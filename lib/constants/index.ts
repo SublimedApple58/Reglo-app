@@ -30,6 +30,7 @@ export const USER_ROLES = process.env.USER_ROLES
 export const SENDER_EMAIL = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
 
 export const publicRoutes = [
+  '/',
   '/sign-in',
   '/sign-up',
   '/unauthorized',

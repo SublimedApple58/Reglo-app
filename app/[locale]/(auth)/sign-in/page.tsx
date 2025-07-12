@@ -1,3 +1,4 @@
+import { auth } from '@/auth';
 import {
   Card,
   CardContent,
@@ -5,13 +6,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Metadata } from 'next';
-import Link from 'next/link';
-import Image from 'next/image';
 import { APP_NAME } from '@/lib/constants';
-import CredentialsSignInForm from './credentials-signin-form';
-import { auth } from '@/auth';
+import { Metadata } from 'next';
+import { getTranslations } from 'next-intl/server';
+import Image from 'next/image';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import CredentialsSignInForm from './credentials-signin-form';
 
 export const metadata: Metadata = {
   title: 'Sign In',
@@ -29,6 +30,7 @@ const SignInPage = async (props: {
   if (session) {
     return redirect(callbackUrl || '/');
   }
+  const translation = await getTranslations('SignInPage'); // or useTranslations for client components
 
   return (
     <div className='w-full max-w-md mx-auto'>
@@ -43,7 +45,7 @@ const SignInPage = async (props: {
               priority={true}
             />
           </Link>
-          <CardTitle className='text-center'>Sign In</CardTitle>
+          <CardTitle className='text-center'>{translation('title')}</CardTitle>
           <CardDescription className='text-center'>
             Sign in to your account
           </CardDescription>

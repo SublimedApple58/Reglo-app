@@ -1,12 +1,9 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import '@/assets/styles/globals.css';
 import { APP_DESCRIPTION, APP_NAME, SERVER_URL } from '@/lib/constants';
+import type { Metadata } from 'next';
+import { NextIntlClientProvider } from 'next-intl';
 import { ThemeProvider } from 'next-themes';
-import { Toaster } from '@/components/ui/toaster';
-import { hasLocale, NextIntlClientProvider } from 'next-intl';
-import { notFound } from 'next/navigation';
-import { routing } from '@/i18n/routing';
+import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -27,13 +24,14 @@ export default async function RootLayout({
   params: Promise<{ locale: string }>;
 }>) {
   const { locale } = await params;
-  if (!hasLocale(routing.locales, locale)) {
-    notFound();
-  }
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className={`${inter.className} antialiased`}>
+      <body
+        className={`${inter.className} antialiased`}
+        data-new-gr-c-s-check-loaded='14.1241.0'
+        data-gr-ext-installed=''
+      >
         <NextIntlClientProvider>
           <ThemeProvider
             attribute='class'
@@ -42,7 +40,6 @@ export default async function RootLayout({
             disableTransitionOnChange
           >
             {children}
-            <Toaster />
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

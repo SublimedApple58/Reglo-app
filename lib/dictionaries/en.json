@@ -1,5 +1,8 @@
 {
-  "products": {
+  "SignInPage": {
+    "title": "Sign In"
+  },
+  "ProductPage": {
     "cart": "Add to Cart"
   }
 }

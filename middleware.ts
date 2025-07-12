@@ -1,35 +1,43 @@
-import { authConfig } from './auth.config';
+import NextAuth, { NextAuthRequest } from 'next-auth';
 import createMiddleware from 'next-intl/middleware';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { authConfig } from './auth.config';
 import { routing } from './i18n/routing';
 import { publicRoutes } from './lib/constants';
-import NextAuth from 'next-auth';
 
 const handleI18nRouting = createMiddleware(routing);
 
 const { auth } = NextAuth(authConfig);
 
-const authMiddleware = auth((req) => {
-  const { nextUrl } = req;
+const isPublicRoute = (req: NextRequest) => {
+  const publicPathnameRegex = RegExp(
+      `^(/(${routing.locales.join('|')}))?(${publicRoutes
+        .flatMap((p) => (p === '/' ? ['', '/'] : p))
+        .join('|')})/?$`,
+      'i'
+    ),
+    isPublicRoute = publicPathnameRegex.test(req.nextUrl.pathname);
 
+  return isPublicRoute;
+};
+
+const authMiddleware = auth((req: NextAuthRequest) => {
   const isAuthenticated = !!req.auth;
-  const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
 
-  if (!isPublicRoute && isAuthenticated) {
+  if (isAuthenticated) {
     return handleI18nRouting(req);
+  } else {
+    const redirectUrl = new URL('/sign-in', req.url);
+    redirectUrl.searchParams.set('callbackUrl', req.nextUrl.pathname);
+
+    return NextResponse.redirect(redirectUrl);
   }
 });
 
 export default function middleware(req: NextRequest) {
-  const publicPathnameRegex = RegExp(
-    `^(/(${routing.locales.join('|')}))?(${publicRoutes
-      .flatMap((p) => (p === '/' ? ['', '/'] : p))
-      .join('|')})/?$`,
-    'i'
-  );
-  const isPublicPage = publicPathnameRegex.test(req.nextUrl.pathname);
+  const isPublic = isPublicRoute(req);
 
-  if (isPublicPage) {
+  if (isPublic) {
     return handleI18nRouting(req);
   } else {
     return (authMiddleware as any)(req);
