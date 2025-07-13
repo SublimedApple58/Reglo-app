@@ -12,6 +12,12 @@ const sampleData = {
       password: '123456',
       role: 'user',
     },
+    {
+      name: 'Jane 2',
+      email: 'user2@example.com',
+      password: '123456',
+      role: 'user',
+    },
   ],
 };
 
