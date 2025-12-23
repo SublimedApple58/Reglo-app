@@ -1,9 +1,9 @@
-import { z } from 'zod';
 import {
   insertOrderItemSchema,
   insertOrderSchema,
   paymentResultSchema,
 } from '@/lib/validators';
+import { z } from 'zod';
 
 export type OrderItem = z.infer<typeof insertOrderItemSchema>;
 export type Order = z.infer<typeof insertOrderSchema> & {
