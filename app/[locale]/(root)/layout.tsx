@@ -6,11 +6,5 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  return (
-    <div className='flex h-screen flex-col'>
-      <Header />
-      <main className='flex-1 wrapper'>{children}</main>
-      <Footer />
-    </div>
-  );
+  return children;
 }

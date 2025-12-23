@@ -1,6 +1,7 @@
 import '@/assets/styles/globals.css';
 import { APP_DESCRIPTION, APP_NAME, SERVER_URL } from '@/lib/constants';
 import type { Metadata } from 'next';
+import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { ThemeProvider } from 'next-themes';
 import { Inter } from 'next/font/google';
@@ -39,7 +40,9 @@ export default async function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
+            <SessionProvider>
             {children}
+            </SessionProvider>
           </ThemeProvider>
         </NextIntlClientProvider>
       </body>

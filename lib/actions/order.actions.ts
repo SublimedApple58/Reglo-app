@@ -1,14 +1,14 @@
 'use server';
 
-import { convertToPlainObject, formatError } from '../utils';
 import { auth } from '@/auth';
-import { getUserById } from './user.actions';
-import { insertOrderSchema } from '../validators';
 import { prisma } from '@/db/prisma';
-import { Order, PaymentResult } from '@/types';
-import { revalidatePath } from 'next/cache';
-import { Prisma } from '@prisma/client';
 import { sendPurchaseReceipt } from '@/email';
+import { PaymentResult } from '@/types';
+import { Prisma } from '@prisma/client';
+import { revalidatePath } from 'next/cache';
+import { convertToPlainObject, formatError } from '../utils';
+import { insertOrderSchema } from '../validators';
+import { getUserById } from './user.actions';
 
 // Create order and create the order items
 export async function createOrder() {
