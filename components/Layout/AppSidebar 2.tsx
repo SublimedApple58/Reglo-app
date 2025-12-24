@@ -46,6 +46,11 @@ const items = [
     icon: Workflow,
   },
   {
+    title: "Practices",
+    url: "/practices",
+    icon: ScrollText,
+  },
+  {
     title: "Documents",
     url: "/documents",
     icon: Folders,
@@ -58,11 +63,11 @@ const adminItems = [
     url: "/users",
     icon: Users,
   },
-  // {
-  //   title: "Overview",
-  //   url: "/overview",
-  //   icon: BriefcaseBusiness,
-  // },
+  {
+    title: "Overview",
+    url: "/overview",
+    icon: BriefcaseBusiness,
+  },
 ]
 
 const configurationItems = [

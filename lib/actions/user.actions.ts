@@ -14,7 +14,7 @@ import { formatError } from '../utils';
 import { z } from 'zod';
 import { PAGE_SIZE } from '../constants';
 import { revalidatePath } from 'next/cache';
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -148,15 +148,20 @@ export async function updateProfile(user: { name: string; email: string }) {
 }
 
 // Get all the users
+type PaginatedUsers = {
+  data: User[];
+  totalPages: number;
+};
+
 export async function getAllUsers({
   limit = PAGE_SIZE,
   page,
-  query,
+  query = '',
 }: {
   limit?: number;
   page: number;
-  query: string;
-}) {
+  query?: string;
+}): Promise<PaginatedUsers> {
   const queryFilter: Prisma.UserWhereInput =
     query && query !== 'all'
       ? {

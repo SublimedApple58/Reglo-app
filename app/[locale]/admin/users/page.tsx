@@ -17,23 +17,39 @@ import { UserRole } from '@/lib/constants';
 import { formatId } from '@/lib/utils';
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { AwaitedReactNode, JSXElementConstructor, ReactElement, ReactNode, ReactPortal } from 'react';
 
 export const metadata: Metadata = {
   title: 'Admin Users',
 };
 
-const AdminUserPage = async (props: {
-  searchParams: Promise<{
-    page: string;
-    query: string;
-  }>;
+type AdminUsersSearchParams = {
+  page?: string | string[];
+  query?: string | string[];
+};
+
+const AdminUserPage = async ({
+  searchParams,
+}: {
+  searchParams?: Promise<AdminUsersSearchParams>;
 }) => {
   await requireRole(UserRole.ADMIN);
 
-  const { page = '1', query: searchText } = await props.searchParams;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
 
-  const users = await getAllUsers({ page: Number(page), query: searchText });
+  const pageParam = Array.isArray(resolvedSearchParams.page)
+    ? resolvedSearchParams.page[0]
+    : resolvedSearchParams.page;
+  const queryParam = Array.isArray(resolvedSearchParams.query)
+    ? resolvedSearchParams.query[0]
+    : resolvedSearchParams.query;
+
+  const currentPage = Number(pageParam) || 1;
+  const searchText = queryParam?.trim();
+
+  const users = await getAllUsers({
+    page: currentPage,
+    query: searchText ?? '',
+  });
 
   return (
     <ClientPageWrapper title='Users'>
@@ -62,7 +78,7 @@ const AdminUserPage = async (props: {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.data.map((user: { id: string; name: string | number | bigint | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<AwaitedReactNode> | null | undefined; email: string | number | bigint | boolean | ReactElement<any, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<AwaitedReactNode> | null | undefined; role: string; }) => (
+              {users.data.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>{formatId(user.id)}</TableCell>
                   <TableCell>{user.name}</TableCell>
@@ -85,7 +101,10 @@ const AdminUserPage = async (props: {
             </TableBody>
           </Table>
           {users.totalPages > 1 && (
-            <Pagination page={Number(page) || 1} totalPages={users?.totalPages} />
+            <Pagination
+              page={currentPage}
+              totalPages={users?.totalPages}
+            />
           )}
         </div>
       </div>
