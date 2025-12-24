@@ -1,14 +1,15 @@
 "use client";
 
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/animate-ui/radix/sidebar";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
 } from "../ui/breadcrumb";
+import ModeToggle from "@/components/shared/header/mode-toggle";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/animate-ui/radix/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function ClientHeader({ title }: { title: React.ReactNode }) {
   const isMobile = useIsMobile();
@@ -38,6 +39,9 @@ export function ClientHeader({ title }: { title: React.ReactNode }) {
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        <div className="ml-auto">
+          <ModeToggle />
+        </div>
       </div>
     </header>
   );

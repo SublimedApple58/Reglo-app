@@ -3,13 +3,12 @@
 import {
   Folders,
   Workflow,
-  ScrollText,
   LayoutDashboard,
   Settings,
   Bot,
   HeartHandshake,
   Users,
-  BriefcaseBusiness,
+  FolderKanban,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -44,6 +43,11 @@ const items = [
     title: "Workflows",
     url: "/workflows",
     icon: Workflow,
+  },
+  {
+    title: "Doc manager",
+    url: "/doc_manager",
+    icon: FolderKanban,
   },
   {
     title: "Documents",

@@ -19,7 +19,7 @@ export default function SideBarWrapper({
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="inset" />
+        <AppSidebar variant="sidebar" />
         {children}
       </SidebarProvider>
     </main>
