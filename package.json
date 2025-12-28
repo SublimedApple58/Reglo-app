@@ -46,6 +46,7 @@
     "react-dom": "^19.0.0",
     "react-email": "^3.0.4",
     "react-hook-form": "^7.53.2",
+    "react-pdf": "^10.2.0",
     "react-use-measure": "^2.1.7",
     "reactflow": "^11.11.4",
     "recharts": "^2.14.1",
