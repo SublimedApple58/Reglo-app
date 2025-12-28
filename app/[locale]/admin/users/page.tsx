@@ -52,7 +52,7 @@ const AdminUserPage = async ({
   });
 
   return (
-    <ClientPageWrapper title='Users'>
+    <ClientPageWrapper title='Users' subTitle='Qui puoi vedere la tua directory completa di utenti'>
       <div className='space-y-2'>
         <div className='flex items-center gap-3'>
           {searchText && (

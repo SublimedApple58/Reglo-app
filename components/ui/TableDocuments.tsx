@@ -291,6 +291,7 @@ export function TableDocuments({
   const searchTerm = searchParams.get("search") || "";
 
   const isInitialMount = useRef(true);
+  const prevSearchTerm = useRef(searchTerm);
   const [isFading, setIsFading] = useState<boolean>(false);
   const [selectedInvoices, setSelectedInvoices] = useState<SelectedInvoicesState>({});
   const [documentsToShow, setDocumentsToShow] = useState<typeof documents>([]);
@@ -316,13 +317,16 @@ export function TableDocuments({
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
+      prevSearchTerm.current = searchTerm;
       return;
     }
 
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", "1");
-    router.push(`${pathname}?${params}`);
-    
+    if (prevSearchTerm.current !== searchTerm) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("page", "1");
+      router.push(`${pathname}?${params}`);
+      prevSearchTerm.current = searchTerm;
+    }
   }, [pathname, router, searchParams, searchTerm]);
 
   useEffect(() => {

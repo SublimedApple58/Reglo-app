@@ -12,10 +12,8 @@ import {
 import { SlidingNumber } from "@/components/animate-ui/text/sliding-number";
 import { motion, Variants, Transition, type HTMLMotionProps } from "motion/react";
 import { FilePlus2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useAtomValue } from "jotai";
-import { Documents } from "@/atoms/TabelsStore";
 
 const BUTTON_MOTION_CONFIG = {
   initial: "rest",
@@ -46,43 +44,43 @@ const LABEL_TRANSITION: Transition = {
 
 const PAGE_DIMENSION = 20;
 
-function ManagementBar({totalRows}: {totalRows: number}) {
-
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const [TOTAL_PAGES, setTotalPages] = React.useState(0);
+function ManagementBar({ totalRows }: { totalRows: number }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const page = searchParams.get("page")
+  const pageParam = searchParams.get("page");
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(totalRows / PAGE_DIMENSION)),
+    [totalRows],
+  );
+
+  const currentPage = useMemo(() => {
+    const parsed = Number(pageParam);
+    if (!pageParam || Number.isNaN(parsed) || parsed < 1) return 1;
+    return Math.min(parsed, totalPages);
+  }, [pageParam, totalPages]);
 
   useEffect(() => {
-    if(totalRows){
-      setTotalPages(Math.ceil(totalRows / PAGE_DIMENSION))
-    }
-  }, [totalRows])
-
-  useEffect(() => {
-    if(page){
-      setCurrentPage(Number(page))
-    }
-  }, [page])
-
-  useEffect(() => {
-    if (Number(page) !== currentPage) {
+    if (!pageParam) {
       const params = new URLSearchParams(searchParams.toString());
-      if (page) {
-        params.set("page", currentPage.toString());
-      }
-      router.push(`${pathname}?${params}`);
+      params.set("page", "1");
+      router.replace(`${pathname}?${params}`);
     }
-  }, [currentPage, page, pathname, router, searchParams]);
-  
+  }, [pageParam, pathname, router, searchParams]);
+
+  const updatePage = (nextPage: number) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", nextPage.toString());
+    router.replace(`${pathname}?${params}`);
+  };
+
   const handlePrevPage = () => {
-    if (currentPage > 1) setCurrentPage(currentPage - 1);
+    if (currentPage > 1) updatePage(currentPage - 1);
   };
 
   const handleNextPage = () => {
-    if (currentPage < TOTAL_PAGES) setCurrentPage(currentPage + 1);
+    if (currentPage < totalPages) updatePage(currentPage + 1);
   };
 
   return (
@@ -108,10 +106,10 @@ function ManagementBar({totalRows}: {totalRows: number}) {
             padStart
             number={currentPage}
           />
-          <span className="text-muted-foreground">/ {TOTAL_PAGES}</span>
+          <span className="text-muted-foreground">/ {totalPages}</span>
         </div>
         <button
-          disabled={currentPage === TOTAL_PAGES}
+          disabled={currentPage === totalPages}
           className="p-1 text-muted-foreground transition-colors hover:text-foreground disabled:text-muted-foreground/30 disabled:hover:text-muted-foreground/30"
           onClick={handleNextPage}
         >

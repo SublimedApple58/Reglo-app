@@ -7,3 +7,11 @@ export namespace Documents {
     
     export const rows = atom<number | undefined>(undefined);
 }
+
+export namespace Workflows {
+    export const workflowsRowsSelected = atom<number | undefined>(
+      undefined,
+    );
+    
+    export const rows = atom<number | undefined>(undefined);
+}

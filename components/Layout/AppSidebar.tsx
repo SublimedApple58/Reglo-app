@@ -109,12 +109,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="px-1">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="lg" asChild className="gap-3 rounded-xl px-3 py-2">
               <Link href="/">
-                <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border-solid border-1 border-light-blue-500">
+                <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border border-border/70 shadow-sm">
                   <Image
                     src="/images/R_logo.png"
                     alt="Reglo Logo"
@@ -125,16 +125,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">Reglo srl</span>
-                  <span className="truncate text-xs">Pro plan</span>
+                  <span className="truncate text-xs text-muted-foreground">Pro plan</span>
                 </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="flex justify-between">
-        <div>
-
+      <SidebarContent className="flex justify-between px-1">
+        <div className="space-y-4">
           <SidebarGroup>
             {/* <SidebarGroupLabel>Application</SidebarGroupLabel> */}
             <SidebarGroupContent>
@@ -196,8 +195,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           )}
         </div>
         {/* <Separator style={{ width: "90%", marginInline: "auto" }} /> */}
-        <SidebarGroup>
-          {/* <SidebarGroupLabel>Configurations</SidebarGroupLabel> */}
+        <SidebarGroup className="px-1">
           <SidebarGroupContent>
             <SidebarMenu>
               {configurationItems.map((item) => (
@@ -224,7 +222,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>
+      <SidebarFooter className="px-1">
         <NavUser user={user} />
       </SidebarFooter>
     </Sidebar>
