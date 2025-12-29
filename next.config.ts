@@ -4,6 +4,13 @@ import createNextIntlPlugin from 'next-intl/plugin';
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts');
 const nextConfig: NextConfig = {
   devIndicators: false,
+  webpack: (config) => {
+    config.module.rules.push({
+      test: /\.pdf$/,
+      type: "asset/resource",
+    });
+    return config;
+  },
   images: {
     remotePatterns: [
       {

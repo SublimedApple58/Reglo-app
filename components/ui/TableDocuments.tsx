@@ -25,8 +25,8 @@ export function TableDocuments({
 }: {
   selectable?: boolean;
 }): React.ReactElement {
-  const documents = useMemo(
-    () => [
+  const [documents, setDocuments] = useState(() =>
+    [
     {
       title: "Project Alpha Proposal",
       status: "Paid",
@@ -277,8 +277,11 @@ export function TableDocuments({
       status: "Paid",
       client: "Stark Industries",
     },
-    ],
-    [],
+    ].map((doc, index) => ({
+      ...doc,
+      id: `doc-${index + 1}`,
+      previewUrl: "/file/pdf_example.pdf",
+    })),
   );
 
   const searchParams = useSearchParams();
@@ -296,6 +299,8 @@ export function TableDocuments({
   const [selectedInvoices, setSelectedInvoices] = useState<SelectedInvoicesState>({});
   const [documentsToShow, setDocumentsToShow] = useState<typeof documents>([]);
   const [openDrawer, setOpenDrawer] = useState<boolean>(false);
+  const [activeDocId, setActiveDocId] = useState<string | null>(null);
+  const activeDocument = documents.find((doc) => doc.id === activeDocId) ?? null;
 
   const filteredDocuments = useMemo(() => {
     if (!searchTerm) {
@@ -377,6 +382,22 @@ export function TableDocuments({
     documentsToShow.length > 0 &&
     documentsToShow.every((doc) => selectedInvoices[doc.title]);
 
+  const handleDelete = (docId: string) => {
+    setDocuments((prev) => prev.filter((doc) => doc.id !== docId));
+    setSelectedInvoices((prev) => {
+      const next = { ...prev };
+      const doc = documents.find((item) => item.id === docId);
+      if (doc) {
+        delete next[doc.title];
+      }
+      return next;
+    });
+    if (activeDocId === docId) {
+      setOpenDrawer(false);
+      setActiveDocId(null);
+    }
+  };
+
   return (
     <div
       style={{
@@ -418,7 +439,14 @@ export function TableDocuments({
               <TableCell>{doc.status}</TableCell>
               <TableCell>{doc.client}</TableCell>
               <TableCell className="text-right">
-                <Button type="button" variant="default" onClick={() => setOpenDrawer(true)}>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => {
+                    setActiveDocId(doc.id);
+                    setOpenDrawer(true);
+                  }}
+                >
                   Edit
                 </Button>
               </TableCell>
@@ -426,11 +454,17 @@ export function TableDocuments({
           ))}
         </TableBody>
       </Table>
-      <DocumentsDrawer open={openDrawer} onOpenChange={(e) => {
-        if(!e){
-          setOpenDrawer(e)
-        }
-      }}/>
+      <DocumentsDrawer
+        open={openDrawer}
+        onOpenChange={(open) => {
+          setOpenDrawer(open);
+          if (!open) {
+            setActiveDocId(null);
+          }
+        }}
+        document={activeDocument}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }

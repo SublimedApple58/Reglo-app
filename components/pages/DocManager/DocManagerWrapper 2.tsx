@@ -1,22 +1,15 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  ArrowUpFromLine,
-  FilePenLine,
-  FilePlus2,
-  MoreHorizontal,
-  Trash2,
-} from "lucide-react";
-import Link from "next/link";
+import { ArrowUpFromLine, FilePlus2, MoreHorizontal } from "lucide-react";
+
+const Document = dynamic(() => import("react-pdf").then((mod) => mod.Document), { ssr: false });
+const Page = dynamic(() => import("react-pdf").then((mod) => mod.Page), { ssr: false });
+
+const PDF_WORKER_SRC = "https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
 
 type DocItem = {
   id: string;
@@ -58,7 +51,20 @@ const documents: DocItem[] = [
 ];
 
 export function DocManagerWrapper(): React.ReactElement {
-  const [items, setItems] = React.useState<DocItem[]>(documents);
+  const [pdfReady, setPdfReady] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    // Configure pdf.js worker only when browser context is available
+    import("react-pdf").then(({ pdfjs }) => {
+      if (!isMounted) return;
+      pdfjs.GlobalWorkerOptions.workerSrc = PDF_WORKER_SRC;
+      setPdfReady(true);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <ClientPageWrapper
@@ -78,14 +84,8 @@ export function DocManagerWrapper(): React.ReactElement {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((doc) => (
-            <DocCard
-              key={doc.id}
-              doc={doc}
-              onDelete={() =>
-                setItems((prev) => prev.filter((item) => item.id !== doc.id))
-              }
-            />
+          {documents.map((doc) => (
+            <DocCard key={doc.id} doc={doc} />
           ))}
         </div>
       </div>
@@ -93,7 +93,25 @@ export function DocManagerWrapper(): React.ReactElement {
   );
 }
 
-function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
+function DocCard({ doc }: { doc: DocItem }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState<number>(0);
+
+  useEffect(() => {
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect) {
+          setWidth(entry.contentRect.width);
+        }
+      }
+    });
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+      setWidth(containerRef.current.getBoundingClientRect().width);
+    }
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className="group flex flex-col gap-3 rounded-2xl bg-card p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-lg">
       <div className="flex items-start justify-between">
@@ -101,59 +119,39 @@ function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
           <p className="text-sm font-semibold text-foreground">{doc.title}</p>
           <p className="text-xs text-muted-foreground">{doc.updatedAt} · {doc.owner}</p>
         </div>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="rounded-full p-2 text-muted-foreground transition hover:bg-muted/70"
-              aria-label="More actions"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" sideOffset={6}>
-            <DropdownMenuItem asChild>
-              <Link
-                href={`/user/doc_manager/${doc.id}/fill`}
-                className="flex items-center gap-2"
-              >
-                <FilePenLine className="h-4 w-4" />
-                Compila documento
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onSelect={onDelete}>
-              <Trash2 className="h-4 w-4" />
-              Elimina documento
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          type="button"
+          className="rounded-full p-2 text-muted-foreground transition hover:bg-muted/70"
+          aria-label="More actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
       </div>
       <div
+        ref={containerRef}
         className="relative overflow-hidden rounded-xl bg-muted/50 shadow-inner"
         style={{ aspectRatio: "4 / 3" }}
       >
-        <PdfPreview src={doc.previewUrl} title={doc.title} />
+        {pdfReady && width > 0 && (
+          <Document file={doc.previewUrl} loading={<Skeleton />} error={<Skeleton />}>
+            <Page pageNumber={1} width={width} renderTextLayer={false} renderAnnotationLayer={false} />
+          </Document>
+        )}
       </div>
-      <Link
-        href={`/user/doc_manager/${doc.id}`}
+      <button
+        type="button"
         className="inline-flex items-center justify-center rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/20"
       >
         Apri documento
-      </Link>
+      </button>
     </div>
   );
 }
 
-function PdfPreview({ src, title }: { src: string; title: string }) {
+function Skeleton(): React.ReactElement {
   return (
-    <div className="relative h-full w-full">
-      <iframe
-        title={`Anteprima ${title}`}
-        src={`${src}#toolbar=0&navpanes=0&scrollbar=0`}
-        className="pointer-events-none absolute inset-0 h-full w-full border-0 origin-center scale-[1.06]"
-        tabIndex={-1}
-        loading="lazy"
-      />
+    <div className="flex h-full w-full items-center justify-center bg-muted/40 text-xs text-muted-foreground">
+      Loading preview...
     </div>
   );
 }
