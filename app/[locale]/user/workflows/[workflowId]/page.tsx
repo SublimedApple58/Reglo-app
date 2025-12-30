@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { workflowsData } from "@/components/pages/Workflows/workflows-data";
 import ReactFlow, {
@@ -19,31 +19,48 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { ArrowLeft } from "lucide-react";
 
-const initialNodes: Node[] = [
-  {
+const baseNodeStyle = {
+  borderRadius: 12,
+  padding: "12px 16px",
+  border: "1px solid var(--border)",
+};
+
+const buildNodes = (title: string, isNew: boolean): Node[] => {
+  const startNode: Node = {
     id: "start",
     position: { x: 120, y: 120 },
-    data: { label: "Start · Flow" },
-    style: { borderRadius: 12, padding: "12px 16px", border: "1px solid var(--border)" },
-  },
-  {
-    id: "approval",
-    position: { x: 360, y: 120 },
-    data: { label: "Approvazione responsabile" },
-    style: { borderRadius: 12, padding: "12px 16px", border: "1px solid var(--border)" },
-  },
-  {
-    id: "complete",
-    position: { x: 600, y: 120 },
-    data: { label: "Completato" },
-    style: { borderRadius: 12, padding: "12px 16px", border: "1px solid var(--border)" },
-  },
-];
+    data: { label: `Start · ${title}` },
+    style: baseNodeStyle,
+  };
 
-const initialEdges: Edge[] = [
-  { id: "e1", source: "start", target: "approval", animated: true },
-  { id: "e2", source: "approval", target: "complete", animated: true },
-];
+  if (isNew) {
+    return [startNode];
+  }
+
+  return [
+    startNode,
+    {
+      id: "approval",
+      position: { x: 360, y: 120 },
+      data: { label: "Approvazione responsabile" },
+      style: baseNodeStyle,
+    },
+    {
+      id: "complete",
+      position: { x: 600, y: 120 },
+      data: { label: "Completato" },
+      style: baseNodeStyle,
+    },
+  ];
+};
+
+const buildEdges = (isNew: boolean): Edge[] =>
+  isNew
+    ? []
+    : [
+        { id: "e1", source: "start", target: "approval", animated: true },
+        { id: "e2", source: "approval", target: "complete", animated: true },
+      ];
 
 type ServiceKey = "teamsystem" | "slack" | "doc-manager" | "reglo-actions";
 
@@ -100,23 +117,26 @@ const serviceBlocks: Record<
 
 export default function WorkflowDetailPage(): React.ReactElement {
   const params = useParams<{ workflowId: string }>();
+  const searchParams = useSearchParams();
   const workflowId = params?.workflowId;
+  const isNew = searchParams.get("mode") === "new";
+  const nameParam = searchParams.get("name");
 
   const workflow = useMemo(
     () => workflowsData.find((item) => item.id === workflowId),
     [workflowId],
   );
 
-  const title = workflow?.title ?? "Workflow";
+  const title = useMemo(() => {
+    if (isNew && nameParam) {
+      return nameParam;
+    }
+    return workflow?.title ?? "Workflow";
+  }, [isNew, nameParam, workflow?.title]);
   const [selectedService, setSelectedService] = useState<ServiceKey>("teamsystem");
   const [paletteView, setPaletteView] = useState<"menu" | "blocks">("menu");
-  const [nodes, setNodes] = useState<Node[]>(() =>
-    initialNodes.map((n) => ({
-      ...n,
-      data: { ...n.data, label: n.id === "start" ? `Start · ${title}` : n.data?.label },
-    })),
-  );
-  const [edges, setEdges] = useState<Edge[]>(initialEdges);
+  const [nodes, setNodes] = useState<Node[]>(() => buildNodes(title, isNew));
+  const [edges, setEdges] = useState<Edge[]>(() => buildEdges(isNew));
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const idCounter = useRef(0);
   const flowWrapperRef = useRef<HTMLDivElement | null>(null);

@@ -83,7 +83,7 @@ export function NavUser({
             <DropdownMenuGroup>
               <DropdownMenuItem>
                 <IconUserCircle />
-                <Link rel="stylesheet" href="/user/profile">Account</Link>
+                <Link rel="stylesheet" href="/user/settings">Account</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconCreditCard />

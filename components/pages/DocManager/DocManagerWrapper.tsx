@@ -17,45 +17,8 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
-
-type DocItem = {
-  id: string;
-  title: string;
-  updatedAt: string;
-  owner: string;
-  previewUrl: string;
-};
-
-const documents: DocItem[] = [
-  {
-    id: "doc-1",
-    title: "Contratto fornitore 2025",
-    updatedAt: "Aggiornato 2h fa",
-    owner: "Tiziano",
-    previewUrl: "/file/pdf_example.pdf",
-  },
-  {
-    id: "doc-2",
-    title: "Linee guida onboarding",
-    updatedAt: "Aggiornato ieri",
-    owner: "Ops team",
-    previewUrl: "/file/pdf_example.pdf",
-  },
-  {
-    id: "doc-3",
-    title: "Report trimestrale",
-    updatedAt: "Aggiornato 3gg fa",
-    owner: "Finance",
-    previewUrl: "/file/pdf_example.pdf",
-  },
-  {
-    id: "doc-4",
-    title: "Checklist ISO",
-    updatedAt: "Aggiornato 1 settimana fa",
-    owner: "Compliance",
-    previewUrl: "/file/pdf_example.pdf",
-  },
-];
+import { documents, pdfSource } from "@/components/pages/DocManager/doc-manager.data";
+import type { DocItem } from "@/components/pages/DocManager/doc-manager.types";
 
 export function DocManagerWrapper(): React.ReactElement {
   const [items, setItems] = React.useState<DocItem[]>(documents);
@@ -132,13 +95,13 @@ function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
         className="relative overflow-hidden rounded-xl bg-muted/50 shadow-inner"
         style={{ aspectRatio: "4 / 3" }}
       >
-        <PdfPreview src={doc.previewUrl} title={doc.title} />
+        <PdfPreview src={doc.previewUrl ?? pdfSource} title={doc.title} />
       </div>
       <Link
         href={`/user/doc_manager/${doc.id}`}
         className="inline-flex items-center justify-center rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/20"
       >
-        Apri documento
+        Modifica documento
       </Link>
     </div>
   );

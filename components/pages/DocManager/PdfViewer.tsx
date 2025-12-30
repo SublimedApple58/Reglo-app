@@ -10,10 +10,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
-export function PdfViewer(): React.ReactElement {
+type PdfViewerProps = {
+  file?: string;
+  pageNumber?: number;
+};
+
+export function PdfViewer({
+  file = pdfFile,
+  pageNumber,
+}: PdfViewerProps): React.ReactElement {
   const [numPages, setNumPages] = React.useState(1);
   const [containerRef, bounds] = useMeasure();
   const pageWidth = Math.max(1, Math.floor(bounds.width || 0));
+  const activePage = pageNumber ?? numPages;
 
   const onDocumentLoaded = ({ numPages: total }: { numPages: number }) => {
     setNumPages(total);
@@ -21,9 +30,9 @@ export function PdfViewer(): React.ReactElement {
 
   return (
     <div ref={containerRef} className="h-full w-full">
-      <Document file={pdfFile} onLoadSuccess={onDocumentLoaded}>
+      <Document file={file} onLoadSuccess={onDocumentLoaded}>
         <Page
-          pageNumber={numPages}
+          pageNumber={activePage}
           width={pageWidth}
           renderTextLayer={false}
           renderAnnotationLayer={false}

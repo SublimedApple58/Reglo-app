@@ -5,6 +5,7 @@ import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { ThemeProvider } from 'next-themes';
 import { Inter } from 'next/font/google';
+import { Toaster } from '@/components/ui/toaster';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -44,7 +45,8 @@ export default async function RootLayout({
             disableTransitionOnChange
           >
             <SessionProvider>
-            {children}
+              {children}
+              <Toaster />
             </SessionProvider>
           </ThemeProvider>
         </NextIntlClientProvider>

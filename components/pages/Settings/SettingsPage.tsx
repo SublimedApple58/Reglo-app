@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import {
   Card,
   CardContent,
@@ -11,386 +11,227 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { cn } from "@/lib/utils";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { useSession } from "next-auth/react";
+import { updateProfile } from "@/lib/actions/user.actions";
 
-type TabKey = "app" | "account";
+type TabKey = "account" | "company";
 type TabItem = { label: string; value: TabKey };
 
-const appPresets = ["Default", "Minimal", "Data-heavy", "Live collaboration"];
+const pronounOptions = ["Lei/Lei", "Lui/Lui", "Loro/Loro"];
+const genderOptions = ["Donna", "Uomo", "Non-binario", "Preferisco non dirlo"];
+const languageOptions = ["Italiano", "English", "Deutsch"];
+const dataRegionOptions = ["EU-West", "US-East", "APAC-Singapore"];
+const sessionTimeoutOptions = ["15", "30", "45", "60"];
 
 export function SettingsPage(): React.ReactElement {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
-  const [toggles, setToggles] = useState({
-    smartHints: true,
-    compactMode: false,
-    notifications: true,
-    aiAutoLabels: true,
-    betaFeatures: false,
-    twoFactor: true,
+  const { data: session, update } = useSession();
+  const toast = useFeedbackToast();
+  const didInitName = useRef(false);
+
+  const [accountForm, setAccountForm] = useState({
+    firstName: "",
+    lastName: "",
+    pronouns: pronounOptions[0],
+    gender: genderOptions[0],
+    language: languageOptions[0],
   });
-  const [refreshRate, setRefreshRate] = useState(65);
+
+  const [notificationPrefs, setNotificationPrefs] = useState({
+    weeklyDigest: true,
+    criticalAlerts: true,
+    mentions: false,
+  });
+
+  const [companyForm, setCompanyForm] = useState({
+    companyName: "Reglo S.r.l.",
+    dataRegion: dataRegionOptions[0],
+  });
+
+  const [sessionAccess, setSessionAccess] = useState({
+    logSessions: true,
+    blockUnknownDevices: true,
+    sessionTimeout: sessionTimeoutOptions[2],
+  });
 
   const tabItems = useMemo<TabItem[]>(
     () => [
-      { label: "App", value: "app" },
       { label: "Account", value: "account" },
+      { label: "Company", value: "company" },
     ],
     [],
   );
-  const activeTab = tabItems[activeTabIndex]?.value ?? "app";
+  const activeTab = tabItems[activeTabIndex]?.value ?? "account";
+
+  useEffect(() => {
+    if (didInitName.current) return;
+    const fullName = session?.user?.name?.trim();
+    if (!fullName) return;
+    const parts = fullName.split(" ");
+    const firstName = parts.shift() ?? "";
+    const lastName = parts.join(" ");
+    setAccountForm((prev) => ({
+      ...prev,
+      firstName,
+      lastName,
+    }));
+    didInitName.current = true;
+  }, [session?.user?.name]);
+
+  const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const firstName = accountForm.firstName.trim();
+    const lastName = accountForm.lastName.trim();
+    const email = session?.user?.email;
+
+    if (!firstName || !lastName) {
+      toast.error({
+        description: "Inserisci nome e cognome.",
+      });
+      return;
+    }
+
+    if (!email) {
+      toast.error({
+        description: "Email mancante nella sessione.",
+      });
+      return;
+    }
+
+    const res = await updateProfile({
+      name: `${firstName} ${lastName}`.trim(),
+      email,
+    });
+
+    if (!res.success) {
+      toast.error({
+        description: res.message,
+      });
+      return;
+    }
+
+    if (session) {
+      await update({
+        ...session,
+        user: {
+          ...session.user,
+          name: `${firstName} ${lastName}`.trim(),
+        },
+      });
+    }
+
+    toast.success({
+      title: "Salvataggio completato",
+      description: "Le impostazioni account sono state aggiornate.",
+    });
+  };
+
+  const handleCompanySave = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    toast.success({
+      title: "Salvataggio completato",
+      description: "Le impostazioni company sono state aggiornate (mock).",
+    });
+  };
 
   return (
     <ClientPageWrapper title="Settings">
       <div className="space-y-6">
-        <Card className="border-primary/20 bg-gradient-to-r from-primary/5 via-background to-background">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-lg">Area impostazioni</CardTitle>
-              <CardDescription>
-                Scegli layout, interazioni e sicurezza. Ogni modifica è salvata
-                localmente per ora.
-              </CardDescription>
-            </div>
-            <div className="flex gap-2">
-              <Badge variant="secondary">Autosave mock</Badge>
-              <Badge className="bg-emerald-500/10 text-emerald-600">
-                Live preview
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <TabsSwitcher
-              items={tabItems}
-              activeIndex={activeTabIndex}
-              onChange={(index) => setActiveTabIndex(index)}
-            />
-            <p className="text-sm text-muted-foreground">
-              Applica a colpo d&apos;occhio più combinazioni di input: toggle,
-              select, text e layout misti.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex flex-col gap-3">
+          <TabsSwitcher
+            items={tabItems}
+            activeIndex={activeTabIndex}
+            onChange={(index) => setActiveTabIndex(index)}
+          />
+        </div>
 
         <AnimatePresence mode="wait">
-          {activeTab === "app" ? (
-            <motion.div
-              key="app"
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.2 }}
-              className="grid gap-4 xl:grid-cols-[2fr_1fr]"
-            >
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>App experience</CardTitle>
-                    <CardDescription>
-                      Personalizza come l&apos;app appare e reagisce ai tuoi
-                      input.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <LabeledInput
-                        label="Workspace name"
-                        placeholder="Acme internal ops"
-                        defaultValue="Reglo - Pilot"
-                      />
-                      <LabeledInput
-                        label="Tagline"
-                        placeholder="Una frase che descrive il workspace"
-                        defaultValue="Automazione leggera, zero attrito."
-                      />
-                    </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div className="space-y-2">
-                        <LabelMini>Preset</LabelMini>
-                        <Select defaultValue="Default">
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose a preset" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectGroup>
-                              <SelectLabel>Layout</SelectLabel>
-                              {appPresets.map((preset) => (
-                                <SelectItem key={preset} value={preset}>
-                                  {preset}
-                                </SelectItem>
-                              ))}
-                            </SelectGroup>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Cambia micro-animazioni e densità.
-                        </p>
-                      </div>
-                      <div className="space-y-2">
-                        <LabelMini>Primary color</LabelMini>
-                        <div className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2">
-                          <div className="grid w-full gap-2">
-                            <Input
-                              type="text"
-                              defaultValue="#1D7CF2"
-                              className="font-mono"
-                            />
-                            <div className="flex gap-2 text-xs text-muted-foreground">
-                              <Badge variant="outline">Brand</Badge>
-                              <Badge variant="outline">Accessible</Badge>
-                            </div>
-                          </div>
-                          <div className="h-10 w-10 rounded-lg border bg-gradient-to-br from-primary to-primary/50" />
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <LabelMini>Page density</LabelMini>
-                        <RangeRow
-                          value={refreshRate}
-                          onChange={setRefreshRate}
-                          min={20}
-                          max={100}
-                          suffix="%"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Controlla la densità degli elementi in tabella.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <ToggleRow
-                        title="Suggerimenti smart"
-                        description="Mostra tooltip animati basati sul contesto."
-                        checked={toggles.smartHints}
-                        onChange={(val) =>
-                          setToggles((prev) => ({ ...prev, smartHints: val }))
-                        }
-                      />
-                      <ToggleRow
-                        title="Modalità compatta"
-                        description="Riduci padding e margini per schermi piccoli."
-                        checked={toggles.compactMode}
-                        onChange={(val) =>
-                          setToggles((prev) => ({ ...prev, compactMode: val }))
-                        }
-                      />
-                    </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <ToggleRow
-                        title="Notifiche push"
-                        description="Alert in-app e badge dinamici."
-                        checked={toggles.notifications}
-                        onChange={(val) =>
-                          setToggles((prev) => ({ ...prev, notifications: val }))
-                        }
-                      />
-                      <ToggleRow
-                        title="Etichette AI"
-                        description="Classificazione automatica dei documenti."
-                        checked={toggles.aiAutoLabels}
-                        onChange={(val) =>
-                          setToggles((prev) => ({ ...prev, aiAutoLabels: val }))
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Data &amp; privacy</CardTitle>
-                    <CardDescription>
-                      Definisci retention e zone di elaborazione.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <SelectField
-                        label="Data region"
-                        placeholder="EU-West"
-                        options={["EU-West", "US-East", "APAC-Singapore"]}
-                      />
-                      <SelectField
-                        label="Backup"
-                        placeholder="Settimanale"
-                        options={[
-                          "Giornaliero",
-                          "Settimanale",
-                          "Mensile",
-                          "Solo manuale",
-                        ]}
-                      />
-                      <SelectField
-                        label="Retention"
-                        placeholder="90 giorni"
-                        options={["30 giorni", "90 giorni", "180 giorni", "Mai"]}
-                      />
-                    </div>
-                    <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                      <p className="font-medium text-foreground">
-                        Data processing note
-                      </p>
-                      I dati restano all&apos;interno della regione selezionata.
-                      Puoi spegnere il logging analitico per le view.
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Micro-interactions</CardTitle>
-                    <CardDescription>
-                      Scegli come animare gli elementi dinamici.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="space-y-2">
-                      <LabelMini>Motion tone</LabelMini>
-                      <RadioGroup
-                        defaultValue="balanced"
-                        className="grid grid-cols-1 gap-2"
-                      >
-                        <RadioOption
-                          value="balanced"
-                          title="Balanced"
-                          description="Transizioni morbide da 200ms"
-                        />
-                        <RadioOption
-                          value="playful"
-                          title="Playful"
-                          description="Rimbalzi e gradienti evidenti"
-                        />
-                        <RadioOption
-                          value="minimal"
-                          title="Minimal"
-                          description="Quasi istantaneo, senza overshoot"
-                        />
-                      </RadioGroup>
-                    </div>
-                    <div className="space-y-2">
-                      <LabelMini>Check list</LabelMini>
-                      <div className="space-y-2 rounded-xl border bg-card p-3">
-                        <CheckboxRow
-                          label="Evidenzia la riga selezionata in tabella"
-                          defaultChecked
-                        />
-                        <CheckboxRow
-                          label="Mostra glow sugli input attivi"
-                          defaultChecked={false}
-                        />
-                        <CheckboxRow
-                          label="Auto espansione dei moduli multi-step"
-                          defaultChecked
-                        />
-                      </div>
-                    </div>
-                    <Button className="w-full" variant="secondary">
-                      Applica preset animazioni
-                    </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Release track</CardTitle>
-                    <CardDescription>
-                      Scegli il ritmo di aggiornamento e feature beta.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <ToggleRow
-                      title="Beta features"
-                      description="Nuove UI e componenti animate prima del rilascio."
-                      checked={toggles.betaFeatures}
-                      onChange={(val) =>
-                        setToggles((prev) => ({ ...prev, betaFeatures: val }))
-                      }
-                    />
-                    <Textarea
-                      placeholder="Note interne o reminder su cosa testare..."
-                      className="min-h-[96px]"
-                    />
-                    <Button className="w-full">Salva impostazioni app</Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </motion.div>
-          ) : (
+          {activeTab === "account" ? (
             <motion.div
               key="account"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.2 }}
-              className="grid gap-4 xl:grid-cols-[1.5fr_1fr]"
+              className="space-y-4"
             >
-              <div className="space-y-4">
+              <form onSubmit={handleAccountSave} className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Profilo</CardTitle>
+                    <CardTitle>Account</CardTitle>
                     <CardDescription>
-                      Aggiorna dati, sicurezza e preferenze account.
+                      Modifica i dati personali principali.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2">
                       <LabeledInput
-                        label="Nome completo"
-                        placeholder="Mario Rossi"
-                        defaultValue="Tiziano Di Felice"
+                        label="Nome"
+                        placeholder="Mario"
+                        value={accountForm.firstName}
+                        onChange={(event) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            firstName: event.target.value,
+                          }))
+                        }
                       />
                       <LabeledInput
-                        label="Ruolo"
-                        placeholder="Es. Operations"
-                        defaultValue="Product & Ops"
+                        label="Cognome"
+                        placeholder="Rossi"
+                        value={accountForm.lastName}
+                        onChange={(event) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            lastName: event.target.value,
+                          }))
+                        }
                       />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <LabeledInput
-                        label="Email"
-                        type="email"
-                        placeholder="you@example.com"
-                        defaultValue="tiziano@reglo.ai"
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <SelectField
+                        label="Pronomi"
+                        value={accountForm.pronouns}
+                        options={pronounOptions}
+                        onChange={(value) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            pronouns: value,
+                          }))
+                        }
                       />
-                      <LabeledInput
-                        label="Telefono"
-                        placeholder="+39 ..."
-                        defaultValue="+39 333 123 4567"
+                      <SelectField
+                        label="Genere"
+                        value={accountForm.gender}
+                        options={genderOptions}
+                        onChange={(value) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            gender: value,
+                          }))
+                        }
                       />
-                    </div>
-                    <ToggleRow
-                      title="Two-factor"
-                      description="Richiedi codice via app o SMS al login."
-                      checked={toggles.twoFactor}
-                      onChange={(val) =>
-                        setToggles((prev) => ({ ...prev, twoFactor: val }))
-                      }
-                    />
-                    <div className="grid gap-3 md:grid-cols-2">
                       <SelectField
                         label="Lingua"
-                        placeholder="Italiano"
-                        options={["Italiano", "English", "Deutsch"]}
-                      />
-                      <SelectField
-                        label="Formato data"
-                        placeholder="DD/MM/YYYY"
-                        options={["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]}
+                        value={accountForm.language}
+                        options={languageOptions}
+                        onChange={(value) =>
+                          setAccountForm((prev) => ({
+                            ...prev,
+                            language: value,
+                          }))
+                        }
                       />
                     </div>
                   </CardContent>
@@ -400,109 +241,140 @@ export function SettingsPage(): React.ReactElement {
                   <CardHeader>
                     <CardTitle>Notifiche personali</CardTitle>
                     <CardDescription>
-                      Mix di toggle, checkbox e select sull&apos;account.
+                      Preferenze di notifica salvate con la CTA unica.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <ToggleRow
-                        title="Digest settimanale"
-                        description="Inviato il lunedì alle 9:00."
-                        checked
-                        onChange={() => void 0}
-                      />
-                      <ToggleRow
-                        title="Alert critici"
-                        description="Sempre attivi per incidenti e SLA."
-                        checked
-                        onChange={() => void 0}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <LabelMini>Canali</LabelMini>
-                      <div className="flex flex-wrap gap-2">
-                        {["Email", "Push", "Slack", "SMS"].map((item) => (
-                          <Badge key={item} variant="outline" className="px-3">
-                            {item}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <LabelMini>Zona oraria</LabelMini>
-                      <Select defaultValue="Europe/Rome">
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Seleziona la timezone" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Europe/Rome">
-                            Europe/Rome (CET)
-                          </SelectItem>
-                          <SelectItem value="UTC">UTC</SelectItem>
-                          <SelectItem value="America/New_York">
-                            America/New York
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <ToggleRow
+                      title="Digest settimanale"
+                      description="Riepilogo ogni lunedì alle 9:00."
+                      checked={notificationPrefs.weeklyDigest}
+                      onChange={(value) =>
+                        setNotificationPrefs((prev) => ({
+                          ...prev,
+                          weeklyDigest: value,
+                        }))
+                      }
+                    />
+                    <ToggleRow
+                      title="Alert critici"
+                      description="Sempre attivi per incidenti e SLA."
+                      checked={notificationPrefs.criticalAlerts}
+                      onChange={(value) =>
+                        setNotificationPrefs((prev) => ({
+                          ...prev,
+                          criticalAlerts: value,
+                        }))
+                      }
+                    />
+                    <ToggleRow
+                      title="Menzioni dirette"
+                      description="Notifiche quando vieni taggato."
+                      checked={notificationPrefs.mentions}
+                      onChange={(value) =>
+                        setNotificationPrefs((prev) => ({
+                          ...prev,
+                          mentions: value,
+                        }))
+                      }
+                    />
                   </CardContent>
                 </Card>
-              </div>
 
-              <div className="space-y-4">
-                <Card className="border-destructive/30">
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <Button type="submit">Salva impostazioni account</Button>
+                </div>
+              </form>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="company"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-4"
+            >
+              <form onSubmit={handleCompanySave} className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Company</CardTitle>
+                    <CardDescription>
+                      Informazioni base dell&apos;azienda.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <LabeledInput
+                      label="Nome azienda"
+                      placeholder="Reglo S.r.l."
+                      value={companyForm.companyName}
+                      onChange={(event) =>
+                        setCompanyForm((prev) => ({
+                          ...prev,
+                          companyName: event.target.value,
+                        }))
+                      }
+                    />
+                    <SelectField
+                      label="Data region"
+                      value={companyForm.dataRegion}
+                      options={dataRegionOptions}
+                      onChange={(value) =>
+                        setCompanyForm((prev) => ({
+                          ...prev,
+                          dataRegion: value,
+                        }))
+                      }
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="border-primary/15">
                   <CardHeader>
                     <CardTitle>Sessioni &amp; Accessi</CardTitle>
                     <CardDescription>
-                      Controlla le sessioni attive e le policy di login.
+                      Policy di accesso e monitoraggio sessioni.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <CheckboxRow
                       label="Logga nuove sessioni e invia recap"
-                      defaultChecked
+                      checked={sessionAccess.logSessions}
+                      onChange={(value) =>
+                        setSessionAccess((prev) => ({
+                          ...prev,
+                          logSessions: value,
+                        }))
+                      }
                     />
                     <CheckboxRow
                       label="Blocca device non riconosciuti"
-                      defaultChecked
+                      checked={sessionAccess.blockUnknownDevices}
+                      onChange={(value) =>
+                        setSessionAccess((prev) => ({
+                          ...prev,
+                          blockUnknownDevices: value,
+                        }))
+                      }
                     />
-                    <div className="space-y-2">
-                      <LabelMini>Session timeout</LabelMini>
-                      <Select defaultValue="45">
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Durata" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {["15", "30", "45", "60"].map((val) => (
-                            <SelectItem key={val} value={val}>
-                              {val} minuti
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button variant="secondary" className="w-full">
-                      Chiudi tutte le sessioni
-                    </Button>
+                    <SelectField
+                      label="Session timeout (min)"
+                      value={sessionAccess.sessionTimeout}
+                      options={sessionTimeoutOptions}
+                      onChange={(value) =>
+                        setSessionAccess((prev) => ({
+                          ...prev,
+                          sessionTimeout: value,
+                        }))
+                      }
+                    />
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Note account</CardTitle>
-                    <CardDescription>
-                      Spazio libero per note o action item.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <Textarea
-                      placeholder="Es. verifica 2FA entro venerdì, aggiorna email di recupero..."
-                      className="min-h-[120px]"
-                    />
-                    <Button className="w-full">Aggiorna account</Button>
-                  </CardContent>
-                </Card>
-              </div>
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <Button type="submit">Salva impostazioni company</Button>
+                </div>
+              </form>
             </motion.div>
           )}
         </AnimatePresence>
@@ -527,6 +399,27 @@ function LabeledInput({
 
 function LabelMini({ children }: { children: React.ReactNode }) {
   return <p className="text-xs font-medium uppercase text-muted-foreground">{children}</p>;
+}
+
+function BadgeMini({
+  children,
+  variant = "base",
+}: {
+  children: React.ReactNode;
+  variant?: "base" | "accent";
+}) {
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-3 py-1 text-xs font-semibold",
+        variant === "accent"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-border bg-background text-muted-foreground",
+      )}
+    >
+      {children}
+    </span>
+  );
 }
 
 function ToggleRow({
@@ -581,82 +474,19 @@ function SimpleToggle({
   );
 }
 
-function RangeRow({
-  value,
-  onChange,
-  min = 0,
-  max = 100,
-  suffix,
-}: {
-  value: number;
-  onChange: (value: number) => void;
-  min?: number;
-  max?: number;
-  suffix?: string;
-}) {
-  const percentage = ((value - min) / (max - min)) * 100;
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm font-medium">
-        <span>{value}{suffix}</span>
-        <span className="text-muted-foreground text-xs">aggiornamento UI</span>
-      </div>
-      <div className="relative">
-        <div className="pointer-events-none absolute inset-0 rounded-full bg-muted" />
-        <motion.div
-          className="pointer-events-none absolute inset-y-0 rounded-full bg-primary/60"
-          style={{ width: `${percentage}%` }}
-          initial={false}
-        />
-        <motion.div
-          className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 rounded-full border-2 border-background bg-primary shadow"
-          style={{ left: `calc(${percentage}% - 8px)` }}
-          initial={false}
-        />
-        <input
-          type="range"
-          min={min}
-          max={max}
-          value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="relative z-10 w-full cursor-pointer opacity-0"
-        />
-      </div>
-    </div>
-  );
-}
-
 function CheckboxRow({
   label,
-  defaultChecked,
+  checked,
+  onChange,
 }: {
   label: string;
-  defaultChecked?: boolean;
+  checked: boolean;
+  onChange: (value: boolean) => void;
 }) {
   return (
     <label className="flex items-start gap-3 rounded-lg border px-3 py-2">
-      <Checkbox defaultChecked={defaultChecked} />
+      <Checkbox checked={checked} onCheckedChange={() => onChange(!checked)} />
       <span className="text-sm text-foreground">{label}</span>
-    </label>
-  );
-}
-
-function RadioOption({
-  value,
-  title,
-  description,
-}: {
-  value: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <label className="flex items-start gap-3 rounded-xl border px-3 py-2">
-      <RadioGroupItem value={value} />
-      <div>
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
     </label>
   );
 }
@@ -664,18 +494,20 @@ function RadioOption({
 function SelectField({
   label,
   options,
-  placeholder,
+  value,
+  onChange,
 }: {
   label: string;
   options: string[];
-  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <div className="space-y-2">
       <LabelMini>{label}</LabelMini>
-      <Select defaultValue={options[0]}>
+      <Select value={value} onValueChange={onChange}>
         <SelectTrigger className="w-full">
-          <SelectValue placeholder={placeholder} />
+          <SelectValue placeholder={label} />
         </SelectTrigger>
         <SelectContent>
           {options.map((option) => (
@@ -708,7 +540,7 @@ function TabsSwitcher({
         className="relative flex items-center rounded-xl border bg-muted/60 p-1"
       >
         <motion.div
-          className="absolute top-1 bottom-1 rounded-lg border border-primary/30 bg-background shadow-sm"
+          className="absolute bottom-1 top-1 rounded-lg border border-primary/30 bg-background shadow-sm"
           style={{ width: `${width}%`, left: 0 }}
           animate={{ left: `${activeIndex * width}%` }}
           transition={{ type: "spring", stiffness: 260, damping: 26, mass: 0.7 }}

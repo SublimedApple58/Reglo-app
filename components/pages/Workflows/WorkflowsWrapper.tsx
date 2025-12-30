@@ -12,19 +12,34 @@ import {
 import { SlidingNumber } from "@/components/animate-ui/text/sliding-number";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import Filters from "@/components/ui/filters";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { Workflows } from "@/atoms/TabelsStore";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { WorkflowsTable } from "./WorkflowsTable";
+import { Ban, Plus, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import slugify from "slugify";
 
 export function WorkflowsWrapper(): React.ReactElement {
   const [showInput, setShowInput] = useState(false);
   const [value, setValue] = useState("");
   const totalSelected = useAtomValue(Workflows.workflowsRowsSelected);
   const totalRows = useAtomValue(Workflows.rows);
+  const triggerDelete = useSetAtom(Workflows.workflowsDeleteRequest);
+  const triggerDisable = useSetAtom(Workflows.workflowsDisableRequest);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [workflowName, setWorkflowName] = useState("");
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -47,18 +62,13 @@ export function WorkflowsWrapper(): React.ReactElement {
   const filtersParamters = [
     {
       title: "Owner",
-      options: ["Ops team", "Customer Success", "Finance", "Legal", "HR", "IT"],
+      options: ["Amministrazione", "Produzione", "Team tech", "Team sales"],
       param: "owner",
     },
     {
       title: "Status",
-      options: ["Active", "Draft", "Paused", "Review"],
+      options: ["Active", "Draft", "Paused", "Review", "Disattivato"],
       param: "status",
-    },
-    {
-      title: "Area",
-      options: ["Operations", "Finance", "HR", "IT", "Compliance"],
-      param: "area",
     },
   ];
 
@@ -73,7 +83,34 @@ export function WorkflowsWrapper(): React.ReactElement {
           right: 24,
         }}
       >
-        <ManagementBar totalRows={totalRows ?? 0} />
+        <ManagementBar
+          totalRows={totalRows ?? 0}
+          actions={[
+            {
+              id: "delete",
+              label: "Elimina",
+              icon: Trash2,
+              variant: "destructive",
+              disabled: !totalSelected,
+              onClick: () => triggerDelete((prev) => prev + 1),
+            },
+            {
+              id: "disable",
+              label: "Disattiva",
+              icon: Ban,
+              variant: "outline",
+              disabled: !totalSelected,
+              onClick: () => triggerDisable((prev) => prev + 1),
+            },
+            {
+              id: "create",
+              label: "Crea workflow",
+              icon: Plus,
+              variant: "default",
+              onClick: () => setCreateOpen(true),
+            },
+          ]}
+        />
       </div>
 
       <div
@@ -139,6 +176,46 @@ export function WorkflowsWrapper(): React.ReactElement {
       <div className="table_wrapper">
         <WorkflowsTable selectable />
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuovo workflow</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const trimmed = workflowName.trim();
+              if (!trimmed) return;
+              const slug =
+                slugify(trimmed, { lower: true, strict: true }) ||
+                `workflow-${Date.now()}`;
+              const params = new URLSearchParams();
+              params.set("mode", "new");
+              params.set("name", trimmed);
+              router.push(`${pathname}/${slug}?${params.toString()}`);
+              setWorkflowName("");
+              setCreateOpen(false);
+            }}
+          >
+            <Input
+              value={workflowName}
+              onChange={(event) => setWorkflowName(event.target.value)}
+              placeholder="Nome workflow"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                Annulla
+              </Button>
+              <Button type="submit" disabled={!workflowName.trim()}>
+                Crea
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </ClientPageWrapper>
   );
 }

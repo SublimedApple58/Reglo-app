@@ -13,9 +13,10 @@ import { SlidingNumber } from "@/components/animate-ui/text/sliding-number";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { TableDocuments } from "@/components/ui/TableDocuments";
 import Filters from "@/components/ui/filters";
-import { useAtomValue } from "jotai";
+import { useAtomValue, useSetAtom } from "jotai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { useState, useCallback } from "react";
+import { ArrowUpFromLine, FilePlus2, Trash2 } from "lucide-react";
 
 export function DocumentsPage(): React.ReactElement {
   const [showInput, setShowInput] = useState(false);
@@ -26,6 +27,7 @@ export function DocumentsPage(): React.ReactElement {
   const [value, setValue] = useState("");
   const totalSelected = useAtomValue(Documents.documentsRowsSelected);
   const totalRows = useAtomValue(Documents.rows);
+  const triggerDelete = useSetAtom(Documents.documentsDeleteRequest);
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -49,19 +51,14 @@ export function DocumentsPage(): React.ReactElement {
 
   const filtersParamters = [
     {
-      title: "Type",
-      options: ["PDF", "CSV", "WORD"],
-      param: "type",
-    },
-    {
       title: "Status",
-      options: ["Approved", "Pending", "Declined"],
+      options: [
+        "Bozza",
+        "Configurato",
+        "Bindato",
+        "AI",
+      ],
       param: "status",
-    },
-    {
-      title: "Workflow",
-      options: ["Validation", "New custumer", "New request"],
-      param: "workflow",
     },
   ];
 
@@ -77,7 +74,31 @@ export function DocumentsPage(): React.ReactElement {
           right: 24,
         }}
       >
-        <ManagementBar totalRows={totalRows ?? 0}/>
+        <ManagementBar
+          totalRows={totalRows ?? 0}
+          actions={[
+            {
+              id: "delete",
+              label: "Elimina",
+              icon: Trash2,
+              variant: "destructive",
+              disabled: !totalSelected,
+              onClick: () => triggerDelete((prev) => prev + 1),
+            },
+            {
+              id: "create",
+              label: "Crea documento",
+              icon: FilePlus2,
+              variant: "default",
+            },
+            {
+              id: "upload",
+              label: "Upload",
+              icon: ArrowUpFromLine,
+              variant: "outline",
+            },
+          ]}
+        />
       </div>
       <div
         style={{
