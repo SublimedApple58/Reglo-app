@@ -81,7 +81,7 @@ const configurationItems = [
     icon: Bot,
   },
   {
-    title: "Chat with us",
+    title: "Ask support",
     url: "/help",
     icon: HeartHandshake,
   },

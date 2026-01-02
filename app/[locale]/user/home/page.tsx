@@ -1,135 +1,328 @@
 "use client";
 
+import React, { useMemo, useState } from "react";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { Sparkles, CheckCircle2, Clock3, ArrowUpRight } from "lucide-react";
+import {
+  ArrowUpRight,
+  Bot,
+  Sparkles,
+  FileUp,
+  ReceiptText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
+import {
+  computePlanUsage,
+  formatCurrency,
+  type PlanKey,
+} from "@/lib/plan-usage";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import slugify from "slugify";
 
-const highlights = [
-  { label: "Workflows attivi", value: "12", badge: "+3 vs ieri" },
-  { label: "Documenti processati", value: "1.4K", badge: "98% success" },
-  { label: "Task in coda", value: "23", badge: "2 critici" },
-];
+type QuickAction = {
+  id: string;
+  title: string;
+  description: string;
+  icon: React.ReactElement;
+  onClick: () => void;
+};
 
-const recent = [
-  { title: "Onboarding nuovo cliente", time: "10 min fa", status: "Completato" },
-  { title: "Sync TeamSystem · fatture", time: "35 min fa", status: "In esecuzione" },
-  { title: "Validazione documenti HR", time: "1h fa", status: "Completato" },
-  { title: "Alert SLA workflow vendite", time: "2h fa", status: "In attesa" },
-];
-
-const quickLinks = [
-  { title: "Crea workflow", desc: "Blueprint preconfigurati", icon: <Sparkles className="h-4 w-4" /> },
-  { title: "Carica documenti", desc: "PDF, CSV, DOCX", icon: <ArrowUpRight className="h-4 w-4" /> },
-  { title: "Apri assistente", desc: "Prompt rapidi e ricette", icon: <Sparkles className="h-4 w-4" /> },
-];
+const planKey: PlanKey = "growth";
+const usageSnapshot = {
+  documentsUsed: 612,
+  workflowsUsed: 46,
+};
 
 export default function HomePage(): React.ReactElement {
-  const userName = "Tiziano"; // TODO: fetch from session/profile when available
+  const router = useRouter();
+  const { data: session } = useSession();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [workflowName, setWorkflowName] = useState("");
+  const summary = useMemo(
+    () => computePlanUsage(planKey, usageSnapshot),
+    [],
+  );
+
+  const greetingName =
+    session?.user?.name?.split(" ").filter(Boolean)[0] ?? "there";
+
+  const quickActions: QuickAction[] = [
+    {
+      id: "create-workflow",
+      title: "Crea nuovo workflow",
+      description: "Da zero o con blueprint",
+      icon: <Sparkles className="h-4 w-4" />,
+      onClick: () => setCreateOpen(true),
+    },
+    {
+      id: "upload-docs",
+      title: "Carica documenti",
+      description: "PDF, CSV, DOCX",
+      icon: <FileUp className="h-4 w-4" />,
+      onClick: () => router.push("/user/doc_manager"),
+    },
+    {
+      id: "open-assistant",
+      title: "Apri assistente",
+      description: "Prompt rapidi e ricette",
+      icon: <Bot className="h-4 w-4" />,
+      onClick: () => router.push("/user/assistant"),
+    },
+  ];
+
   return (
     <ClientPageWrapper title="Home" hideHero>
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-background to-background p-6 shadow-lg">
-            <div className="flex items-start justify-between gap-3">
+      <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="space-y-5">
+          <section className="rounded-3xl border bg-gradient-to-br from-[#e9f2f2] via-white to-[#f6f7fb] p-6 shadow-lg">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.16em] text-primary">Overview</p>
-                <h2 className="text-2xl font-semibold text-foreground">Ciao, {userName}</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#324e7a]">
+                  Bentornato
+                </p>
+                <h1 className="text-2xl font-semibold text-[#324e7a]">
+                  Ciao, {greetingName}
+                </h1>
                 <p className="text-sm text-muted-foreground">
-                  Stato operativo sintetico: flussi, documenti e attività di oggi.
+                  Questo mese stai usando Reglo al massimo del suo potenziale.
                 </p>
               </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary shadow-inner">
-                <Sparkles className="h-5 w-5" />
+              <div className="rounded-2xl border bg-white/80 px-4 py-3 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Piano attuale
+                </p>
+                <p className="text-lg font-semibold text-[#324e7a]">
+                  {summary.plan.label}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Prezzo base {formatCurrency(summary.plan.basePrice)} / mese
+                </p>
               </div>
             </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              {highlights.map((item) => (
-                <div key={item.label} className="rounded-xl bg-white/80 px-4 py-3 shadow-md shadow-primary/5 backdrop-blur">
-                  <p className="text-xs text-muted-foreground">{item.label}</p>
-                  <p className="text-xl font-semibold text-foreground">{item.value}</p>
-                  <span className="text-[11px] font-medium text-primary/80">{item.badge}</span>
-                </div>
-              ))}
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <UsageCard
+                title="Documenti compilati"
+                used={summary.docs.used}
+                limit={summary.docs.currentLimit}
+                remaining={summary.docs.remainingToNext}
+                extraBlocks={summary.docs.extraBlocks}
+                unitLabel="documenti"
+                blockSize={summary.docs.blockSize}
+                trackColor="bg-[#e9f2f2]"
+                barColor="bg-[#a9d9d1]"
+              />
+              <UsageCard
+                title="Workflow eseguiti"
+                used={summary.workflows.used}
+                limit={summary.workflows.currentLimit}
+                remaining={summary.workflows.remainingToNext}
+                extraBlocks={summary.workflows.extraBlocks}
+                unitLabel="workflow"
+                blockSize={summary.workflows.blockSize}
+                trackColor="bg-[#e5e4f0]"
+                barColor="bg-[#60579e]"
+              />
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-2xl bg-card p-5 shadow-lg shadow-black/5">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">Attività recenti</h3>
-              <span className="text-xs text-muted-foreground">Ultime 2 ore</span>
+          <section className="rounded-2xl border bg-card p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Consumi &amp; soglie
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Controlla quando scattera il prossimo extra.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => router.push("/user/billing")}
+              >
+                <ReceiptText className="h-4 w-4" />
+                Vedi prossimo addebito
+              </Button>
             </div>
-            <div className="space-y-3">
-              {recent.map((item) => (
-                <div
-                  key={item.title}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-white/80 px-4 py-3 shadow-sm shadow-black/5 backdrop-blur"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner">
-                      {item.status === "Completato" ? <CheckCircle2 className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.time}</p>
-                    </div>
-                  </div>
-                  <span
-                    className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground"
-                  >
-                    {item.status}
-                  </span>
-                </div>
-              ))}
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                <p className="font-semibold text-[#324e7a]">Documenti</p>
+                <p>
+                  Soglia base: {summary.docs.included} · Extra attivi:{" "}
+                  {summary.docs.extraBlocks || 0}
+                </p>
+                <p>
+                  Prossimo scatto: +{summary.docs.blockSize} documenti
+                </p>
+              </div>
+              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+                <p className="font-semibold text-[#324e7a]">Workflow</p>
+                <p>
+                  Soglia base: {summary.workflows.included} · Extra attivi:{" "}
+                  {summary.workflows.extraBlocks || 0}
+                </p>
+                <p>
+                  Prossimo scatto: +{summary.workflows.blockSize} workflow
+                </p>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl bg-white/90 p-4 shadow-lg shadow-black/5 backdrop-blur">
+          <section className="rounded-2xl border bg-white/90 p-4 shadow-sm">
             <h3 className="text-lg font-semibold text-foreground">Azioni rapide</h3>
-            <p className="text-xs text-muted-foreground">Riprendi subito dove avevi lasciato.</p>
-            <div className="mt-3 space-y-3">
-              {quickLinks.map((item) => (
+            <p className="text-xs text-muted-foreground">
+              Crea e avvia subito il prossimo flusso.
+            </p>
+            <div className="mt-4 space-y-3">
+              {quickActions.map((action) => (
                 <button
-                  key={item.title}
+                  key={action.id}
                   className="flex w-full items-center justify-between rounded-xl bg-muted/50 px-4 py-3 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
                   type="button"
+                  onClick={action.onClick}
                 >
                   <div className="flex items-center gap-3">
                     <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner">
-                      {item.icon}
+                      {action.icon}
                     </span>
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.desc}</p>
+                      <p className="text-sm font-semibold text-foreground">
+                        {action.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {action.description}
+                      </p>
                     </div>
                   </div>
                   <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-white to-white p-4 shadow-lg shadow-primary/10">
-            <h3 className="text-lg font-semibold text-foreground">Insight rapido</h3>
-            <p className="text-xs text-muted-foreground">
-              Sette giorni di performance workflow.
+          <section className="rounded-2xl border bg-gradient-to-br from-[#e5e4f0] via-white to-white p-4 shadow-sm">
+            <h3 className="text-base font-semibold text-[#324e7a]">
+              Prossimo addebito
+            </h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Troverai il dettaglio completo nella sezione Billing.
             </p>
-            <div className="mt-4 flex items-end gap-2">
-              {[60, 80, 45, 90, 72, 88, 96].map((v, idx) => (
-                <div key={idx} className="flex-1 rounded-full bg-muted/60">
-                  <div
-                    className="w-full rounded-full bg-primary/80"
-                    style={{ height: `${v}%` }}
-                  />
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Miglioramento costante: +12% vs settimana scorsa.
-            </p>
-          </div>
+            <Button
+              className="mt-4 w-full"
+              variant="default"
+              onClick={() => router.push("/user/billing")}
+            >
+              Apri dettaglio costi
+            </Button>
+          </section>
         </div>
       </div>
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuovo workflow</DialogTitle>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const trimmed = workflowName.trim();
+              if (!trimmed) return;
+              const slug =
+                slugify(trimmed, { lower: true, strict: true }) ||
+                `workflow-${Date.now()}`;
+              const params = new URLSearchParams();
+              params.set("mode", "new");
+              params.set("name", trimmed);
+              router.push(`/user/workflows/${slug}?${params.toString()}`);
+              setWorkflowName("");
+              setCreateOpen(false);
+            }}
+          >
+            <Input
+              value={workflowName}
+              onChange={(event) => setWorkflowName(event.target.value)}
+              placeholder="Nome workflow"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
+                Annulla
+              </Button>
+              <Button type="submit" disabled={!workflowName.trim()}>
+                Crea
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </ClientPageWrapper>
+  );
+}
+
+function UsageCard({
+  title,
+  used,
+  limit,
+  remaining,
+  extraBlocks,
+  unitLabel,
+  blockSize,
+  trackColor,
+  barColor,
+}: {
+  title: string;
+  used: number;
+  limit: number;
+  remaining: number;
+  extraBlocks: number;
+  unitLabel: string;
+  blockSize: number;
+  trackColor: string;
+  barColor: string;
+}): React.ReactElement {
+  const percent = Math.min((used / limit) * 100, 100);
+
+  return (
+    <div className="rounded-2xl border bg-white/80 p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {title}
+          </p>
+          <div className="mt-1 flex items-end gap-2">
+            <p className="text-2xl font-semibold text-[#324e7a]">{used}</p>
+            <p className="text-xs text-muted-foreground">su {limit}</p>
+          </div>
+        </div>
+        {extraBlocks ? (
+          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
+            +{extraBlocks} extra
+          </span>
+        ) : null}
+      </div>
+      <div className={`mt-4 h-2 rounded-full ${trackColor}`}>
+        <div
+          className={`h-2 rounded-full ${barColor}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {remaining > 0
+          ? `${remaining} ${unitLabel} al prossimo scatto`
+          : `Prossimo scatto: +${blockSize} ${unitLabel}`}
+      </p>
+    </div>
   );
 }

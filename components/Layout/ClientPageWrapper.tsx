@@ -73,7 +73,7 @@ export default function ClientPageWrapper({
 
             {!hideHero && <div className="h-px w-full bg-border" />}
 
-            <section className="flex flex-1 flex-col rounded-2xl bg-background/90 p-[6px] backdrop-blur">
+            <section className="flex flex-1 flex-col rounded-2xl bg-background/90 backdrop-blur">
               <div className="flex-1 rounded-xl bg-card ">
                 {children}
               </div>

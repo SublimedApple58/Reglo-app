@@ -46,9 +46,13 @@ export function AssistantPage(): React.ReactElement {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const showSlashMenu = input.trim().startsWith("/");
-  const slashQuery = input.replace("/", "").toLowerCase();
+  const trimmedInput = input.trim();
+  const showSlashMenu = trimmedInput.startsWith("/");
+  const slashQuery = trimmedInput.startsWith("/")
+    ? trimmedInput.slice(1).toLowerCase()
+    : "";
   const filteredCommands = useMemo(
     () =>
       slashCommands.filter(
@@ -59,6 +63,10 @@ export function AssistantPage(): React.ReactElement {
     [slashQuery],
   );
 
+  const focusInput = () => {
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
   const sendMessage = () => {
     if (!input.trim()) return;
     const newMessage: Message = {
@@ -68,6 +76,7 @@ export function AssistantPage(): React.ReactElement {
     };
     setMessages((prev) => [...prev, newMessage]);
     setInput("");
+    focusInput();
     queueMicrotask(() => {
       listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
     });
@@ -78,10 +87,20 @@ export function AssistantPage(): React.ReactElement {
     sendMessage();
   };
 
+  const handleQuickInsert = (value: string) => {
+    setInput(value);
+    focusInput();
+  };
+
+  const handleCommandSelect = (command: string) => {
+    setInput(`${command} `);
+    focusInput();
+  };
+
   return (
     <ClientPageWrapper title="Assistant">
       <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <Card className="relative overflow-hidden">
+        <Card className="relative">
           <CardHeader className="flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2">
@@ -135,7 +154,8 @@ export function AssistantPage(): React.ReactElement {
                           key={question}
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
-                          onClick={() => setInput(question)}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => handleQuickInsert(question)}
                           className="rounded-full border bg-muted px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:text-foreground"
                         >
                           {question}
@@ -147,6 +167,7 @@ export function AssistantPage(): React.ReactElement {
 
                 <form onSubmit={handleSend} className="relative space-y-2">
                   <Textarea
+                    ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder='Scrivi un prompt o "/" per i comandi rapidi'
@@ -174,11 +195,11 @@ export function AssistantPage(): React.ReactElement {
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 6 }}
                         transition={{ duration: 0.15 }}
-                        className="absolute -top-[228px] left-0 right-0"
+                        className="absolute bottom-[calc(100%+8px)] left-0 right-0 z-30"
                       >
                         <CommandPalette
                           commands={filteredCommands}
-                          onSelect={(command) => setInput(`${command} `)}
+                          onSelect={handleCommandSelect}
                         />
                       </motion.div>
                     )}
@@ -208,7 +229,8 @@ export function AssistantPage(): React.ReactElement {
                   <Button
                     size="sm"
                     variant="secondary"
-                    onClick={() => setInput(`${item.command} `)}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleCommandSelect(item.command)}
                   >
                     Usa
                   </Button>
@@ -266,6 +288,7 @@ function CommandPalette({
               <MotionHighlightItem key={item.command} value={item.command}>
                 <button
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onSelect(item.command)}
                   className={cn(
                     "flex w-full items-start justify-between rounded-lg px-3 py-2 text-left transition",

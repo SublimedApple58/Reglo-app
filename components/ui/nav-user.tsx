@@ -87,7 +87,7 @@ export function NavUser({
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconCreditCard />
-                Billing
+                <Link rel="stylesheet" href="/user/billing">Billing</Link>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconNotification />

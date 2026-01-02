@@ -45,37 +45,37 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --background: #ffffff;
+  --foreground: #324e7a;
+  --card: #ffffff;
+  --card-foreground: #324e7a;
+  --popover: #ffffff;
+  --popover-foreground: #324e7a;
+  --primary: #324e7a;
+  --primary-foreground: #f8fafc;
+  --secondary: #a9d9d1;
+  --secondary-foreground: #324e7a;
+  --muted: #e9f2f2;
+  --muted-foreground: #5a6f8f;
+  --accent: #e5e4f0;
+  --accent-foreground: #324e7a;
+  --destructive: #d94b47;
+  --border: #d7e3e6;
+  --input: #d7e3e6;
+  --ring: #a9d9d1;
+  --chart-1: #60579e;
+  --chart-2: #a9d9d1;
+  --chart-3: #324e7a;
+  --chart-4: #e5e4f0;
+  --chart-5: #e9f2f2;
+  --sidebar: #f4f9f9;
+  --sidebar-foreground: #324e7a;
+  --sidebar-primary: #324e7a;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #e9f2f2;
+  --sidebar-accent-foreground: #324e7a;
+  --sidebar-border: #d7e3e6;
+  --sidebar-ring: #a9d9d1;
 }
 
 .dark {

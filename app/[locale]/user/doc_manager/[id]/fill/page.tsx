@@ -1,13 +1,14 @@
 import { DocFillWrapper } from "@/components/pages/DocManager/DocFillWrapper";
 
 type DocFillPageProps = {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 };
 
-export default function DocFillPage({
+export default async function DocFillPage({
   params,
-}: DocFillPageProps): React.ReactElement {
-  return <DocFillWrapper docId={params.id} />;
+}: DocFillPageProps): Promise<React.ReactElement> {
+  const { id } = await params;
+  return <DocFillWrapper docId={id} />;
 }

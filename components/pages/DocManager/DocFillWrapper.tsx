@@ -11,8 +11,17 @@ import {
   userProfile,
 } from "@/components/pages/DocManager/doc-manager.data";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { DocFillOverlay } from "@/components/pages/DocManager/doc-fill/DocFillOverlay";
 import { SignatureDialog } from "@/components/pages/DocManager/doc-fill/SignatureDialog";
+import { Link2, Mail, MessageSquareText } from "lucide-react";
 
 type DocFillWrapperProps = {
   docId?: string;
@@ -40,6 +49,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
     string | null
   >(null);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [shareDialogOpen, setShareDialogOpen] = React.useState(false);
 
   const handleSignatureOpen = (fieldId: string) => {
     setActiveSignatureFieldId(fieldId);
@@ -165,7 +175,9 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
       });
 
       const outputBytes = await pdfDoc.save();
-      const blob = new Blob([outputBytes], { type: "application/pdf" });
+      const blob = new Blob([new Uint8Array(outputBytes)], {
+        type: "application/pdf",
+      });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -191,7 +203,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
             <Button variant="outline" onClick={handleSaveDraft} disabled={isSaving}>
               {isSaving ? "Salvataggio..." : "Salva bozza"}
             </Button>
-            <Button>Invia</Button>
+            <Button onClick={() => setShareDialogOpen(true)}>Invia</Button>
           </>
         }
       />
@@ -218,6 +230,66 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         }}
         onConfirm={handleSignatureApply}
       />
+
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Condividi documento</DialogTitle>
+            <DialogDescription>
+              Scegli come inviare il documento compilato. (Mock)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2 text-left text-sm transition hover:bg-muted/40"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Mail className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="font-semibold text-foreground">Email</p>
+                <p className="text-xs text-muted-foreground">
+                  Invia tramite email al destinatario.
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2 text-left text-sm transition hover:bg-muted/40"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-100 text-sky-600">
+                <MessageSquareText className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="font-semibold text-foreground">Slack</p>
+                <p className="text-xs text-muted-foreground">
+                  Condividi in un canale o via DM.
+                </p>
+              </div>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-xl border bg-card px-3 py-2 text-left text-sm transition hover:bg-muted/40"
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
+                <Link2 className="h-4 w-4" />
+              </span>
+              <div>
+                <p className="font-semibold text-foreground">Link condiviso</p>
+                <p className="text-xs text-muted-foreground">
+                  Genera un link sicuro per la condivisione.
+                </p>
+              </div>
+            </button>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareDialogOpen(false)}>
+              Chiudi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

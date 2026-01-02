@@ -19,10 +19,20 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { ArrowLeft } from "lucide-react";
 
-const baseNodeStyle = {
-  borderRadius: 12,
+const primaryNodeStyle = {
+  borderRadius: 14,
   padding: "12px 16px",
-  border: "1px solid var(--border)",
+  border: "1px solid rgba(50, 78, 122, 0.2)",
+  background: "#e9f2f2",
+  color: "#324e7a",
+  fontWeight: 600,
+  boxShadow: "0 10px 18px -16px rgba(50, 78, 122, 0.4)",
+};
+
+const secondaryNodeStyle = {
+  ...primaryNodeStyle,
+  background: "#e5e4f0",
+  border: "1px solid rgba(96, 87, 158, 0.25)",
 };
 
 const buildNodes = (title: string, isNew: boolean): Node[] => {
@@ -30,7 +40,7 @@ const buildNodes = (title: string, isNew: boolean): Node[] => {
     id: "start",
     position: { x: 120, y: 120 },
     data: { label: `Start · ${title}` },
-    style: baseNodeStyle,
+    style: primaryNodeStyle,
   };
 
   if (isNew) {
@@ -43,13 +53,13 @@ const buildNodes = (title: string, isNew: boolean): Node[] => {
       id: "approval",
       position: { x: 360, y: 120 },
       data: { label: "Approvazione responsabile" },
-      style: baseNodeStyle,
+      style: secondaryNodeStyle,
     },
     {
       id: "complete",
       position: { x: 600, y: 120 },
       data: { label: "Completato" },
-      style: baseNodeStyle,
+      style: primaryNodeStyle,
     },
   ];
 };
@@ -171,7 +181,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
         id: newId,
         position,
         data: { label },
-        style: { borderRadius: 12, padding: "12px 16px", border: "1px solid var(--border)" },
+        style: secondaryNodeStyle,
       };
       setNodes((nds) => nds.concat(newNode));
     },
