@@ -34,7 +34,7 @@ const SignUpForm = () => {
       <input type='hidden' name='callbackUrl' value={callbackUrl} />
       <div className='space-y-6'>
         <div>
-          <Label htmlFor='email'>Name</Label>
+          <Label htmlFor='name' style={{marginBottom: 8}}>Name</Label>
           <Input
             id='name'
             name='name'
@@ -44,7 +44,7 @@ const SignUpForm = () => {
           />
         </div>
         <div>
-          <Label htmlFor='email'>Email</Label>
+          <Label htmlFor='email' style={{marginBottom: 8}}>Email</Label>
           <Input
             id='email'
             name='email'
@@ -54,7 +54,7 @@ const SignUpForm = () => {
           />
         </div>
         <div>
-          <Label htmlFor='password'>Password</Label>
+          <Label htmlFor='password' style={{marginBottom: 8}}>Password</Label>
           <Input
             id='password'
             name='password'
@@ -65,7 +65,7 @@ const SignUpForm = () => {
           />
         </div>
         <div>
-          <Label htmlFor='confirmPassword'>Confirm Password</Label>
+          <Label htmlFor='confirmPassword' style={{marginBottom: 8}}>Confirm Password</Label>
           <Input
             id='confirmPassword'
             name='confirmPassword'

@@ -37,11 +37,11 @@ const SignInPage = async (props: {
     <div className='grid w-full items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]'>
       <div className='space-y-6'>
         <Link href='/' className='inline-flex items-center gap-3'>
-          <span className='flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e9f2f2] shadow-sm'>
+          <span className='flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e9f2f2] shadow-md overflow-hidden'>
             <Image
               src='/images/R_logo.png'
-              width={28}
-              height={28}
+              width={60}
+              height={60}
               alt={`${APP_NAME} logo`}
               priority
             />
