@@ -6,7 +6,6 @@ import {
   BreadcrumbItem,
   BreadcrumbList,
 } from "../ui/breadcrumb";
-import ModeToggle from "@/components/shared/header/mode-toggle";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/animate-ui/radix/sidebar";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -61,9 +60,7 @@ export function ClientHeader({
             </BreadcrumbList>
           </Breadcrumb>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <ModeToggle />
-        </div>
+        <div className="ml-auto flex items-center gap-2" />
       </div>
     </header>
   );

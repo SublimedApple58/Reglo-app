@@ -3,7 +3,6 @@ import { APP_DESCRIPTION, APP_NAME, SERVER_URL } from '@/lib/constants';
 import type { Metadata } from 'next';
 import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
-import { ThemeProvider } from 'next-themes';
 import { Inter } from 'next/font/google';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -38,17 +37,10 @@ export default async function RootLayout({
         data-gr-ext-installed=''
       >
         <NextIntlClientProvider>
-          <ThemeProvider
-            attribute='class'
-            defaultTheme='light'
-            enableSystem
-            disableTransitionOnChange
-          >
-            <SessionProvider>
-              {children}
-              <Toaster />
-            </SessionProvider>
-          </ThemeProvider>
+          <SessionProvider>
+            {children}
+            <Toaster />
+          </SessionProvider>
         </NextIntlClientProvider>
       </body>
     </html>
