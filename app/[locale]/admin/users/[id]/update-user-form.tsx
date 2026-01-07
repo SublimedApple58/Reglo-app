@@ -22,7 +22,7 @@ import { updateUser } from '@/lib/actions/user.actions';
 import { USER_ROLES } from '@/lib/constants';
 import { updateUserSchema } from '@/lib/validators';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useRouter } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ControllerRenderProps, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -32,6 +32,9 @@ const UpdateUserForm = ({
   user: z.infer<typeof updateUserSchema>;
 }) => {
   const router = useRouter();
+  const params = useParams<{ locale?: string }>();
+  const locale = typeof params?.locale === "string" ? params.locale : undefined;
+  const usersHref = locale ? `/${locale}/admin/users` : "/admin/users";
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof updateUserSchema>>({
@@ -57,7 +60,7 @@ const UpdateUserForm = ({
         description: res.message,
       });
       form.reset();
-      router.push('/admin/users');
+      router.push(usersHref);
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -144,7 +147,7 @@ const UpdateUserForm = ({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {USER_ROLES.map((role) => (
+                    {USER_ROLES.filter((role) => role).map((role) => (
                       <SelectItem key={role} value={role}>
                         {role.charAt(0).toUpperCase() + role.slice(1)}
                       </SelectItem>

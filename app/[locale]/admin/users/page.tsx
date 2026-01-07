@@ -35,11 +35,14 @@ type AdminUsersSearchParams = {
 
 const AdminUserPage = async ({
   searchParams,
+  params,
 }: {
   searchParams?: Promise<AdminUsersSearchParams>;
+  params: Promise<{ locale: string }>;
 }) => {
   await requireRole(UserRole.ADMIN);
 
+  const { locale } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
 
   const pageParam = Array.isArray(resolvedSearchParams.page)
@@ -144,7 +147,7 @@ const AdminUserPage = async ({
                         <TableCell className='text-right'>
                           <div className='inline-flex items-center gap-2'>
                             <Button asChild variant='outline' size='sm'>
-                              <Link href={`/admin/users/${user.id}`}>Edit</Link>
+                              <Link href={`${locale ? `/${locale}` : ""}/admin/users/${user.id}`}>Edit</Link>
                             </Button>
                             <DeleteDialog id={user.id} action={deleteUser} />
                           </div>
