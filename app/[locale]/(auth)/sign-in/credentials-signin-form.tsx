@@ -65,7 +65,11 @@ const CredentialsSignInForm = () => {
 
         <div className='text-sm text-center text-muted-foreground'>
           Don&apos;t have an account?{' '}
-          <Link href='/sign-up' target='_self' className='link'>
+          <Link
+            href={`/sign-up?callbackUrl=${encodeURIComponent(callbackUrl)}`}
+            target='_self'
+            className='link'
+          >
             Sign Up
           </Link>
         </div>

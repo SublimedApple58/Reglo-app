@@ -81,3 +81,56 @@ export const updateUserSchema = updateProfileSchema.extend({
   id: z.string().min(1, 'ID is required'),
   role: z.string().min(1, 'Role is required'),
 });
+
+export const documentFieldSchema = z.object({
+  type: z.string().min(1, 'Field type is required'),
+  label: z.string().optional(),
+  bindingKey: z.string().optional(),
+  page: z.number().int().min(1, 'Page must be at least 1'),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  meta: z.unknown().optional(),
+});
+
+export const createDocumentTemplateSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  name: z.string().min(1, 'Name is required'),
+  sourceUrl: z.string().optional(),
+});
+
+export const saveDocumentFieldsSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  templateId: z.string().min(1, 'Template is required'),
+  fields: z.array(documentFieldSchema),
+});
+
+export const getDocumentConfigSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  templateId: z.string().min(1, 'Template is required'),
+});
+
+export const updateCompanyNameSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  name: z.string().min(1, 'Company name is required'),
+});
+
+export const createImageUploadSchema = z.object({
+  contentType: z.string().min(1, 'Content type is required'),
+  size: z.number().int().positive('File size is required'),
+});
+
+export const finalizeImageUploadSchema = z.object({
+  key: z.string().min(1, 'Asset key is required'),
+});
+
+export const createCompanyInviteSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['member', 'admin']),
+});
+
+export const acceptCompanyInviteSchema = z.object({
+  token: z.string().min(1, 'Invite token is required'),
+});

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import {
   Select,
@@ -24,6 +25,16 @@ import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { useSession } from "next-auth/react";
 import { updateProfile } from "@/lib/actions/user.actions";
+import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
+import {
+  createCompanyLogoUpload,
+  createUserAvatarUpload,
+  getCurrentUserAvatarUrl,
+  saveCompanyLogo,
+  saveUserAvatar,
+} from "@/lib/actions/storage.actions";
+import { createCompanyInvite } from "@/lib/actions/invite.actions";
+import { MailPlus, UploadCloud } from "lucide-react";
 
 type TabKey = "account" | "company";
 type TabItem = { label: string; value: TabKey };
@@ -39,6 +50,12 @@ export function SettingsPage(): React.ReactElement {
   const { data: session, update } = useSession();
   const toast = useFeedbackToast();
   const didInitName = useRef(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [isAvatarUploading, setIsAvatarUploading] = useState(false);
+  const [isLogoUploading, setIsLogoUploading] = useState(false);
 
   const [accountForm, setAccountForm] = useState({
     firstName: "",
@@ -58,6 +75,12 @@ export function SettingsPage(): React.ReactElement {
     companyName: "Reglo S.r.l.",
     dataRegion: dataRegionOptions[0],
   });
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [inviteForm, setInviteForm] = useState({
+    email: "",
+    role: "member",
+  });
+  const [isInviteSending, setIsInviteSending] = useState(false);
 
   const [sessionAccess, setSessionAccess] = useState({
     logSessions: true,
@@ -65,12 +88,25 @@ export function SettingsPage(): React.ReactElement {
     sessionTimeout: sessionTimeoutOptions[2],
   });
 
+  const isAdmin = session?.user?.role === "admin";
+  const avatarInitials = useMemo(() => {
+    const name = session?.user?.name?.trim();
+    if (!name) return "RG";
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase();
+  }, [session?.user?.name]);
+
   const tabItems = useMemo<TabItem[]>(
     () => [
       { label: "Account", value: "account" },
-      { label: "Company", value: "company" },
+      ...(isAdmin ? [{ label: "Company", value: "company" }] : []),
     ],
-    [],
+    [isAdmin],
   );
   const activeTab = tabItems[activeTabIndex]?.value ?? "account";
 
@@ -88,6 +124,45 @@ export function SettingsPage(): React.ReactElement {
     }));
     didInitName.current = true;
   }, [session?.user?.name]);
+
+  useEffect(() => {
+    if (activeTabIndex >= tabItems.length) {
+      setActiveTabIndex(0);
+    }
+  }, [activeTabIndex, tabItems.length]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadCompany = async () => {
+      const res = await getCurrentCompany();
+      if (!res.success || !isMounted) return;
+      setCompanyId(res.data.id);
+      setCompanyForm((prev) => ({
+        ...prev,
+        companyName: res.data.name,
+      }));
+      setLogoUrl(res.data.logoUrl ?? null);
+    };
+
+    loadCompany();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadAvatar = async () => {
+      const res = await getCurrentUserAvatarUrl();
+      if (!res.success || !isMounted) return;
+      setAvatarUrl(res.data.url);
+    };
+
+    loadAvatar();
+    return () => {
+      isMounted = false;
+    };
+  }, [session?.user?.image]);
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -137,12 +212,217 @@ export function SettingsPage(): React.ReactElement {
     });
   };
 
-  const handleCompanySave = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleCompanySave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const name = companyForm.companyName.trim();
+
+    if (!name) {
+      toast.error({
+        description: "Inserisci il nome della company.",
+      });
+      return;
+    }
+
+    if (!companyId) {
+      toast.error({
+        description: "Company non trovata.",
+      });
+      return;
+    }
+
+    const res = await updateCompanyName({
+      companyId,
+      name,
+    });
+
+    if (!res.success) {
+      toast.error({
+        description: res.message,
+      });
+      return;
+    }
+
     toast.success({
       title: "Salvataggio completato",
-      description: "Le impostazioni company sono state aggiornate (mock).",
+      description: "Le impostazioni company sono state aggiornate.",
     });
+  };
+
+  const handleAvatarFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!file.type) {
+      toast.error({ description: "Unsupported file type." });
+      return;
+    }
+
+    setIsAvatarUploading(true);
+    try {
+      const upload = await createUserAvatarUpload({
+        contentType: file.type,
+        size: file.size,
+      });
+
+      if (!upload.success || !upload.data) {
+        throw new Error(upload.message ?? "Upload failed.");
+      }
+
+      const uploadRes = await fetch(upload.data.uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Upload failed.");
+      }
+
+      const finalize = await saveUserAvatar({ key: upload.data.key });
+
+      if (!finalize.success || !finalize.data) {
+        throw new Error(finalize.message ?? "Upload failed.");
+      }
+
+      setAvatarUrl(finalize.data.url);
+
+      if (session) {
+        await update({
+          ...session,
+          user: {
+            ...session.user,
+            image: finalize.data.key,
+          },
+        });
+      }
+
+      toast.success({
+        title: "Upload completed",
+        description: "Profile image updated successfully.",
+      });
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error ? error.message : "Upload failed.",
+      });
+    } finally {
+      setIsAvatarUploading(false);
+    }
+  };
+
+  const handleLogoFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!companyId) {
+      toast.error({ description: "Company not found." });
+      return;
+    }
+
+    if (!file.type) {
+      toast.error({ description: "Unsupported file type." });
+      return;
+    }
+
+    setIsLogoUploading(true);
+    try {
+      const upload = await createCompanyLogoUpload({
+        companyId,
+        contentType: file.type,
+        size: file.size,
+      });
+
+      if (!upload.success || !upload.data) {
+        throw new Error(upload.message ?? "Upload failed.");
+      }
+
+      const uploadRes = await fetch(upload.data.uploadUrl, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("Upload failed.");
+      }
+
+      const finalize = await saveCompanyLogo({
+        companyId,
+        key: upload.data.key,
+      });
+
+      if (!finalize.success || !finalize.data) {
+        throw new Error(finalize.message ?? "Upload failed.");
+      }
+
+      setLogoUrl(finalize.data.url);
+      window.dispatchEvent(new Event("company-logo-updated"));
+
+      toast.success({
+        title: "Upload completed",
+        description: "Company logo updated successfully.",
+      });
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error ? error.message : "Upload failed.",
+      });
+    } finally {
+      setIsLogoUploading(false);
+    }
+  };
+
+  const handleInviteSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    if (!companyId) {
+      toast.error({ description: "Company not found." });
+      return;
+    }
+
+    const email = inviteForm.email.trim();
+    if (!email) {
+      toast.error({ description: "Enter an email address." });
+      return;
+    }
+
+    setIsInviteSending(true);
+    try {
+      const res = await createCompanyInvite({
+        companyId,
+        email,
+        role: inviteForm.role as "member" | "admin",
+      });
+
+      if (!res.success) {
+        throw new Error(res.message ?? "Invite failed.");
+      }
+
+      setInviteForm((prev) => ({ ...prev, email: "" }));
+      toast.success({
+        title: "Invite sent",
+        description: "The invitation email has been sent.",
+      });
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error ? error.message : "Invite failed.",
+      });
+    } finally {
+      setIsInviteSending(false);
+    }
   };
 
   return (
@@ -167,6 +447,46 @@ export function SettingsPage(): React.ReactElement {
               className="space-y-4"
             >
               <form onSubmit={handleAccountSave} className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Profile photo</CardTitle>
+                    <CardDescription>
+                      Upload a profile image to personalize your account.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                      <Avatar className="h-14 w-14">
+                        <AvatarImage src={avatarUrl ?? undefined} alt="Profile" />
+                        <AvatarFallback>{avatarInitials}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">Profile image</p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, or WebP. Max 5MB.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={avatarInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={handleAvatarFileChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={isAvatarUploading}
+                      >
+                        <UploadCloud className="h-4 w-4" />
+                        {isAvatarUploading ? "Uploading..." : "Upload image"}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle>Account</CardTitle>
@@ -295,86 +615,191 @@ export function SettingsPage(): React.ReactElement {
               transition={{ duration: 0.2 }}
               className="space-y-4"
             >
-              <form onSubmit={handleCompanySave} className="space-y-4">
+              <div className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Company</CardTitle>
+                    <CardTitle>Company logo</CardTitle>
                     <CardDescription>
-                      Informazioni base dell&apos;azienda.
+                      Upload a logo to personalize the workspace.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <LabeledInput
-                      label="Nome azienda"
-                      placeholder="Reglo S.r.l."
-                      value={companyForm.companyName}
-                      onChange={(event) =>
-                        setCompanyForm((prev) => ({
-                          ...prev,
-                          companyName: event.target.value,
-                        }))
-                      }
-                    />
-                    <SelectField
-                      label="Data region"
-                      value={companyForm.dataRegion}
-                      options={dataRegionOptions}
-                      onChange={(value) =>
-                        setCompanyForm((prev) => ({
-                          ...prev,
-                          dataRegion: value,
-                        }))
-                      }
-                    />
+                  <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30">
+                        {logoUrl ? (
+                          <img
+                            src={logoUrl}
+                            alt="Company logo"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Logo
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">Company logo</p>
+                        <p className="text-xs text-muted-foreground">
+                          PNG, JPG, or WebP. Max 5MB.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={handleLogoFileChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => logoInputRef.current?.click()}
+                        disabled={isLogoUploading}
+                      >
+                        <UploadCloud className="h-4 w-4" />
+                        {isLogoUploading ? "Uploading..." : "Upload logo"}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
 
-                <Card className="border-primary/15">
-                  <CardHeader>
-                    <CardTitle>Sessioni &amp; Accessi</CardTitle>
-                    <CardDescription>
-                      Policy di accesso e monitoraggio sessioni.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <CheckboxRow
-                      label="Logga nuove sessioni e invia recap"
-                      checked={sessionAccess.logSessions}
-                      onChange={(value) =>
-                        setSessionAccess((prev) => ({
-                          ...prev,
-                          logSessions: value,
-                        }))
-                      }
-                    />
-                    <CheckboxRow
-                      label="Blocca device non riconosciuti"
-                      checked={sessionAccess.blockUnknownDevices}
-                      onChange={(value) =>
-                        setSessionAccess((prev) => ({
-                          ...prev,
-                          blockUnknownDevices: value,
-                        }))
-                      }
-                    />
-                    <SelectField
-                      label="Session timeout (min)"
-                      value={sessionAccess.sessionTimeout}
-                      options={sessionTimeoutOptions}
-                      onChange={(value) =>
-                        setSessionAccess((prev) => ({
-                          ...prev,
-                          sessionTimeout: value,
-                        }))
-                      }
-                    />
-                  </CardContent>
-                </Card>
+                <form onSubmit={handleCompanySave} className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Company</CardTitle>
+                      <CardDescription>
+                        Informazioni base dell&apos;azienda.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <LabeledInput
+                        label="Nome azienda"
+                        placeholder="Reglo S.r.l."
+                        value={companyForm.companyName}
+                        onChange={(event) =>
+                          setCompanyForm((prev) => ({
+                            ...prev,
+                            companyName: event.target.value,
+                          }))
+                        }
+                      />
+                      <SelectField
+                        label="Data region"
+                        value={companyForm.dataRegion}
+                        options={dataRegionOptions}
+                        onChange={(value) =>
+                          setCompanyForm((prev) => ({
+                            ...prev,
+                            dataRegion: value,
+                          }))
+                        }
+                      />
+                    </CardContent>
+                  </Card>
 
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  <Button type="submit">Salva impostazioni company</Button>
-                </div>
-              </form>
+                  <Card className="border-primary/15">
+                    <CardHeader>
+                      <CardTitle>Sessioni &amp; Accessi</CardTitle>
+                      <CardDescription>
+                        Policy di accesso e monitoraggio sessioni.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <CheckboxRow
+                        label="Logga nuove sessioni e invia recap"
+                        checked={sessionAccess.logSessions}
+                        onChange={(value) =>
+                          setSessionAccess((prev) => ({
+                            ...prev,
+                            logSessions: value,
+                          }))
+                        }
+                      />
+                      <CheckboxRow
+                        label="Blocca device non riconosciuti"
+                        checked={sessionAccess.blockUnknownDevices}
+                        onChange={(value) =>
+                          setSessionAccess((prev) => ({
+                            ...prev,
+                            blockUnknownDevices: value,
+                          }))
+                        }
+                      />
+                      <SelectField
+                        label="Session timeout (min)"
+                        value={sessionAccess.sessionTimeout}
+                        options={sessionTimeoutOptions}
+                        onChange={(value) =>
+                          setSessionAccess((prev) => ({
+                            ...prev,
+                            sessionTimeout: value,
+                          }))
+                        }
+                      />
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    <Button type="submit">Salva impostazioni company</Button>
+                  </div>
+                </form>
+
+                <form onSubmit={handleInviteSubmit} className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Invite team members</CardTitle>
+                      <CardDescription>
+                        Send a simple invite to join your company.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-[1.4fr_0.6fr]">
+                        <LabeledInput
+                          label="Email"
+                          placeholder="name@company.com"
+                          value={inviteForm.email}
+                          onChange={(event) =>
+                            setInviteForm((prev) => ({
+                              ...prev,
+                              email: event.target.value,
+                            }))
+                          }
+                        />
+                        <div className="space-y-2">
+                          <LabelMini>Role</LabelMini>
+                          <Select
+                            value={inviteForm.role}
+                            onValueChange={(value) =>
+                              setInviteForm((prev) => ({
+                                ...prev,
+                                role: value,
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="member">Member</SelectItem>
+                              <SelectItem value="admin">Admin</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    <Button type="submit" disabled={isInviteSending}>
+                      <MailPlus className="h-4 w-4" />
+                      {isInviteSending ? "Sending..." : "Send invite"}
+                    </Button>
+                  </div>
+                </form>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

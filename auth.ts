@@ -62,10 +62,12 @@ export const config = {
       session.user.id = token.sub;
       session.user.role = token.role;
       session.user.name = token.name;
+      session.user.image = token.image;
 
       // If there is an update, set the user name
       if (trigger === 'update') {
         session.user.name = user.name;
+        session.user.image = user.image ?? session.user.image;
       }
 
       return session;
@@ -75,6 +77,7 @@ export const config = {
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        token.image = user.image;
 
         // If user has no name then use the email
         if (user.name === 'NO_NAME') {
@@ -91,6 +94,10 @@ export const config = {
       // Handle session updates
       if (session?.user.name && trigger === 'update') {
         token.name = session.user.name;
+      }
+
+      if (trigger === 'update' && session?.user?.image !== undefined) {
+        token.image = session.user.image;
       }
 
       return token;

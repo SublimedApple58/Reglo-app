@@ -23,17 +23,41 @@ import {
   useSidebar,
 } from "@/components/animate-ui/radix/sidebar";
 import { signOutUser } from "@/lib/actions/user.actions";
+import { getCurrentUserAvatarUrl } from "@/lib/actions/storage.actions";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
-export function NavUser({
-  user,
-}: {
-  user: {
-    avatar: string;
-  };
-}) {
+import { useEffect, useMemo, useState } from "react";
+
+export function NavUser() {
   const { isMobile } = useSidebar();
   const session = useSession();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const initials = useMemo(() => {
+    const name = session.data?.user?.name?.trim();
+    if (!name) return "RG";
+    return name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0])
+      .join("")
+      .toUpperCase();
+  }, [session.data?.user?.name]);
+
+  useEffect(() => {
+    if (!session.data) return;
+    let isMounted = true;
+    const loadAvatar = async () => {
+      const res = await getCurrentUserAvatarUrl();
+      if (!res.success || !isMounted) return;
+      setAvatarUrl(res.data.url);
+    };
+
+    loadAvatar();
+    return () => {
+      isMounted = false;
+    };
+  }, [session.data?.user?.image]);
 
   if(!session.data) return null;
   
@@ -47,8 +71,10 @@ export function NavUser({
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
               <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={"image avatar"} />
-                <AvatarFallback className="rounded-lg">RG</AvatarFallback>
+                <AvatarImage src={avatarUrl ?? undefined} alt="User avatar" />
+                <AvatarFallback className="rounded-lg">
+                  {initials}
+                </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{session.data.user.name}</span>
@@ -68,8 +94,10 @@ export function NavUser({
             <DropdownMenuLabel className="p-0 font-normal">
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.avatar} alt={"name"} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarImage src={avatarUrl ?? undefined} alt="User avatar" />
+                  <AvatarFallback className="rounded-lg">
+                    {initials}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{session.data.user.name}</span>

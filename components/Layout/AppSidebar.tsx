@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   Sidebar,
@@ -32,6 +32,7 @@ import Link from "next/link";
 import { SidebarGroupLabel } from "../ui/sidebar";
 import useRequireRole from "@/hooks/use-require-role";
 import { UserRole } from "@/lib/constants";
+import { getCurrentCompany } from "@/lib/actions/company.actions";
 
 const items = [
   {
@@ -87,13 +88,11 @@ const configurationItems = [
   },
 ];
 
-const user = {
-  avatar: "https://ui.shadcn.com/avatars/shadcn.jpg",
-};
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
   const path = usePathname() || "";
+  const [companyName, setCompanyName] = useState("Reglo srl");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
 
   const mainSection = useMemo(() => {
     if (path === "/") {
@@ -107,6 +106,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const {isAuthorized } = useRequireRole(UserRole.ADMIN);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadCompany = async () => {
+      const res = await getCurrentCompany();
+      if (!res.success || !isMounted) return;
+      setCompanyName(res.data.name);
+      setCompanyLogoUrl(res.data.logoUrl ?? null);
+    };
+    const handleLogoUpdate = () => {
+      loadCompany();
+    };
+
+    loadCompany();
+    window.addEventListener("company-logo-updated", handleLogoUpdate);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("company-logo-updated", handleLogoUpdate);
+    };
+  }, []);
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="px-1">
@@ -115,16 +134,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton size="lg" asChild className="gap-3 rounded-xl px-3 py-2">
               <Link href="/">
                 <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border border-border/70 shadow-sm">
-                  <Image
-                    src="/images/R_logo.png"
-                    alt="Reglo Logo"
-                    width={32}
-                    height={32}
-                    priority
-                  />
+                  {companyLogoUrl ? (
+                    <img
+                      src={companyLogoUrl}
+                      alt="Company logo"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <Image
+                      src="/images/R_logo.png"
+                      alt="Reglo Logo"
+                      width={32}
+                      height={32}
+                      priority
+                    />
+                  )}
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">Reglo srl</span>
+                  <span className="truncate font-medium">{companyName}</span>
                   <span className="truncate text-xs text-muted-foreground">Pro plan</span>
                 </div>
               </Link>
@@ -223,7 +250,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-1">
-        <NavUser user={user} />
+        <NavUser />
       </SidebarFooter>
     </Sidebar>
   );
