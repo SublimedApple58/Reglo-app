@@ -126,7 +126,9 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
             ? "Input"
             : field.type === "sign"
               ? "Sign"
-              : "Text area"),
+              : field.type === "text"
+                ? "Testo"
+                : "Text area"),
         page: field.page,
         x: field.x,
         y: field.y,
@@ -219,6 +221,18 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         return lines;
       };
 
+      const htmlToText = (html: string) => {
+        if (!html) return "";
+        const normalized = html
+          .replace(/<br\s*\/?>/gi, "\n")
+          .replace(/<\/p>/gi, "\n");
+        if (typeof window === "undefined") {
+          return normalized.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        }
+        const parsed = new DOMParser().parseFromString(normalized, "text/html");
+        return (parsed.body.textContent ?? "").replace(/\s+/g, " ").trim();
+      };
+
       const getMetricsForPage = (pageNumber: number) => {
         if (pageMetrics.has(pageNumber)) {
           return pageMetrics.get(pageNumber) ?? null;
@@ -265,6 +279,26 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         const height = resolved.height * metrics.scaleY;
         const paddingX = 4 * metrics.scaleX;
         const paddingY = 3 * metrics.scaleY;
+
+        if (field.type === "text") {
+          const text = htmlToText(field.meta?.html ?? field.label ?? "");
+          if (!text) return;
+          const fontSize = Math.min(12, Math.max(9, height * 0.22));
+          const lineHeight = fontSize * 1.3;
+          const maxLines = Math.floor((height - paddingY * 2) / lineHeight);
+          const lines = wrapText(text, fontSize, width - paddingX * 2);
+          lines.slice(0, maxLines).forEach((line, index) => {
+            const textY = y + height - paddingY - lineHeight * (index + 1);
+            metrics.page.drawText(line, {
+              x: x + paddingX,
+              y: textY,
+              size: fontSize,
+              font: textFont,
+              color: rgb(0.1, 0.1, 0.1),
+            });
+          });
+          return;
+        }
 
         if (field.type === "input") {
           const fontSize = Math.min(14, Math.max(9, height * 0.85));

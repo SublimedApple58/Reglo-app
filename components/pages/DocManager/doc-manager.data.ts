@@ -1,4 +1,4 @@
-import { PenLine, TextCursorInput, Type } from "lucide-react";
+import { AlignLeft, PenLine, TextCursorInput, Type } from "lucide-react";
 import type { DocItem, FillField, ToolItem } from "./doc-manager.types";
 
 export const pdfSource = "/file/pdf_example.pdf";
@@ -45,6 +45,16 @@ export const toolItems: ToolItem[] = [
     height: 110,
     minWidth: 160,
     minHeight: 80,
+    resizable: true,
+  },
+  {
+    id: "text",
+    label: "Add text block",
+    icon: AlignLeft,
+    width: 260,
+    height: 90,
+    minWidth: 160,
+    minHeight: 60,
     resizable: true,
   },
 ];

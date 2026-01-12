@@ -11,6 +11,7 @@ import type { PlacedField, ToolId } from "@/components/pages/DocManager/doc-mana
 import { DocEditorSidebar } from "@/components/pages/DocManager/doc-editor/DocEditorSidebar";
 import { DocEditorOverlay } from "@/components/pages/DocManager/doc-editor/DocEditorOverlay";
 import { BindingKeyDialog } from "@/components/pages/DocManager/doc-editor/BindingKeyDialog";
+import { RichTextDialog } from "@/components/pages/DocManager/doc-editor/RichTextDialog";
 import { getCurrentCompany } from "@/lib/actions/company.actions";
 import {
   getDocumentConfig,
@@ -45,6 +46,9 @@ export function DocEditorWrapper({
   const [bindingDialogOpen, setBindingDialogOpen] = React.useState(false);
   const [bindingFieldId, setBindingFieldId] = React.useState<string | null>(null);
   const [bindingDraft, setBindingDraft] = React.useState("");
+  const [textDialogOpen, setTextDialogOpen] = React.useState(false);
+  const [textFieldId, setTextFieldId] = React.useState<string | null>(null);
+  const [textDraft, setTextDraft] = React.useState("");
   const [dragState, setDragState] = React.useState<{
     id: string;
     page: number;
@@ -83,6 +87,15 @@ export function DocEditorWrapper({
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 7) return `Aggiornato ${diffDays}gg fa`;
     return `Aggiornato il ${updated.toLocaleDateString("it-IT")}`;
+  }, []);
+
+  const extractPlainText = React.useCallback((html: string) => {
+    if (!html) return "";
+    if (typeof window === "undefined") {
+      return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    }
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    return (parsed.body.textContent ?? "").replace(/\s+/g, " ").trim();
   }, []);
 
   React.useEffect(() => {
@@ -131,7 +144,7 @@ export function DocEditorWrapper({
         width: field.width,
         height: field.height,
         bindingKey: field.bindingKey ?? undefined,
-        meta: (field.meta as { unit?: "ratio" } | null) ?? null,
+        meta: (field.meta as { unit?: "ratio"; html?: string } | null) ?? null,
       }));
       setFields(loadedFields);
       idCounter.current = loadedFields.length;
@@ -208,6 +221,8 @@ export function DocEditorWrapper({
     const baseHeight = Math.max(bounds.height, 1);
     const widthRatio = tool.width / baseWidth;
     const heightRatio = tool.height / baseHeight;
+    const isTextBlock = toolId === "text";
+    const defaultHtml = isTextBlock ? "<p>Scrivi qui il testo...</p>" : undefined;
     const nextField: PlacedField = {
       id: `field-${idCounter.current++}`,
       type: toolId,
@@ -216,7 +231,10 @@ export function DocEditorWrapper({
       y: y / baseHeight,
       width: widthRatio,
       height: heightRatio,
-      meta: { unit: "ratio" },
+      meta: {
+        unit: "ratio",
+        ...(defaultHtml ? { html: defaultHtml } : {}),
+      },
     };
     setFields((prev) => prev.concat(nextField));
   };
@@ -317,6 +335,30 @@ export function DocEditorWrapper({
     setBindingFieldId(null);
   };
 
+  const handleEditTextField = (field: PlacedField) => {
+    setTextFieldId(field.id);
+    setTextDraft(field.meta?.html ?? "<p>Scrivi qui il testo...</p>");
+    setTextDialogOpen(true);
+  };
+
+  const handleTextSubmit = (nextHtml: string) => {
+    if (!textFieldId) return;
+    setFields((prev) =>
+      prev.map((field) =>
+        field.id === textFieldId
+          ? {
+              ...field,
+              meta: {
+                unit: field.meta?.unit ?? "ratio",
+                html: nextHtml,
+              },
+            }
+          : field,
+      ),
+    );
+    setTextFieldId(null);
+  };
+
   const handleSave = async () => {
     if (!docId || !companyId || isSaving) return;
     setIsSaving(true);
@@ -330,27 +372,36 @@ export function DocEditorWrapper({
       }
       const baseWidth = Math.max(bounds.width, 1);
       const baseHeight = Math.max(bounds.height, 1);
+      const nextMeta = {
+        unit: "ratio",
+        ...(field.meta?.html ? { html: field.meta.html } : {}),
+      };
       return {
         ...field,
         x: field.x / baseWidth,
         y: field.y / baseHeight,
         width: field.width / baseWidth,
         height: field.height / baseHeight,
-        meta: { unit: "ratio" },
+        meta: nextMeta,
       };
     });
 
-    const payloadFields = normalizedFields.map((field) => ({
-      type: field.type,
-      label: field.bindingKey ?? undefined,
-      bindingKey: field.bindingKey ?? undefined,
-      page: field.page,
-      x: field.x,
-      y: field.y,
-      width: field.width,
-      height: field.height,
-      meta: field.meta ?? undefined,
-    }));
+    const payloadFields = normalizedFields.map((field) => {
+      const label = field.type === "text"
+        ? extractPlainText(field.meta?.html ?? "") || "Testo"
+        : field.bindingKey ?? undefined;
+      return {
+        type: field.type,
+        label,
+        bindingKey: field.bindingKey ?? undefined,
+        page: field.page,
+        x: field.x,
+        y: field.y,
+        width: field.width,
+        height: field.height,
+        meta: field.meta ?? undefined,
+      };
+    });
 
     const res = await saveDocumentFields({
       companyId,
@@ -512,6 +563,7 @@ export function DocEditorWrapper({
               }
               onDeleteField={handleDeleteField}
               onRequestBinding={handleRequestBinding}
+              onEditText={handleEditTextField}
             />
           )}
         />
@@ -529,6 +581,17 @@ export function DocEditorWrapper({
           }
         }}
         onSubmit={handleBindingSubmit}
+      />
+      <RichTextDialog
+        open={textDialogOpen}
+        value={textDraft}
+        onOpenChange={(open) => {
+          setTextDialogOpen(open);
+          if (!open) {
+            setTextFieldId(null);
+          }
+        }}
+        onSubmit={handleTextSubmit}
       />
     </div>
   );

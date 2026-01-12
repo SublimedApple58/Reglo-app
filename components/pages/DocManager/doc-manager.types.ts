@@ -8,7 +8,7 @@ export type DocItem = {
   previewUrl?: string;
 };
 
-export type ToolId = "input" | "sign" | "textarea";
+export type ToolId = "input" | "sign" | "textarea" | "text";
 
 export type ToolItem = {
   id: ToolId;
@@ -32,6 +32,7 @@ export type PlacedField = {
   bindingKey?: string;
   meta?: {
     unit?: "ratio";
+    html?: string;
   } | null;
 };
 
@@ -46,5 +47,6 @@ export type FillField = {
   height: number;
   meta?: {
     unit?: "ratio";
+    html?: string;
   } | null;
 };

@@ -67,8 +67,22 @@ export function DocFillOverlay({
   return (
     <div ref={overlayRef} className="pointer-events-none absolute inset-0 z-10">
       {pageFields.map((field) => {
+        if (field.type === "text") {
+          const html = field.meta?.html ?? field.label ?? "";
+          if (!html.trim()) return null;
+          return (
+            <div
+              key={field.id}
+              className="absolute pointer-events-none text-[11px] leading-relaxed text-foreground/90 [&_p]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0"
+              style={resolveFieldStyle(field)}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
+          );
+        }
+
         const value = values[field.id] ?? "";
         const isSigned = field.type === "sign" && value.trim().length > 0;
+
         return (
           <div
             key={field.id}
