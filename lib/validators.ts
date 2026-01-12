@@ -18,6 +18,7 @@ export const signInFormSchema = z.object({
 // Schema for signing up a user
 export const signUpFormSchema = z
   .object({
+    companyName: z.string().min(1, 'Company name is required'),
     name: z.string().min(3, 'Name must be at least 3 characters'),
     email: z.string().email('Invalid email address'),
     password: z.string().min(6, 'Password must be at least 6 characters'),
@@ -109,6 +110,12 @@ export const saveDocumentFieldsSchema = z.object({
 export const getDocumentConfigSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   templateId: z.string().min(1, 'Template is required'),
+});
+
+export const createDocumentRequestSchema = z.object({
+  companyId: z.string().min(1, 'Company is required'),
+  templateId: z.string().min(1, 'Template is required'),
+  name: z.string().min(1, 'Name is required'),
 });
 
 export const updateCompanyNameSchema = z.object({

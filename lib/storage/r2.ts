@@ -20,6 +20,12 @@ export const getSignedAssetUrl = async (
     return key;
   }
 
+  const publicBase = normalizePublicBase(process.env.R2_PUBLIC_BASE_URL);
+  if (publicBase) {
+    const normalizedKey = key.replace(/^\/+/, '');
+    return `${publicBase}/${normalizedKey}`;
+  }
+
   return getSignedUrl(
     getR2Client(),
     new GetObjectCommand({
@@ -42,7 +48,10 @@ const getConfig = () => {
     return cachedConfig;
   }
 
-  const bucketName = requiredEnv(process.env.R2_BUCKET_NAME, 'R2_BUCKET_NAME');
+  const bucketName = requiredEnv(
+    process.env.R2_BUCKET_NAME ?? process.env.R2_BUCKET,
+    'R2_BUCKET_NAME'
+  );
   const endpoint = normalizeEndpoint(
     requiredEnv(process.env.R2_ENDPOINT, 'R2_ENDPOINT'),
     bucketName
@@ -76,4 +85,9 @@ function normalizeEndpoint(value: string, bucket: string) {
     return trimmed.slice(0, -(bucket.length + 1));
   }
   return trimmed;
+}
+
+function normalizePublicBase(value: string | undefined) {
+  if (!value) return null;
+  return value.replace(/\/+$/, '');
 }

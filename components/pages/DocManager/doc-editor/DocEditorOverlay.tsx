@@ -13,6 +13,7 @@ import type { PlacedField, ToolId } from "../doc-manager.types";
 
 type DocEditorOverlayProps = {
   fields: PlacedField[];
+  pageNumber: number;
   selectedTool: ToolId | null;
   overlayRef: React.RefObject<HTMLDivElement>;
   onCanvasClick: (event: React.MouseEvent<HTMLDivElement>) => void;
@@ -29,6 +30,7 @@ type DocEditorOverlayProps = {
 
 export function DocEditorOverlay({
   fields,
+  pageNumber,
   selectedTool,
   overlayRef,
   onCanvasClick,
@@ -39,6 +41,46 @@ export function DocEditorOverlay({
   onDeleteField,
   onRequestBinding,
 }: DocEditorOverlayProps): React.ReactElement {
+  const pageFields = fields.filter((field) => field.page === pageNumber);
+  const [bounds, setBounds] = React.useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  React.useLayoutEffect(() => {
+    const node = overlayRef.current;
+    if (!node) return;
+
+    const update = () =>
+      setBounds({
+        width: node.clientWidth,
+        height: node.clientHeight,
+      });
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [overlayRef]);
+
+  const resolveFieldStyle = (field: PlacedField) => {
+    if (field.meta?.unit === "ratio" && bounds) {
+      return {
+        left: field.x * bounds.width,
+        top: field.y * bounds.height,
+        width: field.width * bounds.width,
+        height: field.height * bounds.height,
+      };
+    }
+
+    return {
+      left: field.x,
+      top: field.y,
+      width: field.width,
+      height: field.height,
+    };
+  };
+
   return (
     <div
       ref={overlayRef}
@@ -51,16 +93,11 @@ export function DocEditorOverlay({
       onDragOver={onCanvasDragOver}
       aria-hidden="true"
     >
-      {fields.map((field) => (
+      {pageFields.map((field) => (
         <div
           key={field.id}
           className="group absolute cursor-move rounded-md border border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary/80 shadow-sm"
-          style={{
-            left: field.x,
-            top: field.y,
-            width: field.width,
-            height: field.height,
-          }}
+          style={resolveFieldStyle(field)}
           onMouseDown={(event) => onStartDrag(field, event)}
           onClick={(event) => {
             event.stopPropagation();

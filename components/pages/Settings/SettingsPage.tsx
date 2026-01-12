@@ -27,11 +27,7 @@ import { useSession } from "next-auth/react";
 import { updateProfile } from "@/lib/actions/user.actions";
 import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
 import {
-  createCompanyLogoUpload,
-  createUserAvatarUpload,
   getCurrentUserAvatarUrl,
-  saveCompanyLogo,
-  saveUserAvatar,
 } from "@/lib/actions/storage.actions";
 import { createCompanyInvite } from "@/lib/actions/invite.actions";
 import { MailPlus, UploadCloud } from "lucide-react";
@@ -262,41 +258,27 @@ export function SettingsPage(): React.ReactElement {
 
     setIsAvatarUploading(true);
     try {
-      const upload = await createUserAvatarUpload({
-        contentType: file.type,
-        size: file.size,
-      });
+      const formData = new FormData();
+      formData.append("file", file);
 
-      if (!upload.success || !upload.data) {
+      const uploadRes = await fetch("/api/uploads/avatar", {
+        method: "POST",
+        body: formData,
+      });
+      const upload = await uploadRes.json();
+
+      if (!uploadRes.ok || !upload.success || !upload.data) {
         throw new Error(upload.message ?? "Upload failed.");
       }
 
-      const uploadRes = await fetch(upload.data.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error("Upload failed.");
-      }
-
-      const finalize = await saveUserAvatar({ key: upload.data.key });
-
-      if (!finalize.success || !finalize.data) {
-        throw new Error(finalize.message ?? "Upload failed.");
-      }
-
-      setAvatarUrl(finalize.data.url);
+      setAvatarUrl(upload.data.url);
 
       if (session) {
         await update({
           ...session,
           user: {
             ...session.user,
-            image: finalize.data.key,
+            image: upload.data.key,
           },
         });
       }
@@ -334,38 +316,21 @@ export function SettingsPage(): React.ReactElement {
 
     setIsLogoUploading(true);
     try {
-      const upload = await createCompanyLogoUpload({
-        companyId,
-        contentType: file.type,
-        size: file.size,
-      });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyId", companyId);
 
-      if (!upload.success || !upload.data) {
+      const uploadRes = await fetch("/api/uploads/company-logo", {
+        method: "POST",
+        body: formData,
+      });
+      const upload = await uploadRes.json();
+
+      if (!uploadRes.ok || !upload.success || !upload.data) {
         throw new Error(upload.message ?? "Upload failed.");
       }
 
-      const uploadRes = await fetch(upload.data.uploadUrl, {
-        method: "PUT",
-        body: file,
-        headers: {
-          "Content-Type": file.type,
-        },
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error("Upload failed.");
-      }
-
-      const finalize = await saveCompanyLogo({
-        companyId,
-        key: upload.data.key,
-      });
-
-      if (!finalize.success || !finalize.data) {
-        throw new Error(finalize.message ?? "Upload failed.");
-      }
-
-      setLogoUrl(finalize.data.url);
+      setLogoUrl(upload.data.url);
       window.dispatchEvent(new Event("company-logo-updated"));
 
       toast.success({

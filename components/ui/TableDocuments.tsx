@@ -14,6 +14,11 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { Documents } from "@/atoms/TabelsStore";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { DocumentsDrawer } from "../pages/DocumentsDrawer";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import {
+  deleteDocumentTemplate,
+  listDocumentTemplates,
+} from "@/lib/actions/document.actions";
 
 interface SelectedInvoicesState {
   [key: string]: boolean;
@@ -28,68 +33,15 @@ export function TableDocuments({
   selectable?: boolean;
 }): React.ReactElement {
   const [documents, setDocuments] = useState(() => {
-    const statusCycle = ["Bozza", "Configurato", "Bindato", "AI"];
-    const titles = [
-      "Project Alpha Proposal",
-      "Website Redesign Contract",
-      "Marketing Campaign Report Q1",
-      "Software Development Agreement",
-      "Consulting Services Invoice #1",
-      "Annual Maintenance Plan",
-      "Brand Guideline Document",
-      "New Product Launch Plan",
-      "Server Migration Proposal",
-      "Mobile App Development Quote",
-      "Social Media Strategy",
-      "Content Creation Agreement",
-      "E-commerce Platform Upgrade",
-      "Financial Audit Report 2024",
-      "Cloud Computing Services Contract",
-      "IT Support Services Agreement",
-      "Digital Marketing Analytics",
-      "UX/UI Design Mockups",
-      "Network Security Review",
-      "Sales Training Program",
-      "SEO Optimization Plan",
-      "Video Production Contract",
-      "Customer Relationship Management Strategy",
-      "Market Research Study",
-      "Legal Services Retainer",
-      "Employee Handbook Update",
-      "Server Maintenance Log",
-      "Quarterly Business Review",
-      "API Integration Documentation",
-      "Investment Portfolio Analysis",
-      "Hardware Procurement Order",
-      "Client Onboarding Checklist",
-      "Software License Agreement",
-      "Project Management Plan",
-      "Disaster Recovery Strategy",
-      "Supply Chain Optimization Report",
-      "Training Module Development",
-      "Cybersecurity Policy",
-      "Vendor Agreement Renewal",
-      "Product Feature Roadmap",
-      "Budget Proposal 2025",
-      "HR Policy Document",
-      "Quality Assurance Report",
-      "Website Analytics Report",
-      "Contract Review & Amendment",
-      "Meeting Minutes - Board of Directors",
-      "Research & Development Brief",
-      "New Hire Onboarding Packet",
-      "Client Feedback Survey Results",
-      "Project Closure Report - Q2",
-    ];
-
-    return titles.map((title, index) => ({
-      id: `doc-${index + 1}`,
-      title,
-      status: statusCycle[index % statusCycle.length],
-      previewUrl: "/file/pdf_example.pdf",
-    }));
+    return [] as {
+      id: string;
+      title: string;
+      status: string;
+      previewUrl?: string;
+    }[];
   });
 
+  const toast = useFeedbackToast();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -112,6 +64,35 @@ export function TableDocuments({
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const activeDocument = documents.find((doc) => doc.id === activeDocId) ?? null;
   const lastDeleteRequest = useRef(0);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadDocuments = async () => {
+      const res = await listDocumentTemplates();
+      if (!res.success || !res.data) {
+        if (isMounted) {
+          toast.error({
+            description: res.message ?? "Impossibile caricare i documenti.",
+          });
+        }
+        return;
+      }
+      if (!isMounted) return;
+      setDocuments(
+        res.data.documents.map((doc) => ({
+          id: doc.id,
+          title: doc.title,
+          status: doc.status ?? "Bozza",
+          previewUrl: doc.previewUrl ?? undefined,
+        })),
+      );
+    };
+
+    loadDocuments();
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
 
   const statusFilters = useMemo(
     () =>
@@ -217,11 +198,30 @@ export function TableDocuments({
     if (deleteRequest === lastDeleteRequest.current) return;
     lastDeleteRequest.current = deleteRequest;
     if (!deleteRequest || selectedIds.length === 0) return;
-    setDocuments((prev) => prev.filter((doc) => !selectedIds.includes(doc.id)));
+    const ids = selectedIds.slice();
     setSelectedInvoices({});
-  }, [deleteRequest, selectedIds, setDocuments, setSelectedInvoices]);
+    setSelectedIds([]);
+    (async () => {
+      const results = await Promise.all(
+        ids.map(async (id) => ({ id, res: await deleteDocumentTemplate(id) })),
+      );
+      const failed = results.find((item) => !item.res.success);
+      if (failed) {
+        toast.error({
+          description:
+            failed.res.message ?? "Impossibile eliminare alcuni documenti.",
+        });
+      }
+      setDocuments((prev) => prev.filter((doc) => !ids.includes(doc.id)));
+    })();
+  }, [deleteRequest, selectedIds, setDocuments, setSelectedIds, setSelectedInvoices, toast]);
 
-  const handleDelete = (docId: string) => {
+  const handleDelete = async (docId: string) => {
+    const res = await deleteDocumentTemplate(docId);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile eliminare." });
+      return;
+    }
     setDocuments((prev) => prev.filter((doc) => doc.id !== docId));
     setSelectedInvoices((prev) => {
       const next = { ...prev };

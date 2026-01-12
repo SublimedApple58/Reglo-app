@@ -12,6 +12,8 @@ type DocFillOverlayProps = {
   values: Record<string, string>;
   onChangeValue: (fieldId: string, value: string) => void;
   onSign: (fieldId: string) => void;
+  pageNumber: number;
+  overlayRef?: React.RefObject<HTMLDivElement>;
 };
 
 export function DocFillOverlay({
@@ -19,10 +21,52 @@ export function DocFillOverlay({
   values,
   onChangeValue,
   onSign,
+  pageNumber,
+  overlayRef,
 }: DocFillOverlayProps): React.ReactElement {
+  const pageFields = fields.filter((field) => field.page === pageNumber);
+  const [bounds, setBounds] = React.useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  React.useLayoutEffect(() => {
+    const node = overlayRef?.current;
+    if (!node) return;
+
+    const update = () =>
+      setBounds({
+        width: node.clientWidth,
+        height: node.clientHeight,
+      });
+
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [overlayRef]);
+
+  const resolveFieldStyle = (field: FillField) => {
+    if (field.meta?.unit === "ratio" && bounds) {
+      return {
+        left: field.x * bounds.width,
+        top: field.y * bounds.height,
+        width: field.width * bounds.width,
+        height: field.height * bounds.height,
+      };
+    }
+
+    return {
+      left: field.x,
+      top: field.y,
+      width: field.width,
+      height: field.height,
+    };
+  };
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-10">
-      {fields.map((field) => {
+    <div ref={overlayRef} className="pointer-events-none absolute inset-0 z-10">
+      {pageFields.map((field) => {
         const value = values[field.id] ?? "";
         const isSigned = field.type === "sign" && value.trim().length > 0;
         return (
@@ -32,12 +76,7 @@ export function DocFillOverlay({
               "pointer-events-auto absolute rounded-md border border-primary/40 bg-white/90 text-[11px] text-foreground shadow-sm",
               field.type === "sign" && "bg-primary/10",
             )}
-            style={{
-              left: field.x,
-              top: field.y,
-              width: field.width,
-              height: field.height,
-            }}
+            style={resolveFieldStyle(field)}
           >
             {field.type === "input" ? (
               <Input

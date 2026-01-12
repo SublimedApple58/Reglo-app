@@ -11,6 +11,7 @@ export const signInDefaultValues = {
 };
 
 export const signUpDefaultValues = {
+  companyName: '',
   name: '',
   email: '',
   password: '',

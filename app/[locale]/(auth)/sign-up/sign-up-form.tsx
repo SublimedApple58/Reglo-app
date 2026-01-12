@@ -34,6 +34,16 @@ const SignUpForm = () => {
       <input type='hidden' name='callbackUrl' value={callbackUrl} />
       <div className='space-y-6'>
         <div>
+          <Label htmlFor='companyName' style={{marginBottom: 8}}>Company name</Label>
+          <Input
+            id='companyName'
+            name='companyName'
+            type='text'
+            autoComplete='organization'
+            defaultValue={signUpDefaultValues.companyName}
+          />
+        </div>
+        <div>
           <Label htmlFor='name' style={{marginBottom: 8}}>Name</Label>
           <Input
             id='name'

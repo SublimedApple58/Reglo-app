@@ -2,17 +2,20 @@
 
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { useSession } from "next-auth/react";
 import { DocumentCanvas } from "@/components/pages/DocManager/DocumentCanvas";
 import { DocumentHeader } from "@/components/pages/DocManager/DocumentHeader";
-import {
-  documents,
-  pdfSource,
-  toolItems,
-} from "@/components/pages/DocManager/doc-manager.data";
+import { pdfSource, toolItems } from "@/components/pages/DocManager/doc-manager.data";
 import type { PlacedField, ToolId } from "@/components/pages/DocManager/doc-manager.types";
 import { DocEditorSidebar } from "@/components/pages/DocManager/doc-editor/DocEditorSidebar";
 import { DocEditorOverlay } from "@/components/pages/DocManager/doc-editor/DocEditorOverlay";
 import { BindingKeyDialog } from "@/components/pages/DocManager/doc-editor/BindingKeyDialog";
+import { getCurrentCompany } from "@/lib/actions/company.actions";
+import {
+  getDocumentConfig,
+  saveDocumentFields,
+} from "@/lib/actions/document.actions";
 
 type DocEditorWrapperProps = {
   docId?: string;
@@ -21,35 +24,169 @@ type DocEditorWrapperProps = {
 export function DocEditorWrapper({
   docId,
 }: DocEditorWrapperProps): React.ReactElement {
-  const doc = documents.find((item) => item.id === docId);
-  const resolvedDoc = doc ?? {
-    id: docId ?? "doc",
-    title: "Documento mock",
-    updatedAt: "Aggiornato ora",
-    owner: "Reglo",
-  };
+  const toast = useFeedbackToast();
+  const { data: session } = useSession();
+  const [doc, setDoc] = React.useState<{
+    id: string;
+    title: string;
+    updatedAt: string;
+    owner: string;
+    previewUrl?: string | null;
+  } | null>(null);
+  const [companyId, setCompanyId] = React.useState<string | null>(null);
+  const [pdfFile, setPdfFile] = React.useState<string | undefined>(undefined);
+  const [isSaving, setIsSaving] = React.useState(false);
   const [selectedTool, setSelectedTool] = React.useState<ToolId | null>(null);
   const [fields, setFields] = React.useState<PlacedField[]>([]);
   const idCounter = React.useRef(0);
-  const overlayRef = React.useRef<HTMLDivElement | null>(null);
+  const overlayRefs = React.useRef<Record<number, React.RefObject<HTMLDivElement>>>(
+    {},
+  );
   const [bindingDialogOpen, setBindingDialogOpen] = React.useState(false);
   const [bindingFieldId, setBindingFieldId] = React.useState<string | null>(null);
   const [bindingDraft, setBindingDraft] = React.useState("");
   const [dragState, setDragState] = React.useState<{
     id: string;
+    page: number;
     offsetX: number;
     offsetY: number;
   } | null>(null);
   const [resizeState, setResizeState] = React.useState<{
     id: string;
+    page: number;
     startX: number;
     startY: number;
     startWidth: number;
     startHeight: number;
   } | null>(null);
+  const loadRef = React.useRef<string | null>(null);
+
+  const getOverlayRef = React.useCallback(
+    (page: number) => {
+      if (!overlayRefs.current[page]) {
+        overlayRefs.current[page] = React.createRef<HTMLDivElement>();
+      }
+      return overlayRefs.current[page];
+    },
+    [],
+  );
+
+  const formatUpdatedAt = React.useCallback((iso: string) => {
+    const updated = new Date(iso);
+    const diffMs = Date.now() - updated.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+    if (Number.isNaN(diffMinutes)) return "Aggiornato ora";
+    if (diffMinutes < 1) return "Aggiornato ora";
+    if (diffMinutes < 60) return `Aggiornato ${diffMinutes}m fa`;
+    const diffHours = Math.floor(diffMinutes / 60);
+    if (diffHours < 24) return `Aggiornato ${diffHours}h fa`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `Aggiornato ${diffDays}gg fa`;
+    return `Aggiornato il ${updated.toLocaleDateString("it-IT")}`;
+  }, []);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadDocument = async () => {
+      if (!docId) return;
+      if (loadRef.current === docId) return;
+      const companyRes = await getCurrentCompany();
+      if (!companyRes.success || !companyRes.data) {
+        if (isMounted) {
+          toast.error({ description: companyRes.message ?? "Company non trovata." });
+        }
+        return;
+      }
+
+      if (!isMounted) return;
+      setCompanyId(companyRes.data.id);
+
+      const configRes = await getDocumentConfig({
+        companyId: companyRes.data.id,
+        templateId: docId,
+      });
+
+      if (!configRes.success || !configRes.data) {
+        toast.error({ description: configRes.message ?? "Documento non trovato." });
+        return;
+      }
+
+      const ownerName =
+        session?.user?.name ?? companyRes.data.name ?? "Reglo";
+
+      setDoc({
+        id: configRes.data.id,
+        title: configRes.data.name,
+        updatedAt: formatUpdatedAt(configRes.data.updatedAt.toString()),
+        owner: ownerName,
+        previewUrl: configRes.data.sourceUrl ?? undefined,
+      });
+      setPdfFile(configRes.data.sourceUrl ?? pdfSource);
+      const loadedFields = configRes.data.fields.map((field) => ({
+        id: field.id,
+        type: field.type as ToolId,
+        page: field.page,
+        x: field.x,
+        y: field.y,
+        width: field.width,
+        height: field.height,
+        bindingKey: field.bindingKey ?? undefined,
+        meta: (field.meta as { unit?: "ratio" } | null) ?? null,
+      }));
+      setFields(loadedFields);
+      idCounter.current = loadedFields.length;
+      loadRef.current = docId;
+    };
+
+    loadDocument();
+    return () => {
+      isMounted = false;
+    };
+  }, [docId, formatUpdatedAt, session?.user?.name, toast]);
 
   const clampValue = (value: number, min: number, max: number) =>
     Math.min(Math.max(value, min), max);
+
+  const isRatioField = (field: PlacedField) => field.meta?.unit === "ratio";
+
+  const resolveFieldPixels = (field: PlacedField, bounds: DOMRect) => {
+    if (isRatioField(field)) {
+      const baseWidth = Math.max(bounds.width, 1);
+      const baseHeight = Math.max(bounds.height, 1);
+      return {
+        x: field.x * baseWidth,
+        y: field.y * baseHeight,
+        width: field.width * baseWidth,
+        height: field.height * baseHeight,
+      };
+    }
+
+    return {
+      x: field.x,
+      y: field.y,
+      width: field.width,
+      height: field.height,
+    };
+  };
+
+  const toFieldUnits = (
+    field: PlacedField,
+    bounds: DOMRect,
+    next: { x: number; y: number; width: number; height: number },
+  ) => {
+    if (isRatioField(field)) {
+      const baseWidth = Math.max(bounds.width, 1);
+      const baseHeight = Math.max(bounds.height, 1);
+      return {
+        x: next.x / baseWidth,
+        y: next.y / baseHeight,
+        width: next.width / baseWidth,
+        height: next.height / baseHeight,
+      };
+    }
+
+    return next;
+  };
 
   const getTool = (toolId: ToolId) =>
     toolItems.find((item) => item.id === toolId);
@@ -59,6 +196,7 @@ export function DocEditorWrapper({
     clientX: number,
     clientY: number,
     bounds: DOMRect,
+    page: number,
   ) => {
     const tool = getTool(toolId);
     if (!tool) return;
@@ -66,29 +204,41 @@ export function DocEditorWrapper({
     const rawY = clientY - bounds.top - tool.height / 2;
     const x = clampValue(rawX, 0, Math.max(0, bounds.width - tool.width));
     const y = clampValue(rawY, 0, Math.max(0, bounds.height - tool.height));
+    const baseWidth = Math.max(bounds.width, 1);
+    const baseHeight = Math.max(bounds.height, 1);
+    const widthRatio = tool.width / baseWidth;
+    const heightRatio = tool.height / baseHeight;
     const nextField: PlacedField = {
       id: `field-${idCounter.current++}`,
       type: toolId,
-      x: Math.round(x),
-      y: Math.round(y),
-      width: tool.width,
-      height: tool.height,
+      page,
+      x: x / baseWidth,
+      y: y / baseHeight,
+      width: widthRatio,
+      height: heightRatio,
+      meta: { unit: "ratio" },
     };
     setFields((prev) => prev.concat(nextField));
   };
 
-  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleCanvasClick = (
+    page: number,
+    event: React.MouseEvent<HTMLDivElement>,
+  ) => {
     if (!selectedTool) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    addFieldAtPoint(selectedTool, event.clientX, event.clientY, bounds);
+    addFieldAtPoint(selectedTool, event.clientX, event.clientY, bounds, page);
   };
 
-  const handleCanvasDrop = (event: React.DragEvent<HTMLDivElement>) => {
+  const handleCanvasDrop = (
+    page: number,
+    event: React.DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     const toolId = event.dataTransfer.getData("application/reglo-doc-tool") as ToolId;
     if (!toolId) return;
     const bounds = event.currentTarget.getBoundingClientRect();
-    addFieldAtPoint(toolId, event.clientX, event.clientY, bounds);
+    addFieldAtPoint(toolId, event.clientX, event.clientY, bounds, page);
   };
 
   const handleCanvasDragOver = (event: React.DragEvent<HTMLDivElement>) => {
@@ -105,33 +255,41 @@ export function DocEditorWrapper({
   };
 
   const handleStartDrag = (
+    page: number,
     field: PlacedField,
     event: React.MouseEvent<HTMLDivElement>,
   ) => {
     if (event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
-    const bounds = overlayRef.current?.getBoundingClientRect();
+    const bounds = overlayRefs.current[page]?.current?.getBoundingClientRect();
     if (!bounds) return;
+    const current = resolveFieldPixels(field, bounds);
     setDragState({
       id: field.id,
-      offsetX: event.clientX - bounds.left - field.x,
-      offsetY: event.clientY - bounds.top - field.y,
+      page,
+      offsetX: event.clientX - bounds.left - current.x,
+      offsetY: event.clientY - bounds.top - current.y,
     });
   };
 
   const handleStartResize = (
+    page: number,
     field: PlacedField,
     event: React.MouseEvent<HTMLSpanElement>,
   ) => {
     event.preventDefault();
     event.stopPropagation();
+    const bounds = overlayRefs.current[page]?.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const current = resolveFieldPixels(field, bounds);
     setResizeState({
       id: field.id,
+      page,
       startX: event.clientX,
       startY: event.clientY,
-      startWidth: field.width,
-      startHeight: field.height,
+      startWidth: current.width,
+      startHeight: current.height,
     });
   };
 
@@ -159,33 +317,95 @@ export function DocEditorWrapper({
     setBindingFieldId(null);
   };
 
+  const handleSave = async () => {
+    if (!docId || !companyId || isSaving) return;
+    setIsSaving(true);
+
+    const normalizedFields = fields.map((field) => {
+      if (isRatioField(field)) return field;
+      const bounds =
+        overlayRefs.current[field.page]?.current?.getBoundingClientRect();
+      if (!bounds) {
+        return field;
+      }
+      const baseWidth = Math.max(bounds.width, 1);
+      const baseHeight = Math.max(bounds.height, 1);
+      return {
+        ...field,
+        x: field.x / baseWidth,
+        y: field.y / baseHeight,
+        width: field.width / baseWidth,
+        height: field.height / baseHeight,
+        meta: { unit: "ratio" },
+      };
+    });
+
+    const payloadFields = normalizedFields.map((field) => ({
+      type: field.type,
+      label: field.bindingKey ?? undefined,
+      bindingKey: field.bindingKey ?? undefined,
+      page: field.page,
+      x: field.x,
+      y: field.y,
+      width: field.width,
+      height: field.height,
+      meta: field.meta ?? undefined,
+    }));
+
+    const res = await saveDocumentFields({
+      companyId,
+      templateId: docId,
+      fields: payloadFields,
+    });
+
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Salvataggio fallito." });
+      setIsSaving(false);
+      return;
+    }
+
+    setFields(normalizedFields);
+    toast.success({ title: "Salvato", description: "Campi aggiornati." });
+    setIsSaving(false);
+  };
+
   React.useEffect(() => {
     if (!dragState && !resizeState) return;
 
     const handleMouseMove = (event: MouseEvent) => {
-      const bounds = overlayRef.current?.getBoundingClientRect();
-      if (!bounds) return;
-
       if (dragState) {
+        const bounds =
+          overlayRefs.current[dragState.page]?.current?.getBoundingClientRect();
+        if (!bounds) return;
         setFields((prev) =>
           prev.map((field) => {
             if (field.id !== dragState.id) return field;
+            const current = resolveFieldPixels(field, bounds);
             const nextX = clampValue(
               event.clientX - bounds.left - dragState.offsetX,
               0,
-              Math.max(0, bounds.width - field.width),
+              Math.max(0, bounds.width - current.width),
             );
             const nextYValue = clampValue(
               event.clientY - bounds.top - dragState.offsetY,
               0,
-              Math.max(0, bounds.height - field.height),
+              Math.max(0, bounds.height - current.height),
             );
-            return { ...field, x: Math.round(nextX), y: Math.round(nextYValue) };
+            const updated = toFieldUnits(field, bounds, {
+              x: nextX,
+              y: nextYValue,
+              width: current.width,
+              height: current.height,
+            });
+            return { ...field, x: updated.x, y: updated.y };
           }),
         );
       }
 
       if (resizeState) {
+        const bounds =
+          overlayRefs.current[resizeState.page]?.current?.getBoundingClientRect();
+        if (!bounds) return;
         setFields((prev) =>
           prev.map((field) => {
             if (field.id !== resizeState.id) return field;
@@ -193,8 +413,9 @@ export function DocEditorWrapper({
             if (!tool?.resizable) return field;
             const deltaX = event.clientX - resizeState.startX;
             const deltaY = event.clientY - resizeState.startY;
-            const maxWidth = Math.max(0, bounds.width - field.x);
-            const maxHeight = Math.max(0, bounds.height - field.y);
+            const current = resolveFieldPixels(field, bounds);
+            const maxWidth = Math.max(0, bounds.width - current.x);
+            const maxHeight = Math.max(0, bounds.height - current.y);
             const nextWidth = clampValue(
               resizeState.startWidth + deltaX,
               tool.minWidth ?? 120,
@@ -205,10 +426,16 @@ export function DocEditorWrapper({
               tool.minHeight ?? 80,
               maxHeight,
             );
+            const updated = toFieldUnits(field, bounds, {
+              x: current.x,
+              y: current.y,
+              width: nextWidth,
+              height: nextHeight,
+            });
             return {
               ...field,
-              width: Math.round(nextWidth),
-              height: Math.round(nextHeight),
+              width: updated.width,
+              height: updated.height,
             };
           }),
         );
@@ -233,6 +460,14 @@ export function DocEditorWrapper({
     fields.find((field) => field.id === bindingFieldId)?.bindingKey ??
     "es. customer_name";
 
+  const resolvedDoc = doc ?? {
+    id: docId ?? "doc",
+    title: "Documento",
+    updatedAt: "Aggiornato ora",
+    owner: "Reglo",
+    previewUrl: pdfSource,
+  };
+
   return (
     <div className="flex min-h-[calc(100vh-160px)] w-full gap-6 p-6">
       <DocEditorSidebar
@@ -250,25 +485,36 @@ export function DocEditorWrapper({
           actions={
             <>
               <Button variant="outline">Discard</Button>
-              <Button>Save</Button>
+              <Button onClick={handleSave} disabled={isSaving}>
+                {isSaving ? "Salvataggio..." : "Save"}
+              </Button>
             </>
           }
         />
 
-        <DocumentCanvas pdfFile={doc?.previewUrl ?? pdfSource}>
-          <DocEditorOverlay
-            fields={fields}
-            selectedTool={selectedTool}
-            overlayRef={overlayRef}
-            onCanvasClick={handleCanvasClick}
-            onCanvasDrop={handleCanvasDrop}
-            onCanvasDragOver={handleCanvasDragOver}
-            onStartDrag={handleStartDrag}
-            onStartResize={handleStartResize}
-            onDeleteField={handleDeleteField}
-            onRequestBinding={handleRequestBinding}
-          />
-        </DocumentCanvas>
+        <DocumentCanvas
+          pdfFile={pdfFile ?? pdfSource}
+          renderOverlay={(pageNumber, _pageRef) => (
+            <DocEditorOverlay
+              key={`overlay-${pageNumber}`}
+              pageNumber={pageNumber}
+              fields={fields}
+              selectedTool={selectedTool}
+              overlayRef={getOverlayRef(pageNumber)}
+              onCanvasClick={(event) => handleCanvasClick(pageNumber, event)}
+              onCanvasDrop={(event) => handleCanvasDrop(pageNumber, event)}
+              onCanvasDragOver={handleCanvasDragOver}
+              onStartDrag={(field, event) =>
+                handleStartDrag(pageNumber, field, event)
+              }
+              onStartResize={(field, event) =>
+                handleStartResize(pageNumber, field, event)
+              }
+              onDeleteField={handleDeleteField}
+              onRequestBinding={handleRequestBinding}
+            />
+          )}
+        />
       </section>
 
       <BindingKeyDialog

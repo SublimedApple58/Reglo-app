@@ -24,19 +24,27 @@ export type ToolItem = {
 export type PlacedField = {
   id: string;
   type: ToolId;
+  page: number;
   x: number;
   y: number;
   width: number;
   height: number;
   bindingKey?: string;
+  meta?: {
+    unit?: "ratio";
+  } | null;
 };
 
 export type FillField = {
   id: string;
   type: ToolId;
   label: string;
+  page: number;
   x: number;
   y: number;
   width: number;
   height: number;
+  meta?: {
+    unit?: "ratio";
+  } | null;
 };

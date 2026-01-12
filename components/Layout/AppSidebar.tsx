@@ -9,6 +9,7 @@ import {
   HeartHandshake,
   Users,
   FolderKanban,
+  ClipboardCheck,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -54,6 +55,11 @@ const items = [
     title: "Documents",
     url: "/documents",
     icon: Folders,
+  },
+  {
+    title: "Compilazioni",
+    url: "/compilazioni",
+    icon: ClipboardCheck,
   },
 ];
 

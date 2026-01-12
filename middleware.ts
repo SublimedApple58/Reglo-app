@@ -10,6 +10,16 @@ const handleI18nRouting = createMiddleware(routing);
 const { auth } = NextAuth(authConfig);
 
 const isPublicRoute = (req: NextRequest) => {
+  const localePrefix = new RegExp(`^/(${routing.locales.join('|')})`, 'i');
+  const normalizedPath = req.nextUrl.pathname.replace(localePrefix, '');
+
+  if (
+    normalizedPath.startsWith('/public/documents/') ||
+    normalizedPath === '/public/documents'
+  ) {
+    return true;
+  }
+
   const publicPathnameRegex = RegExp(
       `^(/(${routing.locales.join('|')}))?(${publicRoutes
         .flatMap((p) => (p === '/' ? ['', '/'] : p))

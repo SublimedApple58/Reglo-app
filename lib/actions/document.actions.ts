@@ -29,6 +29,73 @@ async function requireCompanyAccess(companyId: string) {
   return { userId };
 }
 
+export async function listDocumentTemplates() {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      throw new Error('User is not authenticated');
+    }
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId },
+      include: { company: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (!membership) {
+      throw new Error('Company not found');
+    }
+
+    const templates = await prisma.documentTemplate.findMany({
+      where: { companyId: membership.companyId },
+      include: {
+        fields: {
+          select: { bindingKey: true },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const owner = session?.user?.name ?? membership.company.name;
+    const documents = templates.map((template) => {
+      const previewUrl = template.sourceUrl
+        ? `/api/documents/${template.id}/file`
+        : null;
+        const hasFields = template.fields.length > 0;
+        const allBound = hasFields
+          ? template.fields.every((field) => Boolean(field.bindingKey))
+          : false;
+        const status = hasFields
+          ? allBound
+            ? 'Bindato'
+            : 'Configurato'
+          : 'Bozza';
+        return {
+          id: template.id,
+          title: template.name,
+          updatedAt: template.updatedAt.toISOString(),
+          owner,
+          previewUrl,
+          sourceUrl: template.sourceUrl,
+          status,
+        };
+      });
+
+    return {
+      success: true,
+      data: {
+        companyId: membership.companyId,
+        companyName: membership.company.name,
+        documents,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function createDocumentTemplate(
   input: z.infer<typeof createDocumentTemplateSchema>
 ) {
@@ -49,6 +116,41 @@ export async function createDocumentTemplate(
       templateId: template.id,
       message: 'Document created',
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function deleteDocumentTemplate(templateId: string) {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      throw new Error('User is not authenticated');
+    }
+
+    const template = await prisma.documentTemplate.findFirst({
+      where: { id: templateId },
+    });
+
+    if (!template) {
+      throw new Error('Document not found');
+    }
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId, companyId: template.companyId },
+    });
+
+    if (!membership) {
+      throw new Error('User is not authorized for this company');
+    }
+
+    await prisma.documentTemplate.delete({
+      where: { id: templateId },
+    });
+
+    return { success: true, message: 'Document deleted' };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -118,7 +220,17 @@ export async function getDocumentConfig(
       throw new Error('Document not found');
     }
 
-    return { success: true, data: template };
+    const sourceUrl = template.sourceUrl
+      ? `/api/documents/${template.id}/file`
+      : null;
+
+    return {
+      success: true,
+      data: {
+        ...template,
+        sourceUrl,
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

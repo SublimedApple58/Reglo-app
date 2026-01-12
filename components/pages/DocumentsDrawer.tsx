@@ -19,10 +19,7 @@ import { FilePenLine, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { pdfSource } from "@/components/pages/DocManager/doc-manager.data";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 type DocumentItem = {
   id: string;
@@ -45,6 +42,10 @@ export function DocumentsDrawer({
   const isMobile = useIsMobile();
   const [containerRef, bounds] = useMeasure();
   const pageWidth = Math.max(1, Math.floor(bounds.width || 0));
+  const pdfOptions = React.useMemo(
+    () => ({ disableRange: true, disableStream: true }),
+    [],
+  );
 
   return (
     <Drawer
@@ -123,7 +124,11 @@ export function DocumentsDrawer({
                   ref={containerRef}
                   className="mt-3 w-full overflow-hidden rounded-lg bg-white"
                 >
-                  <Document file={document.previewUrl ?? pdfSource} loading={null}>
+                  <Document
+                    file={document.previewUrl ?? pdfSource}
+                    loading={null}
+                    options={pdfOptions}
+                  >
                     <Page
                       pageNumber={1}
                       width={pageWidth}

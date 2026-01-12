@@ -26,6 +26,7 @@ model User {
   Order         Order[]
   companyMembers CompanyMember[]
   companyInvites CompanyInvite[] @relation("CompanyInviteInvitedBy")
+  documentRequests DocumentRequest[] @relation("DocumentRequestCreatedBy")
 }
 
 model Account {
@@ -109,6 +110,7 @@ model Company {
   members   CompanyMember[]
   documents DocumentTemplate[]
   invites   CompanyInvite[]
+  documentRequests DocumentRequest[]
 }
 
 model CompanyMember {
@@ -154,6 +156,7 @@ model DocumentTemplate {
 
   company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   fields    DocumentField[]
+  requests  DocumentRequest[]
 
   @@index([companyId])
 }
@@ -175,5 +178,28 @@ model DocumentField {
 
   template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
+  @@index([templateId])
+}
+
+model DocumentRequest {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String   @db.Uuid
+  templateId      String   @db.Uuid
+  name            String
+  status          String   @default("in_progress")
+  publicToken     String   @unique
+  payload         Json?
+  resultUrl       String?
+  completedByName String?
+  completedAt     DateTime? @db.Timestamp(6)
+  createdById     String?  @db.Uuid
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime @updatedAt
+
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  template  DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy User?            @relation("DocumentRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
   @@index([templateId])
 }

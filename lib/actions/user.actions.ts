@@ -49,6 +49,7 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
   try {
     const callbackUrl = formData.get('callbackUrl')?.toString() || '/';
     const user = signUpFormSchema.parse({
+      companyName: formData.get('companyName'),
       name: formData.get('name'),
       email: formData.get('email'),
       password: formData.get('password'),
@@ -59,16 +60,35 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
 
     user.password = await hash(user.password);
 
-    await prisma.user.create({
-      data: {
-        name: user.name,
-        email: user.email,
-        password: user.password,
-      },
+    const companyName = user.companyName.trim();
+
+    const createdUser = await prisma.$transaction(async (tx) => {
+      const company = await tx.company.create({
+        data: { name: companyName },
+      });
+
+      const createdUser = await tx.user.create({
+        data: {
+          name: user.name,
+          email: user.email,
+          password: user.password,
+          role: 'admin',
+        },
+      });
+
+      await tx.companyMember.create({
+        data: {
+          companyId: company.id,
+          userId: createdUser.id,
+          role: 'admin',
+        },
+      });
+
+      return createdUser;
     });
 
     await signIn('credentials', {
-      email: user.email,
+      email: createdUser.email,
       password: plainPassword,
       redirectTo: callbackUrl,
     });
