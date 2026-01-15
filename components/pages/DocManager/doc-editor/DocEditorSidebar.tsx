@@ -19,6 +19,33 @@ export function DocEditorSidebar({
   onSelectTool,
   onDragTool,
 }: DocEditorSidebarProps): React.ReactElement {
+  const textTools = tools.filter((tool) => tool.id === "text");
+  const fieldTools = tools.filter((tool) => tool.id !== "text");
+
+  const renderTools = (items: ToolItem[]) =>
+    items.map((tool) => {
+      const Icon = tool.icon;
+      const isSelected = selectedTool === tool.id;
+      return (
+        <button
+          key={tool.id}
+          type="button"
+          draggable
+          onDragStart={(event) => onDragTool(event, tool.id)}
+          onClick={() => onSelectTool(isSelected ? null : tool.id)}
+          className={cn(
+            "flex items-center gap-2 rounded-xl border px-3 py-2 text-left font-medium transition",
+            isSelected
+              ? "border-primary/60 bg-primary/10 text-foreground"
+              : "border-border bg-background text-foreground hover:bg-muted/50",
+          )}
+        >
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {tool.label}
+        </button>
+      );
+    });
+
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col gap-4 rounded-2xl bg-card p-4 shadow-sm">
       <Link
@@ -32,28 +59,19 @@ export function DocEditorSidebar({
         <h2 className="text-lg font-semibold text-foreground">Tools</h2>
       </div>
       <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-        {tools.map((tool) => {
-          const Icon = tool.icon;
-          const isSelected = selectedTool === tool.id;
-          return (
-            <button
-              key={tool.id}
-              type="button"
-              draggable
-              onDragStart={(event) => onDragTool(event, tool.id)}
-              onClick={() => onSelectTool(isSelected ? null : tool.id)}
-              className={cn(
-                "flex items-center gap-2 rounded-xl border px-3 py-2 text-left font-medium transition",
-                isSelected
-                  ? "border-primary/60 bg-primary/10 text-foreground"
-                  : "border-border bg-background text-foreground hover:bg-muted/50",
-              )}
-            >
-              <Icon className="h-4 w-4 text-muted-foreground" />
-              {tool.label}
-            </button>
-          );
-        })}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Fields
+          </p>
+          {renderTools(fieldTools)}
+        </div>
+        <div className="h-px bg-border/70 my-4" />
+        <div className="space-y-2 pt-1">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Text block
+          </p>
+          {renderTools(textTools)}
+        </div>
       </div>
       <div className="mt-auto" />
     </aside>

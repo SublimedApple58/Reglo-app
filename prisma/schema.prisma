@@ -111,6 +111,8 @@ model Company {
   documents DocumentTemplate[]
   invites   CompanyInvite[]
   documentRequests DocumentRequest[]
+  workflows Workflow[]
+  workflowRuns WorkflowRun[]
 }
 
 model CompanyMember {
@@ -202,4 +204,59 @@ model DocumentRequest {
 
   @@index([companyId])
   @@index([templateId])
+}
+
+model Workflow {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  name      String
+  status    String   @default("draft")
+  definition Json    @db.Json
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  runs      WorkflowRun[]
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model WorkflowRun {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId    String   @db.Uuid
+  companyId     String   @db.Uuid
+  status        String   @default("queued")
+  triggerType   String
+  triggerPayload Json?   @db.Json
+  startedAt     DateTime? @db.Timestamp(6)
+  finishedAt    DateTime? @db.Timestamp(6)
+  createdAt     DateTime  @default(now()) @db.Timestamp(6)
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  steps    WorkflowRunStep[]
+
+  @@index([workflowId])
+  @@index([companyId])
+  @@index([status])
+}
+
+model WorkflowRunStep {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  runId     String   @db.Uuid
+  nodeId    String
+  status    String   @default("pending")
+  input     Json?    @db.Json
+  output    Json?    @db.Json
+  error     Json?    @db.Json
+  attempt   Int      @default(0)
+  startedAt DateTime? @db.Timestamp(6)
+  finishedAt DateTime? @db.Timestamp(6)
+  createdAt DateTime  @default(now()) @db.Timestamp(6)
+
+  run WorkflowRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([status])
 }

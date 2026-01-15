@@ -3,7 +3,13 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { workflowsData } from "@/components/pages/Workflows/workflows-data";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import {
+  getWorkflowById,
+  startWorkflowRun,
+  updateWorkflow,
+} from "@/lib/actions/workflow.actions";
+import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHistory";
 import ReactFlow, {
   Background,
   Controls,
@@ -24,6 +30,13 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { ArrowLeft, GitBranch, Repeat, GitMerge } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -93,7 +106,13 @@ const buildEdges = (isNew: boolean): Edge[] =>
         { id: "e2", source: "approval", target: "complete", animated: true },
       ];
 
-type ServiceKey = "teamsystem" | "slack" | "doc-manager" | "reglo-actions" | "logic";
+type ServiceKey =
+  | "teamsystem"
+  | "slack"
+  | "doc-manager"
+  | "reglo-actions"
+  | "logic"
+  | "flow-control";
 
 type BlockKind = "standard" | "if" | "for" | "while";
 
@@ -104,9 +123,18 @@ type BlockDefinition = {
   hint?: string;
 };
 
+type Condition = {
+  op: "eq" | "neq" | "gt" | "gte" | "lt" | "lte" | "contains";
+  left: string;
+  right: string;
+};
+
 type LogicNodeData = {
   label: string;
   meta?: string;
+  condition?: Condition;
+  loopKind?: "for" | "while";
+  iterations?: number;
 };
 
 const serviceBlocks: Record<
@@ -182,6 +210,17 @@ const serviceBlocks: Record<
       },
     ],
   },
+  "flow-control": {
+    label: "Flow control",
+    group: "logic",
+    blocks: [
+      {
+        id: "wait",
+        label: "Metti in pausa",
+        hint: "Attende un evento esterno prima di proseguire.",
+      },
+    ],
+  },
 };
 
 export default function WorkflowDetailPage(): React.ReactElement {
@@ -191,25 +230,28 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const isNew = searchParams.get("mode") === "new";
   const nameParam = searchParams.get("name");
 
-  const workflow = useMemo(
-    () => workflowsData.find((item) => item.id === workflowId),
-    [workflowId],
-  );
-
-  const title = useMemo(() => {
-    if (isNew && nameParam) {
-      return nameParam;
-    }
-    return workflow?.title ?? "Workflow";
-  }, [isNew, nameParam, workflow?.title]);
+  const toast = useFeedbackToast();
+  const [workflowName, setWorkflowName] = useState(() => {
+    if (isNew && nameParam) return nameParam;
+    return "Workflow";
+  });
+  const [workflowStatus, setWorkflowStatus] = useState("draft");
   const [selectedService, setSelectedService] = useState<ServiceKey>("teamsystem");
   const [paletteView, setPaletteView] = useState<"menu" | "blocks">("menu");
-  const [nodes, setNodes] = useState<Node[]>(() => buildNodes(title, isNew));
-  const [edges, setEdges] = useState<Edge[]>(() => buildEdges(isNew));
+  const [nodes, setNodes] = useState<Node[]>(() => buildNodes(workflowName, true));
+  const [edges, setEdges] = useState<Edge[]>(() => buildEdges(true));
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [runHistoryKey, setRunHistoryKey] = useState(0);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [logicDialogOpen, setLogicDialogOpen] = useState(false);
-  const [logicCondition, setLogicCondition] = useState("");
+  const [logicCondition, setLogicCondition] = useState<Condition>({
+    op: "eq",
+    left: "",
+    right: "",
+  });
   const [logicIterations, setLogicIterations] = useState("");
+  const [waitTimeout, setWaitTimeout] = useState("24h");
   const [pendingLogic, setPendingLogic] = useState<{
     block: BlockDefinition;
     position: { x: number; y: number };
@@ -217,6 +259,155 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const idCounter = useRef(0);
   const flowWrapperRef = useRef<HTMLDivElement | null>(null);
   const currentService = serviceBlocks[selectedService];
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadWorkflow = async () => {
+      if (!workflowId) return;
+      if (isNew) return;
+      const res = await getWorkflowById(workflowId);
+      if (!res.success || !res.data) {
+        if (isMounted) {
+          toast.error({ description: res.message ?? "Workflow non trovato." });
+        }
+        return;
+      }
+      if (!isMounted) return;
+      setWorkflowName(res.data.name);
+      setWorkflowStatus(res.data.status);
+      const definition = res.data.definition as {
+        canvas?: { nodes?: Node[]; edges?: Edge[] };
+      } | null;
+      const canvasNodes = definition?.canvas?.nodes ?? [];
+      const canvasEdges = definition?.canvas?.edges ?? [];
+      if (canvasNodes.length > 0) {
+        setNodes(canvasNodes);
+        setEdges(canvasEdges);
+      } else {
+        setNodes(buildNodes(res.data.name, true));
+        setEdges(buildEdges(true));
+      }
+      idCounter.current = canvasNodes.length;
+    };
+    loadWorkflow();
+    return () => {
+      isMounted = false;
+    };
+  }, [isNew, toast, workflowId]);
+
+  const handleSave = async () => {
+    if (!workflowId || isSaving) return;
+    if (!workflowName.trim()) {
+      toast.error({ description: "Inserisci un nome workflow." });
+      return;
+    }
+    setIsSaving(true);
+    const serializedNodes = nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      position: node.position,
+      data: node.data,
+      style: node.style,
+    }));
+    const serializedEdges = edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: edge.sourceHandle,
+      targetHandle: edge.targetHandle,
+      animated: edge.animated,
+      style: edge.style,
+    }));
+    const runtimeNodes = nodes.map((node) => {
+      const data = node.data as LogicNodeData | undefined;
+      const label =
+        typeof node.data === "object" && node.data && "label" in node.data
+          ? (node.data as { label?: string }).label ?? ""
+          : "";
+
+      if (node.type === "wait") {
+        const timeout =
+          typeof node.data === "object" && node.data && "timeout" in node.data
+            ? (node.data as { timeout?: string }).timeout
+            : undefined;
+        return {
+          id: node.id,
+          type: "wait",
+          config: {
+            timeout,
+            label,
+          },
+        };
+      }
+
+      if (node.type === "logicIf") {
+        return {
+          id: node.id,
+          type: "logicIf",
+          config: {
+            condition: data?.condition,
+            label,
+          },
+        };
+      }
+
+      if (node.type === "logicLoop") {
+        return {
+          id: node.id,
+          type: "logicLoop",
+          config: {
+            mode: data?.loopKind ?? "for",
+            iterations: data?.iterations,
+            condition: data?.condition,
+            label,
+          },
+        };
+      }
+
+      return {
+        id: node.id,
+        type: node.type ?? "standard",
+        config: { label },
+      };
+    });
+    const runtimeEdges = edges.map((edge) => ({
+      from: edge.source,
+      to: edge.target,
+      condition: edge.sourceHandle ? { branch: edge.sourceHandle } : null,
+    }));
+    const res = await updateWorkflow({
+      id: workflowId,
+      name: workflowName,
+      status: workflowStatus as "draft" | "active" | "paused",
+      definition: {
+        trigger: { type: "manual", config: {} },
+        nodes: runtimeNodes,
+        edges: runtimeEdges,
+        canvas: { nodes: serializedNodes, edges: serializedEdges },
+      },
+    });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Salvataggio fallito." });
+      setIsSaving(false);
+      return;
+    }
+    toast.success({ description: "Workflow salvato." });
+    setIsSaving(false);
+  };
+
+  const handleRun = async () => {
+    if (!workflowId || isRunning) return;
+    setIsRunning(true);
+    const res = await startWorkflowRun({ workflowId });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile avviare il workflow." });
+      setIsRunning(false);
+      return;
+    }
+    toast.success({ description: "Workflow avviato." });
+    setRunHistoryKey((prev) => prev + 1);
+    setIsRunning(false);
+  };
 
   const nodeTypes = useMemo(
     () => ({
@@ -233,8 +424,9 @@ export default function WorkflowDetailPage(): React.ReactElement {
   }, []);
 
   const resetLogicDialog = () => {
-    setLogicCondition("");
+    setLogicCondition({ op: "eq", left: "", right: "" });
     setLogicIterations("");
+    setWaitTimeout("24h");
     setPendingLogic(null);
     setLogicDialogOpen(false);
   };
@@ -247,6 +439,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const newId = `ts-node-${idCounter.current++}`;
   addNode({
     id: newId,
+    type: label === "Metti in pausa" ? "wait" : undefined,
     position,
     data: { label },
     style: secondaryNodeStyle,
@@ -346,7 +539,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
       if (block.kind && block.kind !== "standard") {
         setPendingLogic({ block, position });
         setLogicDialogOpen(true);
-        setLogicCondition("");
+        setLogicCondition({ op: "eq", left: "", right: "" });
         setLogicIterations("");
         return;
       }
@@ -500,8 +693,46 @@ export default function WorkflowDetailPage(): React.ReactElement {
   );
 
   return (
-    <ClientPageWrapper title={title} parentTitle="Workflows" enableBackNavigation>
+    <ClientPageWrapper title={workflowName} parentTitle="Workflows" enableBackNavigation>
       <div className="flex h-full flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-[240px] space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Workflow name
+            </p>
+            <Input
+              value={workflowName}
+              onChange={(event) => setWorkflowName(event.target.value)}
+              placeholder="Nome workflow"
+            />
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Status
+              </p>
+              <Select
+                value={workflowStatus}
+                onValueChange={(value) => setWorkflowStatus(value)}
+              >
+                <SelectTrigger className="min-w-[160px]">
+                  <SelectValue placeholder="Seleziona stato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button type="button" variant="outline" onClick={handleRun} disabled={isRunning}>
+              {isRunning ? "Running..." : "Run now"}
+            </Button>
+            <Button type="button" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save workflow"}
+            </Button>
+          </div>
+        </div>
         <div className="flex flex-1 gap-4">
           <aside className="w-80 shrink-0 self-start space-y-4 rounded-xl  bg-card p-4 shadow-sm">
             {paletteView === "menu" ? (
@@ -545,19 +776,22 @@ export default function WorkflowDetailPage(): React.ReactElement {
                 <hr className="border-border/60" />
                 <div className="space-y-2">
                   <p className="text-base font-semibold text-foreground">Logica</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedService("logic");
-                      setPaletteView("blocks");
-                    }}
-                    className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
-                  >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-                      IF
-                    </span>
-                    <span>{serviceBlocks.logic.label}</span>
-                  </button>
+                  {(["logic", "flow-control"] as ServiceKey[]).map((svc) => (
+                    <button
+                      key={svc}
+                      type="button"
+                      onClick={() => {
+                        setSelectedService(svc);
+                        setPaletteView("blocks");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
+                    >
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
+                        {svc === "logic" ? "IF" : "WAIT"}
+                      </span>
+                      <span>{serviceBlocks[svc].label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             ) : (
@@ -578,7 +812,9 @@ export default function WorkflowDetailPage(): React.ReactElement {
                         ? "TS"
                         : selectedService === "logic"
                           ? "IF"
-                          : "R"}
+                          : selectedService === "flow-control"
+                            ? "WAIT"
+                            : "R"}
                   </span>
                   <div>
                     <p className="text-base font-semibold text-foreground">{currentService.label}</p>
@@ -625,6 +861,9 @@ export default function WorkflowDetailPage(): React.ReactElement {
             </div>
           </div>
         </div>
+        {workflowId ? (
+          <WorkflowRunHistory workflowId={workflowId} refreshKey={runHistoryKey} />
+        ) : null}
       </div>
 
       <Dialog
@@ -642,7 +881,21 @@ export default function WorkflowDetailPage(): React.ReactElement {
               Inserisci i dati per rendere il blocco chiaro e comprensibile.
             </DialogDescription>
           </DialogHeader>
-          {pendingLogic?.block.kind === "for" ? (
+          {pendingLogic?.block.id === "wait" ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Timeout
+              </p>
+              <Input
+                value={waitTimeout}
+                onChange={(event) => setWaitTimeout(event.target.value)}
+                placeholder="24h"
+              />
+              <p className="text-xs text-muted-foreground">
+                Es: 30m, 24h, 7d. Se scade, il run fallisce.
+              </p>
+            </div>
+          ) : pendingLogic?.block.kind === "for" ? (
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Numero di iterazioni
@@ -659,17 +912,56 @@ export default function WorkflowDetailPage(): React.ReactElement {
               </p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Condizione
               </p>
-              <Input
-                value={logicCondition}
-                onChange={(event) => setLogicCondition(event.target.value)}
-                placeholder="Es. il totale supera 500€"
-              />
+              <div className="grid gap-2">
+                <Input
+                  value={logicCondition.left}
+                  onChange={(event) =>
+                    setLogicCondition((prev) => ({
+                      ...prev,
+                      left: event.target.value,
+                    }))
+                  }
+                  placeholder="{{trigger.payload.amount}}"
+                />
+                <Select
+                  value={logicCondition.op}
+                  onValueChange={(value) =>
+                    setLogicCondition((prev) => ({
+                      ...prev,
+                      op: value as Condition["op"],
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Operatore" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="eq">uguale</SelectItem>
+                    <SelectItem value="neq">diverso</SelectItem>
+                    <SelectItem value="gt">maggiore</SelectItem>
+                    <SelectItem value="gte">maggiore o uguale</SelectItem>
+                    <SelectItem value="lt">minore</SelectItem>
+                    <SelectItem value="lte">minore o uguale</SelectItem>
+                    <SelectItem value="contains">contiene</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={logicCondition.right}
+                  onChange={(event) =>
+                    setLogicCondition((prev) => ({
+                      ...prev,
+                      right: event.target.value,
+                    }))
+                  }
+                  placeholder="1000"
+                />
+              </div>
               <p className="text-xs text-muted-foreground">
-                Scrivi la condizione in linguaggio semplice.
+                Puoi usare variabili tipo {"{{trigger.payload.*}}"} o {"{{steps.nodeId.output.*}}"}.
               </p>
             </div>
           )}
@@ -680,31 +972,69 @@ export default function WorkflowDetailPage(): React.ReactElement {
             <Button
               type="button"
               disabled={
-                pendingLogic?.block.kind === "for"
-                  ? Number(logicIterations) < 1
-                  : !logicCondition.trim()
+                pendingLogic?.block.id === "wait"
+                  ? !waitTimeout.trim()
+                  : pendingLogic?.block.kind === "for"
+                    ? Number(logicIterations) < 1
+                    : !logicCondition.left.trim() || !logicCondition.right.trim()
               }
               onClick={() => {
                 if (!pendingLogic) return;
                 const { block, position } = pendingLogic;
+                if (block.id === "wait") {
+                  addStandardNode("Metti in pausa", position);
+                  setNodes((prev) =>
+                    prev.map((node, index) =>
+                      index === prev.length - 1
+                        ? {
+                            ...node,
+                            data: { label: "Metti in pausa", timeout: waitTimeout },
+                            type: "wait",
+                          }
+                        : node,
+                    ),
+                  );
+                  resetLogicDialog();
+                  return;
+                }
                 if (block.kind === "if") {
-                  addLogicIfWithMerge({ label: logicCondition.trim(), meta: "Condizione" }, position);
+                  const label = `${logicCondition.left} ${logicCondition.op} ${logicCondition.right}`;
+                  addLogicIfWithMerge(
+                    {
+                      label,
+                      meta: "Condizione",
+                      condition: logicCondition,
+                    },
+                    position,
+                  );
                   resetLogicDialog();
                   return;
                 }
                 if (block.kind === "while") {
+                  const label = `${logicCondition.left} ${logicCondition.op} ${logicCondition.right}`;
                   addLogicNode(
                     "logicLoop",
-                    { label: `Ripeti finché ${logicCondition.trim()}`, meta: "Ripetizione" },
+                    {
+                      label: `Ripeti finché ${label}`,
+                      meta: "Ripetizione",
+                      loopKind: "while",
+                      condition: logicCondition,
+                    },
                     position,
                   );
                   resetLogicDialog();
                   return;
                 }
                 if (block.kind === "for") {
+                  const iterations = Number(logicIterations.trim());
                   addLogicNode(
                     "logicLoop",
-                    { label: `Ripeti ${logicIterations.trim()} volte`, meta: "Ripetizione" },
+                    {
+                      label: `Ripeti ${logicIterations.trim()} volte`,
+                      meta: "Ripetizione",
+                      loopKind: "for",
+                      iterations: Number.isFinite(iterations) ? iterations : undefined,
+                    },
                     position,
                   );
                   resetLogicDialog();

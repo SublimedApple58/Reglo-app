@@ -4,7 +4,9 @@ import React from "react";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { workflowsData, type WorkflowItem } from "./workflows-data";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { listWorkflows, deleteWorkflow, updateWorkflow } from "@/lib/actions/workflow.actions";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMemo, useRef, useState, useEffect } from "react";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -19,6 +21,7 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const toast = useFeedbackToast();
   const setRows = useSetAtom(Workflows.rows);
   const setTotalSelected = useSetAtom(Workflows.workflowsRowsSelected);
   const setSelectedIds = useSetAtom(Workflows.workflowsSelectedIds);
@@ -27,9 +30,15 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
   const [selectedItems, setSelectedItems] = useState<Record<string, boolean>>(
     {},
   );
-  const [visibleRows, setVisibleRows] = useState<WorkflowItem[]>([]);
-  const [rows, setRowsData] = useState<WorkflowItem[]>(workflowsData);
+  const [visibleRows, setVisibleRows] = useState<{
+    id: string;
+    title: string;
+    owner: string;
+    status: string;
+  }[]>([]);
+  const [rows, setRowsData] = useState<typeof visibleRows>([]);
   const [isFading, setIsFading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const isInitialMount = useRef(true);
   const prevSearchTerm = useRef<string | null>(searchParams.get("search"));
   const lastDeleteRequest = useRef(0);
@@ -59,10 +68,12 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
         row.title.toLowerCase().includes(lower) ||
         row.owner.toLowerCase().includes(lower) ||
         row.status.toLowerCase().includes(lower) ||
-        (row.disabled ? "disattivato" : "").includes(lower);
-      const effectiveStatus = row.disabled ? "disattivato" : row.status.toLowerCase();
+        (row.status.toLowerCase() === "paused" ? "disattivato" : "").includes(lower);
+      const effectiveStatus = row.status.toLowerCase();
       const matchesStatus =
-        statusFilters.length === 0 || statusFilters.includes(effectiveStatus);
+        statusFilters.length === 0 ||
+        statusFilters.includes(effectiveStatus) ||
+        (effectiveStatus === "paused" && statusFilters.includes("disattivato"));
       const matchesOwner =
         ownerFilters.length === 0 || ownerFilters.includes(row.owner.toLowerCase());
       return matchesSearch && matchesStatus && matchesOwner;
@@ -72,6 +83,37 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
   useEffect(() => {
     setRows(filteredRows.length);
   }, [filteredRows, setRows]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      if (isMounted) setIsLoading(true);
+      const res = await listWorkflows();
+      if (!res.success || !res.data) {
+        if (isMounted) {
+          toast.error({
+            description: res.message ?? "Impossibile caricare i workflow.",
+          });
+          setIsLoading(false);
+        }
+        return;
+      }
+      if (!isMounted) return;
+      setRowsData(
+        res.data.map((workflow) => ({
+          id: workflow.id,
+          title: workflow.name,
+          owner: workflow.owner,
+          status: workflow.status,
+        })),
+      );
+      setIsLoading(false);
+    };
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -146,21 +188,46 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
     if (deleteRequest === lastDeleteRequest.current) return;
     lastDeleteRequest.current = deleteRequest;
     if (!deleteRequest || selectedIds.length === 0) return;
-    setRowsData((prev) => prev.filter((row) => !selectedIds.includes(row.id)));
-    setSelectedItems({});
-  }, [deleteRequest, selectedIds]);
+    (async () => {
+      const results = await Promise.all(
+        selectedIds.map(async (id) => ({ id, res: await deleteWorkflow(id) })),
+      );
+      const failed = results.find((item) => !item.res.success);
+      if (failed) {
+        toast.error({
+          description: failed.res.message ?? "Impossibile eliminare alcuni workflow.",
+        });
+      }
+      setRowsData((prev) => prev.filter((row) => !selectedIds.includes(row.id)));
+      setSelectedItems({});
+    })();
+  }, [deleteRequest, selectedIds, toast]);
 
   useEffect(() => {
     if (disableRequest === lastDisableRequest.current) return;
     lastDisableRequest.current = disableRequest;
     if (!disableRequest || selectedIds.length === 0) return;
-    setRowsData((prev) =>
-      prev.map((row) =>
-        selectedIds.includes(row.id) ? { ...row, disabled: true } : row,
-      ),
-    );
-    setSelectedItems({});
-  }, [disableRequest, selectedIds]);
+    (async () => {
+      const results = await Promise.all(
+        selectedIds.map(async (id) => ({
+          id,
+          res: await updateWorkflow({ id, status: "paused" }),
+        })),
+      );
+      const failed = results.find((item) => !item.res.success);
+      if (failed) {
+        toast.error({
+          description: failed.res.message ?? "Impossibile disattivare alcuni workflow.",
+        });
+      }
+      setRowsData((prev) =>
+        prev.map((row) =>
+          selectedIds.includes(row.id) ? { ...row, status: "paused" } : row,
+        ),
+      );
+      setSelectedItems({});
+    })();
+  }, [disableRequest, selectedIds, toast]);
 
   const allOnPageSelected =
     visibleRows.length > 0 && visibleRows.every((row) => selectedItems[row.id]);
@@ -191,48 +258,78 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
           </TableRow>
         </TableHeader>
         <TableBody>
-          {visibleRows.map((row) => (
-            <TableRow key={row.id}>
-              {selectable && (
-                <TableCell className="text-center">
-                  <Checkbox
-                    checked={selectedItems[row.id] || false}
-                    onCheckedChange={() => toggleSelect(row.id)}
-                    aria-label={`Select workflow ${row.title}`}
-                  />
-                </TableCell>
-              )}
-              <TableCell className="font-medium">{row.title}</TableCell>
-              <TableCell>{row.owner}</TableCell>
-              <TableCell>
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-full border border-black/5 px-2.5 py-1 text-xs font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
-                    row.disabled && "bg-neutral-100 text-neutral-500",
-                    !row.disabled &&
-                      row.status === "Active" &&
-                      "bg-emerald-100 text-emerald-700",
-                    !row.disabled &&
-                      row.status === "Draft" &&
-                      "bg-slate-100 text-slate-600",
-                    !row.disabled &&
-                      row.status === "Paused" &&
-                      "bg-amber-100 text-amber-700",
-                    !row.disabled &&
-                      row.status === "Review" &&
-                      "bg-sky-100 text-sky-700",
+          {isLoading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <TableRow key={`workflow-skeleton-${index}`}>
+                  {selectable && (
+                    <TableCell className="text-center">
+                      <Skeleton className="mx-auto h-4 w-4 rounded" />
+                    </TableCell>
                   )}
-                >
-                  {row.disabled ? "Disattivato" : row.status}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <Button type="button" variant="default" onClick={() => handleEdit(row.id)}>
-                  Edit
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="ml-auto h-8 w-16" />
+                  </TableCell>
+                </TableRow>
+              ))
+            : visibleRows.length
+              ? visibleRows.map((row) => (
+                  <TableRow key={row.id}>
+                    {selectable && (
+                      <TableCell className="text-center">
+                        <Checkbox
+                          checked={selectedItems[row.id] || false}
+                          onCheckedChange={() => toggleSelect(row.id)}
+                          aria-label={`Select workflow ${row.title}`}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell className="font-medium">{row.title}</TableCell>
+                    <TableCell>{row.owner}</TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border border-black/5 px-2.5 py-1 text-xs font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
+                          row.status === "active" &&
+                            "bg-emerald-100 text-emerald-700",
+                          row.status === "draft" &&
+                            "bg-slate-100 text-slate-600",
+                          row.status === "paused" &&
+                            "bg-amber-100 text-amber-700",
+                        )}
+                      >
+                        {row.status === "paused"
+                          ? "Disattivato"
+                          : row.status === "active"
+                            ? "Active"
+                            : "Draft"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button type="button" variant="default" onClick={() => handleEdit(row.id)}>
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={selectable ? 5 : 4}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Nessun workflow trovato.
+                    </TableCell>
+                  </TableRow>
+                )}
         </TableBody>
       </Table>
     </div>

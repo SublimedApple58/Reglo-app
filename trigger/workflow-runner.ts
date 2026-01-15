@@ -1,0 +1,236 @@
+import { task, wait } from "@trigger.dev/sdk/v3";
+import { prisma } from "@/db/prisma";
+import {
+  computeExecutionOrder,
+  evaluateCondition,
+  getNextNodeId,
+  type Condition,
+  type WorkflowEdge,
+  type WorkflowNode,
+} from "@/lib/workflows/engine";
+
+export const workflowRunner = task({
+  id: "workflow-runner",
+  run: async (payload: { runId: string }) => {
+    const run = await prisma.workflowRun.findUnique({
+      where: { id: payload.runId },
+      include: { workflow: true },
+    });
+
+    if (!run) {
+      throw new Error("Workflow run not found");
+    }
+
+    const definition = run.workflow.definition as {
+      nodes?: WorkflowNode[];
+      edges?: WorkflowEdge[];
+      settings?: {
+        retryPolicy?: { maxAttempts?: number; backoffSeconds?: number };
+      };
+    };
+
+    const executionOrder = computeExecutionOrder(definition);
+    const retryPolicy = definition.settings?.retryPolicy ?? {};
+    const maxAttempts = retryPolicy.maxAttempts ?? 3;
+    const backoffSeconds = retryPolicy.backoffSeconds ?? 5;
+
+    await prisma.workflowRun.update({
+      where: { id: run.id },
+      data: {
+        status: "running",
+        startedAt: new Date(),
+      },
+    });
+
+    const nodes = definition.nodes ?? [];
+    const edges = definition.edges ?? [];
+    const nodesById = new Map(nodes.map((node) => [node.id, node]));
+    const stepOutputs: Record<string, unknown> = {};
+    const loopCounters = new Map<string, number>();
+    const maxSteps = Math.max(50, nodes.length * 5);
+
+    const executeNode = async (nodeId: string) => {
+      const node = nodesById.get(nodeId);
+      if (!node) {
+        throw new Error("Workflow node not found");
+      }
+
+      await prisma.workflowRunStep.updateMany({
+        where: { runId: run.id, nodeId },
+        data: {
+          status: "running",
+          startedAt: new Date(),
+        },
+      });
+
+      if (node.type === "logicIf") {
+        const condition = node.config?.condition as Condition | undefined;
+        const result = condition
+          ? evaluateCondition(condition, {
+              triggerPayload: run.triggerPayload ?? undefined,
+              stepOutputs,
+            })
+          : false;
+        const output = { result };
+        stepOutputs[nodeId] = output;
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "completed",
+            output,
+            finishedAt: new Date(),
+          },
+        });
+        return { branch: result ? "yes" : "no" };
+      }
+
+      if (node.type === "logicLoop") {
+        const mode = (node.config?.mode as string | undefined) ?? "for";
+        const condition = node.config?.condition as Condition | undefined;
+        let shouldLoop = false;
+        let iterationsLeft = loopCounters.get(nodeId) ?? 0;
+
+        if (mode === "while") {
+          shouldLoop = condition
+            ? evaluateCondition(condition, {
+                triggerPayload: run.triggerPayload ?? undefined,
+                stepOutputs,
+              })
+            : false;
+        } else {
+          if (iterationsLeft === 0) {
+            const total = Number(node.config?.iterations ?? 0);
+            iterationsLeft = Number.isFinite(total) ? total : 0;
+          }
+          if (iterationsLeft > 0) {
+            shouldLoop = true;
+            iterationsLeft -= 1;
+          }
+          loopCounters.set(nodeId, iterationsLeft);
+        }
+
+        const output = { shouldLoop, iterationsLeft };
+        stepOutputs[nodeId] = output;
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "completed",
+            output,
+            finishedAt: new Date(),
+          },
+        });
+
+        return { branch: shouldLoop ? "loop" : "next" };
+      }
+
+      if (node.type === "wait") {
+        const token = await wait.createToken({
+          timeout: node.config?.timeout ?? "24h",
+          tags: [run.id, nodeId],
+        });
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "waiting",
+            output: {
+              waitpointId: token.id,
+              url: token.url,
+            },
+          },
+        });
+        await prisma.workflowRun.update({
+          where: { id: run.id },
+          data: { status: "waiting" },
+        });
+
+        const result = await wait.forToken(token).unwrap();
+
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "completed",
+            output: {
+              waitpointId: token.id,
+              result,
+            },
+            finishedAt: new Date(),
+          },
+        });
+
+        await prisma.workflowRun.update({
+          where: { id: run.id },
+          data: { status: "running" },
+        });
+
+        stepOutputs[nodeId] = result;
+        return { branch: null };
+      }
+
+      const output = { message: "Step executed (stub)" };
+      stepOutputs[nodeId] = output;
+      await prisma.workflowRunStep.updateMany({
+        where: { runId: run.id, nodeId },
+        data: {
+          status: "completed",
+          output,
+          finishedAt: new Date(),
+        },
+      });
+      return { branch: null };
+    };
+
+    let current = executionOrder[0] ?? null;
+    let stepsVisited = 0;
+
+    while (current && stepsVisited < maxSteps) {
+      stepsVisited += 1;
+      let branch: string | null = null;
+      let attempt = 0;
+      while (attempt < maxAttempts) {
+        attempt += 1;
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId: current },
+          data: { attempt },
+        });
+        try {
+          const result = await executeNode(current);
+          branch = result.branch ?? null;
+          break;
+        } catch (error) {
+          if (attempt >= maxAttempts) {
+            await prisma.workflowRunStep.updateMany({
+              where: { runId: run.id, nodeId: current },
+              data: {
+                status: "failed",
+                error: {
+                  message: error instanceof Error ? error.message : "Step failed",
+                },
+                finishedAt: new Date(),
+              },
+            });
+            await prisma.workflowRun.update({
+              where: { id: run.id },
+              data: { status: "failed", finishedAt: new Date() },
+            });
+            return { status: "failed" };
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, backoffSeconds * 1000),
+          );
+        }
+      }
+
+      current = getNextNodeId(current, edges, branch);
+    }
+
+    await prisma.workflowRun.update({
+      where: { id: run.id },
+      data: {
+        status: "completed",
+        finishedAt: new Date(),
+      },
+    });
+
+    return { status: "completed" };
+  },
+});

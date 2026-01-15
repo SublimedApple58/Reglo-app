@@ -6,7 +6,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { useSession } from "next-auth/react";
 import { DocumentCanvas } from "@/components/pages/DocManager/DocumentCanvas";
 import { DocumentHeader } from "@/components/pages/DocManager/DocumentHeader";
-import { pdfSource, toolItems } from "@/components/pages/DocManager/doc-manager.data";
+import { toolItems } from "@/components/pages/DocManager/doc-manager.data";
 import type { PlacedField, ToolId } from "@/components/pages/DocManager/doc-manager.types";
 import { DocEditorSidebar } from "@/components/pages/DocManager/doc-editor/DocEditorSidebar";
 import { DocEditorOverlay } from "@/components/pages/DocManager/doc-editor/DocEditorOverlay";
@@ -35,7 +35,7 @@ export function DocEditorWrapper({
     previewUrl?: string | null;
   } | null>(null);
   const [companyId, setCompanyId] = React.useState<string | null>(null);
-  const [pdfFile, setPdfFile] = React.useState<string | undefined>(undefined);
+  const [pdfFile, setPdfFile] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [selectedTool, setSelectedTool] = React.useState<ToolId | null>(null);
   const [fields, setFields] = React.useState<PlacedField[]>([]);
@@ -134,7 +134,7 @@ export function DocEditorWrapper({
         owner: ownerName,
         previewUrl: configRes.data.sourceUrl ?? undefined,
       });
-      setPdfFile(configRes.data.sourceUrl ?? pdfSource);
+      setPdfFile(configRes.data.sourceUrl ?? null);
       const loadedFields = configRes.data.fields.map((field) => ({
         id: field.id,
         type: field.type as ToolId,
@@ -363,7 +363,7 @@ export function DocEditorWrapper({
     if (!docId || !companyId || isSaving) return;
     setIsSaving(true);
 
-    const normalizedFields = fields.map((field) => {
+    const normalizedFields: PlacedField[] = fields.map((field): PlacedField => {
       if (isRatioField(field)) return field;
       const bounds =
         overlayRefs.current[field.page]?.current?.getBoundingClientRect();
@@ -372,7 +372,7 @@ export function DocEditorWrapper({
       }
       const baseWidth = Math.max(bounds.width, 1);
       const baseHeight = Math.max(bounds.height, 1);
-      const nextMeta = {
+      const nextMeta: PlacedField["meta"] = {
         unit: "ratio",
         ...(field.meta?.html ? { html: field.meta.html } : {}),
       };
@@ -516,7 +516,7 @@ export function DocEditorWrapper({
     title: "Documento",
     updatedAt: "Aggiornato ora",
     owner: "Reglo",
-    previewUrl: pdfSource,
+    previewUrl: undefined,
   };
 
   return (
@@ -535,16 +535,15 @@ export function DocEditorWrapper({
           meta={`${resolvedDoc.updatedAt} - ${resolvedDoc.owner}`}
           actions={
             <>
-              <Button variant="outline">Discard</Button>
               <Button onClick={handleSave} disabled={isSaving}>
-                {isSaving ? "Salvataggio..." : "Save"}
+                {isSaving ? "Saving..." : "Save"}
               </Button>
             </>
           }
         />
 
         <DocumentCanvas
-          pdfFile={pdfFile ?? pdfSource}
+          pdfFile={pdfFile ?? undefined}
           renderOverlay={(pageNumber, _pageRef) => (
             <DocEditorOverlay
               key={`overlay-${pageNumber}`}

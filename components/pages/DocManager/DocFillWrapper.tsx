@@ -4,7 +4,6 @@ import React from "react";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { DocumentCanvas } from "@/components/pages/DocManager/DocumentCanvas";
 import { DocumentHeader } from "@/components/pages/DocManager/DocumentHeader";
-import { pdfSource } from "@/components/pages/DocManager/doc-manager.data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,7 +39,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
     updatedAt: string;
     owner: string;
   } | null>(null);
-  const [pdfFile, setPdfFile] = React.useState<string>(pdfSource);
+  const [pdfFile, setPdfFile] = React.useState<string | null>(null);
   const [fields, setFields] = React.useState<FillField[]>([]);
   const fullName = session?.user?.name?.trim() || "Reglo User";
   const overlayRefs = React.useRef<Record<number, React.RefObject<HTMLDivElement>>>(
@@ -115,7 +114,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         updatedAt: formatUpdatedAt(configRes.data.updatedAt.toString()),
         owner: ownerName,
       });
-      setPdfFile(configRes.data.sourceUrl ?? pdfSource);
+      setPdfFile(configRes.data.sourceUrl ?? null);
       const loadedFields = configRes.data.fields.map((field) => ({
         id: field.id,
         type: field.type as FillField["type"],
@@ -169,6 +168,9 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
     setIsSaving(true);
 
     try {
+      if (!pdfFile) {
+        throw new Error("Documento non disponibile.");
+      }
       const response = await fetch(pdfFile);
       const pdfBytes = await response.arrayBuffer();
       const pdfDoc = await PDFDocument.load(pdfBytes);
@@ -425,7 +427,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
       />
 
       <DocumentCanvas
-        pdfFile={pdfFile}
+        pdfFile={pdfFile ?? undefined}
         renderOverlay={(pageNumber, _pageRef) => (
           <DocFillOverlay
             key={`fill-overlay-${pageNumber}`}

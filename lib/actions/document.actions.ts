@@ -9,6 +9,10 @@ import {
 } from '@/lib/validators';
 import { formatError } from '@/lib/utils';
 import { z } from 'zod';
+import { PDFDocument } from 'pdf-lib';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
+import { getR2Bucket, getR2Client } from '@/lib/storage/r2';
+import { randomUUID } from 'crypto';
 
 async function requireCompanyAccess(companyId: string) {
   const session = await auth();
@@ -108,6 +112,45 @@ export async function createDocumentTemplate(
         companyId: payload.companyId,
         name: payload.name,
         sourceUrl: payload.sourceUrl,
+      },
+    });
+
+    return {
+      success: true,
+      templateId: template.id,
+      message: 'Document created',
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function createBlankDocumentTemplate(
+  input: z.infer<typeof createDocumentTemplateSchema>
+) {
+  try {
+    const payload = createDocumentTemplateSchema.parse(input);
+    await requireCompanyAccess(payload.companyId);
+
+    const pdfDoc = await PDFDocument.create();
+    pdfDoc.addPage([595.28, 841.89]);
+    const pdfBytes = await pdfDoc.save();
+    const key = `companies/${payload.companyId}/documents/${randomUUID()}.pdf`;
+
+    await getR2Client().send(
+      new PutObjectCommand({
+        Bucket: getR2Bucket(),
+        Key: key,
+        Body: Buffer.from(pdfBytes),
+        ContentType: 'application/pdf',
+      })
+    );
+
+    const template = await prisma.documentTemplate.create({
+      data: {
+        companyId: payload.companyId,
+        name: payload.name,
+        sourceUrl: key,
       },
     });
 

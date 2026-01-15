@@ -63,6 +63,15 @@ export function DocumentCanvas({
   }, [currentPage, editingPage]);
 
   React.useEffect(() => {
+    if (!pdfFile) return;
+    setCurrentPage(1);
+    setPageDraft("1");
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0 });
+    }
+  }, [pdfFile]);
+
+  React.useEffect(() => {
     if (pageCount > 0 && currentPage > pageCount) {
       setCurrentPage(pageCount);
     }

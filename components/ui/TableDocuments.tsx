@@ -19,6 +19,7 @@ import {
   deleteDocumentTemplate,
   listDocumentTemplates,
 } from "@/lib/actions/document.actions";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SelectedInvoicesState {
   [key: string]: boolean;
@@ -40,6 +41,7 @@ export function TableDocuments({
       previewUrl?: string;
     }[];
   });
+  const [isLoading, setIsLoading] = useState(true);
 
   const toast = useFeedbackToast();
   const searchParams = useSearchParams();
@@ -68,12 +70,14 @@ export function TableDocuments({
   useEffect(() => {
     let isMounted = true;
     const loadDocuments = async () => {
+      if (isMounted) setIsLoading(true);
       const res = await listDocumentTemplates();
       if (!res.success || !res.data) {
         if (isMounted) {
           toast.error({
             description: res.message ?? "Impossibile caricare i documenti.",
           });
+          setIsLoading(false);
         }
         return;
       }
@@ -86,6 +90,7 @@ export function TableDocuments({
           previewUrl: doc.previewUrl ?? undefined,
         })),
       );
+      setIsLoading(false);
     };
 
     loadDocuments();
@@ -259,47 +264,77 @@ export function TableDocuments({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {documentsToShow?.map((doc) => (
-            <TableRow key={doc.id}>
-              {selectable && (
-                <TableCell className="text-center">
-                  <Checkbox
-                    checked={selectedInvoices[doc.id] || false}
-                    onCheckedChange={() => handleSelectInvoice(doc.id)}
-                    aria-label={`Select document ${doc.title}`}
-                  />
-                </TableCell>
-              )}
-              <TableCell className="font-medium">{doc.title}</TableCell>
-              <TableCell>
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                    doc.status === "Bozza" && "bg-slate-100 text-slate-600",
-                    doc.status === "Configurato" && "bg-amber-100 text-amber-700",
-                    doc.status === "Bindato" && "bg-emerald-100 text-emerald-700",
-                    doc.status === "AI" && "bg-cyan-100 text-cyan-700",
-                    !["Bozza", "Configurato", "Bindato", "AI"].includes(doc.status) &&
-                      "bg-muted text-muted-foreground",
+          {isLoading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <TableRow key={`document-skeleton-${index}`}>
+                  {selectable && (
+                    <TableCell className="text-center">
+                      <Skeleton className="mx-auto h-4 w-4 rounded" />
+                    </TableCell>
                   )}
-                >
-                  {doc.status}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={() => {
-                    setActiveDocId(doc.id);
-                    setOpenDrawer(true);
-                  }}
-                >
-                  Edit
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="ml-auto h-8 w-16" />
+                  </TableCell>
+                </TableRow>
+              ))
+            : documentsToShow?.length
+              ? documentsToShow.map((doc) => (
+                  <TableRow key={doc.id}>
+                    {selectable && (
+                      <TableCell className="text-center">
+                        <Checkbox
+                          checked={selectedInvoices[doc.id] || false}
+                          onCheckedChange={() => handleSelectInvoice(doc.id)}
+                          aria-label={`Select document ${doc.title}`}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell className="font-medium">{doc.title}</TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                          doc.status === "Bozza" && "bg-slate-100 text-slate-600",
+                          doc.status === "Configurato" && "bg-amber-100 text-amber-700",
+                          doc.status === "Bindato" && "bg-emerald-100 text-emerald-700",
+                          doc.status === "AI" && "bg-cyan-100 text-cyan-700",
+                          !["Bozza", "Configurato", "Bindato", "AI"].includes(doc.status) &&
+                            "bg-muted text-muted-foreground",
+                        )}
+                      >
+                        {doc.status}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="default"
+                        onClick={() => {
+                          setActiveDocId(doc.id);
+                          setOpenDrawer(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={selectable ? 4 : 3}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Nessun documento trovato.
+                    </TableCell>
+                  </TableRow>
+                )}
         </TableBody>
       </Table>
       <DocumentsDrawer

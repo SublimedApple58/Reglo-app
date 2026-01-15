@@ -15,6 +15,8 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { listDocumentRequests } from "@/lib/actions/document-requests.actions";
 import { DocumentRequestsDrawer } from "@/components/pages/DocumentRequestsDrawer";
 import { useLocale } from "next-intl";
+import { Skeleton } from "@/components/ui/skeleton";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type RequestItem = {
   id: string;
@@ -30,14 +32,28 @@ type RequestItem = {
 
 const statusLabel = (status: string) =>
   status === "completed" ? "Completato" : "In corso";
+const PAGE_DIMENSION = 20;
+const normalizeValue = (value: string) => value.trim().toLowerCase();
 
-export function TableDocumentRequests(): React.ReactElement {
+export function TableDocumentRequests({
+  onRowsChange,
+}: {
+  onRowsChange?: (rows: number) => void;
+}): React.ReactElement {
   const toast = useFeedbackToast();
   const locale = useLocale();
   const [requests, setRequests] = React.useState<RequestItem[]>([]);
+  const [requestsToShow, setRequestsToShow] = React.useState<RequestItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
   const [openDrawer, setOpenDrawer] = React.useState(false);
   const [activeRequestId, setActiveRequestId] = React.useState<string | null>(null);
   const [origin, setOrigin] = React.useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const page = Number(searchParams.get("page")) || 1;
+  const searchTerm = searchParams.get("search") || "";
+  const prevSearchTerm = React.useRef(searchTerm);
 
   React.useEffect(() => {
     setOrigin(window.location.origin);
@@ -46,12 +62,14 @@ export function TableDocumentRequests(): React.ReactElement {
   React.useEffect(() => {
     let isMounted = true;
     const load = async () => {
+      if (isMounted) setIsLoading(true);
       const res = await listDocumentRequests();
       if (!res.success || !res.data) {
         if (isMounted) {
           toast.error({
             description: res.message ?? "Impossibile caricare le compilazioni.",
           });
+          setIsLoading(false);
         }
         return;
       }
@@ -69,12 +87,53 @@ export function TableDocumentRequests(): React.ReactElement {
           resultUrl: request.resultUrl ?? null,
         })),
       );
+      setIsLoading(false);
     };
     load();
     return () => {
       isMounted = false;
     };
   }, [toast]);
+
+  const filteredRequests = React.useMemo(() => {
+    const lowercasedSearch = normalizeValue(searchTerm);
+    return requests.filter((request) => {
+      if (!searchTerm) return true;
+      const statusText = statusLabel(request.status);
+      return [
+        request.name,
+        request.templateName,
+        request.status,
+        statusText,
+      ]
+        .filter(Boolean)
+        .some((value) => normalizeValue(value).includes(lowercasedSearch));
+    });
+  }, [requests, searchTerm]);
+
+  React.useEffect(() => {
+    onRowsChange?.(filteredRequests.length);
+  }, [filteredRequests.length, onRowsChange]);
+
+  React.useEffect(() => {
+    if (prevSearchTerm.current === searchTerm) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", "1");
+    router.push(`${pathname}?${params}`);
+    prevSearchTerm.current = searchTerm;
+  }, [pathname, router, searchParams, searchTerm]);
+
+  const totalPages = React.useMemo(
+    () => Math.max(1, Math.ceil(filteredRequests.length / PAGE_DIMENSION)),
+    [filteredRequests.length],
+  );
+  const currentPage = Math.min(page, totalPages);
+
+  React.useEffect(() => {
+    const startIndex = (currentPage - 1) * PAGE_DIMENSION;
+    const endIndex = startIndex + PAGE_DIMENSION;
+    setRequestsToShow(filteredRequests.slice(startIndex, endIndex));
+  }, [currentPage, filteredRequests]);
 
   const activeRequest =
     requests.find((request) => request.id === activeRequestId) ?? null;
@@ -94,37 +153,65 @@ export function TableDocumentRequests(): React.ReactElement {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {requests.map((request) => (
-            <TableRow key={request.id}>
-              <TableCell className="font-medium">{request.name}</TableCell>
-              <TableCell>{request.templateName}</TableCell>
-              <TableCell>
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                    request.status === "completed" &&
-                      "bg-emerald-100 text-emerald-700",
-                    request.status !== "completed" &&
-                      "bg-sky-100 text-sky-700",
-                  )}
-                >
-                  {statusLabel(request.status)}
-                </span>
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="default"
-                  onClick={() => {
-                    setActiveRequestId(request.id);
-                    setOpenDrawer(true);
-                  }}
-                >
-                  Apri
-                </Button>
-              </TableCell>
-            </TableRow>
-          ))}
+          {isLoading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <TableRow key={`request-skeleton-${index}`}>
+                  <TableCell>
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-32" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-5 w-24 rounded-full" />
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Skeleton className="ml-auto h-8 w-16" />
+                  </TableCell>
+                </TableRow>
+              ))
+            : requestsToShow.length
+              ? requestsToShow.map((request) => (
+                  <TableRow key={request.id}>
+                    <TableCell className="font-medium">{request.name}</TableCell>
+                    <TableCell>{request.templateName}</TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                          request.status === "completed" &&
+                            "bg-emerald-100 text-emerald-700",
+                          request.status !== "completed" &&
+                            "bg-sky-100 text-sky-700",
+                        )}
+                      >
+                        {statusLabel(request.status)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="default"
+                        onClick={() => {
+                          setActiveRequestId(request.id);
+                          setOpenDrawer(true);
+                        }}
+                      >
+                        Apri
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={4}
+                      className="py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Nessuna compilazione trovata.
+                    </TableCell>
+                  </TableRow>
+                )}
         </TableBody>
       </Table>
 

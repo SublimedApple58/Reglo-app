@@ -26,7 +26,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import slugify from "slugify";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { createWorkflow } from "@/lib/actions/workflow.actions";
 
 export function WorkflowsWrapper(): React.ReactElement {
   const [showInput, setShowInput] = useState(false);
@@ -40,6 +41,7 @@ export function WorkflowsWrapper(): React.ReactElement {
   const searchParams = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState("");
+  const toast = useFeedbackToast();
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -188,15 +190,18 @@ export function WorkflowsWrapper(): React.ReactElement {
               event.preventDefault();
               const trimmed = workflowName.trim();
               if (!trimmed) return;
-              const slug =
-                slugify(trimmed, { lower: true, strict: true }) ||
-                `workflow-${Date.now()}`;
-              const params = new URLSearchParams();
-              params.set("mode", "new");
-              params.set("name", trimmed);
-              router.push(`${pathname}/${slug}?${params.toString()}`);
-              setWorkflowName("");
-              setCreateOpen(false);
+              (async () => {
+                const res = await createWorkflow({ name: trimmed });
+                if (!res.success || !res.data) {
+                  toast.error({
+                    description: res.message ?? "Impossibile creare il workflow.",
+                  });
+                  return;
+                }
+                router.push(`${pathname}/${res.data.id}`);
+                setWorkflowName("");
+                setCreateOpen(false);
+              })();
             }}
           >
             <Input

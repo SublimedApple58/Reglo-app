@@ -22,16 +22,47 @@ import { pdfSource } from "@/components/pages/DocManager/doc-manager.data";
 import type { DocItem } from "@/components/pages/DocManager/doc-manager.types";
 import {
   deleteDocumentTemplate,
+  createBlankDocumentTemplate,
   listDocumentTemplates,
 } from "@/lib/actions/document.actions";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  InputButton,
+  InputButtonAction,
+  InputButtonInput,
+  InputButtonProvider,
+  InputButtonSubmit,
+} from "@/components/animate-ui/buttons/input";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { PdfViewer } from "@/components/pages/DocManager/PdfViewer";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 export function DocManagerWrapper(): React.ReactElement {
   const toast = useFeedbackToast();
   const [items, setItems] = React.useState<DocItem[]>([]);
   const [companyId, setCompanyId] = React.useState<string | null>(null);
   const [ownerName, setOwnerName] = React.useState("Reglo");
+  const [isLoading, setIsLoading] = React.useState(true);
   const [isUploading, setIsUploading] = React.useState(false);
+  const [isCreating, setIsCreating] = React.useState(false);
+  const [showInput, setShowInput] = React.useState(false);
+  const [value, setValue] = React.useState("");
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [documentName, setDocumentName] = React.useState("");
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchTerm = searchParams.get("search") || "";
 
   const formatUpdatedAt = React.useCallback((iso: string) => {
     const updated = new Date(iso);
@@ -68,9 +99,11 @@ export function DocManagerWrapper(): React.ReactElement {
   );
 
   const loadDocuments = React.useCallback(async () => {
+    setIsLoading(true);
     const res = await listDocumentTemplates();
     if (!res.success || !res.data) {
       toast.error({ description: res.message ?? "Impossibile caricare i documenti." });
+      setIsLoading(false);
       return;
     }
     setCompanyId(res.data.companyId);
@@ -78,11 +111,71 @@ export function DocManagerWrapper(): React.ReactElement {
       res.data.documents[0]?.owner ?? res.data.companyName;
     setOwnerName(inferredOwner);
     setItems(res.data.documents.map((doc) => mapDocItem(doc, inferredOwner)));
+    setIsLoading(false);
   }, [mapDocItem, toast]);
 
   React.useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
+
+  React.useEffect(() => {
+    setValue(searchTerm);
+  }, [searchTerm]);
+
+  const handleSubmit = React.useCallback(
+    (e: React.FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (!showInput) {
+        setShowInput(true);
+        return;
+      }
+
+      const params = new URLSearchParams(searchParams.toString());
+      if (value) {
+        params.set("search", value);
+      } else {
+        params.delete("search");
+      }
+      router.push(`${pathname}?${params}`);
+    },
+    [showInput, value, pathname, router, searchParams],
+  );
+
+  const filteredItems = React.useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+    if (!normalized) return items;
+    return items.filter((doc) =>
+      [doc.title, doc.owner].some((value) =>
+        value.toLowerCase().includes(normalized),
+      ),
+    );
+  }, [items, searchTerm]);
+
+  const handleCreateDocument = async () => {
+    if (!companyId) {
+      toast.error({ description: "Company non trovata." });
+      return;
+    }
+    const trimmed = documentName.trim();
+    if (!trimmed) {
+      toast.error({ description: "Inserisci un nome documento." });
+      return;
+    }
+    setIsCreating(true);
+    const res = await createBlankDocumentTemplate({
+      companyId,
+      name: trimmed,
+    });
+    if (!res.success || !res.templateId) {
+      toast.error({ description: res.message ?? "Creazione fallita." });
+      setIsCreating(false);
+      return;
+    }
+    setCreateOpen(false);
+    setDocumentName("");
+    setIsCreating(false);
+    router.push(`/user/doc_manager/${res.templateId}`);
+  };
 
   const handleUpload = async (file: File) => {
     if (!companyId) {
@@ -132,13 +225,30 @@ export function DocManagerWrapper(): React.ReactElement {
       subTitle="Gestisci e rivedi i documenti caricati. Anteprime rapide, pronto per l'editing."
     >
       <div className="flex flex-1 flex-col gap-5">
+        <form onSubmit={handleSubmit} style={{ width: "200px" }}>
+          <InputButtonProvider showInput={showInput} setShowInput={setShowInput}>
+            <InputButton>
+              <InputButtonAction onClick={() => {}}>
+                <p style={{ color: "white" }}></p>
+              </InputButtonAction>
+              <InputButtonSubmit onClick={() => {}} type="submit" />
+            </InputButton>
+            <InputButtonInput
+              type="text"
+              placeholder="Search..."
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              autoFocus
+            />
+          </InputButtonProvider>
+        </form>
         <div className="flex flex-wrap items-center gap-3">
           <Button
             className="gap-2"
             size="lg"
             type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isUploading}
+            onClick={() => setCreateOpen(true)}
+            disabled={isCreating || !companyId}
           >
             <FilePlus2 className="h-4 w-4" />
             Create new document
@@ -169,15 +279,77 @@ export function DocManagerWrapper(): React.ReactElement {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((doc) => (
-            <DocCard
-              key={doc.id}
-              doc={doc}
-              onDelete={() => handleDelete(doc.id)}
-            />
-          ))}
+          {isLoading
+            ? Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={`doc-skeleton-${index}`}
+                  className="flex flex-col gap-3 rounded-2xl bg-card p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-40" />
+                      <Skeleton className="h-3 w-28" />
+                    </div>
+                    <Skeleton className="h-8 w-8 rounded-full" />
+                  </div>
+                  <div
+                    className="relative overflow-hidden rounded-xl bg-muted/50 shadow-inner"
+                    style={{ aspectRatio: "4 / 3" }}
+                  >
+                    <Skeleton className="h-full w-full rounded-none" />
+                  </div>
+                  <Skeleton className="h-9 w-full rounded-xl" />
+                </div>
+              ))
+            : filteredItems.length
+              ? filteredItems.map((doc) => (
+                  <DocCard
+                    key={doc.id}
+                    doc={doc}
+                    onDelete={() => handleDelete(doc.id)}
+                  />
+                ))
+              : (
+                  <div className="md:col-span-2 xl:col-span-3">
+                    <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center text-sm text-muted-foreground">
+                      Nessun documento trovato.
+                    </div>
+                  </div>
+                )}
         </div>
       </div>
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuovo documento</DialogTitle>
+            <DialogDescription>
+              Dai un nome al documento da creare.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="document-name">Nome documento</Label>
+            <Input
+              id="document-name"
+              value={documentName}
+              onChange={(event) => setDocumentName(event.target.value)}
+              placeholder="Es. Accordo di servizio"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCreateOpen(false)}
+              disabled={isCreating}
+            >
+              Annulla
+            </Button>
+            <Button type="button" onClick={handleCreateDocument} disabled={isCreating}>
+              {isCreating ? "Creo..." : "Crea documento"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ClientPageWrapper>
   );
 }
@@ -236,13 +408,12 @@ function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
 function PdfPreview({ src, title }: { src: string; title: string }) {
   return (
     <div className="relative h-full w-full">
-      <iframe
-        title={`Anteprima ${title}`}
-        src={`${src}#toolbar=0&navpanes=0&scrollbar=0`}
-        className="pointer-events-none absolute inset-0 h-full w-full border-0 origin-center scale-[1.06]"
-        tabIndex={-1}
-        loading="lazy"
-      />
+      <div
+        className="absolute inset-0 h-full w-full"
+        aria-label={`Anteprima ${title}`}
+      >
+        <PdfViewer file={src} maxPages={1} />
+      </div>
     </div>
   );
 }

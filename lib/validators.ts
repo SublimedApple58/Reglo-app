@@ -118,6 +118,61 @@ export const createDocumentRequestSchema = z.object({
   name: z.string().min(1, 'Name is required'),
 });
 
+export const workflowTriggerSchema = z.object({
+  type: z.enum(['manual', 'email_inbound', 'document_completed']),
+  config: z.record(z.unknown()).optional(),
+});
+
+export const workflowNodeSchema = z.object({
+  id: z.string().min(1, 'Node id is required'),
+  type: z.string().min(1, 'Node type is required'),
+  config: z.record(z.unknown()).optional(),
+});
+
+export const workflowEdgeSchema = z.object({
+  from: z.string().min(1, 'Edge source is required'),
+  to: z.string().min(1, 'Edge target is required'),
+  condition: z.record(z.unknown()).nullable().optional(),
+});
+
+export const workflowDefinitionSchema = z.object({
+  trigger: workflowTriggerSchema,
+  nodes: z.array(workflowNodeSchema).default([]),
+  edges: z.array(workflowEdgeSchema).default([]),
+  canvas: z
+    .object({
+      nodes: z.array(z.unknown()).default([]),
+      edges: z.array(z.unknown()).default([]),
+    })
+    .optional(),
+  settings: z
+    .object({
+      timezone: z.string().optional(),
+      onError: z.enum(['stop', 'continue']).optional(),
+      retryPolicy: z
+        .object({
+          maxAttempts: z.number().int().min(1).max(10).optional(),
+          backoffSeconds: z.number().int().min(1).optional(),
+        })
+        .optional(),
+    })
+    .optional(),
+});
+
+export const workflowStatusSchema = z.enum(['draft', 'active', 'paused']);
+
+export const createWorkflowSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  definition: workflowDefinitionSchema.optional(),
+});
+
+export const updateWorkflowSchema = z.object({
+  id: z.string().min(1, 'Workflow id is required'),
+  name: z.string().min(1).optional(),
+  status: workflowStatusSchema.optional(),
+  definition: workflowDefinitionSchema.optional(),
+});
+
 export const updateCompanyNameSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   name: z.string().min(1, 'Company name is required'),

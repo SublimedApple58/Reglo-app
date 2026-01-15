@@ -1,7 +1,6 @@
 "use client";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { TableDocumentRequests } from "@/components/ui/TableDocumentRequests";
+import React from "react";
 import {
   InputButton,
   InputButtonAction,
@@ -11,15 +10,25 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import React from "react";
 
-export function DocumentRequestsPage(): React.ReactElement {
+type AdminUsersToolbarProps = {
+  totalRows: number;
+  initialQuery?: string | null;
+};
+
+export function AdminUsersToolbar({
+  totalRows,
+  initialQuery,
+}: AdminUsersToolbarProps): React.ReactElement {
   const [showInput, setShowInput] = React.useState(false);
-  const [value, setValue] = React.useState("");
-  const [totalRows, setTotalRows] = React.useState(0);
+  const [value, setValue] = React.useState(initialQuery ?? "");
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+
+  React.useEffect(() => {
+    setValue(initialQuery ?? "");
+  }, [initialQuery]);
 
   const handleSubmit = React.useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
@@ -31,9 +40,9 @@ export function DocumentRequestsPage(): React.ReactElement {
 
       const params = new URLSearchParams(searchParams.toString());
       if (value) {
-        params.set("search", value);
+        params.set("query", value);
       } else {
-        params.delete("search");
+        params.delete("query");
       }
       params.set("page", "1");
       router.push(`${pathname}?${params}`);
@@ -42,10 +51,7 @@ export function DocumentRequestsPage(): React.ReactElement {
   );
 
   return (
-    <ClientPageWrapper
-      title="Compilazioni"
-      subTitle="Documenti in fase di compilazione o completati."
-    >
+    <>
       <div
         style={{
           position: "fixed",
@@ -83,9 +89,6 @@ export function DocumentRequestsPage(): React.ReactElement {
           </InputButtonProvider>
         </form>
       </div>
-      <div className="table_wrapper">
-        <TableDocumentRequests onRowsChange={setTotalRows} />
-      </div>
-    </ClientPageWrapper>
+    </>
   );
 }
