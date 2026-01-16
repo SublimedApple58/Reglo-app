@@ -64,7 +64,25 @@
 - Requirements:
   - Decision on secrets storage (DB encryption method) and OAuth callback URLs.
 
-## Phase 4 — P0 Integrations & Triggers
+## Phase 4 — Integrations UI
+- Settings > Integrations: connect/disconnect flows for Slack + Fatture in Cloud.
+- Workflow editor: form-based configuration for each block.
+- User-friendly validation + previews for block inputs.
+- User outcome:
+  - Users can connect their own accounts, configure blocks without coding, and validate inputs before publish.
+- Success metrics:
+  - Users can complete OAuth connect in under 2 minutes.
+  - 80%+ of workflows are configured without support intervention in pilot testing.
+- Requirements:
+  - UX copy for integration status/errors.
+  - Approved OAuth redirect URLs for prod/staging.
+- Status:
+  - Completed.
+  - Settings > Integrations connects/disconnects Slack + Fatture in Cloud.
+  - OAuth status feedback shown via Settings toasts.
+  - Workflow editor supports per-block config modals + non-blocking warnings for missing fields.
+
+## Phase 5 — P0 Integrations & Triggers
 - Slack App actions: send message, reply in thread, upload file, notify status.
 - Fatture in Cloud actions: create invoice, update status, send PDF, list invoices.
 - Doc Manager internal actions: upload document, request signature, update status, archive.
@@ -82,19 +100,6 @@
   - Resend account + inbound domain setup + webhook secret.
   - Fatture in Cloud developer account + OAuth app credentials + sandbox data.
   - Clarify Doc Manager internal events and action payloads.
-
-## Phase 5 — Integrations UI
-- Settings > Integrations: connect/disconnect flows for Slack + Fatture in Cloud.
-- Workflow editor: form-based configuration for each block.
-- User-friendly validation + previews for block inputs.
-- User outcome:
-  - Users can connect their own accounts, configure blocks without coding, and validate inputs before publish.
-- Success metrics:
-  - Users can complete OAuth connect in under 2 minutes.
-  - 80%+ of workflows are configured without support intervention in pilot testing.
-- Requirements:
-  - UX copy for integration status/errors.
-  - Approved OAuth redirect URLs for prod/staging.
 
 ## Phase 6 — Testing & Documentation
 - Integration test harness with mocked providers.

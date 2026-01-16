@@ -42,7 +42,7 @@ export default function InviteAcceptWrapper({
     const loadInvite = async () => {
       const res = await getCompanyInvite({ token });
       if (!isMounted) return;
-      if (!res.success) {
+      if (!res.success || !res.data) {
         setError(res.message ?? "Invite not available.");
         setLoading(false);
         return;

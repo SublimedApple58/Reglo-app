@@ -9,6 +9,11 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum IntegrationProvider {
+  SLACK
+  FATTURE_IN_CLOUD
+}
+
 model User {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String    @default("NO_NAME")
@@ -113,6 +118,7 @@ model Company {
   documentRequests DocumentRequest[]
   workflows Workflow[]
   workflowRuns WorkflowRun[]
+  integrationConnections IntegrationConnection[]
 }
 
 model CompanyMember {
@@ -146,6 +152,31 @@ model CompanyInvite {
 
   @@index([companyId])
   @@index([email])
+}
+
+model IntegrationConnection {
+  id        String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String              @db.Uuid
+  provider  IntegrationProvider
+  status    String              @default("connected")
+  externalAccountId String?
+  displayName String?
+  scope     String?
+  accessTokenCiphertext String?
+  accessTokenIv String?
+  accessTokenTag String?
+  refreshTokenCiphertext String?
+  refreshTokenIv String?
+  refreshTokenTag String?
+  expiresAt DateTime?
+  metadata  Json?
+  createdAt DateTime            @default(now()) @db.Timestamp(6)
+  updatedAt DateTime            @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, provider])
+  @@index([provider])
 }
 
 model DocumentTemplate {

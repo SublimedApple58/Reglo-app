@@ -65,10 +65,17 @@ type RunContext = {
 const resolvePath = (value: unknown, path: string) => {
   if (!path) return undefined;
   const parts = path.split(".").filter(Boolean);
-  let current: any = value;
+  let current: unknown = value;
   for (const part of parts) {
     if (current == null) return undefined;
-    current = current[part];
+    if (typeof current !== "object") return undefined;
+    if (Array.isArray(current)) {
+      const index = Number(part);
+      if (Number.isNaN(index)) return undefined;
+      current = current[index];
+      continue;
+    }
+    current = (current as Record<string, unknown>)[part];
   }
   return current;
 };
@@ -96,12 +103,30 @@ export const resolveExpression = (value: string, context: RunContext) => {
       const parts = path.replace(/^steps\./, "").split(".");
       const stepId = parts.shift();
       if (!stepId) return undefined;
+      if (parts[0] === "output") {
+        parts.shift();
+      }
       const output = context.stepOutputs[stepId];
       return resolvePath(output, parts.join("."));
     }
     return resolvePath(context, path);
   }
   return parseValue(trimmed);
+};
+
+export const interpolateTemplate = (template: string, context: RunContext) => {
+  return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, expr: string) => {
+    const resolved = resolveExpression(`{{${expr}}}`, context);
+    if (resolved == null) return "";
+    if (typeof resolved === "object") {
+      try {
+        return JSON.stringify(resolved);
+      } catch {
+        return String(resolved);
+      }
+    }
+    return String(resolved);
+  });
 };
 
 export const evaluateCondition = (condition: Condition, context: RunContext) => {

@@ -9,11 +9,11 @@ import {
   startWorkflowRun,
   updateWorkflow,
 } from "@/lib/actions/workflow.actions";
+import { listDocumentTemplates } from "@/lib/actions/document.actions";
 import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHistory";
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
   applyNodeChanges,
   applyEdgeChanges,
   addEdge,
@@ -107,7 +107,7 @@ const buildEdges = (isNew: boolean): Edge[] =>
       ];
 
 type ServiceKey =
-  | "teamsystem"
+  | "fatture-in-cloud"
   | "slack"
   | "doc-manager"
   | "reglo-actions"
@@ -121,6 +121,23 @@ type BlockDefinition = {
   label: string;
   kind?: BlockKind;
   hint?: string;
+};
+
+type BlockConfigField = {
+  key: string;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  type?: "text" | "select";
+  options?: string[];
+  optionsSource?: "templates";
+  hint?: string;
+};
+
+type BlockConfigDefinition = {
+  title: string;
+  description?: string;
+  fields: BlockConfigField[];
 };
 
 type Condition = {
@@ -141,33 +158,27 @@ const serviceBlocks: Record<
   ServiceKey,
   { label: string; blocks: BlockDefinition[]; group: "integrations" | "docs" | "logic" }
 > = {
-  teamsystem: {
-    label: "TeamSystem",
+  "fatture-in-cloud": {
+    label: "Fatture in Cloud",
     group: "integrations",
     blocks: [
-      { id: "ts-fattura", label: "Registra fattura fornitore" },
-      { id: "ts-prima-nota", label: "Invia prima nota" },
-      { id: "ts-magazzino", label: "Aggiorna movimenti magazzino" },
-      { id: "ts-scadenze", label: "Genera scadenze pagamento" },
-      { id: "ts-conto", label: "Aggiorna piano dei conti" },
-      { id: "ts-iva", label: "Liquidazione IVA mensile" },
+      { id: "fic-create-invoice", label: "Crea fattura" },
+      { id: "fic-update-status", label: "Aggiorna stato fattura" },
     ],
   },
   slack: {
     label: "Slack",
     group: "integrations",
     blocks: [
-      { id: "slack-message", label: "Invia messaggio canale" },
-      { id: "slack-thread", label: "Rispondi in thread" },
-      { id: "slack-reminder", label: "Crea reminder" },
-      { id: "slack-upload", label: "Pubblica file" },
-      { id: "slack-notify", label: "Notifica stato workflow" },
+      { id: "slack-channel-message", label: "Invia messaggio a canale" },
+      { id: "slack-user-message", label: "Scrivi a utente" },
     ],
   },
   "doc-manager": {
     label: "Doc manager",
     group: "docs",
     blocks: [
+      { id: "doc-compile-template", label: "Compila template" },
       { id: "doc-upload", label: "Carica documento" },
       { id: "doc-validate", label: "Valida documento" },
       { id: "doc-route", label: "Instrada per approvazione" },
@@ -223,6 +234,143 @@ const serviceBlocks: Record<
   },
 };
 
+const blockConfigDefinitions: Record<string, BlockConfigDefinition> = {
+  "slack-channel-message": {
+    title: "Messaggio in canale",
+    description: "Invia un messaggio al canale scelto.",
+    fields: [
+      {
+        key: "channel",
+        label: "Canale",
+        placeholder: "#general o ID canale",
+        required: true,
+      },
+      {
+        key: "message",
+        label: "Messaggio",
+        placeholder: "Scrivi il testo da inviare",
+        required: true,
+        hint: "Puoi usare variabili come {{trigger.payload.*}} o {{steps.nodeId.output.*}}.",
+      },
+    ],
+  },
+  "slack-user-message": {
+    title: "Messaggio a utente",
+    description: "Invia un DM a un utente del workspace.",
+    fields: [
+      {
+        key: "user",
+        label: "Utente",
+        placeholder: "Email o ID utente Slack",
+        required: true,
+      },
+      {
+        key: "message",
+        label: "Messaggio",
+        placeholder: "Scrivi il testo da inviare",
+        required: true,
+        hint: "Puoi usare variabili come {{trigger.payload.*}} o {{steps.nodeId.output.*}}.",
+      },
+    ],
+  },
+  "doc-compile-template": {
+    title: "Compila template",
+    description: "Genera una compilazione pubblica a partire da un template.",
+    fields: [
+      {
+        key: "templateId",
+        label: "Template",
+        type: "select",
+        required: true,
+        optionsSource: "templates",
+      },
+      {
+        key: "requestName",
+        label: "Nome compilazione",
+        placeholder: "Es. Contratto Mario Rossi",
+        required: true,
+        hint: "Supporta variabili come {{trigger.payload.*}} o {{steps.nodeId.output.*}}.",
+      },
+    ],
+  },
+  "fic-create-invoice": {
+    title: "Crea fattura",
+    description: "Crea una nuova fattura di vendita.",
+    fields: [
+      {
+        key: "customer",
+        label: "Cliente",
+        placeholder: "Nome cliente o ID",
+        required: true,
+      },
+      {
+        key: "amount",
+        label: "Importo",
+        placeholder: "Es. 1200.00",
+        required: true,
+      },
+      {
+        key: "currency",
+        label: "Valuta",
+        placeholder: "EUR",
+        required: true,
+      },
+      {
+        key: "description",
+        label: "Descrizione",
+        placeholder: "Descrizione breve della fattura",
+      },
+      {
+        key: "dueDate",
+        label: "Scadenza",
+        placeholder: "YYYY-MM-DD",
+      },
+    ],
+  },
+  "fic-update-status": {
+    title: "Aggiorna stato fattura",
+    description: "Aggiorna lo stato di una fattura esistente.",
+    fields: [
+      {
+        key: "invoiceId",
+        label: "ID fattura",
+        placeholder: "ID o riferimento",
+        required: true,
+      },
+      {
+        key: "status",
+        label: "Nuovo stato",
+        type: "select",
+        required: true,
+        options: ["Pagata", "In sospeso", "Annullata"],
+      },
+    ],
+  },
+};
+
+const getDefaultConfig = (blockId: string) => {
+  const definition = blockConfigDefinitions[blockId];
+  if (!definition) return {};
+  return definition.fields.reduce<Record<string, string>>((acc, field) => {
+    acc[field.key] = "";
+    return acc;
+  }, {});
+};
+
+const getMissingFields = (blockId: string, config: Record<string, unknown>) => {
+  const definition = blockConfigDefinitions[blockId];
+  if (!definition) return [];
+  return definition.fields
+    .filter((field) => field.required)
+    .filter((field) => {
+      const value = config[field.key];
+      if (value == null) return true;
+      if (typeof value === "string") return value.trim().length === 0;
+      return false;
+    })
+    .map((field) => field.label);
+};
+
 export default function WorkflowDetailPage(): React.ReactElement {
   const params = useParams<{ workflowId: string }>();
   const searchParams = useSearchParams();
@@ -236,7 +384,8 @@ export default function WorkflowDetailPage(): React.ReactElement {
     return "Workflow";
   });
   const [workflowStatus, setWorkflowStatus] = useState("draft");
-  const [selectedService, setSelectedService] = useState<ServiceKey>("teamsystem");
+  const [selectedService, setSelectedService] =
+    useState<ServiceKey>("slack");
   const [paletteView, setPaletteView] = useState<"menu" | "blocks">("menu");
   const [nodes, setNodes] = useState<Node[]>(() => buildNodes(workflowName, true));
   const [edges, setEdges] = useState<Edge[]>(() => buildEdges(true));
@@ -259,6 +408,65 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const idCounter = useRef(0);
   const flowWrapperRef = useRef<HTMLDivElement | null>(null);
   const currentService = serviceBlocks[selectedService];
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
+  const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
+  const [configBlockId, setConfigBlockId] = useState<string | null>(null);
+  const [configNodeId, setConfigNodeId] = useState<string | null>(null);
+  const [documentTemplateOptions, setDocumentTemplateOptions] = useState<
+    { label: string; value: string }[]
+  >([]);
+  const selectedNode = useMemo(
+    () => nodes.find((node) => node.id === selectedNodeId) ?? null,
+    [nodes, selectedNodeId],
+  );
+  const selectedBlockId =
+    selectedNode &&
+    typeof selectedNode.data === "object" &&
+    selectedNode.data &&
+    "blockId" in selectedNode.data
+      ? (selectedNode.data as { blockId?: string }).blockId ?? null
+      : null;
+  const selectedBlockConfig =
+    selectedNode &&
+    typeof selectedNode.data === "object" &&
+    selectedNode.data &&
+    "config" in selectedNode.data
+      ? (selectedNode.data as { config?: Record<string, string> }).config ?? {}
+      : {};
+  const selectedBlockDefinition = selectedBlockId
+    ? blockConfigDefinitions[selectedBlockId]
+    : undefined;
+  const selectedBlockHasConfig = Boolean(selectedBlockDefinition);
+  const activeConfigDefinition = configBlockId
+    ? blockConfigDefinitions[configBlockId]
+    : undefined;
+
+  const warnings = useMemo(() => {
+    return nodes
+      .filter((node) => node.type !== "logicIf" && node.type !== "logicLoop")
+      .map((node) => {
+        const data = node.data as
+          | {
+              blockId?: string;
+              config?: Record<string, unknown>;
+              label?: string;
+              configTouched?: boolean;
+            }
+          | undefined;
+        const blockId = data?.blockId;
+        if (!blockId) return null;
+        if (!data?.configTouched) return null;
+        const missing = getMissingFields(blockId, data?.config ?? {});
+        if (missing.length === 0) return null;
+        return {
+          nodeId: node.id,
+          label: data?.label ?? node.id,
+          missing,
+        };
+      })
+      .filter(Boolean) as { nodeId: string; label: string; missing: string[] }[];
+  }, [nodes]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -295,6 +503,24 @@ export default function WorkflowDetailPage(): React.ReactElement {
     };
   }, [isNew, toast, workflowId]);
 
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadTemplates = async () => {
+      const res = await listDocumentTemplates();
+      if (!res.success || !res.data || !isMounted) return;
+      setDocumentTemplateOptions(
+        res.data.documents.map((template) => ({
+          label: template.title,
+          value: template.id,
+        })),
+      );
+    };
+    loadTemplates();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const handleSave = async () => {
     if (!workflowId || isSaving) return;
     if (!workflowName.trim()) {
@@ -324,6 +550,14 @@ export default function WorkflowDetailPage(): React.ReactElement {
         typeof node.data === "object" && node.data && "label" in node.data
           ? (node.data as { label?: string }).label ?? ""
           : "";
+      const blockId =
+        typeof node.data === "object" && node.data && "blockId" in node.data
+          ? (node.data as { blockId?: string }).blockId
+          : undefined;
+      const blockConfig =
+        typeof node.data === "object" && node.data && "config" in node.data
+          ? (node.data as { config?: Record<string, unknown> }).config ?? {}
+          : {};
 
       if (node.type === "wait") {
         const timeout =
@@ -366,8 +600,12 @@ export default function WorkflowDetailPage(): React.ReactElement {
 
       return {
         id: node.id,
-        type: node.type ?? "standard",
-        config: { label },
+        type: blockId ?? node.type ?? "standard",
+        config: {
+          label,
+          blockId,
+          settings: blockConfig,
+        },
       };
     });
     const runtimeEdges = edges.map((edge) => ({
@@ -409,6 +647,77 @@ export default function WorkflowDetailPage(): React.ReactElement {
     setIsRunning(false);
   };
 
+  const openConfigForNode = useCallback(
+    (nodeId: string, blockId: string) => {
+      const baseConfig = getDefaultConfig(blockId);
+      const node = nodes.find((item) => item.id === nodeId);
+      const existingConfig =
+        node &&
+        typeof node.data === "object" &&
+        node.data &&
+        "config" in node.data
+          ? (node.data as { config?: Record<string, string> }).config ?? {}
+          : {};
+      setSelectedNodeId(nodeId);
+      setConfigDraft({
+        ...baseConfig,
+        ...(existingConfig as Record<string, string>),
+      });
+      setConfigBlockId(blockId);
+      setConfigNodeId(nodeId);
+      setConfigDialogOpen(true);
+    },
+    [nodes],
+  );
+
+  const openConfigDialog = () => {
+    if (!selectedBlockId || !selectedBlockHasConfig || !selectedNode) return;
+    openConfigForNode(selectedNode.id, selectedBlockId);
+  };
+
+  const handleConfigSave = () => {
+    if (!configNodeId || !configBlockId) {
+      setConfigDialogOpen(false);
+      return;
+    }
+    setNodes((prev) =>
+      prev.map((node) => {
+        if (node.id !== configNodeId) return node;
+        return {
+          ...node,
+          data: {
+            ...(typeof node.data === "object" ? node.data : {}),
+            config: configDraft,
+            blockId: configBlockId,
+            configTouched: true,
+          },
+        };
+      }),
+    );
+    setConfigDialogOpen(false);
+  };
+
+  const handleConfigClose = () => {
+    if (configNodeId) {
+      setNodes((prev) =>
+        prev.map((node) =>
+          node.id === configNodeId
+            ? {
+                ...node,
+                data: {
+                  ...(typeof node.data === "object" ? node.data : {}),
+                  configTouched: true,
+                },
+              }
+            : node,
+        ),
+      );
+    }
+    setConfigDialogOpen(false);
+    setConfigBlockId(null);
+    setConfigNodeId(null);
+  };
+
   const nodeTypes = useMemo(
     () => ({
       logicIf: LogicIfNode,
@@ -431,20 +740,31 @@ export default function WorkflowDetailPage(): React.ReactElement {
     setLogicDialogOpen(false);
   };
 
-  const addNode = (node: Node) => {
+  const addNode = useCallback((node: Node) => {
     setNodes((nds) => nds.concat(node));
-  };
+  }, []);
 
-  const addStandardNode = (label: string, position: { x: number; y: number }) => {
-  const newId = `ts-node-${idCounter.current++}`;
-  addNode({
-    id: newId,
-    type: label === "Metti in pausa" ? "wait" : undefined,
-    position,
-    data: { label },
-    style: secondaryNodeStyle,
-  });
-};
+  const addStandardNode = useCallback(
+    (block: BlockDefinition, position: { x: number; y: number }) => {
+      const newId = `ts-node-${idCounter.current++}`;
+      const blockId = block.id;
+      const config = getDefaultConfig(blockId);
+      addNode({
+        id: newId,
+        type: blockId === "wait" ? "wait" : undefined,
+        position,
+        data: {
+          label: block.label,
+          blockId,
+          config,
+          configTouched: false,
+        },
+        style: secondaryNodeStyle,
+      });
+      return newId;
+    },
+    [addNode],
+  );
 
   const addLogicNode = (
     type: "logicIf" | "logicLoop" | "logicMerge",
@@ -544,9 +864,12 @@ export default function WorkflowDetailPage(): React.ReactElement {
         return;
       }
 
-      addStandardNode(block.label, position);
+      const newNodeId = addStandardNode(block, position);
+      if (blockConfigDefinitions[block.id]) {
+        openConfigForNode(newNodeId, block.id);
+      }
     },
-    [reactFlowInstance],
+    [reactFlowInstance, addStandardNode, openConfigForNode],
   );
 
   const onNodesChange = useCallback(
@@ -725,6 +1048,11 @@ export default function WorkflowDetailPage(): React.ReactElement {
                 </SelectContent>
               </Select>
             </div>
+            {selectedBlockHasConfig ? (
+              <Button type="button" variant="outline" onClick={openConfigDialog}>
+                Configura blocco
+              </Button>
+            ) : null}
             <Button type="button" variant="outline" onClick={handleRun} disabled={isRunning}>
               {isRunning ? "Running..." : "Run now"}
             </Button>
@@ -733,6 +1061,24 @@ export default function WorkflowDetailPage(): React.ReactElement {
             </Button>
           </div>
         </div>
+        {warnings.length > 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">Attenzione: alcuni blocchi sono incompleti.</p>
+            <p className="text-xs text-amber-800">
+              Puoi salvare il workflow, ma le azioni potrebbero fallire.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-amber-900">
+              {warnings.map((warning) => (
+                <span
+                  key={warning.nodeId}
+                  className="rounded-full border border-amber-200 bg-white px-3 py-1"
+                >
+                  {warning.label}: {warning.missing.join(", ")}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="flex flex-1 gap-4">
           <aside className="w-80 shrink-0 self-start space-y-4 rounded-xl  bg-card p-4 shadow-sm">
             {paletteView === "menu" ? (
@@ -756,7 +1102,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
                 <hr className="border-border/60" />
                 <div className="space-y-2">
                   <p className="text-base font-semibold text-foreground">Integrations</p>
-                  {(["slack", "teamsystem"] as ServiceKey[]).map((svc) => (
+                  {(["slack", "fatture-in-cloud"] as ServiceKey[]).map((svc) => (
                     <button
                       key={svc}
                       type="button"
@@ -767,7 +1113,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
                       className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
                     >
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-                        {svc === "slack" ? "S" : "TS"}
+                        {svc === "slack" ? "S" : "FIC"}
                       </span>
                       <span>{serviceBlocks[svc].label}</span>
                     </button>
@@ -808,8 +1154,8 @@ export default function WorkflowDetailPage(): React.ReactElement {
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
                     {selectedService === "slack"
                       ? "S"
-                      : selectedService === "teamsystem"
-                        ? "TS"
+                      : selectedService === "fatture-in-cloud"
+                        ? "FIC"
                         : selectedService === "logic"
                           ? "IF"
                           : selectedService === "flow-control"
@@ -853,6 +1199,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onConnect={onConnect}
+                onNodeClick={(_, node) => setSelectedNodeId(node.id)}
                 deleteKeyCode={["Backspace"]}
               >
                 <Controls />
@@ -865,6 +1212,82 @@ export default function WorkflowDetailPage(): React.ReactElement {
           <WorkflowRunHistory workflowId={workflowId} refreshKey={runHistoryKey} />
         ) : null}
       </div>
+
+      <Dialog
+        open={configDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleConfigClose();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{activeConfigDefinition?.title ?? "Configura blocco"}</DialogTitle>
+            {activeConfigDefinition?.description ? (
+              <DialogDescription>{activeConfigDefinition.description}</DialogDescription>
+            ) : null}
+          </DialogHeader>
+          <div className="space-y-4">
+            {activeConfigDefinition?.fields.map((field) => {
+              const selectOptions =
+                field.optionsSource === "templates"
+                  ? documentTemplateOptions
+                  : (field.options ?? []).map((option) => ({
+                      label: option,
+                      value: option,
+                    }));
+              return (
+              <div key={field.key} className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  {field.label}
+                  {field.required ? " *" : ""}
+                </p>
+                {field.type === "select" ? (
+                  <Select
+                    value={configDraft[field.key] ?? ""}
+                    onValueChange={(value) =>
+                      setConfigDraft((prev) => ({ ...prev, [field.key]: value }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona valore" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={configDraft[field.key] ?? ""}
+                    onChange={(event) =>
+                      setConfigDraft((prev) => ({
+                        ...prev,
+                        [field.key]: event.target.value,
+                      }))
+                    }
+                    placeholder={field.placeholder}
+                  />
+                )}
+                {field.hint ? (
+                  <p className="text-xs text-muted-foreground">{field.hint}</p>
+                ) : null}
+              </div>
+            );
+            })}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleConfigClose}>
+              Chiudi
+            </Button>
+            <Button onClick={handleConfigSave}>Salva configurazione</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={logicDialogOpen}
@@ -982,13 +1405,19 @@ export default function WorkflowDetailPage(): React.ReactElement {
                 if (!pendingLogic) return;
                 const { block, position } = pendingLogic;
                 if (block.id === "wait") {
-                  addStandardNode("Metti in pausa", position);
+                  const newNodeId = addStandardNode(block, position);
                   setNodes((prev) =>
                     prev.map((node, index) =>
-                      index === prev.length - 1
+                      node.id === newNodeId
                         ? {
                             ...node,
-                            data: { label: "Metti in pausa", timeout: waitTimeout },
+                            data: {
+                              label: "Metti in pausa",
+                              blockId: "wait",
+                              timeout: waitTimeout,
+                              config: { timeout: waitTimeout },
+                              configTouched: true,
+                            },
                             type: "wait",
                           }
                         : node,

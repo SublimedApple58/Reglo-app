@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Card,
@@ -26,13 +26,15 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { useSession } from "next-auth/react";
 import { updateProfile } from "@/lib/actions/user.actions";
 import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
+import { getIntegrationConnections } from "@/lib/actions/integration.actions";
 import {
   getCurrentUserAvatarUrl,
 } from "@/lib/actions/storage.actions";
 import { createCompanyInvite } from "@/lib/actions/invite.actions";
 import { MailPlus, UploadCloud } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-type TabKey = "account" | "company";
+type TabKey = "account" | "company" | "integrations";
 type TabItem = { label: string; value: TabKey };
 
 const pronounOptions = ["Lei/Lei", "Lui/Lui", "Loro/Loro"];
@@ -40,11 +42,39 @@ const genderOptions = ["Donna", "Uomo", "Non-binario", "Preferisco non dirlo"];
 const languageOptions = ["Italiano", "English", "Deutsch"];
 const dataRegionOptions = ["EU-West", "US-East", "APAC-Singapore"];
 const sessionTimeoutOptions = ["15", "30", "45", "60"];
+const integrations = [
+  {
+    id: "slack",
+    name: "Slack",
+    description: "Messaggi, thread, upload file e notifiche di workflow.",
+    helper: "Installa la Reglo Slack App nel workspace aziendale.",
+  },
+  {
+    id: "fatture-in-cloud",
+    name: "Fatture in Cloud",
+    description: "Crea fatture, aggiorna stati, genera PDF e sincronizza clienti.",
+    helper: "Collega l'account TeamSystem autorizzato della company.",
+  },
+  {
+    id: "doc-manager",
+    name: "Doc Manager",
+    description: "Azioni interne: upload, firma, aggiornamento stato e archiviazione.",
+    helper: "Disponibile di default per ogni company.",
+  },
+] as const;
+
+const integrationLabelMap: Record<string, string> = {
+  slack: "Slack",
+  "fatture-in-cloud": "Fatture in Cloud",
+};
 
 export function SettingsPage(): React.ReactElement {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
   const { data: session, update } = useSession();
   const toast = useFeedbackToast();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const didInitName = useRef(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +107,10 @@ export function SettingsPage(): React.ReactElement {
     role: "member",
   });
   const [isInviteSending, setIsInviteSending] = useState(false);
+  const [integrationState, setIntegrationState] = useState<
+    Record<string, { status: string; displayName?: string | null }>
+  >({});
+  const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
 
   const [sessionAccess, setSessionAccess] = useState({
     logSessions: true,
@@ -97,13 +131,29 @@ export function SettingsPage(): React.ReactElement {
       .toUpperCase();
   }, [session?.user?.name]);
 
-  const tabItems = useMemo<TabItem[]>(
-    () => [
-      { label: "Account", value: "account" },
-      ...(isAdmin ? [{ label: "Company", value: "company" }] : []),
-    ],
-    [isAdmin],
-  );
+  const refreshIntegrations = useCallback(async () => {
+    const res = await getIntegrationConnections();
+    if (!res.success || !res.data) return;
+    const map: Record<string, { status: string; displayName?: string | null }> = {};
+    res.data.forEach((connection) => {
+      map[connection.provider] = {
+        status: connection.status,
+        displayName: connection.displayName,
+      };
+    });
+    setIntegrationState(map);
+  }, []);
+
+  const tabItems = useMemo<TabItem[]>(() => {
+    const items: TabItem[] = [{ label: "Account", value: "account" }];
+    if (isAdmin) {
+      items.push(
+        { label: "Company", value: "company" },
+        { label: "Integrations", value: "integrations" },
+      );
+    }
+    return items;
+  }, [isAdmin]);
   const activeTab = tabItems[activeTabIndex]?.value ?? "account";
 
   useEffect(() => {
@@ -128,10 +178,44 @@ export function SettingsPage(): React.ReactElement {
   }, [activeTabIndex, tabItems.length]);
 
   useEffect(() => {
+    const success = searchParams.get("integrationSuccess");
+    const error = searchParams.get("integrationError");
+    if (!success && !error) return;
+    if (success) {
+      const label = integrationLabelMap[success] ?? success;
+      toast.success({
+        title: "Integrazione connessa",
+        description: `Connessione completata per ${label}.`,
+      });
+      const integrationsIndex = tabItems.findIndex(
+        (tab) => tab.value === "integrations",
+      );
+      if (integrationsIndex >= 0) {
+        setActiveTabIndex(integrationsIndex);
+      }
+      refreshIntegrations();
+    }
+    if (error) {
+      const label = integrationLabelMap[error] ?? error;
+      toast.error({
+        title: "Connessione fallita",
+        description: `Non e' stato possibile collegare ${label}.`,
+      });
+      const integrationsIndex = tabItems.findIndex(
+        (tab) => tab.value === "integrations",
+      );
+      if (integrationsIndex >= 0) {
+        setActiveTabIndex(integrationsIndex);
+      }
+    }
+    router.replace(pathname);
+  }, [searchParams, toast, router, pathname, refreshIntegrations, tabItems]);
+
+  useEffect(() => {
     let isMounted = true;
     const loadCompany = async () => {
       const res = await getCurrentCompany();
-      if (!res.success || !isMounted) return;
+      if (!res.success || !res.data || !isMounted) return;
       setCompanyId(res.data.id);
       setCompanyForm((prev) => ({
         ...prev,
@@ -150,7 +234,7 @@ export function SettingsPage(): React.ReactElement {
     let isMounted = true;
     const loadAvatar = async () => {
       const res = await getCurrentUserAvatarUrl();
-      if (!res.success || !isMounted) return;
+      if (!res.success || !res.data || !isMounted) return;
       setAvatarUrl(res.data.url);
     };
 
@@ -159,6 +243,50 @@ export function SettingsPage(): React.ReactElement {
       isMounted = false;
     };
   }, [session?.user?.image]);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!isAdmin) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadConnections = async () => {
+      if (!isMounted) return;
+      await refreshIntegrations();
+    };
+
+    loadConnections();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAdmin, refreshIntegrations]);
+
+  const handleDisconnect = async (providerKey: string) => {
+    setDisconnectingProvider(providerKey);
+    try {
+      const res = await fetch(`/api/integrations/${providerKey}/disconnect`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        throw new Error("Disconnect failed.");
+      }
+      toast.success({
+        title: "Integrazione disconnessa",
+        description: "La connessione e' stata rimossa.",
+      });
+      await refreshIntegrations();
+    } catch (error) {
+      toast.error({
+        title: "Errore disconnessione",
+        description:
+          error instanceof Error ? error.message : "Impossibile disconnettere.",
+      });
+    } finally {
+      setDisconnectingProvider(null);
+    }
+  };
 
   const handleAccountSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -573,198 +701,293 @@ export function SettingsPage(): React.ReactElement {
             </motion.div>
           ) : (
             <motion.div
-              key="company"
+              key={activeTab}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.2 }}
               className="space-y-4"
             >
-              <div className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Company logo</CardTitle>
-                    <CardDescription>
-                      Upload a logo to personalize the workspace.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30">
-                        {logoUrl ? (
-                          <img
-                            src={logoUrl}
-                            alt="Company logo"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Logo
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">Company logo</p>
-                        <p className="text-xs text-muted-foreground">
-                          PNG, JPG, or WebP. Max 5MB.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={logoInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        className="hidden"
-                        onChange={handleLogoFileChange}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => logoInputRef.current?.click()}
-                        disabled={isLogoUploading}
-                      >
-                        <UploadCloud className="h-4 w-4" />
-                        {isLogoUploading ? "Uploading..." : "Upload logo"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <form onSubmit={handleCompanySave} className="space-y-4">
+              {activeTab === "company" ? (
+                <div className="space-y-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Company</CardTitle>
+                      <CardTitle>Company logo</CardTitle>
                       <CardDescription>
-                        Informazioni base dell&apos;azienda.
+                        Upload a logo to personalize the workspace.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <LabeledInput
-                        label="Nome azienda"
-                        placeholder="Reglo S.r.l."
-                        value={companyForm.companyName}
-                        onChange={(event) =>
-                          setCompanyForm((prev) => ({
-                            ...prev,
-                            companyName: event.target.value,
-                          }))
-                        }
-                      />
-                      <SelectField
-                        label="Data region"
-                        value={companyForm.dataRegion}
-                        options={dataRegionOptions}
-                        onChange={(value) =>
-                          setCompanyForm((prev) => ({
-                            ...prev,
-                            dataRegion: value,
-                          }))
-                        }
-                      />
+                    <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30">
+                          {logoUrl ? (
+                            <img
+                              src={logoUrl}
+                              alt="Company logo"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Logo
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Company logo</p>
+                          <p className="text-xs text-muted-foreground">
+                            PNG, JPG, or WebP. Max 5MB.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={handleLogoFileChange}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => logoInputRef.current?.click()}
+                          disabled={isLogoUploading}
+                        >
+                          <UploadCloud className="h-4 w-4" />
+                          {isLogoUploading ? "Uploading..." : "Upload logo"}
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
 
-                  <Card className="border-primary/15">
-                    <CardHeader>
-                      <CardTitle>Sessioni &amp; Accessi</CardTitle>
-                      <CardDescription>
-                        Policy di accesso e monitoraggio sessioni.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <CheckboxRow
-                        label="Logga nuove sessioni e invia recap"
-                        checked={sessionAccess.logSessions}
-                        onChange={(value) =>
-                          setSessionAccess((prev) => ({
-                            ...prev,
-                            logSessions: value,
-                          }))
-                        }
-                      />
-                      <CheckboxRow
-                        label="Blocca device non riconosciuti"
-                        checked={sessionAccess.blockUnknownDevices}
-                        onChange={(value) =>
-                          setSessionAccess((prev) => ({
-                            ...prev,
-                            blockUnknownDevices: value,
-                          }))
-                        }
-                      />
-                      <SelectField
-                        label="Session timeout (min)"
-                        value={sessionAccess.sessionTimeout}
-                        options={sessionTimeoutOptions}
-                        onChange={(value) =>
-                          setSessionAccess((prev) => ({
-                            ...prev,
-                            sessionTimeout: value,
-                          }))
-                        }
-                      />
-                    </CardContent>
-                  </Card>
-
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-                    <Button type="submit">Salva impostazioni company</Button>
-                  </div>
-                </form>
-
-                <form onSubmit={handleInviteSubmit} className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Invite team members</CardTitle>
-                      <CardDescription>
-                        Send a simple invite to join your company.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid gap-4 md:grid-cols-[1.4fr_0.6fr]">
+                  <form onSubmit={handleCompanySave} className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Company</CardTitle>
+                        <CardDescription>
+                          Informazioni base dell&apos;azienda.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
                         <LabeledInput
-                          label="Email"
-                          placeholder="name@company.com"
-                          value={inviteForm.email}
+                          label="Nome azienda"
+                          placeholder="Reglo S.r.l."
+                          value={companyForm.companyName}
                           onChange={(event) =>
-                            setInviteForm((prev) => ({
+                            setCompanyForm((prev) => ({
                               ...prev,
-                              email: event.target.value,
+                              companyName: event.target.value,
                             }))
                           }
                         />
-                        <div className="space-y-2">
-                          <LabelMini>Role</LabelMini>
-                          <Select
-                            value={inviteForm.role}
-                            onValueChange={(value) =>
+                        <SelectField
+                          label="Data region"
+                          value={companyForm.dataRegion}
+                          options={dataRegionOptions}
+                          onChange={(value) =>
+                            setCompanyForm((prev) => ({
+                              ...prev,
+                              dataRegion: value,
+                            }))
+                          }
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-primary/15">
+                      <CardHeader>
+                        <CardTitle>Sessioni &amp; Accessi</CardTitle>
+                        <CardDescription>
+                          Policy di accesso e monitoraggio sessioni.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <CheckboxRow
+                          label="Logga nuove sessioni e invia recap"
+                          checked={sessionAccess.logSessions}
+                          onChange={(value) =>
+                            setSessionAccess((prev) => ({
+                              ...prev,
+                              logSessions: value,
+                            }))
+                          }
+                        />
+                        <CheckboxRow
+                          label="Blocca device non riconosciuti"
+                          checked={sessionAccess.blockUnknownDevices}
+                          onChange={(value) =>
+                            setSessionAccess((prev) => ({
+                              ...prev,
+                              blockUnknownDevices: value,
+                            }))
+                          }
+                        />
+                        <SelectField
+                          label="Session timeout (min)"
+                          value={sessionAccess.sessionTimeout}
+                          options={sessionTimeoutOptions}
+                          onChange={(value) =>
+                            setSessionAccess((prev) => ({
+                              ...prev,
+                              sessionTimeout: value,
+                            }))
+                          }
+                        />
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                      <Button type="submit">Salva impostazioni company</Button>
+                    </div>
+                  </form>
+
+                  <form onSubmit={handleInviteSubmit} className="space-y-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Invite team members</CardTitle>
+                        <CardDescription>
+                          Send a simple invite to join your company.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid gap-4 md:grid-cols-[1.4fr_0.6fr]">
+                          <LabeledInput
+                            label="Email"
+                            placeholder="name@company.com"
+                            value={inviteForm.email}
+                            onChange={(event) =>
                               setInviteForm((prev) => ({
                                 ...prev,
-                                role: value,
+                                email: event.target.value,
                               }))
                             }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="member">Member</SelectItem>
-                              <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          />
+                          <div className="space-y-2">
+                            <LabelMini>Role</LabelMini>
+                            <Select
+                              value={inviteForm.role}
+                              onValueChange={(value) =>
+                                setInviteForm((prev) => ({
+                                  ...prev,
+                                  role: value,
+                                }))
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="member">Member</SelectItem>
+                                <SelectItem value="admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                      </div>
+                      </CardContent>
+                    </Card>
+
+                    <div className="flex flex-wrap items-center justify-end gap-3">
+                      <Button type="submit" disabled={isInviteSending}>
+                        <MailPlus className="h-4 w-4" />
+                        {isInviteSending ? "Sending..." : "Send invite"}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <Card className="border-primary/15 bg-muted/30">
+                    <CardHeader>
+                      <CardTitle>Integrazioni</CardTitle>
+                      <CardDescription>
+                        Collega i servizi esterni per rendere i workflow operativi.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      Ogni integrazione e&apos; separata per company e richiede
+                      autorizzazioni dedicate.
                     </CardContent>
                   </Card>
 
-                  <div className="flex flex-wrap items-center justify-end gap-3">
-                    <Button type="submit" disabled={isInviteSending}>
-                      <MailPlus className="h-4 w-4" />
-                      {isInviteSending ? "Sending..." : "Send invite"}
-                    </Button>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {integrations.map((integration) => {
+                      const providerKey = integration.id;
+                      const connection = integrationState[providerKey];
+                      const isBuiltIn = providerKey === "doc-manager";
+                      const isConnected = connection?.status === "connected";
+                      const badgeLabel = isBuiltIn
+                        ? "Integrata"
+                        : isConnected
+                          ? "Connessa"
+                          : "Non collegata";
+                      const badgeVariant = isBuiltIn || isConnected ? "accent" : "base";
+                      return (
+                        <Card key={integration.id} className="flex h-full flex-col">
+                          <CardHeader>
+                            <div className="flex items-center justify-between gap-3">
+                              <CardTitle>{integration.name}</CardTitle>
+                              <BadgeMini variant={badgeVariant}>
+                                {badgeLabel}
+                              </BadgeMini>
+                            </div>
+                            <CardDescription>{integration.description}</CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <p className="text-xs text-muted-foreground">
+                              {integration.helper}
+                            </p>
+                            {connection?.displayName && (
+                              <p className="text-xs text-muted-foreground">
+                                Workspace: {connection.displayName}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-2">
+                              {isBuiltIn ? (
+                                <Button variant="outline" disabled>
+                                  Disponibile
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    type="button"
+                                    onClick={() => {
+                                      if (isConnected) return;
+                                      window.open(
+                                        `/api/integrations/${providerKey}/connect`,
+                                        "_blank",
+                                        "noopener,noreferrer"
+                                      );
+                                    }}
+                                    variant="outline"
+                                    disabled={isConnected}
+                                  >
+                                    {isConnected ? "Connessa" : "Connetti"}
+                                  </Button>
+                                  {isConnected ? (
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => handleDisconnect(providerKey)}
+                                      disabled={disconnectingProvider === providerKey}
+                                    >
+                                      {disconnectingProvider === providerKey
+                                        ? "Disconnettendo..."
+                                        : "Disconnetti"}
+                                    </Button>
+                                  ) : null}
+                                </>
+                              )}
+                              <Button variant="ghost" disabled>
+                                Dettagli
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
-                </form>
-              </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>

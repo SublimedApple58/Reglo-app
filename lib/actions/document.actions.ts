@@ -2,6 +2,7 @@
 
 import { auth } from '@/auth';
 import { prisma } from '@/db/prisma';
+import type { Prisma } from '@prisma/client';
 import {
   createDocumentTemplateSchema,
   getDocumentConfigSchema,
@@ -231,7 +232,7 @@ export async function saveDocumentFields(
             y: field.y,
             width: field.width,
             height: field.height,
-            meta: field.meta,
+            meta: field.meta as Prisma.InputJsonValue | undefined,
           })),
         });
       }

@@ -160,9 +160,13 @@ export function DocEditorWrapper({
   const clampValue = (value: number, min: number, max: number) =>
     Math.min(Math.max(value, min), max);
 
-  const isRatioField = (field: PlacedField) => field.meta?.unit === "ratio";
+  const isRatioField = React.useCallback(
+    (field: PlacedField) => field.meta?.unit === "ratio",
+    [],
+  );
 
-  const resolveFieldPixels = (field: PlacedField, bounds: DOMRect) => {
+  const resolveFieldPixels = React.useCallback(
+    (field: PlacedField, bounds: DOMRect) => {
     if (isRatioField(field)) {
       const baseWidth = Math.max(bounds.width, 1);
       const baseHeight = Math.max(bounds.height, 1);
@@ -180,13 +184,16 @@ export function DocEditorWrapper({
       width: field.width,
       height: field.height,
     };
-  };
+    },
+    [isRatioField],
+  );
 
-  const toFieldUnits = (
-    field: PlacedField,
-    bounds: DOMRect,
-    next: { x: number; y: number; width: number; height: number },
-  ) => {
+  const toFieldUnits = React.useCallback(
+    (
+      field: PlacedField,
+      bounds: DOMRect,
+      next: { x: number; y: number; width: number; height: number },
+    ) => {
     if (isRatioField(field)) {
       const baseWidth = Math.max(bounds.width, 1);
       const baseHeight = Math.max(bounds.height, 1);
@@ -199,7 +206,9 @@ export function DocEditorWrapper({
     }
 
     return next;
-  };
+    },
+    [isRatioField],
+  );
 
   const getTool = (toolId: ToolId) =>
     toolItems.find((item) => item.id === toolId);
@@ -505,7 +514,7 @@ export function DocEditorWrapper({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [dragState, resizeState]);
+  }, [dragState, resizeState, resolveFieldPixels, toFieldUnits]);
 
   const bindingPlaceholder =
     fields.find((field) => field.id === bindingFieldId)?.bindingKey ??

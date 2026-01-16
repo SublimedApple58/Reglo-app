@@ -116,7 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     let isMounted = true;
     const loadCompany = async () => {
       const res = await getCurrentCompany();
-      if (!res.success || !isMounted) return;
+      if (!res.success || !res.data || !isMounted) return;
       setCompanyName(res.data.name);
       setCompanyLogoUrl(res.data.logoUrl ?? null);
     };

@@ -49,7 +49,7 @@ export function NavUser() {
     let isMounted = true;
     const loadAvatar = async () => {
       const res = await getCurrentUserAvatarUrl();
-      if (!res.success || !isMounted) return;
+      if (!res.success || !res.data || !isMounted) return;
       setAvatarUrl(res.data.url);
     };
 
@@ -57,7 +57,7 @@ export function NavUser() {
     return () => {
       isMounted = false;
     };
-  }, [session.data?.user?.image]);
+  }, [session.data, session.data?.user?.image]);
 
   if(!session.data) return null;
   
