@@ -10,6 +10,7 @@ import {
   updateWorkflow,
 } from "@/lib/actions/workflow.actions";
 import { listDocumentTemplates } from "@/lib/actions/document.actions";
+import { getIntegrationConnections } from "@/lib/actions/integration.actions";
 import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHistory";
 import ReactFlow, {
   Background,
@@ -416,6 +417,9 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const [documentTemplateOptions, setDocumentTemplateOptions] = useState<
     { label: string; value: string }[]
   >([]);
+  const [integrationConnections, setIntegrationConnections] = useState<
+    Record<string, { status: string; displayName?: string | null }>
+  >({});
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
@@ -441,6 +445,7 @@ export default function WorkflowDetailPage(): React.ReactElement {
   const activeConfigDefinition = configBlockId
     ? blockConfigDefinitions[configBlockId]
     : undefined;
+  const isSlackConnected = integrationConnections["slack"]?.status === "connected";
 
   const warnings = useMemo(() => {
     return nodes
@@ -516,6 +521,28 @@ export default function WorkflowDetailPage(): React.ReactElement {
       );
     };
     loadTemplates();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadConnections = async () => {
+      const res = await getIntegrationConnections();
+      if (!res.success || !res.data || !isMounted) return;
+      const map: Record<string, { status: string; displayName?: string | null }> = {};
+      res.data.forEach(
+        (connection: { provider: string; status: string; displayName?: string | null }) => {
+        map[connection.provider] = {
+          status: connection.status,
+          displayName: connection.displayName,
+        };
+      },
+      );
+      setIntegrationConnections(map);
+    };
+    loadConnections();
     return () => {
       isMounted = false;
     };
@@ -727,10 +754,18 @@ export default function WorkflowDetailPage(): React.ReactElement {
     [],
   );
 
-  const onDragStart = useCallback((event: React.DragEvent, block: BlockDefinition) => {
-    event.dataTransfer.setData("application/reactflow", JSON.stringify(block));
-    event.dataTransfer.effectAllowed = "move";
-  }, []);
+  const onDragStart = useCallback(
+    (event: React.DragEvent, block: BlockDefinition) => {
+      if (block.id.startsWith("slack-") && !isSlackConnected) {
+        event.preventDefault();
+        toast.error({ description: "Connetti Slack per usare questi blocchi." });
+        return;
+      }
+      event.dataTransfer.setData("application/reactflow", JSON.stringify(block));
+      event.dataTransfer.effectAllowed = "move";
+    },
+    [isSlackConnected, toast],
+  );
 
   const resetLogicDialog = () => {
     setLogicCondition({ op: "eq", left: "", right: "" });
@@ -1107,10 +1142,22 @@ export default function WorkflowDetailPage(): React.ReactElement {
                       key={svc}
                       type="button"
                       onClick={() => {
+                        if (svc === "slack" && !isSlackConnected) {
+                          toast.error({
+                            description: "Connetti Slack per usare questi blocchi.",
+                          });
+                          return;
+                        }
                         setSelectedService(svc);
                         setPaletteView("blocks");
                       }}
-                      className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition",
+                        svc === "slack" && !isSlackConnected
+                          ? "cursor-not-allowed opacity-50"
+                          : "hover:-translate-y-[1px] hover:shadow-md",
+                      )}
+                      disabled={svc === "slack" && !isSlackConnected}
                     >
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                         {svc === "slack" ? "S" : "FIC"}
@@ -1166,13 +1213,23 @@ export default function WorkflowDetailPage(): React.ReactElement {
                     <p className="text-base font-semibold text-foreground">{currentService.label}</p>
                   </div>
                 </div>
+                {selectedService === "slack" && !isSlackConnected ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                    Connetti Slack in Settings per sbloccare questi blocchi.
+                  </div>
+                ) : null}
                 <div className="space-y-3">
                   {currentService.blocks.map((block) => (
                     <div
                       key={block.id}
-                      draggable
+                      draggable={!(block.id.startsWith("slack-") && !isSlackConnected)}
                       onDragStart={(e) => onDragStart(e, block)}
-                      className="cursor-grab rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing"
+                      className={cn(
+                        "rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition",
+                        block.id.startsWith("slack-") && !isSlackConnected
+                          ? "cursor-not-allowed opacity-50"
+                          : "cursor-grab hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing",
+                      )}
                     >
                       <div className="space-y-1">
                         <p className="text-sm font-semibold text-foreground">{block.label}</p>
