@@ -34,13 +34,16 @@ const buildReturnUrl = (request: NextRequest, provider: IntegrationProviderKey) 
 };
 
 const buildRedirectWithStatus = (
+  request: NextRequest,
   baseUrl: string,
   key: "integrationSuccess" | "integrationError",
   provider: string,
 ) => {
-  const url = new URL(baseUrl, "http://localhost");
+  const url = baseUrl.startsWith("http")
+    ? new URL(baseUrl)
+    : new URL(baseUrl, request.nextUrl.origin);
   url.searchParams.set(key, provider);
-  return url.pathname + url.search;
+  return url.toString();
 };
 
 export async function GET(
@@ -63,7 +66,7 @@ export async function GET(
   if (!code || !state || !cookieState || state !== cookieState) {
     const returnUrl = buildReturnUrl(request, providerKey);
     return NextResponse.redirect(
-      buildRedirectWithStatus(returnUrl, "integrationError", providerKey),
+      buildRedirectWithStatus(request, returnUrl, "integrationError", providerKey),
     );
   }
 
@@ -73,6 +76,7 @@ export async function GET(
   if (!userId) {
     return NextResponse.redirect(
       buildRedirectWithStatus(
+        request,
         buildReturnUrl(request, providerKey),
         "integrationError",
         providerKey,
@@ -88,6 +92,7 @@ export async function GET(
   if (!membership) {
     return NextResponse.redirect(
       buildRedirectWithStatus(
+        request,
         buildReturnUrl(request, providerKey),
         "integrationError",
         providerKey,
@@ -98,6 +103,7 @@ export async function GET(
   if (membership.role !== "admin") {
     return NextResponse.redirect(
       buildRedirectWithStatus(
+        request,
         buildReturnUrl(request, providerKey),
         "integrationError",
         providerKey,
@@ -126,6 +132,7 @@ export async function GET(
     if (!payload.ok || !payload.access_token) {
       return NextResponse.redirect(
         buildRedirectWithStatus(
+          request,
           buildReturnUrl(request, providerKey),
           "integrationError",
           providerKey,
@@ -173,6 +180,7 @@ export async function GET(
     if (!payload.access_token) {
       return NextResponse.redirect(
         buildRedirectWithStatus(
+          request,
           buildReturnUrl(request, providerKey),
           "integrationError",
           providerKey,
@@ -225,7 +233,12 @@ export async function GET(
   }
 
   const returnUrl = buildReturnUrl(request, providerKey);
-  const redirectUrl = buildRedirectWithStatus(returnUrl, "integrationSuccess", providerKey);
+  const redirectUrl = buildRedirectWithStatus(
+    request,
+    returnUrl,
+    "integrationSuccess",
+    providerKey,
+  );
   const response = NextResponse.redirect(redirectUrl);
   response.cookies.set(`integration_oauth_state_${providerKey}`, "", {
     maxAge: 0,
