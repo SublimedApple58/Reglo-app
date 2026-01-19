@@ -7,7 +7,7 @@ const prismaGenerateExtension = {
     const rootDir = process.cwd();
     console.log("[trigger] Running prisma generate...");
     execSync("rm -rf node_modules/.prisma", { cwd: rootDir, stdio: "inherit" });
-    execSync("node ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma", {
+    execSync("./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma", {
       stdio: "inherit",
       cwd: rootDir,
       env: {
