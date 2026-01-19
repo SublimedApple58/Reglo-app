@@ -4,9 +4,12 @@ import { defineConfig } from "@trigger.dev/sdk/v3";
 const prismaGenerateExtension = {
   name: "prisma-generate",
   onBuildStart: () => {
-    execSync("npx prisma generate --schema=./prisma/schema.prisma", {
+    const rootDir = process.cwd();
+    console.log("[trigger] Running prisma generate...");
+    execSync("rm -rf node_modules/.prisma", { cwd: rootDir, stdio: "inherit" });
+    execSync("node ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma", {
       stdio: "inherit",
-      cwd: process.cwd(),
+      cwd: rootDir,
       env: {
         ...process.env,
         PRISMA_SCHEMA_PATH: "./prisma/schema.prisma",
@@ -27,6 +30,7 @@ export default defineConfig({
   additionalFiles: [
     "node_modules/.prisma/client/**",
     "node_modules/.pnpm/**/.prisma/client/**",
+    "node_modules/@prisma/client/**",
     "prisma/schema.prisma",
     "prisma/migrations/**",
   ],

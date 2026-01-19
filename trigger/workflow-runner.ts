@@ -83,6 +83,14 @@ const resolvePayloadValue = (payload: unknown, path?: string | null) => {
 export const workflowRunner = task({
   id: "workflow-runner",
   run: async (payload: { runId: string }) => {
+    if (!("workflowRun" in prisma)) {
+      const prototypeKeys = Object.getOwnPropertyNames(
+        Object.getPrototypeOf(prisma),
+      ).filter((key) => !key.startsWith("$") && key !== "constructor");
+      throw new Error(
+        `Prisma client missing WorkflowRun model. Available models: ${prototypeKeys.join(", ")}`,
+      );
+    }
     const run = await prisma.workflowRun.findUnique({
       where: { id: payload.runId },
       include: { workflow: true },
