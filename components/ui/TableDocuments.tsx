@@ -217,6 +217,12 @@ export function TableDocuments({
             failed.res.message ?? "Impossibile eliminare alcuni documenti.",
         });
       }
+      const warnings = results
+        .map((item) => item.res.message)
+        .filter((message) => message && message !== "Document deleted");
+      if (warnings.length > 0) {
+        toast.info({ description: warnings[0] });
+      }
       setDocuments((prev) => prev.filter((doc) => !ids.includes(doc.id)));
     })();
   }, [deleteRequest, selectedIds, setDocuments, setSelectedIds, setSelectedInvoices, toast]);
@@ -226,6 +232,9 @@ export function TableDocuments({
     if (!res.success) {
       toast.error({ description: res.message ?? "Impossibile eliminare." });
       return;
+    }
+    if (res.message && res.message !== "Document deleted") {
+      toast.info({ description: res.message });
     }
     setDocuments((prev) => prev.filter((doc) => doc.id !== docId));
     setSelectedInvoices((prev) => {

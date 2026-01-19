@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -24,15 +25,18 @@ import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { useSession } from "next-auth/react";
+import { useAtomValue, useSetAtom } from "jotai";
 import { updateProfile } from "@/lib/actions/user.actions";
-import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
-import { getIntegrationConnections } from "@/lib/actions/integration.actions";
-import {
-  getCurrentUserAvatarUrl,
-} from "@/lib/actions/storage.actions";
+import { updateCompanyName } from "@/lib/actions/company.actions";
 import { createCompanyInvite } from "@/lib/actions/invite.actions";
 import { MailPlus, UploadCloud } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
+import { companyAtom, companyRefreshAtom } from "@/atoms/company.store";
+import {
+  integrationConnectionsAtom,
+  integrationsRefreshAtom,
+} from "@/atoms/integrations.store";
 
 type TabKey = "account" | "company" | "integrations";
 type TabItem = { label: string; value: TabKey };
@@ -70,7 +74,14 @@ const integrationLabelMap: Record<string, string> = {
 
 export function SettingsPage(): React.ReactElement {
   const [activeTabIndex, setActiveTabIndex] = useState(0);
-  const { data: session, update } = useSession();
+  const { update } = useSession();
+  const session = useAtomValue(userSessionAtom);
+  const avatarUrl = useAtomValue(userAvatarUrlAtom);
+  const company = useAtomValue(companyAtom);
+  const integrationConnections = useAtomValue(integrationConnectionsAtom);
+  const setUserRefresh = useSetAtom(userRefreshAtom);
+  const setCompanyRefresh = useSetAtom(companyRefreshAtom);
+  const setIntegrationsRefresh = useSetAtom(integrationsRefreshAtom);
   const toast = useFeedbackToast();
   const router = useRouter();
   const pathname = usePathname();
@@ -78,8 +89,6 @@ export function SettingsPage(): React.ReactElement {
   const didInitName = useRef(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [isAvatarUploading, setIsAvatarUploading] = useState(false);
   const [isLogoUploading, setIsLogoUploading] = useState(false);
 
@@ -101,15 +110,11 @@ export function SettingsPage(): React.ReactElement {
     companyName: "Reglo S.r.l.",
     dataRegion: dataRegionOptions[0],
   });
-  const [companyId, setCompanyId] = useState<string | null>(null);
   const [inviteForm, setInviteForm] = useState({
     email: "",
     role: "member",
   });
   const [isInviteSending, setIsInviteSending] = useState(false);
-  const [integrationState, setIntegrationState] = useState<
-    Record<string, { status: string; displayName?: string | null }>
-  >({});
   const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
 
   const [sessionAccess, setSessionAccess] = useState({
@@ -118,7 +123,10 @@ export function SettingsPage(): React.ReactElement {
     sessionTimeout: sessionTimeoutOptions[2],
   });
 
-  const isAdmin = session?.user?.role === "admin";
+  const companyId = company?.id ?? null;
+  const companyRole = company?.role ?? null;
+  const companyLogoUrl = company?.logoUrl ?? null;
+  const isAdmin = companyRole === "admin";
   const avatarInitials = useMemo(() => {
     const name = session?.user?.name?.trim();
     if (!name) return "RG";
@@ -131,18 +139,17 @@ export function SettingsPage(): React.ReactElement {
       .toUpperCase();
   }, [session?.user?.name]);
 
-  const refreshIntegrations = useCallback(async () => {
-    const res = await getIntegrationConnections();
-    if (!res.success || !res.data) return;
+  const integrationState = useMemo(() => {
+    if (!integrationConnections) return {};
     const map: Record<string, { status: string; displayName?: string | null }> = {};
-    res.data.forEach((connection) => {
+    integrationConnections.forEach((connection) => {
       map[connection.provider] = {
         status: connection.status,
         displayName: connection.displayName,
       };
     });
-    setIntegrationState(map);
-  }, []);
+    return map;
+  }, [integrationConnections]);
 
   const tabItems = useMemo<TabItem[]>(() => {
     const items: TabItem[] = [{ label: "Account", value: "account" }];
@@ -193,7 +200,7 @@ export function SettingsPage(): React.ReactElement {
       if (integrationsIndex >= 0) {
         setActiveTabIndex(integrationsIndex);
       }
-      refreshIntegrations();
+      setIntegrationsRefresh(true);
     }
     if (error) {
       const label = integrationLabelMap[error] ?? error;
@@ -209,59 +216,15 @@ export function SettingsPage(): React.ReactElement {
       }
     }
     router.replace(pathname);
-  }, [searchParams, toast, router, pathname, refreshIntegrations, tabItems]);
+  }, [searchParams, toast, router, pathname, setIntegrationsRefresh, tabItems]);
 
   useEffect(() => {
-    let isMounted = true;
-    const loadCompany = async () => {
-      const res = await getCurrentCompany();
-      if (!res.success || !res.data || !isMounted) return;
-      setCompanyId(res.data.id);
-      setCompanyForm((prev) => ({
-        ...prev,
-        companyName: res.data.name,
-      }));
-      setLogoUrl(res.data.logoUrl ?? null);
-    };
-
-    loadCompany();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadAvatar = async () => {
-      const res = await getCurrentUserAvatarUrl();
-      if (!res.success || !res.data || !isMounted) return;
-      setAvatarUrl(res.data.url);
-    };
-
-    loadAvatar();
-    return () => {
-      isMounted = false;
-    };
-  }, [session?.user?.image]);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (!isAdmin) {
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    const loadConnections = async () => {
-      if (!isMounted) return;
-      await refreshIntegrations();
-    };
-
-    loadConnections();
-    return () => {
-      isMounted = false;
-    };
-  }, [isAdmin, refreshIntegrations]);
+    if (!company) return;
+    setCompanyForm((prev) => ({
+      ...prev,
+      companyName: company.name,
+    }));
+  }, [company]);
 
   const handleDisconnect = async (providerKey: string) => {
     setDisconnectingProvider(providerKey);
@@ -276,7 +239,7 @@ export function SettingsPage(): React.ReactElement {
         title: "Integrazione disconnessa",
         description: "La connessione e' stata rimossa.",
       });
-      await refreshIntegrations();
+      setIntegrationsRefresh(true);
     } catch (error) {
       toast.error({
         title: "Errore disconnessione",
@@ -329,6 +292,7 @@ export function SettingsPage(): React.ReactElement {
         },
       });
     }
+    setUserRefresh(true);
 
     toast.success({
       title: "Salvataggio completato",
@@ -365,6 +329,7 @@ export function SettingsPage(): React.ReactElement {
       });
       return;
     }
+    setCompanyRefresh(true);
 
     toast.success({
       title: "Salvataggio completato",
@@ -399,8 +364,6 @@ export function SettingsPage(): React.ReactElement {
         throw new Error(upload.message ?? "Upload failed.");
       }
 
-      setAvatarUrl(upload.data.url);
-
       if (session) {
         await update({
           ...session,
@@ -410,6 +373,7 @@ export function SettingsPage(): React.ReactElement {
           },
         });
       }
+      setUserRefresh(true);
 
       toast.success({
         title: "Upload completed",
@@ -458,8 +422,7 @@ export function SettingsPage(): React.ReactElement {
         throw new Error(upload.message ?? "Upload failed.");
       }
 
-      setLogoUrl(upload.data.url);
-      window.dispatchEvent(new Event("company-logo-updated"));
+      setCompanyRefresh(true);
 
       toast.success({
         title: "Upload completed",
@@ -720,10 +683,12 @@ export function SettingsPage(): React.ReactElement {
                     <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-4">
                         <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border bg-muted/30">
-                          {logoUrl ? (
-                            <img
-                              src={logoUrl}
+                          {companyLogoUrl ? (
+                            <Image
+                              src={companyLogoUrl}
                               alt="Company logo"
+                              width={56}
+                              height={56}
                               className="h-full w-full object-cover"
                             />
                           ) : (

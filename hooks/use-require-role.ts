@@ -1,18 +1,35 @@
 'use client';
 
-import { UserRole } from '@/lib/constants';
-import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { getCurrentCompany } from '@/lib/actions/company.actions';
 
-const useRequireRole = (role: UserRole) => {
-  const { data: session } = useSession();
+type CompanyRole = 'admin' | 'member';
+
+const useRequireRole = (role: CompanyRole) => {
+  const [companyRole, setCompanyRole] = useState<CompanyRole | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
 
   useEffect(() => {
-    setIsAuthorized(!!session && session.user?.role === role);
-  }, [session?.user?.role]);
+    let isMounted = true;
+    const loadRole = async () => {
+      const res = await getCurrentCompany();
+      if (!res.success || !res.data || !isMounted) return;
+      const normalizedRole = res.data.role === 'admin' ? 'admin' : 'member';
+      setCompanyRole(normalizedRole);
+    };
 
-  return { isAuthorized, role: session?.user?.role ?? UserRole.NO_ROLE };
+    loadRole();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!companyRole) return;
+    setIsAuthorized(companyRole === role);
+  }, [companyRole, role]);
+
+  return { isAuthorized, role: companyRole };
 };
 
 export default useRequireRole;

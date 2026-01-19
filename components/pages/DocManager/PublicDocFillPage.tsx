@@ -106,6 +106,7 @@ export function PublicDocFillPage({
           y: field.y,
           width: field.width,
           height: field.height,
+          bindingKey: field.bindingKey ?? null,
           meta: field.meta ?? null,
         }));
         setFields(mappedFields);
@@ -335,7 +336,12 @@ export function PublicDocFillPage({
       const formData = new FormData();
       formData.append("file", fileBlob, "documento.pdf");
       formData.append("fullName", fullName);
-      formData.append("payload", JSON.stringify(values));
+      const payloadValues = fields.reduce<Record<string, string>>((acc, field) => {
+        if (!field.bindingKey) return acc;
+        acc[field.bindingKey] = values[field.id] ?? "";
+        return acc;
+      }, {});
+      formData.append("payload", JSON.stringify(payloadValues));
 
       const result = await fetch(
         `/api/public/document-requests/${token}/complete`,

@@ -23,17 +23,17 @@ import {
   useSidebar,
 } from "@/components/animate-ui/radix/sidebar";
 import { signOutUser } from "@/lib/actions/user.actions";
-import { getCurrentUserAvatarUrl } from "@/lib/actions/storage.actions";
-import { useSession } from "next-auth/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useAtomValue } from "jotai";
+import { userAvatarUrlAtom, userSessionAtom } from "@/atoms/user.store";
 
 export function NavUser() {
   const { isMobile } = useSidebar();
-  const session = useSession();
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const session = useAtomValue(userSessionAtom);
+  const avatarUrl = useAtomValue(userAvatarUrlAtom);
   const initials = useMemo(() => {
-    const name = session.data?.user?.name?.trim();
+    const name = session?.user?.name?.trim();
     if (!name) return "RG";
     return name
       .split(" ")
@@ -42,24 +42,9 @@ export function NavUser() {
       .map((part) => part[0])
       .join("")
       .toUpperCase();
-  }, [session.data?.user?.name]);
+  }, [session?.user?.name]);
 
-  useEffect(() => {
-    if (!session.data) return;
-    let isMounted = true;
-    const loadAvatar = async () => {
-      const res = await getCurrentUserAvatarUrl();
-      if (!res.success || !res.data || !isMounted) return;
-      setAvatarUrl(res.data.url);
-    };
-
-    loadAvatar();
-    return () => {
-      isMounted = false;
-    };
-  }, [session.data, session.data?.user?.image]);
-
-  if(!session.data) return null;
+  if(!session) return null;
   
    return (
     <SidebarMenu>
@@ -77,9 +62,9 @@ export function NavUser() {
                 </AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{session.data.user.name}</span>
+                <span className="truncate font-medium">{session.user.name}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {session.data.user.email}
+                  {session.user.email}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />
@@ -100,9 +85,9 @@ export function NavUser() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{session.data.user.name}</span>
+                  <span className="truncate font-medium">{session.user.name}</span>
                   <span className="text-muted-foreground truncate text-xs">
-                    {session.data.user.email}
+                    {session.user.email}
                   </span>
                 </div>
               </div>

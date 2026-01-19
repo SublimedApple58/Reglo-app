@@ -31,7 +31,7 @@ type AdminUserRow = {
   id: string;
   name: string;
   email: string;
-  role: string;
+  role: "admin" | "member";
 };
 
 type AdminUsersTableProps = {
@@ -85,6 +85,7 @@ export function AdminUsersTable({
                     .join("")
                     .toUpperCase()
                 : "U";
+              const isAdmin = user.role === "admin";
               return (
                 <TableRow key={user.id} className="hover:bg-muted/40">
                   <TableCell className="font-mono text-xs text-muted-foreground">
@@ -102,7 +103,7 @@ export function AdminUsersTable({
                           {user.name}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {user.role === "user" ? "Member" : "Admin"}
+                          {isAdmin ? "Admin" : "Member"}
                         </span>
                       </div>
                     </div>
@@ -111,10 +112,10 @@ export function AdminUsersTable({
                     {user.email}
                   </TableCell>
                   <TableCell>
-                    {user.role === "user" ? (
-                      <Badge variant="secondary">User</Badge>
-                    ) : (
+                    {isAdmin ? (
                       <Badge variant="default">Admin</Badge>
+                    ) : (
+                      <Badge variant="secondary">Member</Badge>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

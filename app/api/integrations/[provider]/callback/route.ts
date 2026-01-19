@@ -69,7 +69,6 @@ export async function GET(
 
   const session = await auth();
   const userId = session?.user?.id;
-  const isGlobalAdmin = session?.user?.role === "admin";
 
   if (!userId) {
     return NextResponse.redirect(
@@ -96,7 +95,7 @@ export async function GET(
     );
   }
 
-  if (!isGlobalAdmin && membership.role !== "admin") {
+  if (membership.role !== "admin") {
     return NextResponse.redirect(
       buildRedirectWithStatus(
         buildReturnUrl(request, providerKey),

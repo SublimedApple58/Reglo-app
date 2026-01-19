@@ -45,6 +45,7 @@ export type FillField = {
   y: number;
   width: number;
   height: number;
+  bindingKey?: string | null;
   meta?: {
     unit?: "ratio";
     html?: string;

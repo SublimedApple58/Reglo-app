@@ -17,13 +17,14 @@ import {
 import { DocFillOverlay } from "@/components/pages/DocManager/doc-fill/DocFillOverlay";
 import { SignatureDialog } from "@/components/pages/DocManager/doc-fill/SignatureDialog";
 import { Link2, Mail, MessageSquareText } from "lucide-react";
-import { useSession } from "next-auth/react";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { getCurrentCompany } from "@/lib/actions/company.actions";
 import { getDocumentConfig } from "@/lib/actions/document.actions";
 import { createDocumentRequest } from "@/lib/actions/document-requests.actions";
 import { useLocale } from "next-intl";
 import type { FillField } from "@/components/pages/DocManager/doc-manager.types";
+import { useAtomValue } from "jotai";
+import { userSessionAtom } from "@/atoms/user.store";
+import { companyAtom } from "@/atoms/company.store";
 
 type DocFillWrapperProps = {
   docId?: string;
@@ -31,7 +32,8 @@ type DocFillWrapperProps = {
 
 export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactElement {
   const toast = useFeedbackToast();
-  const { data: session } = useSession();
+  const session = useAtomValue(userSessionAtom);
+  const company = useAtomValue(companyAtom);
   const locale = useLocale();
   const [doc, setDoc] = React.useState<{
     id: string;
@@ -56,7 +58,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
   const [requestName, setRequestName] = React.useState("");
   const [generatedLink, setGeneratedLink] = React.useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = React.useState(false);
-  const [companyId, setCompanyId] = React.useState<string | null>(null);
+  const companyId = company?.id ?? null;
   const loadRef = React.useRef<string | null>(null);
 
   const getOverlayRef = React.useCallback(
@@ -88,17 +90,10 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
     const loadDocument = async () => {
       if (!docId) return;
       if (loadRef.current === docId) return;
-      const companyRes = await getCurrentCompany();
-      if (!companyRes.success || !companyRes.data) {
-        if (isMounted) {
-          toast.error({ description: companyRes.message ?? "Company non trovata." });
-        }
-        return;
-      }
-      setCompanyId(companyRes.data.id);
+      if (!companyId) return;
 
       const configRes = await getDocumentConfig({
-        companyId: companyRes.data.id,
+        companyId,
         templateId: docId,
       });
 
@@ -107,7 +102,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         return;
       }
 
-      const ownerName = session?.user?.name ?? companyRes.data.name ?? "Reglo";
+      const ownerName = session?.user?.name ?? company?.name ?? "Reglo";
       setDoc({
         id: configRes.data.id,
         title: configRes.data.name,
@@ -133,6 +128,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
         y: field.y,
         width: field.width,
         height: field.height,
+        bindingKey: field.bindingKey ?? null,
         meta: (field.meta as { unit?: "ratio" } | null) ?? null,
       }));
       setFields(loadedFields);
@@ -146,7 +142,7 @@ export function DocFillWrapper({ docId }: DocFillWrapperProps): React.ReactEleme
     return () => {
       isMounted = false;
     };
-  }, [docId, formatUpdatedAt, session?.user?.name, toast]);
+  }, [company?.name, companyId, docId, formatUpdatedAt, session?.user?.name, toast]);
 
   const handleSignatureOpen = (fieldId: string) => {
     setActiveSignatureFieldId(fieldId);

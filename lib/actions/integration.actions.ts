@@ -17,7 +17,6 @@ export async function getIntegrationConnections() {
   try {
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === "admin";
 
     if (!userId) {
       throw new Error("User is not authenticated");
@@ -33,7 +32,7 @@ export async function getIntegrationConnections() {
       throw new Error("Company not found");
     }
 
-    if (!isGlobalAdmin && membership.role !== "admin") {
+    if (membership.role !== "admin") {
       throw new Error("Only admins can view integrations");
     }
 

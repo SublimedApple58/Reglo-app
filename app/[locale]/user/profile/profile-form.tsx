@@ -13,11 +13,15 @@ import { updateProfile } from '@/lib/actions/user.actions';
 import { updateProfileSchema } from '@/lib/validators';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useSession } from 'next-auth/react';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { userRefreshAtom, userSessionAtom } from '@/atoms/user.store';
 
 const ProfileForm = () => {
-  const { data: session, update } = useSession();
+  const { update } = useSession();
+  const session = useAtomValue(userSessionAtom);
+  const setUserRefresh = useSetAtom(userRefreshAtom);
 
   const form = useForm<z.infer<typeof updateProfileSchema>>({
     resolver: zodResolver(updateProfileSchema),
@@ -39,15 +43,18 @@ const ProfileForm = () => {
       });
     }
 
-    const newSession = {
-      ...session,
-      user: {
-        ...session?.user,
-        name: values.name,
-      },
-    };
+    if (session) {
+      const newSession = {
+        ...session,
+        user: {
+          ...session.user,
+          name: values.name,
+        },
+      };
 
-    await update(newSession);
+      await update(newSession);
+    }
+    setUserRefresh(true);
 
     toast({
       description: res.message,

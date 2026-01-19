@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/auth';
 import { signOutUser } from '@/lib/actions/user.actions';
 import { Button } from '@/components/ui/button';
+import { prisma } from '@/db/prisma';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,11 @@ const UserButton = async () => {
   }
 
   const firstInitial = session.user?.name?.charAt(0).toUpperCase() ?? 'U';
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: 'asc' },
+  });
+  const isAdmin = membership?.role === 'admin';
 
   return (
     <div className='flex gap-2 items-center'>
@@ -62,7 +68,7 @@ const UserButton = async () => {
             </Link>
           </DropdownMenuItem>
 
-          {session?.user?.role === 'admin' && (
+          {isAdmin && (
             <DropdownMenuItem>
               <Link href='/admin/overview' className='w-full'>
                 Admin

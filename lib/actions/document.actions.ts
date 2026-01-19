@@ -68,25 +68,33 @@ export async function listDocumentTemplates() {
       const previewUrl = template.sourceUrl
         ? `/api/documents/${template.id}/file`
         : null;
-        const hasFields = template.fields.length > 0;
-        const allBound = hasFields
-          ? template.fields.every((field) => Boolean(field.bindingKey))
-          : false;
-        const status = hasFields
-          ? allBound
-            ? 'Bindato'
-            : 'Configurato'
-          : 'Bozza';
-        return {
-          id: template.id,
-          title: template.name,
-          updatedAt: template.updatedAt.toISOString(),
-          owner,
-          previewUrl,
-          sourceUrl: template.sourceUrl,
-          status,
-        };
-      });
+      const hasFields = template.fields.length > 0;
+      const allBound = hasFields
+        ? template.fields.every((field) => Boolean(field.bindingKey))
+        : false;
+      const status = hasFields
+        ? allBound
+          ? 'Bindato'
+          : 'Configurato'
+        : 'Bozza';
+      const bindingKeys = Array.from(
+        new Set(
+          template.fields
+            .map((field) => field.bindingKey?.trim())
+            .filter(Boolean) as string[]
+        )
+      );
+      return {
+        id: template.id,
+        title: template.name,
+        updatedAt: template.updatedAt.toISOString(),
+        owner,
+        previewUrl,
+        sourceUrl: template.sourceUrl,
+        status,
+        bindingKeys,
+      };
+    });
 
     return {
       success: true,
@@ -190,11 +198,45 @@ export async function deleteDocumentTemplate(templateId: string) {
       throw new Error('User is not authorized for this company');
     }
 
+    const workflows = await prisma.workflow.findMany({
+      where: { companyId: template.companyId, status: 'active' },
+    });
+
+    const affected = workflows.filter((workflow) => {
+      const definition = workflow.definition as {
+        trigger?: { type?: string; config?: Record<string, unknown> };
+        nodes?: Array<{ type?: string; config?: Record<string, unknown> }>;
+      };
+      const trigger = definition?.trigger;
+      if (trigger?.type === 'document_completed') {
+        const config = trigger.config ?? {};
+        if (config.templateId === templateId) return true;
+      }
+      const nodes = definition?.nodes ?? [];
+      return nodes.some((node) => {
+        if (node.type !== 'doc-compile-template') return false;
+        const settings = (node.config?.settings ?? {}) as Record<string, unknown>;
+        return settings.templateId === templateId;
+      });
+    });
+
+    if (affected.length > 0) {
+      await prisma.workflow.updateMany({
+        where: { id: { in: affected.map((workflow) => workflow.id) } },
+        data: { status: 'paused' },
+      });
+    }
+
     await prisma.documentTemplate.delete({
       where: { id: templateId },
     });
 
-    return { success: true, message: 'Document deleted' };
+    const message =
+      affected.length > 0
+        ? `Documento eliminato. ${affected.length} workflow disattivati perché usavano questo template.`
+        : 'Document deleted';
+
+    return { success: true, message };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

@@ -56,7 +56,6 @@ export async function updateCompanyName(
     const payload = updateCompanyNameSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === 'admin';
 
     if (!userId) {
       throw new Error('User is not authenticated');
@@ -70,7 +69,7 @@ export async function updateCompanyName(
       throw new Error('User is not authorized for this company');
     }
 
-    if (!isGlobalAdmin && membership.role !== 'admin') {
+    if (membership.role !== 'admin') {
       throw new Error('Only admins can update company settings');
     }
 

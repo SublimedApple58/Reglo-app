@@ -11,7 +11,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useAtomValue } from "jotai";
+import { userSessionAtom } from "@/atoms/user.store";
 import {
   computePlanUsage,
   formatCurrency,
@@ -43,7 +44,7 @@ const usageSnapshot = {
 
 export default function HomePage(): React.ReactElement {
   const router = useRouter();
-  const { data: session } = useSession();
+  const session = useAtomValue(userSessionAtom);
   const [createOpen, setCreateOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState("");
   const summary = useMemo(

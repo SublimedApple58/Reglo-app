@@ -170,11 +170,103 @@ export async function updateProfile(user: { name: string; email: string }) {
   }
 }
 
-// Get all the users
-type PaginatedUsers = {
-  data: User[];
+type PaginatedUsers<T> = {
+  data: T[];
   totalPages: number;
 };
+
+type CompanyUserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'admin' | 'member';
+};
+
+async function requireCompanyAdminContext() {
+  const session = await auth();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    throw new Error('User is not authenticated');
+  }
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  if (!membership) {
+    throw new Error('Company not found');
+  }
+
+  const isAdmin =
+    membership.role === 'admin';
+
+  if (!isAdmin) {
+    throw new Error('Only admins can manage users');
+  }
+
+  return { userId, companyId: membership.companyId };
+}
+
+export async function getCompanyUsers({
+  limit = PAGE_SIZE,
+  page,
+  query = '',
+}: {
+  limit?: number;
+  page: number;
+  query?: string;
+}): Promise<PaginatedUsers<CompanyUserRow>> {
+  const context = await requireCompanyAdminContext();
+
+  const userFilter: Prisma.UserWhereInput =
+    query && query !== 'all'
+      ? {
+          OR: [
+            {
+              name: {
+                contains: query,
+                mode: 'insensitive',
+              } as Prisma.StringFilter,
+            },
+            {
+              email: {
+                contains: query,
+                mode: 'insensitive',
+              } as Prisma.StringFilter,
+            },
+          ],
+        }
+      : {};
+
+  const where: Prisma.CompanyMemberWhereInput = {
+    companyId: context.companyId,
+    user: Object.keys(userFilter).length ? userFilter : undefined,
+  };
+
+  const members = await prisma.companyMember.findMany({
+    where,
+    include: { user: true },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+    skip: (page - 1) * limit,
+  });
+
+  const data: CompanyUserRow[] = members.map((member) => ({
+    id: member.userId,
+    name: member.user.name,
+    email: member.user.email,
+    role: member.role === 'admin' ? 'admin' : 'member',
+  }));
+
+  const dataCount = await prisma.companyMember.count({ where });
+
+  return {
+    data,
+    totalPages: Math.ceil(dataCount / limit),
+  };
+}
 
 export async function getAllUsers({
   limit = PAGE_SIZE,
@@ -184,7 +276,7 @@ export async function getAllUsers({
   limit?: number;
   page: number;
   query?: string;
-}): Promise<PaginatedUsers> {
+}): Promise<PaginatedUsers<User>> {
   const queryFilter: Prisma.UserWhereInput =
     query && query !== 'all'
       ? {
@@ -215,7 +307,32 @@ export async function getAllUsers({
 // Delete a user
 export async function deleteUser(id: string) {
   try {
-    await prisma.user.delete({ where: { id } });
+    const context = await requireCompanyAdminContext();
+
+    const targetMembership = await prisma.companyMember.findFirst({
+      where: { companyId: context.companyId, userId: id },
+    });
+
+    if (!targetMembership) {
+      throw new Error('User not found in this company');
+    }
+
+    const membershipCount = await prisma.companyMember.count({
+      where: { userId: id },
+    });
+
+    if (membershipCount <= 1) {
+      await prisma.user.delete({ where: { id } });
+    } else {
+      await prisma.companyMember.delete({
+        where: {
+          companyId_userId: {
+            companyId: context.companyId,
+            userId: id,
+          },
+        },
+      });
+    }
 
     revalidatePath('/admin/users');
 
@@ -234,12 +351,29 @@ export async function deleteUser(id: string) {
 // Update a user
 export async function updateUser(user: z.infer<typeof updateUserSchema>) {
   try {
+    const context = await requireCompanyAdminContext();
+
+    const targetMembership = await prisma.companyMember.findFirst({
+      where: { companyId: context.companyId, userId: user.id },
+    });
+
+    if (!targetMembership) {
+      throw new Error('User not found in this company');
+    }
+
     await prisma.user.update({
       where: { id: user.id },
-      data: {
-        name: user.name,
-        role: user.role,
+      data: { name: user.name },
+    });
+
+    await prisma.companyMember.update({
+      where: {
+        companyId_userId: {
+          companyId: context.companyId,
+          userId: user.id,
+        },
       },
+      data: { role: user.role },
     });
 
     revalidatePath('/admin/users');

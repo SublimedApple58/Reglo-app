@@ -10,8 +10,10 @@ export type WorkflowEdge = {
   condition?: Record<string, unknown> | null;
 };
 
+type WorkflowNodeRef = Pick<WorkflowNode, "id">;
+
 export function computeExecutionOrder(definition?: {
-  nodes?: WorkflowNode[];
+  nodes?: WorkflowNodeRef[];
   edges?: WorkflowEdge[];
 }) {
   const nodes = definition?.nodes ?? [];
@@ -96,6 +98,15 @@ export const resolveExpression = (value: string, context: RunContext) => {
   const match = trimmed.match(/^\{\{\s*([^}]+)\s*\}\}$/);
   if (match) {
     const path = match[1];
+    if (path === "trigger.payload") {
+      return context.triggerPayload;
+    }
+    if (path.startsWith("trigger.payload.")) {
+      return resolvePath(
+        context.triggerPayload,
+        path.replace(/^trigger\.payload\./, ""),
+      );
+    }
     if (path.startsWith("trigger.")) {
       return resolvePath(context.triggerPayload, path.replace(/^trigger\./, ""));
     }

@@ -31,6 +31,8 @@ export enum UserRole {
 }
 export const USER_ROLES = Object.values(UserRole);
 
+export const COMPANY_MEMBER_ROLES = ['admin', 'member'] as const;
+
 export const SENDER_EMAIL = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
 
 export const publicRoutes = [

@@ -19,7 +19,6 @@ export async function POST(request: Request) {
   try {
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === 'admin';
 
     if (!userId) {
       return NextResponse.json(
@@ -57,7 +56,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!isGlobalAdmin && membership.role !== 'admin') {
+    if (membership.role !== 'admin') {
       return NextResponse.json(
         { success: false, message: 'Only admins can update company logo' },
         { status: 403 }

@@ -216,6 +216,9 @@ export function DocManagerWrapper(): React.ReactElement {
       toast.error({ description: res.message ?? "Impossibile eliminare." });
       return;
     }
+    if (res.message && res.message !== "Document deleted") {
+      toast.info({ description: res.message });
+    }
     setItems((prev) => prev.filter((item) => item.id !== docId));
   };
 

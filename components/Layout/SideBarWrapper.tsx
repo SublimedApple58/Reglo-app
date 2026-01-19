@@ -3,6 +3,7 @@
 import { SidebarProvider } from "@/components/animate-ui/radix/sidebar";
 import React from "react";
 import { AppSidebar } from "./AppSidebar";
+import { AuthDataProvider } from "@/components/providers/auth-data.provider";
 
 export default function SideBarWrapper({
   children,
@@ -19,8 +20,10 @@ export default function SideBarWrapper({
           } as React.CSSProperties
         }
       >
-        <AppSidebar variant="sidebar" />
-        {children}
+        <AuthDataProvider>
+          <AppSidebar variant="sidebar" />
+          {children}
+        </AuthDataProvider>
       </SidebarProvider>
     </main>
   );

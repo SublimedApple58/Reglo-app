@@ -1,10 +1,16 @@
 import SideBarWrapper from '@/components/Layout/SideBarWrapper';
+import { requireUserAndCompany } from '@/lib/auth-guard';
 
-export default function UserLayout({
+export default async function UserLayout({
   children,
+  params,
 }: Readonly<{
   children: React.ReactNode;
+  params: Promise<{ locale: string }>;
 }>) {
+  const { locale } = await params;
+  await requireUserAndCompany(locale);
+
   return (
     <>
       {/* <div className='flex flex-col'>

@@ -3,7 +3,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { useSession } from "next-auth/react";
 import { DocumentCanvas } from "@/components/pages/DocManager/DocumentCanvas";
 import { DocumentHeader } from "@/components/pages/DocManager/DocumentHeader";
 import { toolItems } from "@/components/pages/DocManager/doc-manager.data";
@@ -12,11 +11,13 @@ import { DocEditorSidebar } from "@/components/pages/DocManager/doc-editor/DocEd
 import { DocEditorOverlay } from "@/components/pages/DocManager/doc-editor/DocEditorOverlay";
 import { BindingKeyDialog } from "@/components/pages/DocManager/doc-editor/BindingKeyDialog";
 import { RichTextDialog } from "@/components/pages/DocManager/doc-editor/RichTextDialog";
-import { getCurrentCompany } from "@/lib/actions/company.actions";
 import {
   getDocumentConfig,
   saveDocumentFields,
 } from "@/lib/actions/document.actions";
+import { useAtomValue } from "jotai";
+import { userSessionAtom } from "@/atoms/user.store";
+import { companyAtom } from "@/atoms/company.store";
 
 type DocEditorWrapperProps = {
   docId?: string;
@@ -26,7 +27,8 @@ export function DocEditorWrapper({
   docId,
 }: DocEditorWrapperProps): React.ReactElement {
   const toast = useFeedbackToast();
-  const { data: session } = useSession();
+  const session = useAtomValue(userSessionAtom);
+  const company = useAtomValue(companyAtom);
   const [doc, setDoc] = React.useState<{
     id: string;
     title: string;
@@ -34,7 +36,7 @@ export function DocEditorWrapper({
     owner: string;
     previewUrl?: string | null;
   } | null>(null);
-  const [companyId, setCompanyId] = React.useState<string | null>(null);
+  const companyId = company?.id ?? null;
   const [pdfFile, setPdfFile] = React.useState<string | null>(null);
   const [isSaving, setIsSaving] = React.useState(false);
   const [selectedTool, setSelectedTool] = React.useState<ToolId | null>(null);
@@ -103,19 +105,10 @@ export function DocEditorWrapper({
     const loadDocument = async () => {
       if (!docId) return;
       if (loadRef.current === docId) return;
-      const companyRes = await getCurrentCompany();
-      if (!companyRes.success || !companyRes.data) {
-        if (isMounted) {
-          toast.error({ description: companyRes.message ?? "Company non trovata." });
-        }
-        return;
-      }
-
-      if (!isMounted) return;
-      setCompanyId(companyRes.data.id);
+      if (!companyId) return;
 
       const configRes = await getDocumentConfig({
-        companyId: companyRes.data.id,
+        companyId,
         templateId: docId,
       });
 
@@ -124,8 +117,7 @@ export function DocEditorWrapper({
         return;
       }
 
-      const ownerName =
-        session?.user?.name ?? companyRes.data.name ?? "Reglo";
+      const ownerName = session?.user?.name ?? company?.name ?? "Reglo";
 
       setDoc({
         id: configRes.data.id,
@@ -155,7 +147,7 @@ export function DocEditorWrapper({
     return () => {
       isMounted = false;
     };
-  }, [docId, formatUpdatedAt, session?.user?.name, toast]);
+  }, [company?.name, companyId, docId, formatUpdatedAt, session?.user?.name, toast]);
 
   const clampValue = (value: number, min: number, max: number) =>
     Math.min(Math.max(value, min), max);

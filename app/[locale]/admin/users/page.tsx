@@ -1,8 +1,7 @@
 import ClientPageWrapper from '@/components/Layout/ClientPageWrapper';
 import Pagination from '@/components/shared/pagination';
-import { getAllUsers } from '@/lib/actions/user.actions';
-import { requireRole } from '@/lib/auth-guard';
-import { PAGE_SIZE, UserRole } from '@/lib/constants';
+import { getCompanyUsers } from '@/lib/actions/user.actions';
+import { PAGE_SIZE } from '@/lib/constants';
 import { Metadata } from 'next';
 import { AdminUsersToolbar } from '@/components/pages/AdminUsers/AdminUsersToolbar';
 import { AdminUsersTable } from '@/components/pages/AdminUsers/AdminUsersTable';
@@ -23,8 +22,6 @@ const AdminUserPage = async ({
   searchParams?: Promise<AdminUsersSearchParams>;
   params: Promise<{ locale: string }>;
 }) => {
-  await requireRole(UserRole.ADMIN);
-
   await _params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
 
@@ -38,7 +35,7 @@ const AdminUserPage = async ({
   const currentPage = Number(pageParam) || 1;
   const searchText = queryParam?.trim();
 
-  const users = await getAllUsers({
+  const users = await getCompanyUsers({
     page: currentPage,
     query: searchText ?? '',
   });

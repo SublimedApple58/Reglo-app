@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { updateUser } from "@/lib/actions/user.actions";
-import { USER_ROLES } from "@/lib/constants";
+import { COMPANY_MEMBER_ROLES } from "@/lib/constants";
 import { updateUserSchema } from "@/lib/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -184,9 +184,9 @@ const UpdateUserForm = ({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {USER_ROLES.filter((role) => role).map((role) => (
+                    {COMPANY_MEMBER_ROLES.map((role) => (
                       <SelectItem key={role} value={role}>
-                        {role.charAt(0).toUpperCase() + role.slice(1)}
+                        {role === "admin" ? "Admin" : "Member"}
                       </SelectItem>
                     ))}
                   </SelectContent>

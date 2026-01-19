@@ -80,7 +80,7 @@ export const updateProfileSchema = z.object({
 // Schema to update users
 export const updateUserSchema = updateProfileSchema.extend({
   id: z.string().min(1, 'ID is required'),
-  role: z.string().min(1, 'Role is required'),
+  role: z.enum(['member', 'admin']),
 });
 
 export const documentFieldSchema = z.object({
@@ -119,7 +119,13 @@ export const createDocumentRequestSchema = z.object({
 });
 
 export const workflowTriggerSchema = z.object({
-  type: z.enum(['manual', 'email_inbound', 'document_completed']),
+  type: z.enum([
+    'manual',
+    'email_inbound',
+    'document_completed',
+    'slack_message',
+    'fic_event',
+  ]),
   config: z.record(z.unknown()).optional(),
 });
 

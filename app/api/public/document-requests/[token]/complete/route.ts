@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/db/prisma';
 import { getR2Bucket, getR2Client } from '@/lib/storage/r2';
+import { triggerDocumentCompletionWorkflows } from '@/lib/workflows/trigger';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 
@@ -33,7 +34,13 @@ export async function POST(
 
     const docRequest = await prisma.documentRequest.findFirst({
       where: { publicToken: token },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        companyId: true,
+        templateId: true,
+        publicToken: true,
+      },
     });
 
     if (!docRequest) {
@@ -71,14 +78,34 @@ export async function POST(
       }
     }
 
+    const completedAt = new Date();
     await prisma.documentRequest.update({
       where: { id: docRequest.id },
       data: {
         status: 'completed',
         resultUrl: key,
-        completedAt: new Date(),
+        completedAt,
         completedByName: fullName.trim(),
         payload: payload ?? undefined,
+      },
+    });
+
+    const fieldPayload =
+      payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {};
+
+    await triggerDocumentCompletionWorkflows({
+      companyId: docRequest.companyId,
+      templateId: docRequest.templateId,
+      triggerPayload: {
+        ...fieldPayload,
+        __meta: {
+          templateId: docRequest.templateId,
+          requestId: docRequest.id,
+          publicToken: docRequest.publicToken,
+          resultUrl: key,
+          completedAt: completedAt.toISOString(),
+          completedByName: fullName.trim(),
+        },
       },
     });
 

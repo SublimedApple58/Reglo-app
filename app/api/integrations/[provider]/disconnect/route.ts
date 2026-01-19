@@ -39,7 +39,6 @@ export async function POST(
 
   const session = await auth();
   const userId = session?.user?.id;
-  const isGlobalAdmin = session?.user?.role === "admin";
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -54,7 +53,7 @@ export async function POST(
     return NextResponse.json({ error: "Company not found" }, { status: 404 });
   }
 
-  if (!isGlobalAdmin && membership.role !== "admin") {
+  if (membership.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

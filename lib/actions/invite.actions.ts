@@ -22,7 +22,6 @@ export async function createCompanyInvite(
     const payload = createCompanyInviteSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === 'admin';
 
     if (!userId) {
       throw new Error('User is not authenticated');
@@ -37,7 +36,7 @@ export async function createCompanyInvite(
       throw new Error('User is not authorized for this company');
     }
 
-    if (!isGlobalAdmin && membership.role !== 'admin') {
+    if (membership.role !== 'admin') {
       throw new Error('Only admins can invite users');
     }
 

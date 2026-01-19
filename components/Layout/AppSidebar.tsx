@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useAtomValue } from "jotai";
 
 import {
   Sidebar,
@@ -31,9 +32,7 @@ import {
 import { NavUser } from "../ui/nav-user";
 import Link from "next/link";
 import { SidebarGroupLabel } from "../ui/sidebar";
-import useRequireRole from "@/hooks/use-require-role";
-import { UserRole } from "@/lib/constants";
-import { getCurrentCompany } from "@/lib/actions/company.actions";
+import { companyAtom } from "@/atoms/company.store";
 
 const items = [
   {
@@ -97,8 +96,10 @@ const configurationItems = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
   const path = usePathname() || "";
-  const [companyName, setCompanyName] = useState("Reglo srl");
-  const [companyLogoUrl, setCompanyLogoUrl] = useState<string | null>(null);
+  const company = useAtomValue(companyAtom);
+  const companyName = company?.name ?? "Reglo srl";
+  const companyLogoUrl = company?.logoUrl ?? null;
+  const companyRole = company?.role ?? null;
 
   const mainSection = useMemo(() => {
     if (path === "/") {
@@ -110,27 +111,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const { isMobile, setOpenMobile } = useSidebar();
 
-  const {isAuthorized } = useRequireRole(UserRole.ADMIN);
-
-  useEffect(() => {
-    let isMounted = true;
-    const loadCompany = async () => {
-      const res = await getCurrentCompany();
-      if (!res.success || !res.data || !isMounted) return;
-      setCompanyName(res.data.name);
-      setCompanyLogoUrl(res.data.logoUrl ?? null);
-    };
-    const handleLogoUpdate = () => {
-      loadCompany();
-    };
-
-    loadCompany();
-    window.addEventListener("company-logo-updated", handleLogoUpdate);
-    return () => {
-      isMounted = false;
-      window.removeEventListener("company-logo-updated", handleLogoUpdate);
-    };
-  }, []);
+  const isAuthorized = companyRole === "admin";
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -141,9 +122,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <Link href="/">
                 <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border border-border/70 shadow-sm">
                   {companyLogoUrl ? (
-                    <img
+                    <Image
                       src={companyLogoUrl}
                       alt="Company logo"
+                      width={32}
+                      height={32}
                       className="h-full w-full object-cover"
                     />
                   ) : (

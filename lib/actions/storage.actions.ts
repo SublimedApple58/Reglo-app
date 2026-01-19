@@ -132,7 +132,6 @@ export async function createCompanyLogoUpload(
     const payload = companyLogoUploadSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === 'admin';
 
     if (!userId) {
       throw new Error('User is not authenticated');
@@ -146,7 +145,7 @@ export async function createCompanyLogoUpload(
       throw new Error('User is not authorized for this company');
     }
 
-    if (!isGlobalAdmin && membership.role !== 'admin') {
+    if (membership.role !== 'admin') {
       throw new Error('Only admins can update company logo');
     }
 
@@ -178,7 +177,6 @@ export async function saveCompanyLogo(
     const payload = companyLogoFinalizeSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
-    const isGlobalAdmin = session?.user?.role === 'admin';
 
     if (!userId) {
       throw new Error('User is not authenticated');
@@ -192,7 +190,7 @@ export async function saveCompanyLogo(
       throw new Error('User is not authorized for this company');
     }
 
-    if (!isGlobalAdmin && membership.role !== 'admin') {
+    if (membership.role !== 'admin') {
       throw new Error('Only admins can update company logo');
     }
 
