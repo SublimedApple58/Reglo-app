@@ -15,6 +15,15 @@ const prismaGenerateExtension = {
         PRISMA_SCHEMA_PATH: "./prisma/schema.prisma",
       },
     });
+    console.log("[trigger] Copying generated Prisma client to node_modules/.prisma...");
+    const copyCommand = [
+      "set -euo pipefail",
+      "src=$(find node_modules/.pnpm -path \"*/node_modules/.prisma\" | head -n 1)",
+      'if [ -z "$src" ]; then echo "[trigger] prisma client not found under node_modules/.pnpm"; exit 1; fi',
+      "rm -rf node_modules/.prisma",
+      'cp -R "$src" node_modules/.prisma',
+    ].join(" && ");
+    execSync(`bash -lc '${copyCommand}'`, { cwd: rootDir, stdio: "inherit" });
   },
 };
 
