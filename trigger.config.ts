@@ -4,7 +4,14 @@ import { defineConfig } from "@trigger.dev/sdk/v3";
 const prismaGenerateExtension = {
   name: "prisma-generate",
   onBuildStart: () => {
-    execSync("npx prisma generate", { stdio: "inherit" });
+    execSync("npx prisma generate --schema=./prisma/schema.prisma", {
+      stdio: "inherit",
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        PRISMA_SCHEMA_PATH: "./prisma/schema.prisma",
+      },
+    });
   },
 };
 
@@ -20,6 +27,8 @@ export default defineConfig({
   additionalFiles: [
     "node_modules/.prisma/client/**",
     "node_modules/.pnpm/**/.prisma/client/**",
+    "prisma/schema.prisma",
+    "prisma/migrations/**",
   ],
   maxDuration: 60,
   retries: {
