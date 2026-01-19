@@ -1,5 +1,4 @@
 import { task, wait } from "@trigger.dev/sdk/v3";
-import { Prisma } from "@prisma/client";
 import {
   computeExecutionOrder,
   evaluateCondition,
@@ -34,22 +33,46 @@ type SlackPostMessageResponse = {
   error?: string;
 };
 
-type PrismaClientType = typeof import("@/db/prisma").prisma;
-let prismaClient: PrismaClientType | null = null;
-const getPrisma = async (): Promise<PrismaClientType> => {
-  if (!prismaClient) {
-    const mod = await import("@/db/prisma");
-    prismaClient = mod.prisma;
-  }
-  return prismaClient as PrismaClientType;
+type TemplateField = {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  meta?: unknown;
+  bindingKey?: string | null;
+  label?: string | null;
+  type?: string;
 };
 
-const toJsonValue = (
-  value: unknown,
-): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput => {
-  if (value === undefined || value === null) return Prisma.JsonNull;
+let prismaClient: unknown = null;
+const getPrisma = async (): Promise<any> => {
+  if (!prismaClient) {
+    const [{ PrismaClient }, { PrismaNeon }, neonModule, wsModule] =
+      await Promise.all([
+        import("@prisma/client"),
+        import("@prisma/adapter-neon"),
+        import("@neondatabase/serverless"),
+        import("ws"),
+      ]);
+    const neonConfig = neonModule.neonConfig;
+    const ws = (wsModule as { default?: unknown }).default ?? wsModule;
+    neonConfig.webSocketConstructor = ws as typeof globalThis.WebSocket;
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("Missing DATABASE_URL for Trigger Prisma client");
+    }
+    const adapter = new PrismaNeon({ connectionString });
+    prismaClient = new PrismaClient({ adapter });
+  }
+  return prismaClient as any;
+};
+
+const toJsonValue = (value: unknown) => {
+  if (value === undefined) return null;
+  if (value === null) return null;
   try {
-    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+    return JSON.parse(JSON.stringify(value));
   } catch {
     return String(value);
   }
@@ -484,7 +507,10 @@ export const workflowRunner = task({
         };
 
         const payload = run.triggerPayload ?? {};
-        template.fields.forEach((field) => {
+        const fields = Array.isArray(template.fields)
+          ? (template.fields as TemplateField[])
+          : [];
+        fields.forEach((field) => {
           const page = pages[field.page - 1];
           if (!page) return;
           const { width: pageWidth, height: pageHeight } = page.getSize();
