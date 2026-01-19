@@ -1,5 +1,5 @@
 import { task, wait } from "@trigger.dev/sdk/v3";
-import { prisma } from "@/db/prisma";
+import { Prisma } from "@prisma/client";
 import {
   computeExecutionOrder,
   evaluateCondition,
@@ -32,6 +32,27 @@ type SlackPostMessageResponse = {
   ts?: string;
   channel?: string;
   error?: string;
+};
+
+type PrismaClientType = typeof import("@/db/prisma").prisma;
+let prismaClient: PrismaClientType | null = null;
+const getPrisma = async (): Promise<PrismaClientType> => {
+  if (!prismaClient) {
+    const mod = await import("@/db/prisma");
+    prismaClient = mod.prisma;
+  }
+  return prismaClient as PrismaClientType;
+};
+
+const toJsonValue = (
+  value: unknown,
+): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput => {
+  if (value === undefined || value === null) return Prisma.JsonNull;
+  try {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
+  } catch {
+    return String(value);
+  }
 };
 
 const streamToBuffer = async (stream: unknown) => {
@@ -83,6 +104,7 @@ const resolvePayloadValue = (payload: unknown, path?: string | null) => {
 export const workflowRunner = task({
   id: "workflow-runner",
   run: async (payload: { runId: string }) => {
+    const prisma = await getPrisma();
     if (!("workflowRun" in prisma)) {
       const prototypeKeys = Object.getOwnPropertyNames(
         Object.getPrototypeOf(prisma),
@@ -323,7 +345,7 @@ export const workflowRunner = task({
             status: "completed",
             output: {
               waitpointId: token.id,
-              result,
+              result: toJsonValue(result),
             },
             finishedAt: new Date(),
           },
