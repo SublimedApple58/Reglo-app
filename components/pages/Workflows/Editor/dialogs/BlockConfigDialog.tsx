@@ -21,6 +21,7 @@ import {
 import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
 import type {
   BlockConfigDefinition,
+  SlackChannelOption,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
 
@@ -36,6 +37,9 @@ type BlockConfigDialogProps = {
   onSave: () => void;
   documentTemplateOptions: TemplateOption[];
   variableOptions: VariableOption[];
+  slackChannelOptions?: SlackChannelOption[];
+  slackChannelLoading?: boolean;
+  slackChannelError?: string | null;
 };
 
 export function BlockConfigDialog({
@@ -48,6 +52,9 @@ export function BlockConfigDialog({
   onSave,
   documentTemplateOptions,
   variableOptions,
+  slackChannelOptions,
+  slackChannelLoading,
+  slackChannelError,
 }: BlockConfigDialogProps) {
   return (
     <Dialog
@@ -81,6 +88,52 @@ export function BlockConfigDialog({
                   {field.label}
                   {field.required ? " *" : ""}
                 </p>
+                {field.optionsSource === "slackChannels" ? (
+                  <div className="space-y-1">
+                    <Select
+                      value={
+                        slackChannelOptions?.some((option) => option.value === configDraft[field.key])
+                          ? configDraft[field.key]
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: value,
+                        }))
+                      }
+                      disabled={slackChannelLoading || !slackChannelOptions?.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            slackChannelLoading
+                              ? "Caricamento canali Slack…"
+                              : slackChannelOptions?.length
+                                ? "Scegli un canale Slack"
+                                : slackChannelError
+                                  ? "Selezione non disponibile"
+                                  : "Nessun canale disponibile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {slackChannelOptions?.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {slackChannelError ? (
+                      <p className="text-xs text-rose-500">{slackChannelError}</p>
+                    ) : slackChannelOptions?.length === 0 && !slackChannelLoading ? (
+                      <p className="text-xs text-muted-foreground">
+                        Puoi comunque usare un valore dinamico o incollare un ID canale.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {field.type === "select" ? (
                   <Select
                     value={configDraft[field.key] ?? ""}

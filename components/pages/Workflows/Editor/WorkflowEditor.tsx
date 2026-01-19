@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import ReactFlow, {
   Background,
@@ -43,6 +43,7 @@ import type {
   ManualFieldDefinition,
   RunPayloadField,
   ServiceKey,
+  SlackChannelOption,
   TriggerType,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -128,6 +129,10 @@ export function WorkflowEditor(): React.ReactElement {
   const [templateBindingKeys, setTemplateBindingKeys] = useState<Record<string, string[]>>({});
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
 
+  const [slackChannelOptions, setSlackChannelOptions] = useState<SlackChannelOption[]>([]);
+  const [slackChannelLoading, setSlackChannelLoading] = useState(false);
+  const [slackChannelError, setSlackChannelError] = useState<string | null>(null);
+
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
@@ -192,6 +197,59 @@ export function WorkflowEditor(): React.ReactElement {
       token: `trigger.payload.${field}`,
     }));
   }, [triggerFieldKeys]);
+
+  useEffect(() => {
+    if (!isSlackConnected) {
+      setSlackChannelOptions([]);
+      setSlackChannelLoading(false);
+      setSlackChannelError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    setSlackChannelLoading(true);
+    setSlackChannelError(null);
+
+    fetch("/api/integrations/slack/channels", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: SlackChannelOption[];
+          message?: string;
+          error?: string;
+        };
+        if (!active) return [];
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message ?? payload.error ?? "Impossibile caricare i canali Slack.");
+        }
+        return payload.data ?? [];
+      })
+      .then((data) => {
+        if (!active) return;
+        setSlackChannelOptions(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setSlackChannelOptions([]);
+        setSlackChannelError(err.message ?? "Impossibile caricare i canali Slack.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setSlackChannelLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isSlackConnected]);
 
   const invalidTriggerTokens = useMemo(() => {
     const allowed = new Set(triggerFieldKeys.map((key) => `trigger.payload.${key}`));
@@ -1213,6 +1271,9 @@ export function WorkflowEditor(): React.ReactElement {
         onSave={handleConfigSave}
         documentTemplateOptions={documentTemplateOptions}
         variableOptions={variableOptions}
+        slackChannelOptions={slackChannelOptions}
+        slackChannelLoading={slackChannelLoading}
+        slackChannelError={slackChannelError}
       />
 
       <TriggerDialog

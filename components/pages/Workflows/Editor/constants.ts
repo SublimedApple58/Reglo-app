@@ -151,13 +151,14 @@ export const blockConfigDefinitions: Record<string, BlockConfigDefinition> = {
   "slack-channel-message": {
     title: "Messaggio in canale",
     description: "Invia un messaggio al canale scelto.",
-    fields: [
-      {
-        key: "channel",
-        label: "Canale",
-        placeholder: "#general o ID canale",
-        required: true,
-      },
+      fields: [
+        {
+          key: "channel",
+          label: "Canale",
+          placeholder: "#general o ID canale",
+          optionsSource: "slackChannels",
+          required: true,
+        },
       {
         key: "message",
         label: "Messaggio",
