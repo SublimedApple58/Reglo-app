@@ -24,7 +24,7 @@ export type BlockConfigField = {
   required?: boolean;
   type?: "text" | "select";
   options?: string[];
-  optionsSource?: "templates" | "slackChannels";
+  optionsSource?: "templates" | "slackChannels" | "emailSenders";
   hint?: string;
   multiline?: boolean;
 };
@@ -87,4 +87,9 @@ export type SlackChannelOption = {
   value: string;
   label: string;
   isPrivate?: boolean;
+};
+
+export type EmailSenderOption = {
+  value: string;
+  label: string;
 };

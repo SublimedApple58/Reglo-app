@@ -44,6 +44,7 @@ import type {
   RunPayloadField,
   ServiceKey,
   SlackChannelOption,
+  EmailSenderOption,
   TriggerType,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -128,6 +129,9 @@ export function WorkflowEditor(): React.ReactElement {
   const [documentTemplateOptions, setDocumentTemplateOptions] = useState<TemplateOption[]>([]);
   const [templateBindingKeys, setTemplateBindingKeys] = useState<Record<string, string[]>>({});
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
+  const [emailSenderOptions, setEmailSenderOptions] = useState<EmailSenderOption[]>([]);
+  const [emailSenderLoading, setEmailSenderLoading] = useState(false);
+  const [emailSenderError, setEmailSenderError] = useState<string | null>(null);
 
   const [slackChannelOptions, setSlackChannelOptions] = useState<SlackChannelOption[]>([]);
   const [slackChannelLoading, setSlackChannelLoading] = useState(false);
@@ -250,6 +254,66 @@ export function WorkflowEditor(): React.ReactElement {
       controller.abort();
     };
   }, [isSlackConnected]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    setEmailSenderLoading(true);
+    setEmailSenderError(null);
+
+    fetch("/api/email/senders", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: EmailSenderOption[];
+          message?: string;
+        };
+        if (!active) return [];
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message ?? "Impossibile caricare i mittenti email.");
+        }
+        return payload.data ?? [];
+      })
+      .then((data) => {
+        if (!active) return;
+        setEmailSenderOptions(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setEmailSenderOptions([]);
+        setEmailSenderError(err.message ?? "Impossibile caricare i mittenti email.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setEmailSenderLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      !configDialogOpen ||
+      configBlockId !== "reglo-email" ||
+      !emailSenderOptions.length
+    ) {
+      return;
+    }
+    if (configDraft.from?.trim()) return;
+    setConfigDraft((prev) => ({
+      ...prev,
+      from: prev.from?.trim() || emailSenderOptions[0].value,
+    }));
+  }, [configDialogOpen, configBlockId, configDraft.from, emailSenderOptions]);
 
   const invalidTriggerTokens = useMemo(() => {
     const allowed = new Set(triggerFieldKeys.map((key) => `trigger.payload.${key}`));
@@ -1274,6 +1338,10 @@ export function WorkflowEditor(): React.ReactElement {
         slackChannelOptions={slackChannelOptions}
         slackChannelLoading={slackChannelLoading}
         slackChannelError={slackChannelError}
+        emailSenderOptions={emailSenderOptions}
+        emailSenderLoading={emailSenderLoading}
+        emailSenderError={emailSenderError}
+        blockId={configBlockId ?? undefined}
       />
 
       <TriggerDialog

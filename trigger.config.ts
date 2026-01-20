@@ -42,6 +42,7 @@ export default defineConfig({
     "node_modules/@prisma/client/**",
     "prisma/schema.prisma",
     "prisma/migrations/**",
+    "assets/**",
   ],
   maxDuration: 60,
   retries: {

@@ -70,6 +70,7 @@ export const serviceBlocks: Record<
       { id: "reglo-validate", label: "Valida policy interne" },
       { id: "reglo-notify", label: "Notifica stakeholder" },
       { id: "reglo-log", label: "Logga evento in audit trail" },
+      { id: "reglo-email", label: "Invia email" },
     ],
   },
   logic: {
@@ -206,6 +207,41 @@ export const blockConfigDefinitions: Record<string, BlockConfigDefinition> = {
         placeholder: "Es. Contratto Mario Rossi",
         required: true,
         hint: "Puoi inserire dati dinamici dal trigger o dagli step precedenti.",
+      },
+    ],
+  },
+  "reglo-email": {
+    title: "Invia email",
+    description:
+      "Invia una mail dinamica tramite Resend, con footer Reglo e contenuti personalizzabili.",
+    fields: [
+      {
+        key: "from",
+        label: "Mittente",
+        required: true,
+        optionsSource: "emailSenders",
+      },
+      {
+        key: "to",
+        label: "Destinatario",
+        placeholder: "{{trigger.payload.email}} o user@example.com",
+        required: true,
+        hint: "Usa i token trigger per rendere dinamico il destinatario.",
+      },
+      {
+        key: "subject",
+        label: "Oggetto",
+        placeholder: "Es. Conferma compilazione per {{trigger.payload.name}}",
+        required: true,
+        hint: "Puoi inserire token come {{trigger.payload.xxx}}.",
+      },
+      {
+        key: "body",
+        label: "Corpo",
+        placeholder: "Scrivi il testo della mail (puoi usare token e invii).",
+        required: true,
+        hint: "Il footer Reglo viene aggiunto automaticamente.",
+        multiline: true,
       },
     ],
   },

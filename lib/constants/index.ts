@@ -33,7 +33,26 @@ export const USER_ROLES = Object.values(UserRole);
 
 export const COMPANY_MEMBER_ROLES = ['admin', 'member'] as const;
 
-export const SENDER_EMAIL = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
+export const DEFAULT_EMAIL_SENDER =
+  process.env.DEFAULT_EMAIL_SENDER || 'no-reply@reglo.it';
+
+const rawVerifiedSenders = process.env.VERIFIED_EMAIL_SENDERS ?? '';
+const parsedVerifiedSenders = rawVerifiedSenders
+  .split(',')
+  .map((sender) => sender.trim())
+  .filter(Boolean);
+const allVerifiedSenders = parsedVerifiedSenders.length
+  ? parsedVerifiedSenders
+  : [DEFAULT_EMAIL_SENDER];
+if (!allVerifiedSenders.includes(DEFAULT_EMAIL_SENDER)) {
+  allVerifiedSenders.unshift(DEFAULT_EMAIL_SENDER);
+}
+
+export const VERIFIED_EMAIL_SENDERS = allVerifiedSenders;
+export const SENDER_EMAIL = DEFAULT_EMAIL_SENDER;
+
+export const EMAIL_FOOTER_LOGO = process.env.EMAIL_FOOTER_LOGO;
+export const EMAIL_PROFILE_PICTURE = process.env.EMAIL_PROFILE_PICTURE;
 
 export const publicRoutes = [
   '/sign-in',

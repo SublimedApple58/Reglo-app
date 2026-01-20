@@ -21,6 +21,7 @@ import {
 import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
 import type {
   BlockConfigDefinition,
+  EmailSenderOption,
   SlackChannelOption,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -40,6 +41,10 @@ type BlockConfigDialogProps = {
   slackChannelOptions?: SlackChannelOption[];
   slackChannelLoading?: boolean;
   slackChannelError?: string | null;
+  emailSenderOptions?: EmailSenderOption[];
+  emailSenderLoading?: boolean;
+  emailSenderError?: string | null;
+  blockId?: string;
 };
 
 export function BlockConfigDialog({
@@ -55,6 +60,10 @@ export function BlockConfigDialog({
   slackChannelOptions,
   slackChannelLoading,
   slackChannelError,
+  emailSenderOptions,
+  emailSenderLoading,
+  emailSenderError,
+  blockId,
 }: BlockConfigDialogProps) {
   return (
     <Dialog
@@ -134,7 +143,48 @@ export function BlockConfigDialog({
                     ) : null}
                   </div>
                 ) : null}
-                {field.type === "select" ? (
+                {field.optionsSource === "emailSenders" ? (
+                  <div className="space-y-1">
+                    <Select
+                      value={
+                        emailSenderOptions?.some((option) => option.value === configDraft[field.key])
+                          ? configDraft[field.key]
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: value,
+                        }))
+                      }
+                      disabled={emailSenderLoading || !emailSenderOptions?.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            emailSenderLoading
+                              ? "Caricamento mittenti…"
+                              : emailSenderOptions?.length
+                                ? "Scegli un mittente"
+                                : emailSenderError
+                                  ? "Mittenti non disponibili"
+                                  : "Nessun mittente verificato"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {emailSenderOptions?.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {emailSenderError ? (
+                      <p className="text-xs text-rose-500">{emailSenderError}</p>
+                    ) : null}
+                  </div>
+                ) : field.type === "select" ? (
                   <Select
                     value={configDraft[field.key] ?? ""}
                     onValueChange={(value) =>
@@ -172,6 +222,27 @@ export function BlockConfigDialog({
               </div>
             );
           })}
+          {blockId === "reglo-email" ? (
+            <div className="rounded-2xl border border-border/60 bg-slate-50/70 p-4 text-sm text-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Preview email
+              </p>
+              <p className="mt-3 text-base font-semibold text-foreground">
+                {configDraft.subject?.trim() || "Oggetto dinamico con token"}
+              </p>
+              <div className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                {configDraft.body?.trim() ||
+                  "Qui apparirà il corpo dinamico della mail, incluso il footer di Reglo."}
+              </div>
+              <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                <p>
+                  {configDraft.from?.trim() || "mittente@reglo.it"} ·{' '}
+                  {configDraft.to?.trim() || "destinatario@esempio.com"}
+                </p>
+                <p>Footer personalizzato con logo Reglo incluso.</p>
+              </div>
+            </div>
+          ) : null}
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={onClose}>
