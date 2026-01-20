@@ -115,8 +115,9 @@ export function WorkflowEditor(): React.ReactElement {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
-  const [configBlockId, setConfigBlockId] = useState<string | null>(null);
-  const [configNodeId, setConfigNodeId] = useState<string | null>(null);
+  const [configTarget, setConfigTarget] = useState<{ nodeId: string; blockId: string } | null>(
+    null,
+  );
   const [triggerType, setTriggerType] = useState<TriggerType>("manual");
   const [triggerConfig, setTriggerConfig] = useState<Record<string, string>>({});
   const [triggerDialogOpen, setTriggerDialogOpen] = useState(false);
@@ -152,6 +153,7 @@ export function WorkflowEditor(): React.ReactElement {
     ? blockConfigDefinitions[selectedBlockId]
     : undefined;
   const selectedBlockHasConfig = Boolean(selectedBlockDefinition);
+  const configBlockId = configTarget?.blockId ?? null;
   const activeConfigDefinition = configBlockId
     ? blockConfigDefinitions[configBlockId]
     : undefined;
@@ -301,11 +303,7 @@ export function WorkflowEditor(): React.ReactElement {
   }, []);
 
   useEffect(() => {
-    if (
-      !configDialogOpen ||
-      configBlockId !== "reglo-email" ||
-      !emailSenderOptions.length
-    ) {
+    if (!configDialogOpen || configBlockId !== "reglo-email" || !emailSenderOptions.length) {
       return;
     }
     if (configDraft.from?.trim()) return;
@@ -314,6 +312,16 @@ export function WorkflowEditor(): React.ReactElement {
       from: prev.from?.trim() || emailSenderOptions[0].value,
     }));
   }, [configDialogOpen, configBlockId, configDraft.from, emailSenderOptions]);
+
+  useEffect(() => {
+    if (selectedNodeId && !nodes.some((node) => node.id === selectedNodeId)) {
+      setSelectedNodeId(null);
+    }
+    if (configTarget && !nodes.some((node) => node.id === configTarget.nodeId)) {
+      setConfigDialogOpen(false);
+      setConfigTarget(null);
+    }
+  }, [configTarget, nodes, selectedNodeId]);
 
   const invalidTriggerTokens = useMemo(() => {
     const allowed = new Set(triggerFieldKeys.map((key) => `trigger.payload.${key}`));
@@ -463,7 +471,14 @@ export function WorkflowEditor(): React.ReactElement {
         setNodes(buildNodes(res.data.name, true));
         setEdges(buildEdges(true));
       }
-      idCounter.current = canvasNodes.length;
+      const nextId = canvasNodes.reduce((max, node) => {
+        const match = /^ts-node-(\d+)$/.exec(node.id);
+        if (!match) return max;
+        const value = Number(match[1]);
+        if (!Number.isFinite(value)) return max;
+        return Math.max(max, value);
+      }, -1);
+      idCounter.current = Math.max(nextId + 1, 0);
     };
     loadWorkflow();
     return () => {
@@ -740,8 +755,7 @@ export function WorkflowEditor(): React.ReactElement {
         ...baseConfig,
         ...(existingConfig as Record<string, string>),
       });
-      setConfigBlockId(blockId);
-      setConfigNodeId(nodeId);
+      setConfigTarget({ nodeId, blockId });
       setConfigDialogOpen(true);
     },
     [nodes],
@@ -764,19 +778,20 @@ export function WorkflowEditor(): React.ReactElement {
   );
 
   const handleConfigSave = () => {
-    if (!configNodeId || !configBlockId) {
+    if (!configTarget) {
       setConfigDialogOpen(false);
       return;
     }
+    const { nodeId, blockId } = configTarget;
     setNodes((prev) =>
       prev.map((node) => {
-        if (node.id !== configNodeId) return node;
+        if (node.id !== nodeId) return node;
         return {
           ...node,
           data: {
             ...(typeof node.data === "object" ? node.data : {}),
             config: configDraft,
-            blockId: configBlockId,
+            blockId,
             configTouched: true,
           },
         };
@@ -786,10 +801,10 @@ export function WorkflowEditor(): React.ReactElement {
   };
 
   const handleConfigClose = () => {
-    if (configNodeId) {
+    if (configTarget) {
       setNodes((prev) =>
         prev.map((node) =>
-          node.id === configNodeId
+          node.id === configTarget.nodeId
             ? {
                 ...node,
                 data: {
@@ -802,8 +817,7 @@ export function WorkflowEditor(): React.ReactElement {
       );
     }
     setConfigDialogOpen(false);
-    setConfigBlockId(null);
-    setConfigNodeId(null);
+    setConfigTarget(null);
   };
 
   const nodeTypes = useMemo(
@@ -840,9 +854,21 @@ export function WorkflowEditor(): React.ReactElement {
     setNodes((nds) => nds.concat(node));
   }, []);
 
+  const getNextNodeId = useCallback(() => {
+    const existingIds = new Set(nodes.map((node) => node.id));
+    let next = idCounter.current;
+    let candidate = `ts-node-${next}`;
+    while (existingIds.has(candidate)) {
+      next += 1;
+      candidate = `ts-node-${next}`;
+    }
+    idCounter.current = next + 1;
+    return candidate;
+  }, [nodes]);
+
   const addStandardNode = useCallback(
     (block: BlockDefinition, position: { x: number; y: number }) => {
-      const newId = `ts-node-${idCounter.current++}`;
+      const newId = getNextNodeId();
       const blockId = block.id;
       const config = getDefaultConfig(blockId);
       addNode({
@@ -859,7 +885,7 @@ export function WorkflowEditor(): React.ReactElement {
       });
       return newId;
     },
-    [addNode],
+    [addNode, getNextNodeId],
   );
 
   const addLogicNode = (
@@ -867,7 +893,7 @@ export function WorkflowEditor(): React.ReactElement {
     data: LogicNodeData,
     position: { x: number; y: number },
   ) => {
-    const newId = `ts-node-${idCounter.current++}`;
+    const newId = getNextNodeId();
     addNode({
       id: newId,
       type,
@@ -877,8 +903,8 @@ export function WorkflowEditor(): React.ReactElement {
   };
 
   const addLogicIfWithMerge = (data: LogicNodeData, position: { x: number; y: number }) => {
-    const ifId = `ts-node-${idCounter.current++}`;
-    const mergeId = `ts-node-${idCounter.current++}`;
+    const ifId = getNextNodeId();
+    const mergeId = getNextNodeId();
     const mergePosition = { x: position.x, y: position.y + 200 };
 
     setNodes((nds) =>
