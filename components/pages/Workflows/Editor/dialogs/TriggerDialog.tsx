@@ -63,7 +63,7 @@ export function TriggerDialog({
 }: TriggerDialogProps) {
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent className="sm:max-w-3xl h-full">
+      <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,900px)] data-[vaul-drawer-direction=right]:sm:max-w-2xl h-full">
         <div className="flex h-full flex-col">
           <DrawerHeader className="border-b">
             <DrawerTitle>Configura trigger</DrawerTitle>
