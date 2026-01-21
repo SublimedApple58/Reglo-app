@@ -772,30 +772,11 @@ export const workflowRunner = task({
         const description =
           interpolateTemplate(rawDescription || "Servizio", context) || "Servizio";
         const vatTypeId = interpolateTemplate(rawVatTypeId, context);
-        const dueDateRaw = rawDueDate
-          ? interpolateTemplate(rawDueDate, context)
+        const dueDate = rawDueDate
+          ? interpolateTemplate(rawDueDate, context).trim()
           : "";
-        const dueDate = dueDateRaw.trim();
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
-        const vatTypes = await ficFetch(
-          `/c/${entityId}/info/vat_types`,
-          token,
-          { method: "GET" },
-        );
-        const vatList = Array.isArray(vatTypes)
-          ? vatTypes
-          : ((vatTypes as { data?: unknown }).data as Array<{
-              id?: string;
-              value?: number | string;
-            }>) ?? [];
-        const vatMatch = vatList.find((vat) => String(vat.id) === vatTypeId);
-        const vatRateRaw =
-          vatMatch?.value != null ? Number(vatMatch.value) : null;
-        const vatRate = Number.isFinite(vatRateRaw) ? vatRateRaw : null;
-        const grossAmount = vatRate != null
-          ? Number((amountValue * (1 + vatRate / 100)).toFixed(2))
-          : amountValue;
         const clientDetails = await ficFetch(
           `/c/${entityId}/entities/clients/${clientId}`,
           token,
