@@ -215,6 +215,59 @@ export async function listWorkflowRuns(workflowId: string) {
   }
 }
 
+export async function getWorkflowRunDetails(runId: string) {
+  try {
+    const context = await requireCompanyContext();
+
+    const run = await prisma.workflowRun.findFirst({
+      where: { id: runId, companyId: context.companyId },
+      include: {
+        workflow: true,
+        steps: { orderBy: { createdAt: 'asc' } },
+      },
+    });
+
+    if (!run) {
+      throw new Error('Workflow run not found');
+    }
+
+    const definition = run.workflow.definition as
+      | {
+          nodes?: Array<{ id: string; config?: { label?: string } }>;
+        }
+      | null
+      | undefined;
+
+    const labelMap = new Map<string, string>();
+    (definition?.nodes ?? []).forEach((node) => {
+      labelMap.set(node.id, node.config?.label ?? node.id);
+    });
+
+    return {
+      success: true,
+      data: {
+        id: run.id,
+        status: run.status,
+        startedAt: run.startedAt?.toISOString() ?? null,
+        finishedAt: run.finishedAt?.toISOString() ?? null,
+        steps: run.steps.map((step) => ({
+          id: step.id,
+          nodeId: step.nodeId,
+          label: labelMap.get(step.nodeId) ?? step.nodeId,
+          status: step.status,
+          attempt: step.attempt,
+          startedAt: step.startedAt?.toISOString() ?? null,
+          finishedAt: step.finishedAt?.toISOString() ?? null,
+          error: step.error ?? null,
+          output: step.output ?? null,
+        })),
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function startWorkflowRun({
   workflowId,
   triggerType = 'manual',
