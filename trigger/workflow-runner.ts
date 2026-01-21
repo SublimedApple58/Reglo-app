@@ -877,15 +877,15 @@ export const workflowRunner = task({
               dueDate && paymentAmount != null && paymentMethod?.id
                 ? {
                     payment_terms: { days: 0, type: "standard" },
-                    payment_methods: [
+                    payment_method: {
+                      id: paymentMethod.id,
+                      name: paymentMethod.name,
+                      type: paymentMethod.type,
+                    },
+                    payments: [
                       {
                         amount: paymentAmount,
                         due_date: dueDate,
-                        payment_method: {
-                          id: paymentMethod.id,
-                          name: paymentMethod.name,
-                          type: paymentMethod.type,
-                        },
                       },
                     ],
                   }
