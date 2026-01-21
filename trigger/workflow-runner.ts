@@ -844,12 +844,15 @@ export const workflowRunner = task({
               },
             ],
             payments: dueDate
-              ? [
-                  {
-                    amount: grossAmount,
-                    due_date: dueDate,
-                  },
-                ]
+              ? {
+                  payment_terms: { days: 0, payment_terms_type: "standard" },
+                  payment_methods: [
+                    {
+                      amount: grossAmount,
+                      due_date: dueDate,
+                    },
+                  ],
+                }
               : undefined,
           },
         };
