@@ -24,7 +24,13 @@ export type BlockConfigField = {
   required?: boolean;
   type?: "text" | "select";
   options?: string[];
-  optionsSource?: "templates" | "slackChannels" | "emailSenders" | "ficClients" | "ficVatTypes";
+  optionsSource?:
+    | "templates"
+    | "slackChannels"
+    | "emailSenders"
+    | "ficClients"
+    | "ficVatTypes"
+    | "ficPaymentMethods";
   hint?: string;
   multiline?: boolean;
 };
@@ -103,4 +109,9 @@ export type FicVatTypeOption = {
   value: string;
   label: string;
   rate?: number;
+};
+
+export type FicPaymentMethodOption = {
+  value: string;
+  label: string;
 };

@@ -46,6 +46,7 @@ import type {
   SlackChannelOption,
   EmailSenderOption,
   FicClientOption,
+  FicPaymentMethodOption,
   FicVatTypeOption,
   TriggerType,
   VariableOption,
@@ -145,6 +146,11 @@ export function WorkflowEditor(): React.ReactElement {
   const [ficVatTypeOptions, setFicVatTypeOptions] = useState<FicVatTypeOption[]>([]);
   const [ficVatTypeLoading, setFicVatTypeLoading] = useState(false);
   const [ficVatTypeError, setFicVatTypeError] = useState<string | null>(null);
+  const [ficPaymentMethodOptions, setFicPaymentMethodOptions] = useState<
+    FicPaymentMethodOption[]
+  >([]);
+  const [ficPaymentMethodLoading, setFicPaymentMethodLoading] = useState(false);
+  const [ficPaymentMethodError, setFicPaymentMethodError] = useState<string | null>(null);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -274,6 +280,9 @@ export function WorkflowEditor(): React.ReactElement {
       setFicVatTypeOptions([]);
       setFicVatTypeLoading(false);
       setFicVatTypeError(null);
+      setFicPaymentMethodOptions([]);
+      setFicPaymentMethodLoading(false);
+      setFicPaymentMethodError(null);
       return;
     }
 
@@ -284,6 +293,8 @@ export function WorkflowEditor(): React.ReactElement {
     setFicClientError(null);
     setFicVatTypeLoading(true);
     setFicVatTypeError(null);
+    setFicPaymentMethodLoading(true);
+    setFicPaymentMethodError(null);
 
     fetch("/api/integrations/fatture-in-cloud/clients", {
       cache: "no-store",
@@ -347,6 +358,42 @@ export function WorkflowEditor(): React.ReactElement {
       .finally(() => {
         if (!active) return;
         setFicVatTypeLoading(false);
+      });
+
+    fetch("/api/integrations/fatture-in-cloud/payment-methods", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: FicPaymentMethodOption[];
+          message?: string;
+        };
+        if (!active) return [];
+        if (!response.ok || !payload.success) {
+          throw new Error(
+            payload.message ?? "Impossibile caricare i metodi di pagamento FIC.",
+          );
+        }
+        return payload.data ?? [];
+      })
+      .then((data) => {
+        if (!active) return;
+        setFicPaymentMethodOptions(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setFicPaymentMethodOptions([]);
+        setFicPaymentMethodError(
+          err.message ?? "Impossibile caricare i metodi di pagamento FIC.",
+        );
+      })
+      .finally(() => {
+        if (!active) return;
+        setFicPaymentMethodLoading(false);
       });
 
     return () => {
@@ -1484,6 +1531,9 @@ export function WorkflowEditor(): React.ReactElement {
         ficVatTypeOptions={ficVatTypeOptions}
         ficVatTypeLoading={ficVatTypeLoading}
         ficVatTypeError={ficVatTypeError}
+        ficPaymentMethodOptions={ficPaymentMethodOptions}
+        ficPaymentMethodLoading={ficPaymentMethodLoading}
+        ficPaymentMethodError={ficPaymentMethodError}
         blockId={configBlockId ?? undefined}
       />
 

@@ -268,6 +268,12 @@ export const blockConfigDefinitions: Record<string, BlockConfigDefinition> = {
         required: true,
       },
       {
+        key: "paymentMethodId",
+        label: "Metodo di pagamento",
+        optionsSource: "ficPaymentMethods",
+        hint: "Usato solo se imposti una scadenza.",
+      },
+      {
         key: "currency",
         label: "Valuta",
         placeholder: "EUR",

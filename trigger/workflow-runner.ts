@@ -751,6 +751,7 @@ export const workflowRunner = task({
         const rawCurrency = normalizeSetting(settings.currency).trim() || "EUR";
         const rawDescription = normalizeSetting(settings.description);
         const rawVatTypeId = normalizeSetting(settings.vatTypeId).trim();
+        const rawPaymentMethodId = normalizeSetting(settings.paymentMethodId).trim();
         const rawDueDate = normalizeSetting(settings.dueDate).trim();
 
         if (!rawClientId) {
@@ -772,6 +773,9 @@ export const workflowRunner = task({
         const description =
           interpolateTemplate(rawDescription || "Servizio", context) || "Servizio";
         const vatTypeId = interpolateTemplate(rawVatTypeId, context);
+        const paymentMethodId = rawPaymentMethodId
+          ? interpolateTemplate(rawPaymentMethodId, context)
+          : "";
         const dueDateRaw = rawDueDate
           ? interpolateTemplate(rawDueDate, context)
           : "";
@@ -809,8 +813,8 @@ export const workflowRunner = task({
         const grossAmount = vatRate != null
           ? Number((amountValue * (1 + vatRate / 100)).toFixed(2))
           : amountValue;
-        const paymentMethod =
-          dueDate && (await (async () => {
+        const paymentMethodList = dueDate
+          ? await (async () => {
             const paymentMethodsPayload = await (async () => {
               try {
                 return await ficFetch(
@@ -833,9 +837,18 @@ export const workflowRunner = task({
                   name?: string;
                   type?: string;
                 }>) ?? [];
-            return paymentMethodList[0] ?? null;
-          })());
-        if (dueDate && !paymentMethod?.id) {
+            return paymentMethodList;
+          })()
+          : [];
+        const resolvedPaymentMethod =
+          dueDate
+            ? paymentMethodList.find((method) => String(method.id) === paymentMethodId) ??
+              (paymentMethodId ? null : paymentMethodList[0] ?? null)
+            : null;
+        if (dueDate && paymentMethodId && !resolvedPaymentMethod?.id) {
+          throw new Error("Metodo di pagamento FIC non valido.");
+        }
+        if (dueDate && !resolvedPaymentMethod?.id) {
           throw new Error("Nessun metodo di pagamento FIC disponibile.");
         }
         const clientDetails = await ficFetch(
@@ -872,12 +885,12 @@ export const workflowRunner = task({
                 vat: { id: vatTypeId },
               },
             ],
-            ...(dueDate && paymentAmount != null && paymentMethod?.id
+            ...(dueDate && paymentAmount != null && resolvedPaymentMethod?.id
               ? {
                   payment_method: {
-                    id: Number(paymentMethod.id),
-                    name: paymentMethod.name,
-                    type: paymentMethod.type,
+                    id: Number(resolvedPaymentMethod.id),
+                    name: resolvedPaymentMethod.name,
+                    type: resolvedPaymentMethod.type,
                   },
                   payments_list: [
                     {

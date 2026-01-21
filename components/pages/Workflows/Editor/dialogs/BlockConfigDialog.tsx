@@ -22,6 +22,7 @@ import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-inp
 import type {
   BlockConfigDefinition,
   EmailSenderOption,
+  FicPaymentMethodOption,
   FicClientOption,
   FicVatTypeOption,
   SlackChannelOption,
@@ -52,6 +53,9 @@ type BlockConfigDialogProps = {
   ficVatTypeOptions?: FicVatTypeOption[];
   ficVatTypeLoading?: boolean;
   ficVatTypeError?: string | null;
+  ficPaymentMethodOptions?: FicPaymentMethodOption[];
+  ficPaymentMethodLoading?: boolean;
+  ficPaymentMethodError?: string | null;
   blockId?: string;
 };
 
@@ -77,6 +81,9 @@ export function BlockConfigDialog({
   ficVatTypeOptions,
   ficVatTypeLoading,
   ficVatTypeError,
+  ficPaymentMethodOptions,
+  ficPaymentMethodLoading,
+  ficPaymentMethodError,
   blockId,
 }: BlockConfigDialogProps) {
   return (
@@ -296,6 +303,49 @@ export function BlockConfigDialog({
                     </Select>
                     {ficVatTypeError ? (
                       <p className="text-xs text-rose-500">{ficVatTypeError}</p>
+                    ) : null}
+                  </div>
+                ) : field.optionsSource === "ficPaymentMethods" ? (
+                  <div className="space-y-1">
+                    <Select
+                      value={
+                        ficPaymentMethodOptions?.some(
+                          (option) => option.value === configDraft[field.key],
+                        )
+                          ? configDraft[field.key]
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: value,
+                        }))
+                      }
+                      disabled={ficPaymentMethodLoading || !ficPaymentMethodOptions?.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            ficPaymentMethodLoading
+                              ? "Caricamento metodi…"
+                              : ficPaymentMethodOptions?.length
+                                ? "Scegli metodo"
+                                : ficPaymentMethodError
+                                  ? "Metodi non disponibili"
+                                  : "Nessun metodo disponibile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {ficPaymentMethodOptions?.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {ficPaymentMethodError ? (
+                      <p className="text-xs text-rose-500">{ficPaymentMethodError}</p>
                     ) : null}
                   </div>
                 ) : (

@@ -1,23 +1,20 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import {
   ArrowUpRight,
   Bot,
-  Sparkles,
   FileUp,
   ReceiptText,
+  Sparkles,
+  Workflow,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useAtomValue } from "jotai";
 import { userSessionAtom } from "@/atoms/user.store";
-import {
-  computePlanUsage,
-  formatCurrency,
-  type PlanKey,
-} from "@/lib/plan-usage";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +24,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import slugify from "slugify";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { getHomeOverview } from "@/lib/actions/home.actions";
 
 type QuickAction = {
   id: string;
@@ -36,24 +36,65 @@ type QuickAction = {
   onClick: () => void;
 };
 
-const planKey: PlanKey = "growth";
-const usageSnapshot = {
-  documentsUsed: 612,
-  workflowsUsed: 46,
+type HomeOverview = {
+  companyName: string;
+  metrics: {
+    documentsCompleted30d: number;
+    workflowsCompleted30d: number;
+    activeWorkflows: number;
+    pendingDocuments: number;
+  };
+  recentDocuments: Array<{
+    id: string;
+    name: string;
+    templateName: string;
+    status: string;
+    completedAt: string | null;
+    updatedAt: string;
+  }>;
+  recentRuns: Array<{
+    id: string;
+    workflowName: string;
+    status: string;
+    finishedAt: string | null;
+    createdAt: string;
+  }>;
 };
 
 export default function HomePage(): React.ReactElement {
   const router = useRouter();
   const session = useAtomValue(userSessionAtom);
+  const toast = useFeedbackToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState("");
-  const summary = useMemo(
-    () => computePlanUsage(planKey, usageSnapshot),
-    [],
-  );
+  const [overview, setOverview] = useState<HomeOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  React.useEffect(() => {
+    let active = true;
+    const load = async () => {
+      if (active) setIsLoading(true);
+      const res = await getHomeOverview();
+      if (!active) return;
+      if (!res.success || !res.data) {
+        toast.error({
+          description: res.message ?? "Impossibile caricare la dashboard.",
+        });
+        setIsLoading(false);
+        return;
+      }
+      setOverview(res.data);
+      setIsLoading(false);
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
 
   const greetingName =
     session?.user?.name?.split(" ").filter(Boolean)[0] ?? "there";
+  const metrics = overview?.metrics;
 
   const quickActions: QuickAction[] = [
     {
@@ -77,7 +118,22 @@ export default function HomePage(): React.ReactElement {
       icon: <Bot className="h-4 w-4" />,
       onClick: () => router.push("/user/assistant"),
     },
+    {
+      id: "open-compilazioni",
+      title: "Gestisci compilazioni",
+      description: "Richieste in corso e completate",
+      icon: <ClipboardCheck className="h-4 w-4" />,
+      onClick: () => router.push("/user/compilazioni"),
+    },
   ];
+
+  const formatShortDate = (value: string | null) => {
+    if (!value) return "—";
+    return new Date(value).toLocaleDateString("it-IT", {
+      day: "2-digit",
+      month: "short",
+    });
+  };
 
   return (
     <ClientPageWrapper title="Home" hideHero>
@@ -93,43 +149,53 @@ export default function HomePage(): React.ReactElement {
                   Ciao, {greetingName}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Questo mese stai usando Reglo al massimo del suo potenziale.
+                  Snapshot operativo degli ultimi 30 giorni.
                 </p>
               </div>
               <div className="rounded-2xl border bg-white/80 px-4 py-3 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Piano attuale
+                  Workspace
                 </p>
                 <p className="text-lg font-semibold text-[#324e7a]">
-                  {summary.plan.label}
+                  {overview?.companyName ?? "Reglo"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Prezzo base {formatCurrency(summary.plan.basePrice)} / mese
+                  Dati aggiornati in tempo reale
                 </p>
               </div>
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <UsageCard
-                title="Documenti compilati"
-                used={summary.docs.used}
-                limit={summary.docs.currentLimit}
-                remaining={summary.docs.remainingToNext}
-                extraBlocks={summary.docs.extraBlocks}
-                unitLabel="documenti"
-                blockSize={summary.docs.blockSize}
-                trackColor="bg-[#e9f2f2]"
-                barColor="bg-[#a9d9d1]"
+              <MetricCard
+                title="Compilazioni completate"
+                value={metrics?.documentsCompleted30d ?? 0}
+                description="Ultimi 30 giorni"
+                isLoading={isLoading}
+                accent="bg-[#a9d9d1]"
+                icon={<ClipboardCheck className="h-4 w-4" />}
               />
-              <UsageCard
-                title="Workflow eseguiti"
-                used={summary.workflows.used}
-                limit={summary.workflows.currentLimit}
-                remaining={summary.workflows.remainingToNext}
-                extraBlocks={summary.workflows.extraBlocks}
-                unitLabel="workflow"
-                blockSize={summary.workflows.blockSize}
-                trackColor="bg-[#e5e4f0]"
-                barColor="bg-[#60579e]"
+              <MetricCard
+                title="Workflow completati"
+                value={metrics?.workflowsCompleted30d ?? 0}
+                description="Ultimi 30 giorni"
+                isLoading={isLoading}
+                accent="bg-[#60579e]"
+                icon={<Workflow className="h-4 w-4" />}
+              />
+              <MetricCard
+                title="Workflow attivi"
+                value={metrics?.activeWorkflows ?? 0}
+                description="Attivi ora"
+                isLoading={isLoading}
+                accent="bg-[#d8d2f1]"
+                icon={<Sparkles className="h-4 w-4" />}
+              />
+              <MetricCard
+                title="Compilazioni in attesa"
+                value={metrics?.pendingDocuments ?? 0}
+                description="Da completare"
+                isLoading={isLoading}
+                accent="bg-[#e9f2f2]"
+                icon={<ReceiptText className="h-4 w-4" />}
               />
             </div>
           </section>
@@ -138,41 +204,94 @@ export default function HomePage(): React.ReactElement {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Consumi &amp; soglie
+                  Attivit&#224; recente
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Controlla quando scattera il prossimo extra.
+                  Ultimi eventi rilevati su documenti e workflow.
                 </p>
               </div>
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={() => router.push("/user/billing")}
+                onClick={() => router.push("/user/compilazioni")}
               >
-                <ReceiptText className="h-4 w-4" />
-                Vedi prossimo addebito
+                <ClipboardCheck className="h-4 w-4" />
+                Vedi compilazioni
               </Button>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                <p className="font-semibold text-[#324e7a]">Documenti</p>
-                <p>
-                  Soglia base: {summary.docs.included} · Extra attivi:{" "}
-                  {summary.docs.extraBlocks || 0}
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Compilazioni
                 </p>
-                <p>
-                  Prossimo scatto: +{summary.docs.blockSize} documenti
-                </p>
+                <div className="mt-3 space-y-3">
+                  {isLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ) : overview?.recentDocuments.length ? (
+                    overview.recentDocuments.map((item) => (
+                      <div key={item.id} className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.templateName}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-muted-foreground">
+                          <p>{formatShortDate(item.completedAt ?? item.updatedAt)}</p>
+                          <p>{item.status === "completed" ? "Completato" : "In corso"}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Nessuna compilazione recente.
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-                <p className="font-semibold text-[#324e7a]">Workflow</p>
-                <p>
-                  Soglia base: {summary.workflows.included} · Extra attivi:{" "}
-                  {summary.workflows.extraBlocks || 0}
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Workflow
                 </p>
-                <p>
-                  Prossimo scatto: +{summary.workflows.blockSize} workflow
-                </p>
+                <div className="mt-3 space-y-3">
+                  {isLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-1/2" />
+                    </div>
+                  ) : overview?.recentRuns.length ? (
+                    overview.recentRuns.map((item) => (
+                      <div key={item.id} className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {item.workflowName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {item.status === "completed"
+                              ? "Completato"
+                              : item.status === "failed"
+                                ? "Errore"
+                                : item.status}
+                          </p>
+                        </div>
+                        <div className="text-right text-xs text-muted-foreground">
+                          <p>{formatShortDate(item.finishedAt ?? item.createdAt)}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Nessuna esecuzione recente.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </section>
@@ -209,22 +328,6 @@ export default function HomePage(): React.ReactElement {
                 </button>
               ))}
             </div>
-          </section>
-
-          <section className="rounded-2xl border bg-gradient-to-br from-[#e5e4f0] via-white to-white p-4 shadow-sm">
-            <h3 className="text-base font-semibold text-[#324e7a]">
-              Prossimo addebito
-            </h3>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Troverai il dettaglio completo nella sezione Billing.
-            </p>
-            <Button
-              className="mt-4 w-full"
-              variant="default"
-              onClick={() => router.push("/user/billing")}
-            >
-              Apri dettaglio costi
-            </Button>
           </section>
         </div>
       </div>
@@ -272,29 +375,21 @@ export default function HomePage(): React.ReactElement {
   );
 }
 
-function UsageCard({
+function MetricCard({
   title,
-  used,
-  limit,
-  remaining,
-  extraBlocks,
-  unitLabel,
-  blockSize,
-  trackColor,
-  barColor,
+  value,
+  description,
+  isLoading,
+  accent,
+  icon,
 }: {
   title: string;
-  used: number;
-  limit: number;
-  remaining: number;
-  extraBlocks: number;
-  unitLabel: string;
-  blockSize: number;
-  trackColor: string;
-  barColor: string;
+  value: number;
+  description: string;
+  isLoading: boolean;
+  accent: string;
+  icon: React.ReactElement;
 }): React.ReactElement {
-  const percent = Math.min((used / limit) * 100, 100);
-
   return (
     <div className="rounded-2xl border bg-white/80 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -302,28 +397,19 @@ function UsageCard({
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {title}
           </p>
-          <div className="mt-1 flex items-end gap-2">
-            <p className="text-2xl font-semibold text-[#324e7a]">{used}</p>
-            <p className="text-xs text-muted-foreground">su {limit}</p>
+          <div className="mt-2 flex items-end gap-2">
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <p className="text-2xl font-semibold text-[#324e7a]">{value}</p>
+            )}
+            <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         </div>
-        {extraBlocks ? (
-          <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-            +{extraBlocks} extra
-          </span>
-        ) : null}
+        <span className={`flex h-9 w-9 items-center justify-center rounded-full ${accent}`}>
+          {icon}
+        </span>
       </div>
-      <div className={`mt-4 h-2 rounded-full ${trackColor}`}>
-        <div
-          className={`h-2 rounded-full ${barColor}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <p className="mt-3 text-xs text-muted-foreground">
-        {remaining > 0
-          ? `${remaining} ${unitLabel} al prossimo scatto`
-          : `Prossimo scatto: +${blockSize} ${unitLabel}`}
-      </p>
     </div>
   );
 }

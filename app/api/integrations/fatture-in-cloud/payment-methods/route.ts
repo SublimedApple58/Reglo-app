@@ -6,19 +6,18 @@ import { decryptSecret } from "@/lib/integrations/secrets";
 import { providerEnumMap } from "@/lib/integrations/oauth";
 import { formatError } from "@/lib/utils";
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Promise<{ invoiceId: string }> },
-) {
-  try {
-    const { invoiceId } = await params;
-    if (!invoiceId) {
-      return NextResponse.json(
-        { success: false, message: "ID fattura mancante" },
-        { status: 400 },
-      );
-    }
+type FicPaymentMethod = {
+  id?: string | number;
+  name?: string;
+  type?: string;
+};
 
+type FicPaymentMethodsResponse = {
+  data?: FicPaymentMethod[];
+};
+
+export async function GET() {
+  try {
     const session = await auth();
     const userId = session?.user?.id;
     if (!userId) {
@@ -42,7 +41,7 @@ export async function GET(
 
     if (membership.role !== "admin") {
       return NextResponse.json(
-        { success: false, message: "Solo gli admin possono leggere fatture FIC" },
+        { success: false, message: "Solo gli admin possono vedere i metodi di pagamento FIC" },
         { status: 403 },
       );
     }
@@ -87,7 +86,7 @@ export async function GET(
     });
 
     const response = await fetch(
-      `https://api-v2.fattureincloud.it/c/${metadata.entityId}/issued_documents/${invoiceId}`,
+      `https://api-v2.fattureincloud.it/c/${metadata.entityId}/settings/payment_methods`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -98,11 +97,55 @@ export async function GET(
     );
 
     if (!response.ok) {
-      throw new Error("Impossibile ottenere la fattura FIC");
+      const fallback = await fetch(
+        `https://api-v2.fattureincloud.it/c/${metadata.entityId}/info/payment_methods`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+          cache: "no-store",
+        },
+      );
+
+      if (!fallback.ok) {
+        throw new Error("Impossibile ottenere i metodi di pagamento FIC");
+      }
+
+      const fallbackPayload = (await fallback.json()) as
+        | FicPaymentMethodsResponse
+        | FicPaymentMethod[];
+      const fallbackList = Array.isArray(fallbackPayload)
+        ? fallbackPayload
+        : fallbackPayload.data ?? [];
+      const fallbackOptions = fallbackList
+        .map((method) => {
+          if (method.id == null) return null;
+          return {
+            value: String(method.id),
+            label: method.name ?? "Metodo di pagamento",
+          };
+        })
+        .filter(Boolean) as Array<{ value: string; label: string }>;
+
+      return NextResponse.json({ success: true, data: fallbackOptions });
     }
 
-    const payload = await response.json();
-    return NextResponse.json({ success: true, data: payload });
+    const payload = (await response.json()) as
+      | FicPaymentMethodsResponse
+      | FicPaymentMethod[];
+    const list = Array.isArray(payload) ? payload : payload.data ?? [];
+    const options = list
+      .map((method) => {
+        if (method.id == null) return null;
+        return {
+          value: String(method.id),
+          label: method.name ?? "Metodo di pagamento",
+        };
+      })
+      .filter(Boolean) as Array<{ value: string; label: string }>;
+
+    return NextResponse.json({ success: true, data: options });
   } catch (error) {
     return NextResponse.json(
       { success: false, message: formatError(error) },
