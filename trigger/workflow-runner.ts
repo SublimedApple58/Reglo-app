@@ -775,11 +775,30 @@ export const workflowRunner = task({
         const dueDate = rawDueDate ? interpolateTemplate(rawDueDate, context) : "";
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
+        const clientDetails = await ficFetch(
+          `/c/${entityId}/entities/clients/${clientId}`,
+          token,
+          { method: "GET" },
+        );
+        const clientData =
+          clientDetails && typeof clientDetails === "object" && "data" in clientDetails
+            ? (clientDetails as { data?: Record<string, unknown> }).data ?? {}
+            : (clientDetails as Record<string, unknown>) ?? {};
+        const resolvedName =
+          (clientData.name as string | undefined) ||
+          (clientData.company_name as string | undefined) ||
+          [
+            clientData.firstname as string | undefined,
+            clientData.lastname as string | undefined,
+          ]
+            .filter(Boolean)
+            .join(" ") ||
+          "Cliente";
 
         const payload = {
           data: {
             type: "invoice",
-            entity: { id: clientId },
+            entity: { id: clientId, name: resolvedName },
             currency: { code: currency },
             language: { code: "it", name: "Italiano" },
             items: [
