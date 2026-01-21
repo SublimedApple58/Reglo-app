@@ -772,11 +772,72 @@ export const workflowRunner = task({
         const description =
           interpolateTemplate(rawDescription || "Servizio", context) || "Servizio";
         const vatTypeId = interpolateTemplate(rawVatTypeId, context);
-        const dueDate = rawDueDate
-          ? interpolateTemplate(rawDueDate, context).trim()
+        const dueDateRaw = rawDueDate
+          ? interpolateTemplate(rawDueDate, context)
           : "";
+        const dueDate = (() => {
+          const value = dueDateRaw.trim();
+          if (!value) return "";
+          if (value.includes("/")) {
+            const [day, month, year] = value.split("/");
+            if (day && month && year) {
+              return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+            }
+          }
+          if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return value;
+          }
+          throw new Error("Formato scadenza non valido (usa GG/MM/AAAA).");
+        })();
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
+        const vatTypes = await ficFetch(
+          `/c/${entityId}/info/vat_types`,
+          token,
+          { method: "GET" },
+        );
+        const vatList = Array.isArray(vatTypes)
+          ? vatTypes
+          : ((vatTypes as { data?: unknown }).data as Array<{
+              id?: string;
+              value?: number | string;
+            }>) ?? [];
+        const vatMatch = vatList.find((vat) => String(vat.id) === vatTypeId);
+        const vatRateRaw =
+          vatMatch?.value != null ? Number(vatMatch.value) : null;
+        const vatRate = Number.isFinite(vatRateRaw) ? vatRateRaw : null;
+        const grossAmount = vatRate != null
+          ? Number((amountValue * (1 + vatRate / 100)).toFixed(2))
+          : amountValue;
+        const paymentMethod =
+          dueDate && (await (async () => {
+            const paymentMethodsPayload = await (async () => {
+              try {
+                return await ficFetch(
+                  `/c/${entityId}/settings/payment_methods`,
+                  token,
+                  { method: "GET" },
+                );
+              } catch {
+                return await ficFetch(
+                  `/c/${entityId}/info/payment_methods`,
+                  token,
+                  { method: "GET" },
+                );
+              }
+            })();
+            const paymentMethodList = Array.isArray(paymentMethodsPayload)
+              ? paymentMethodsPayload
+              : ((paymentMethodsPayload as { data?: unknown }).data as Array<{
+                  id?: string | number;
+                  name?: string;
+                  type?: string;
+                }>) ?? [];
+            return paymentMethodList[0] ?? null;
+          })());
+        if (dueDate && !paymentMethod?.id) {
+          throw new Error("Nessun metodo di pagamento FIC disponibile.");
+        }
         const clientDetails = await ficFetch(
           `/c/${entityId}/entities/clients/${clientId}`,
           token,
@@ -797,7 +858,7 @@ export const workflowRunner = task({
             .join(" ") ||
           "Cliente";
 
-        const payload = {
+        const buildPayload = (paymentAmount: number | null) => ({
           data: {
             type: "invoice",
             entity: { id: clientId, name: resolvedName },
@@ -811,17 +872,77 @@ export const workflowRunner = task({
                 vat: { id: vatTypeId },
               },
             ],
+            ...(dueDate && paymentAmount != null && paymentMethod?.id
+              ? {
+                  payment_method: {
+                    id: Number(paymentMethod.id),
+                    name: paymentMethod.name,
+                    type: paymentMethod.type,
+                  },
+                  payments_list: [
+                    {
+                      amount: paymentAmount,
+                      due_date: dueDate,
+                    },
+                  ],
+                }
+              : {}),
           },
+        });
+
+        const createInvoice = async (paymentAmount: number | null) => {
+          const response = await fetch(
+            `https://api-v2.fattureincloud.it/c/${entityId}/issued_documents`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(buildPayload(paymentAmount)),
+            },
+          );
+          const rawText = await response.text();
+          let json: unknown = null;
+          try {
+            json = rawText ? JSON.parse(rawText) : null;
+          } catch {
+            json = null;
+          }
+          if (!response.ok) {
+            return {
+              ok: false,
+              message:
+                (json as { error?: { message?: string } } | null)?.error?.message ||
+                rawText ||
+                "Errore Fatture in Cloud",
+              amountDue: (json as { extra?: { totals?: { amount_due?: number } } } | null)?.extra
+                ?.totals?.amount_due ?? null,
+              raw: json,
+            } as const;
+          }
+          return { ok: true, data: json } as const;
         };
 
-        const result = await ficFetch(
-          `/c/${entityId}/issued_documents`,
-          token,
-          {
-            method: "POST",
-            body: JSON.stringify(payload),
-          },
+        let createResult = await createInvoice(
+          dueDate ? grossAmount : null,
         );
+        if (
+          !createResult.ok &&
+          createResult.amountDue != null &&
+          typeof createResult.amountDue === "number" &&
+          createResult.message.includes("pagamenti")
+        ) {
+          createResult = await createInvoice(createResult.amountDue);
+        }
+        if (!createResult.ok) {
+          throw new Error(createResult.message);
+        }
+
+        const result = createResult.data as
+          | { data?: { id?: string | number }; id?: string | number }
+          | null;
 
         const output = {
           entityId,
