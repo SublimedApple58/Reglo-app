@@ -816,14 +816,10 @@ export const workflowRunner = task({
             language: { code: "it", name: "Italiano" },
             items_list: [
               {
-                items: [
-                  {
-                    name: description,
-                    qty: 1,
-                    net_price: amountValue,
-                    vat: { id: vatTypeId },
-                  },
-                ],
+                name: description,
+                qty: 1,
+                net_price: amountValue,
+                vat: { id: vatTypeId },
               },
             ],
             payments: dueDate
