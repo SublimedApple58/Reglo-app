@@ -784,10 +784,31 @@ export const workflowRunner = task({
               return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
             }
           }
-          return value;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+            return value;
+          }
+          throw new Error("Formato scadenza non valido (usa GG/MM/AAAA).");
         })();
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
+        const vatTypes = await ficFetch(
+          `/c/${entityId}/info/vat_types`,
+          token,
+          { method: "GET" },
+        );
+        const vatList = Array.isArray(vatTypes)
+          ? vatTypes
+          : ((vatTypes as { data?: unknown }).data as Array<{
+              id?: string;
+              value?: number | string;
+            }>) ?? [];
+        const vatMatch = vatList.find((vat) => String(vat.id) === vatTypeId);
+        const vatRateRaw =
+          vatMatch?.value != null ? Number(vatMatch.value) : null;
+        const vatRate = Number.isFinite(vatRateRaw) ? vatRateRaw : null;
+        const grossAmount = vatRate != null
+          ? Number((amountValue * (1 + vatRate / 100)).toFixed(2))
+          : amountValue;
         const clientDetails = await ficFetch(
           `/c/${entityId}/entities/clients/${clientId}`,
           token,
@@ -825,7 +846,7 @@ export const workflowRunner = task({
             payments: dueDate
               ? [
                   {
-                    amount: amountValue,
+                    amount: grossAmount,
                     due_date: dueDate,
                   },
                 ]
