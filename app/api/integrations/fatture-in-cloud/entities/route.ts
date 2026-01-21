@@ -17,13 +17,20 @@ type FicCompany = {
 type FicUserInfoResponse = {
   companies?: FicCompany[];
   company?: FicCompany[];
-  data?: { companies?: FicCompany[] };
+  data?: { companies?: FicCompany[] } | FicCompany[];
 };
 
 const getCompanies = (payload: FicUserInfoResponse) => {
   if (Array.isArray(payload.companies)) return payload.companies;
   if (Array.isArray(payload.company)) return payload.company;
-  if (payload.data && Array.isArray(payload.data.companies)) return payload.data.companies;
+  if (payload.data && Array.isArray(payload.data)) return payload.data;
+  if (
+    payload.data &&
+    typeof payload.data === "object" &&
+    Array.isArray((payload.data as { companies?: FicCompany[] }).companies)
+  ) {
+    return (payload.data as { companies?: FicCompany[] }).companies ?? [];
+  }
   return [];
 };
 

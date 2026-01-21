@@ -123,6 +123,8 @@ export function SettingsPage(): React.ReactElement {
   const [ficEntityError, setFicEntityError] = useState<string | null>(null);
   const [ficSelectedEntityId, setFicSelectedEntityId] = useState<string>("");
   const [ficSavingEntity, setFicSavingEntity] = useState(false);
+  const [ficManualEntityId, setFicManualEntityId] = useState("");
+  const [ficManualEntityName, setFicManualEntityName] = useState("");
 
   const [sessionAccess, setSessionAccess] = useState({
     logSessions: true,
@@ -283,6 +285,12 @@ export function SettingsPage(): React.ReactElement {
       controller.abort();
     };
   }, [isFicConnected]);
+
+  useEffect(() => {
+    if (ficSelectedEntityId) {
+      setFicManualEntityId(ficSelectedEntityId);
+    }
+  }, [ficSelectedEntityId]);
 
   useEffect(() => {
     if (!company) return;
@@ -1024,6 +1032,66 @@ export function SettingsPage(): React.ReactElement {
                                     ))}
                                   </SelectContent>
                                 </Select>
+                                {ficEntities.length === 0 && !ficEntityLoading ? (
+                                  <div className="space-y-2">
+                                    <Input
+                                      value={ficManualEntityId}
+                                      onChange={(event) =>
+                                        setFicManualEntityId(event.target.value)
+                                      }
+                                      placeholder="Incolla l'ID azienda FIC"
+                                    />
+                                    <Input
+                                      value={ficManualEntityName}
+                                      onChange={(event) =>
+                                        setFicManualEntityName(event.target.value)
+                                      }
+                                      placeholder="Nome azienda (opzionale)"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={async () => {
+                                        if (!ficManualEntityId.trim()) {
+                                          toast.error({
+                                            description: "Inserisci un ID azienda valido.",
+                                          });
+                                          return;
+                                        }
+                                        setFicSavingEntity(true);
+                                        const res = await fetch(
+                                          "/api/integrations/fatture-in-cloud/entity",
+                                          {
+                                            method: "POST",
+                                            headers: { "Content-Type": "application/json" },
+                                            body: JSON.stringify({
+                                              entityId: ficManualEntityId.trim(),
+                                              entityName: ficManualEntityName.trim() || null,
+                                            }),
+                                          },
+                                        );
+                                        setFicSavingEntity(false);
+                                        if (!res.ok) {
+                                          toast.error({
+                                            description:
+                                              "Impossibile salvare l'azienda FIC selezionata.",
+                                          });
+                                          return;
+                                        }
+                                        setFicSelectedEntityId(ficManualEntityId.trim());
+                                        toast.success({
+                                          description: "Azienda FIC salvata.",
+                                        });
+                                      }}
+                                      disabled={ficSavingEntity}
+                                    >
+                                      Salva ID azienda
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">
+                                      Puoi recuperare l'ID dalla URL di FIC (es. /c/ID_AZIENDA).
+                                    </p>
+                                  </div>
+                                ) : null}
                                 {ficEntityError ? (
                                   <p className="text-xs text-rose-500">{ficEntityError}</p>
                                 ) : (
