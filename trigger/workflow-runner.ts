@@ -791,6 +791,36 @@ export const workflowRunner = task({
         })();
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
+        const paymentMethodsPayload = dueDate
+          ? await (async () => {
+              try {
+                return await ficFetch(
+                  `/c/${entityId}/settings/payment_methods`,
+                  token,
+                  { method: "GET" },
+                );
+              } catch {
+                return await ficFetch(
+                  `/c/${entityId}/info/payment_methods`,
+                  token,
+                  { method: "GET" },
+                );
+              }
+            })()
+          : null;
+        const paymentMethodList = paymentMethodsPayload
+          ? Array.isArray(paymentMethodsPayload)
+            ? paymentMethodsPayload
+            : ((paymentMethodsPayload as { data?: unknown }).data as Array<{
+                id?: string;
+                name?: string;
+                type?: string;
+              }>) ?? []
+          : [];
+        const paymentMethod = dueDate ? paymentMethodList[0] : null;
+        if (dueDate && !paymentMethod?.id) {
+          throw new Error("Nessun metodo di pagamento FIC disponibile.");
+        }
         const vatTypes = await ficFetch(
           `/c/${entityId}/info/vat_types`,
           token,
@@ -829,7 +859,7 @@ export const workflowRunner = task({
             .join(" ") ||
           "Cliente";
 
-        const payload = {
+        const buildPayload = (paymentAmount: number | null) => ({
           data: {
             type: "invoice",
             entity: { id: clientId, name: resolvedName },
@@ -843,28 +873,71 @@ export const workflowRunner = task({
                 vat: { id: vatTypeId },
               },
             ],
-            payments: dueDate
-              ? {
-                  payment_terms: { days: 0, payment_terms_type: "standard" },
-                  payment_methods: [
-                    {
-                      amount: grossAmount,
-                      due_date: dueDate,
-                    },
-                  ],
-                }
-              : undefined,
+            payments:
+              dueDate && paymentAmount != null && paymentMethod?.id
+                ? {
+                    payment_terms: { days: 0, payment_terms_type: "standard" },
+                    payment_methods: [
+                      {
+                        amount: paymentAmount,
+                        due_date: dueDate,
+                        payment_method: {
+                          id: paymentMethod.id,
+                          name: paymentMethod.name,
+                          type: paymentMethod.type,
+                        },
+                      },
+                    ],
+                  }
+                : undefined,
           },
+        });
+
+        const createInvoice = async (paymentAmount: number | null) => {
+          const response = await fetch(
+            `https://api-v2.fattureincloud.it/c/${entityId}/issued_documents`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify(buildPayload(paymentAmount)),
+            },
+          );
+          const rawText = await response.text();
+          const json = rawText ? JSON.parse(rawText) : null;
+          if (!response.ok) {
+            return {
+              ok: false,
+              message:
+                json?.error?.message ||
+                rawText ||
+                "Errore Fatture in Cloud",
+              amountDue: json?.extra?.totals?.amount_due ?? null,
+              raw: json,
+            } as const;
+          }
+          return { ok: true, data: json } as const;
         };
 
-        const result = await ficFetch(
-          `/c/${entityId}/issued_documents`,
-          token,
-          {
-            method: "POST",
-            body: JSON.stringify(payload),
-          },
+        let createResult = await createInvoice(
+          dueDate ? grossAmount : null,
         );
+        if (
+          !createResult.ok &&
+          createResult.amountDue != null &&
+          typeof createResult.amountDue === "number" &&
+          createResult.message.includes("pagamenti")
+        ) {
+          createResult = await createInvoice(createResult.amountDue);
+        }
+        if (!createResult.ok) {
+          throw new Error(createResult.message);
+        }
+
+        const result = createResult.data;
 
         const output = {
           entityId,
