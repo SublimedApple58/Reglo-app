@@ -1088,7 +1088,8 @@ export function SettingsPage(): React.ReactElement {
                                       Salva ID azienda
                                     </Button>
                                     <p className="text-xs text-muted-foreground">
-                                      Puoi recuperare l'ID dalla URL di FIC (es. /c/ID_AZIENDA).
+                                      Puoi recuperare l&apos;ID dalla URL di FIC (es.
+                                      /c/ID_AZIENDA).
                                     </p>
                                   </div>
                                 ) : null}
