@@ -814,26 +814,25 @@ export const workflowRunner = task({
             entity: { id: clientId, name: resolvedName },
             currency: { code: currency },
             language: { code: "it", name: "Italiano" },
-            items_list: {
-              items: [
-                {
-                  name: description,
-                  qty: 1,
-                  net_price: amountValue,
-                  vat: { id: vatTypeId },
-                },
-              ],
-            },
+            items_list: [
+              {
+                items: [
+                  {
+                    name: description,
+                    qty: 1,
+                    net_price: amountValue,
+                    vat: { id: vatTypeId },
+                  },
+                ],
+              },
+            ],
             payments: dueDate
-              ? {
-                  payment_terms: { days: 0, payment_terms_type: "standard" },
-                  payment_methods: [
-                    {
-                      amount: amountValue,
-                      due_date: dueDate,
-                    },
-                  ],
-                }
+              ? [
+                  {
+                    amount: amountValue,
+                    due_date: dueDate,
+                  },
+                ]
               : undefined,
           },
         };
