@@ -742,13 +742,16 @@ export const workflowRunner = task({
         return { branch: null };
       }
 
+      const normalizeSetting = (value: unknown) =>
+        typeof value === "string" ? value : value == null ? "" : String(value);
+
       if (node.type === "fic-create-invoice") {
-        const rawClientId = settings.clientId?.trim();
-        const rawAmount = settings.amount?.trim();
-        const rawCurrency = settings.currency?.trim() || "EUR";
-        const rawDescription = settings.description ?? "";
-        const rawVatTypeId = settings.vatTypeId?.trim();
-        const rawDueDate = settings.dueDate?.trim();
+        const rawClientId = normalizeSetting(settings.clientId).trim();
+        const rawAmount = normalizeSetting(settings.amount).trim();
+        const rawCurrency = normalizeSetting(settings.currency).trim() || "EUR";
+        const rawDescription = normalizeSetting(settings.description);
+        const rawVatTypeId = normalizeSetting(settings.vatTypeId).trim();
+        const rawDueDate = normalizeSetting(settings.dueDate).trim();
 
         if (!rawClientId) {
           throw new Error("Cliente FIC obbligatorio");
@@ -826,8 +829,8 @@ export const workflowRunner = task({
       }
 
       if (node.type === "fic-update-status") {
-        const rawInvoiceId = settings.invoiceId?.trim();
-        const rawStatus = settings.status?.trim();
+        const rawInvoiceId = normalizeSetting(settings.invoiceId).trim();
+        const rawStatus = normalizeSetting(settings.status).trim();
         if (!rawInvoiceId) {
           throw new Error("ID fattura obbligatorio");
         }
