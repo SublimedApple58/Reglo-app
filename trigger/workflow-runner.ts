@@ -772,7 +772,20 @@ export const workflowRunner = task({
         const description =
           interpolateTemplate(rawDescription || "Servizio", context) || "Servizio";
         const vatTypeId = interpolateTemplate(rawVatTypeId, context);
-        const dueDate = rawDueDate ? interpolateTemplate(rawDueDate, context) : "";
+        const dueDateRaw = rawDueDate
+          ? interpolateTemplate(rawDueDate, context)
+          : "";
+        const dueDate = (() => {
+          const value = dueDateRaw.trim();
+          if (!value) return "";
+          if (value.includes("/")) {
+            const [day, month, year] = value.split("/");
+            if (day && month && year) {
+              return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+            }
+          }
+          return value;
+        })();
 
         const { token, entityId, entityName } = await getFicConnection(run.companyId);
         const clientDetails = await ficFetch(
@@ -801,22 +814,27 @@ export const workflowRunner = task({
             entity: { id: clientId, name: resolvedName },
             currency: { code: currency },
             language: { code: "it", name: "Italiano" },
-            items: [
-              {
-                name: description,
-                qty: 1,
-                net_price: amountValue,
-                vat: { id: vatTypeId },
-              },
-            ],
+            items_list: {
+              items: [
+                {
+                  name: description,
+                  qty: 1,
+                  net_price: amountValue,
+                  vat: { id: vatTypeId },
+                },
+              ],
+            },
             payments: dueDate
-              ? [
-                  {
-                    amount: amountValue,
-                    due_date: dueDate,
-                  },
-                ]
-              : [],
+              ? {
+                  payment_terms: { days: 0, payment_terms_type: "standard" },
+                  payment_methods: [
+                    {
+                      amount: amountValue,
+                      due_date: dueDate,
+                    },
+                  ],
+                }
+              : undefined,
           },
         };
 
