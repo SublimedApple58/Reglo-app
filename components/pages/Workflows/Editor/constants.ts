@@ -250,15 +250,21 @@ export const blockConfigDefinitions: Record<string, BlockConfigDefinition> = {
     description: "Crea una nuova fattura di vendita.",
     fields: [
       {
-        key: "customer",
+        key: "clientId",
         label: "Cliente",
-        placeholder: "Nome cliente o ID",
+        optionsSource: "ficClients",
         required: true,
       },
       {
         key: "amount",
         label: "Importo",
         placeholder: "Es. 1200.00",
+        required: true,
+      },
+      {
+        key: "vatTypeId",
+        label: "Aliquota IVA",
+        optionsSource: "ficVatTypes",
         required: true,
       },
       {

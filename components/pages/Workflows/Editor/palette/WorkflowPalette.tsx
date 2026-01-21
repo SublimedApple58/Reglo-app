@@ -14,10 +14,12 @@ type WorkflowPaletteProps = {
   selectedService: ServiceKey;
   currentService: { label: string; blocks: BlockDefinition[] };
   isSlackConnected: boolean;
+  isFicConnected: boolean;
   onSelectService: (service: ServiceKey) => void;
   onChangeView: (view: "menu" | "blocks") => void;
   onDragStart: (event: DragEvent, block: BlockDefinition) => void;
   onSlackUnavailable: () => void;
+  onFicUnavailable: () => void;
 };
 
 export function WorkflowPalette({
@@ -25,10 +27,12 @@ export function WorkflowPalette({
   selectedService,
   currentService,
   isSlackConnected,
+  isFicConnected,
   onSelectService,
   onChangeView,
   onDragStart,
   onSlackUnavailable,
+  onFicUnavailable,
 }: WorkflowPaletteProps) {
   if (paletteView === "menu") {
     return (
@@ -60,14 +64,20 @@ export function WorkflowPalette({
           {(["slack", "fatture-in-cloud"] as ServiceKey[]).map((serviceKey) => {
             const svc = serviceBlocks[serviceKey];
             const isSlack = serviceKey === "slack";
-            const disabled = isSlack && !isSlackConnected;
+            const isFic = serviceKey === "fatture-in-cloud";
+            const disabled =
+              (isSlack && !isSlackConnected) || (isFic && !isFicConnected);
             return (
               <button
                 key={serviceKey}
                 type="button"
                 onClick={() => {
                   if (disabled) {
-                    onSlackUnavailable();
+                    if (isSlack) {
+                      onSlackUnavailable();
+                    } else {
+                      onFicUnavailable();
+                    }
                     return;
                   }
                   onSelectService(serviceKey);
@@ -147,15 +157,24 @@ export function WorkflowPalette({
           Connetti Slack in Settings per sbloccare questi blocchi.
         </div>
       ) : null}
+      {selectedService === "fatture-in-cloud" && !isFicConnected ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          Connetti Fatture in Cloud in Settings per sbloccare questi blocchi.
+        </div>
+      ) : null}
       <div className="space-y-3">
         {currentService.blocks.map((block) => (
           <div
             key={block.id}
-            draggable={!(block.id.startsWith("slack-") && !isSlackConnected)}
+            draggable={
+              !(block.id.startsWith("slack-") && !isSlackConnected) &&
+              !(block.id.startsWith("fic-") && !isFicConnected)
+            }
             onDragStart={(event) => onDragStart(event, block)}
             className={cn(
               "rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition",
-              block.id.startsWith("slack-") && !isSlackConnected
+              (block.id.startsWith("slack-") && !isSlackConnected) ||
+                (block.id.startsWith("fic-") && !isFicConnected)
                 ? "cursor-not-allowed opacity-50"
                 : "cursor-grab hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing",
             )}

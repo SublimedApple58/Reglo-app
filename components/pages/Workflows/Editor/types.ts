@@ -24,7 +24,7 @@ export type BlockConfigField = {
   required?: boolean;
   type?: "text" | "select";
   options?: string[];
-  optionsSource?: "templates" | "slackChannels" | "emailSenders";
+  optionsSource?: "templates" | "slackChannels" | "emailSenders" | "ficClients" | "ficVatTypes";
   hint?: string;
   multiline?: boolean;
 };
@@ -92,4 +92,15 @@ export type SlackChannelOption = {
 export type EmailSenderOption = {
   value: string;
   label: string;
+};
+
+export type FicClientOption = {
+  value: string;
+  label: string;
+};
+
+export type FicVatTypeOption = {
+  value: string;
+  label: string;
+  rate?: number;
 };

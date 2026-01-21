@@ -47,10 +47,14 @@ export const buildEdges = (isNew: boolean): Edge[] =>
 export const getDefaultConfig = (blockId: string) => {
   const definition = blockConfigDefinitions[blockId];
   if (!definition) return {};
-  return definition.fields.reduce<Record<string, string>>((acc, field) => {
+  const base = definition.fields.reduce<Record<string, string>>((acc, field) => {
     acc[field.key] = "";
     return acc;
   }, {});
+  if (blockId === "fic-create-invoice") {
+    base.currency = "EUR";
+  }
+  return base;
 };
 
 export const getMissingFields = (blockId: string, config: Record<string, unknown>) => {

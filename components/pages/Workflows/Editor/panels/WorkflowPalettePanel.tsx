@@ -16,10 +16,12 @@ type WorkflowPalettePanelProps = {
   selectedService: ServiceKey;
   currentService: { label: string; blocks: BlockDefinition[] };
   isSlackConnected: boolean;
+  isFicConnected: boolean;
   onSelectService: (service: ServiceKey) => void;
   onChangeView: (view: "menu" | "blocks") => void;
   onDragStart: (event: DragEvent, block: BlockDefinition) => void;
   onSlackUnavailable: () => void;
+  onFicUnavailable: () => void;
   onClose: () => void;
 };
 
@@ -29,10 +31,12 @@ export function WorkflowPalettePanel({
   selectedService,
   currentService,
   isSlackConnected,
+  isFicConnected,
   onSelectService,
   onChangeView,
   onDragStart,
   onSlackUnavailable,
+  onFicUnavailable,
   onClose,
 }: WorkflowPalettePanelProps) {
   if (!open) return null;
@@ -58,10 +62,12 @@ export function WorkflowPalettePanel({
           selectedService={selectedService}
           currentService={currentService}
           isSlackConnected={isSlackConnected}
+          isFicConnected={isFicConnected}
           onSelectService={onSelectService}
           onChangeView={onChangeView}
           onDragStart={onDragStart}
           onSlackUnavailable={onSlackUnavailable}
+          onFicUnavailable={onFicUnavailable}
         />
       </div>
     </aside>

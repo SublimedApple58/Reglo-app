@@ -45,6 +45,8 @@ import type {
   ServiceKey,
   SlackChannelOption,
   EmailSenderOption,
+  FicClientOption,
+  FicVatTypeOption,
   TriggerType,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -137,6 +139,12 @@ export function WorkflowEditor(): React.ReactElement {
   const [slackChannelOptions, setSlackChannelOptions] = useState<SlackChannelOption[]>([]);
   const [slackChannelLoading, setSlackChannelLoading] = useState(false);
   const [slackChannelError, setSlackChannelError] = useState<string | null>(null);
+  const [ficClientOptions, setFicClientOptions] = useState<FicClientOption[]>([]);
+  const [ficClientLoading, setFicClientLoading] = useState(false);
+  const [ficClientError, setFicClientError] = useState<string | null>(null);
+  const [ficVatTypeOptions, setFicVatTypeOptions] = useState<FicVatTypeOption[]>([]);
+  const [ficVatTypeLoading, setFicVatTypeLoading] = useState(false);
+  const [ficVatTypeError, setFicVatTypeError] = useState<string | null>(null);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -169,6 +177,7 @@ export function WorkflowEditor(): React.ReactElement {
     return map;
   }, [integrationConnections]);
   const isSlackConnected = integrationState["slack"]?.status === "connected";
+  const isFicConnected = integrationState["fatture-in-cloud"]?.status === "connected";
   const triggerTemplateMissing =
     triggerType === "document_completed" && !triggerConfig.templateId?.trim();
   const triggerSummaryLabel = useMemo(() => {
@@ -256,6 +265,95 @@ export function WorkflowEditor(): React.ReactElement {
       controller.abort();
     };
   }, [isSlackConnected]);
+
+  useEffect(() => {
+    if (!isFicConnected) {
+      setFicClientOptions([]);
+      setFicClientLoading(false);
+      setFicClientError(null);
+      setFicVatTypeOptions([]);
+      setFicVatTypeLoading(false);
+      setFicVatTypeError(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    setFicClientLoading(true);
+    setFicClientError(null);
+    setFicVatTypeLoading(true);
+    setFicVatTypeError(null);
+
+    fetch("/api/integrations/fatture-in-cloud/clients", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: FicClientOption[];
+          message?: string;
+        };
+        if (!active) return [];
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message ?? "Impossibile caricare i clienti FIC.");
+        }
+        return payload.data ?? [];
+      })
+      .then((data) => {
+        if (!active) return;
+        setFicClientOptions(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setFicClientOptions([]);
+        setFicClientError(err.message ?? "Impossibile caricare i clienti FIC.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setFicClientLoading(false);
+      });
+
+    fetch("/api/integrations/fatture-in-cloud/vat-types", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: FicVatTypeOption[];
+          message?: string;
+        };
+        if (!active) return [];
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message ?? "Impossibile caricare le aliquote FIC.");
+        }
+        return payload.data ?? [];
+      })
+      .then((data) => {
+        if (!active) return;
+        setFicVatTypeOptions(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setFicVatTypeOptions([]);
+        setFicVatTypeError(err.message ?? "Impossibile caricare le aliquote FIC.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setFicVatTypeLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isFicConnected]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -836,10 +934,17 @@ export function WorkflowEditor(): React.ReactElement {
         toast.error({ description: "Connetti Slack per usare questi blocchi." });
         return;
       }
+      if (block.id.startsWith("fic-") && !isFicConnected) {
+        event.preventDefault();
+        toast.error({
+          description: "Connetti Fatture in Cloud per usare questi blocchi.",
+        });
+        return;
+      }
       event.dataTransfer.setData("application/reactflow", JSON.stringify(block));
       event.dataTransfer.effectAllowed = "move";
     },
-    [isSlackConnected, toast],
+    [isFicConnected, isSlackConnected, toast],
   );
 
   const resetLogicDialog = () => {
@@ -1300,11 +1405,17 @@ export function WorkflowEditor(): React.ReactElement {
             selectedService={selectedService}
             currentService={currentService}
             isSlackConnected={isSlackConnected}
+            isFicConnected={isFicConnected}
             onSelectService={setSelectedService}
             onChangeView={setPaletteView}
             onDragStart={onDragStart}
             onSlackUnavailable={() =>
               toast.error({ description: "Connetti Slack per usare questi blocchi." })
+            }
+            onFicUnavailable={() =>
+              toast.error({
+                description: "Connetti Fatture in Cloud per usare questi blocchi.",
+              })
             }
             onClose={() => setPaletteOpen(false)}
           />
@@ -1367,6 +1478,12 @@ export function WorkflowEditor(): React.ReactElement {
         emailSenderOptions={emailSenderOptions}
         emailSenderLoading={emailSenderLoading}
         emailSenderError={emailSenderError}
+        ficClientOptions={ficClientOptions}
+        ficClientLoading={ficClientLoading}
+        ficClientError={ficClientError}
+        ficVatTypeOptions={ficVatTypeOptions}
+        ficVatTypeLoading={ficVatTypeLoading}
+        ficVatTypeError={ficVatTypeError}
         blockId={configBlockId ?? undefined}
       />
 

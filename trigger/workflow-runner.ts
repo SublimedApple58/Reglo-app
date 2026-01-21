@@ -204,6 +204,63 @@ export const workflowRunner = task({
       });
     };
 
+    const getFicConnection = async (companyId: string) => {
+      const connection = await prisma.integrationConnection.findUnique({
+        where: {
+          companyId_provider: {
+            companyId,
+            provider: "FATTURE_IN_CLOUD",
+          },
+        },
+      });
+
+      if (
+        !connection?.accessTokenCiphertext ||
+        !connection.accessTokenIv ||
+        !connection.accessTokenTag
+      ) {
+        throw new Error("Fatture in Cloud non connesso");
+      }
+
+      const metadata =
+        connection.metadata && typeof connection.metadata === "object"
+          ? (connection.metadata as { entityId?: string; entityName?: string })
+          : {};
+
+      if (!metadata.entityId) {
+        throw new Error("Seleziona l'azienda FIC in Settings");
+      }
+
+      const token = decryptSecret({
+        ciphertext: connection.accessTokenCiphertext,
+        iv: connection.accessTokenIv,
+        tag: connection.accessTokenTag,
+      });
+
+      return { token, entityId: metadata.entityId, entityName: metadata.entityName };
+    };
+
+    const ficFetch = async (
+      path: string,
+      token: string,
+      init?: RequestInit,
+    ) => {
+      const response = await fetch(`https://api-v2.fattureincloud.it${path}`, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          ...(init?.headers ?? {}),
+        },
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Errore Fatture in Cloud");
+      }
+      return response.json();
+    };
+
     const executeSlackChannelMessage = async (
       token: string,
       channel: string,
@@ -673,6 +730,130 @@ export const workflowRunner = task({
         const from = settings.from?.trim() || undefined;
         await sendDynamicEmail({ to, subject, body, from });
         const output = { to, subject };
+        stepOutputs[nodeId] = output;
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "completed",
+            output,
+            finishedAt: new Date(),
+          },
+        });
+        return { branch: null };
+      }
+
+      if (node.type === "fic-create-invoice") {
+        const rawClientId = settings.clientId?.trim();
+        const rawAmount = settings.amount?.trim();
+        const rawCurrency = settings.currency?.trim() || "EUR";
+        const rawDescription = settings.description ?? "";
+        const rawVatTypeId = settings.vatTypeId?.trim();
+        const rawDueDate = settings.dueDate?.trim();
+
+        if (!rawClientId) {
+          throw new Error("Cliente FIC obbligatorio");
+        }
+        if (!rawAmount) {
+          throw new Error("Importo obbligatorio");
+        }
+        if (!rawVatTypeId) {
+          throw new Error("Aliquota IVA obbligatoria");
+        }
+
+        const clientId = interpolateTemplate(rawClientId, context);
+        const amountValue = Number(interpolateTemplate(rawAmount, context));
+        if (!Number.isFinite(amountValue) || amountValue <= 0) {
+          throw new Error("Importo non valido");
+        }
+        const currency = interpolateTemplate(rawCurrency, context) || "EUR";
+        const description =
+          interpolateTemplate(rawDescription || "Servizio", context) || "Servizio";
+        const vatTypeId = interpolateTemplate(rawVatTypeId, context);
+        const dueDate = rawDueDate ? interpolateTemplate(rawDueDate, context) : "";
+
+        const { token, entityId, entityName } = await getFicConnection(run.companyId);
+
+        const payload = {
+          data: {
+            type: "invoice",
+            entity: { id: clientId },
+            currency: { code: currency },
+            language: { code: "it", name: "Italiano" },
+            items: [
+              {
+                name: description,
+                qty: 1,
+                net_price: amountValue,
+                vat: { id: vatTypeId },
+              },
+            ],
+            payments: dueDate
+              ? [
+                  {
+                    amount: amountValue,
+                    due_date: dueDate,
+                  },
+                ]
+              : [],
+          },
+        };
+
+        const result = await ficFetch(
+          `/c/${entityId}/issued_documents`,
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify(payload),
+          },
+        );
+
+        const output = {
+          entityId,
+          entityName,
+          invoiceId: result?.data?.id ?? result?.id ?? null,
+          raw: result,
+        };
+        stepOutputs[nodeId] = output;
+        await prisma.workflowRunStep.updateMany({
+          where: { runId: run.id, nodeId },
+          data: {
+            status: "completed",
+            output,
+            finishedAt: new Date(),
+          },
+        });
+        return { branch: null };
+      }
+
+      if (node.type === "fic-update-status") {
+        const rawInvoiceId = settings.invoiceId?.trim();
+        const rawStatus = settings.status?.trim();
+        if (!rawInvoiceId) {
+          throw new Error("ID fattura obbligatorio");
+        }
+        if (!rawStatus) {
+          throw new Error("Stato fattura obbligatorio");
+        }
+        const invoiceId = interpolateTemplate(rawInvoiceId, context);
+        const statusInput = interpolateTemplate(rawStatus, context);
+        const statusMap: Record<string, string> = {
+          Pagata: "paid",
+          "In sospeso": "not_paid",
+          Annullata: "cancelled",
+        };
+        const status = statusMap[statusInput] ?? statusInput;
+
+        const { token, entityId, entityName } = await getFicConnection(run.companyId);
+        const result = await ficFetch(
+          `/c/${entityId}/issued_documents/${invoiceId}/status`,
+          token,
+          {
+            method: "POST",
+            body: JSON.stringify({ status }),
+          },
+        );
+
+        const output = { entityId, entityName, invoiceId, status, raw: result };
         stepOutputs[nodeId] = output;
         await prisma.workflowRunStep.updateMany({
           where: { runId: run.id, nodeId },

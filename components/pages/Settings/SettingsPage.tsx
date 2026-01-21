@@ -116,6 +116,13 @@ export function SettingsPage(): React.ReactElement {
   });
   const [isInviteSending, setIsInviteSending] = useState(false);
   const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
+  const [ficEntities, setFicEntities] = useState<Array<{ value: string; label: string }>>(
+    [],
+  );
+  const [ficEntityLoading, setFicEntityLoading] = useState(false);
+  const [ficEntityError, setFicEntityError] = useState<string | null>(null);
+  const [ficSelectedEntityId, setFicSelectedEntityId] = useState<string>("");
+  const [ficSavingEntity, setFicSavingEntity] = useState(false);
 
   const [sessionAccess, setSessionAccess] = useState({
     logSessions: true,
@@ -150,6 +157,7 @@ export function SettingsPage(): React.ReactElement {
     });
     return map;
   }, [integrationConnections]);
+  const isFicConnected = integrationState["fatture-in-cloud"]?.status === "connected";
 
   const tabItems = useMemo<TabItem[]>(() => {
     const items: TabItem[] = [{ label: "Account", value: "account" }];
@@ -217,6 +225,64 @@ export function SettingsPage(): React.ReactElement {
     }
     router.replace(pathname);
   }, [searchParams, toast, router, pathname, setIntegrationsRefresh, tabItems]);
+
+  useEffect(() => {
+    if (!isFicConnected) {
+      setFicEntities([]);
+      setFicEntityLoading(false);
+      setFicEntityError(null);
+      setFicSelectedEntityId("");
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    setFicEntityLoading(true);
+    setFicEntityError(null);
+
+    fetch("/api/integrations/fatture-in-cloud/entities", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const payload = (await response.json()) as {
+          success: boolean;
+          data?: Array<{ value: string; label: string }>;
+          selectedId?: string | null;
+          message?: string;
+        };
+        if (!active) return { options: [], selectedId: "" };
+        if (!response.ok || !payload.success) {
+          throw new Error(payload.message ?? "Impossibile caricare le aziende FIC.");
+        }
+        return {
+          options: payload.data ?? [],
+          selectedId: payload.selectedId ?? "",
+        };
+      })
+      .then(({ options, selectedId }) => {
+        if (!active) return;
+        setFicEntities(options);
+        setFicSelectedEntityId(selectedId);
+      })
+      .catch((error) => {
+        if (!active) return;
+        const err = error as Error;
+        if (err.name === "AbortError") return;
+        setFicEntities([]);
+        setFicEntityError(err.message ?? "Impossibile caricare le aziende FIC.");
+      })
+      .finally(() => {
+        if (!active) return;
+        setFicEntityLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [isFicConnected]);
 
   useEffect(() => {
     if (!company) return;
@@ -906,6 +972,67 @@ export function SettingsPage(): React.ReactElement {
                                 Workspace: {connection.displayName}
                               </p>
                             )}
+                            {providerKey === "fatture-in-cloud" && isConnected ? (
+                              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                                  Azienda FIC
+                                </p>
+                                <Select
+                                  value={ficSelectedEntityId}
+                                  onValueChange={async (value) => {
+                                    setFicSelectedEntityId(value);
+                                    if (!value) return;
+                                    const selected = ficEntities.find(
+                                      (entity) => entity.value === value,
+                                    );
+                                    setFicSavingEntity(true);
+                                    const res = await fetch(
+                                      "/api/integrations/fatture-in-cloud/entity",
+                                      {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({
+                                          entityId: value,
+                                          entityName: selected?.label ?? null,
+                                        }),
+                                      },
+                                    );
+                                    setFicSavingEntity(false);
+                                    if (!res.ok) {
+                                      toast.error({
+                                        description:
+                                          "Impossibile salvare l'azienda FIC selezionata.",
+                                      });
+                                    }
+                                  }}
+                                  disabled={ficEntityLoading || ficSavingEntity}
+                                >
+                                  <SelectTrigger>
+                                    <SelectValue
+                                      placeholder={
+                                        ficEntityLoading
+                                          ? "Caricamento aziende…"
+                                          : "Seleziona azienda"
+                                      }
+                                    />
+                                  </SelectTrigger>
+                                  <SelectContent className="max-h-60 overflow-y-auto">
+                                    {ficEntities.map((entity) => (
+                                      <SelectItem key={entity.value} value={entity.value}>
+                                        {entity.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                {ficEntityError ? (
+                                  <p className="text-xs text-rose-500">{ficEntityError}</p>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">
+                                    La selezione viene usata dai workflow per creare fatture.
+                                  </p>
+                                )}
+                              </div>
+                            ) : null}
                             <div className="flex flex-wrap items-center gap-2">
                               {isBuiltIn ? (
                                 <Button variant="outline" disabled>

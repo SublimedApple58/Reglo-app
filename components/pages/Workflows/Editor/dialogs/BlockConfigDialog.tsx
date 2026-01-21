@@ -22,6 +22,8 @@ import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-inp
 import type {
   BlockConfigDefinition,
   EmailSenderOption,
+  FicClientOption,
+  FicVatTypeOption,
   SlackChannelOption,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -44,6 +46,12 @@ type BlockConfigDialogProps = {
   emailSenderOptions?: EmailSenderOption[];
   emailSenderLoading?: boolean;
   emailSenderError?: string | null;
+  ficClientOptions?: FicClientOption[];
+  ficClientLoading?: boolean;
+  ficClientError?: string | null;
+  ficVatTypeOptions?: FicVatTypeOption[];
+  ficVatTypeLoading?: boolean;
+  ficVatTypeError?: string | null;
   blockId?: string;
 };
 
@@ -63,6 +71,12 @@ export function BlockConfigDialog({
   emailSenderOptions,
   emailSenderLoading,
   emailSenderError,
+  ficClientOptions,
+  ficClientLoading,
+  ficClientError,
+  ficVatTypeOptions,
+  ficVatTypeLoading,
+  ficVatTypeError,
   blockId,
 }: BlockConfigDialogProps) {
   return (
@@ -202,6 +216,88 @@ export function BlockConfigDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                ) : field.optionsSource === "ficClients" ? (
+                  <div className="space-y-1">
+                    <Select
+                      value={
+                        ficClientOptions?.some((option) => option.value === configDraft[field.key])
+                          ? configDraft[field.key]
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: value,
+                        }))
+                      }
+                      disabled={ficClientLoading || !ficClientOptions?.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            ficClientLoading
+                              ? "Caricamento clienti…"
+                              : ficClientOptions?.length
+                                ? "Scegli un cliente"
+                                : ficClientError
+                                  ? "Clienti non disponibili"
+                                  : "Nessun cliente disponibile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {ficClientOptions?.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {ficClientError ? (
+                      <p className="text-xs text-rose-500">{ficClientError}</p>
+                    ) : null}
+                  </div>
+                ) : field.optionsSource === "ficVatTypes" ? (
+                  <div className="space-y-1">
+                    <Select
+                      value={
+                        ficVatTypeOptions?.some((option) => option.value === configDraft[field.key])
+                          ? configDraft[field.key]
+                          : ""
+                      }
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: value,
+                        }))
+                      }
+                      disabled={ficVatTypeLoading || !ficVatTypeOptions?.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            ficVatTypeLoading
+                              ? "Caricamento aliquote…"
+                              : ficVatTypeOptions?.length
+                                ? "Scegli aliquota"
+                                : ficVatTypeError
+                                  ? "Aliquote non disponibili"
+                                  : "Nessuna aliquota disponibile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        {ficVatTypeOptions?.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {ficVatTypeError ? (
+                      <p className="text-xs text-rose-500">{ficVatTypeError}</p>
+                    ) : null}
+                  </div>
                 ) : (
                   <TokenInput
                     value={configDraft[field.key] ?? ""}
