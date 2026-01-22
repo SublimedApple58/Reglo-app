@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
+import { VariablePicker } from "@/components/pages/Workflows/Editor/shared/variable-picker";
 import type {
   BlockConfigDefinition,
   EmailSenderOption,
@@ -96,7 +97,7 @@ export function BlockConfigDialog({
         onOpenChange(nextOpen);
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{definition?.title ?? "Configura blocco"}</DialogTitle>
           {definition?.description ? (
@@ -263,22 +264,15 @@ export function BlockConfigDialog({
                     {ficClientError ? (
                       <p className="text-xs text-rose-500">{ficClientError}</p>
                     ) : null}
-                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Oppure usa dato dinamico
-                      </p>
-                      <TokenInput
-                        value={configDraft[field.key] ?? ""}
-                        onChange={(value) =>
-                          setConfigDraft((prev) => ({
-                            ...prev,
-                            [field.key]: value,
-                          }))
-                        }
-                        placeholder="Seleziona un dato dal trigger"
-                        variables={variableOptions}
-                      />
-                    </div>
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
                   </div>
                 ) : field.optionsSource === "ficVatTypes" ? (
                   <div className="space-y-1">
@@ -320,22 +314,15 @@ export function BlockConfigDialog({
                     {ficVatTypeError ? (
                       <p className="text-xs text-rose-500">{ficVatTypeError}</p>
                     ) : null}
-                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Oppure usa dato dinamico
-                      </p>
-                      <TokenInput
-                        value={configDraft[field.key] ?? ""}
-                        onChange={(value) =>
-                          setConfigDraft((prev) => ({
-                            ...prev,
-                            [field.key]: value,
-                          }))
-                        }
-                        placeholder="Seleziona un dato dal trigger"
-                        variables={variableOptions}
-                      />
-                    </div>
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
                   </div>
                 ) : field.optionsSource === "ficPaymentMethods" ? (
                   <div className="space-y-1">
@@ -379,22 +366,15 @@ export function BlockConfigDialog({
                     {ficPaymentMethodError ? (
                       <p className="text-xs text-rose-500">{ficPaymentMethodError}</p>
                     ) : null}
-                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                        Oppure usa dato dinamico
-                      </p>
-                      <TokenInput
-                        value={configDraft[field.key] ?? ""}
-                        onChange={(value) =>
-                          setConfigDraft((prev) => ({
-                            ...prev,
-                            [field.key]: value,
-                          }))
-                        }
-                        placeholder="Seleziona un dato dal trigger"
-                        variables={variableOptions}
-                      />
-                    </div>
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
                   </div>
                 ) : (
                   <TokenInput
