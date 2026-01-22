@@ -263,6 +263,22 @@ export function BlockConfigDialog({
                     {ficClientError ? (
                       <p className="text-xs text-rose-500">{ficClientError}</p>
                     ) : null}
+                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Oppure usa dato dinamico
+                      </p>
+                      <TokenInput
+                        value={configDraft[field.key] ?? ""}
+                        onChange={(value) =>
+                          setConfigDraft((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        }
+                        placeholder="Seleziona un dato dal trigger"
+                        variables={variableOptions}
+                      />
+                    </div>
                   </div>
                 ) : field.optionsSource === "ficVatTypes" ? (
                   <div className="space-y-1">
@@ -304,6 +320,22 @@ export function BlockConfigDialog({
                     {ficVatTypeError ? (
                       <p className="text-xs text-rose-500">{ficVatTypeError}</p>
                     ) : null}
+                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Oppure usa dato dinamico
+                      </p>
+                      <TokenInput
+                        value={configDraft[field.key] ?? ""}
+                        onChange={(value) =>
+                          setConfigDraft((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        }
+                        placeholder="Seleziona un dato dal trigger"
+                        variables={variableOptions}
+                      />
+                    </div>
                   </div>
                 ) : field.optionsSource === "ficPaymentMethods" ? (
                   <div className="space-y-1">
@@ -347,6 +379,22 @@ export function BlockConfigDialog({
                     {ficPaymentMethodError ? (
                       <p className="text-xs text-rose-500">{ficPaymentMethodError}</p>
                     ) : null}
+                    <div className="rounded-lg border border-dashed border-muted-foreground/25 bg-muted/20 p-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Oppure usa dato dinamico
+                      </p>
+                      <TokenInput
+                        value={configDraft[field.key] ?? ""}
+                        onChange={(value) =>
+                          setConfigDraft((prev) => ({
+                            ...prev,
+                            [field.key]: value,
+                          }))
+                        }
+                        placeholder="Seleziona un dato dal trigger"
+                        variables={variableOptions}
+                      />
+                    </div>
                   </div>
                 ) : (
                   <TokenInput

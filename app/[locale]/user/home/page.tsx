@@ -39,8 +39,8 @@ type QuickAction = {
 type HomeOverview = {
   companyName: string;
   metrics: {
-    documentsCompleted30d: number;
-    workflowsCompleted30d: number;
+    documentsCompletedMonth: number;
+    workflowsCompletedMonth: number;
     activeWorkflows: number;
     pendingDocuments: number;
   };
@@ -149,7 +149,7 @@ export default function HomePage(): React.ReactElement {
                   Ciao, {greetingName}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Snapshot operativo degli ultimi 30 giorni.
+                  Snapshot operativo del mese corrente.
                 </p>
               </div>
               <div className="rounded-2xl border bg-white/80 px-4 py-3 shadow-sm">
@@ -167,16 +167,16 @@ export default function HomePage(): React.ReactElement {
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               <MetricCard
                 title="Compilazioni completate"
-                value={metrics?.documentsCompleted30d ?? 0}
-                description="Ultimi 30 giorni"
+                value={metrics?.documentsCompletedMonth ?? 0}
+                description="Mese corrente"
                 isLoading={isLoading}
                 accent="bg-[#a9d9d1]"
                 icon={<ClipboardCheck className="h-4 w-4" />}
               />
               <MetricCard
                 title="Workflow completati"
-                value={metrics?.workflowsCompleted30d ?? 0}
-                description="Ultimi 30 giorni"
+                value={metrics?.workflowsCompletedMonth ?? 0}
+                description="Mese corrente"
                 isLoading={isLoading}
                 accent="bg-[#60579e]"
                 icon={<Workflow className="h-4 w-4" />}
@@ -207,7 +207,7 @@ export default function HomePage(): React.ReactElement {
                   Attivit&#224; recente
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Ultimi eventi rilevati su documenti e workflow.
+                  Eventi del mese corrente su documenti e workflow.
                 </p>
               </div>
               <Button

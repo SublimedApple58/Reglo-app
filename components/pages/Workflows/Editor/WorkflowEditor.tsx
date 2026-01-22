@@ -976,6 +976,11 @@ export function WorkflowEditor(): React.ReactElement {
 
   const onDragStart = useCallback(
     (event: React.DragEvent, block: BlockDefinition) => {
+      if (block.status === "planned") {
+        event.preventDefault();
+        toast.info({ description: "Questo blocco è in arrivo." });
+        return;
+      }
       if (block.id.startsWith("slack-") && !isSlackConnected) {
         event.preventDefault();
         toast.error({ description: "Connetti Slack per usare questi blocchi." });
@@ -1128,6 +1133,11 @@ export function WorkflowEditor(): React.ReactElement {
         block = JSON.parse(raw);
       } catch {
         // fallback to raw label
+      }
+
+      if (block.status === "planned") {
+        toast.info({ description: "Questo blocco è in arrivo." });
+        return;
       }
 
       if (block.kind && block.kind !== "standard") {

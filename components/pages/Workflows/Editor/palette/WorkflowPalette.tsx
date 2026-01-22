@@ -72,29 +72,30 @@ export function WorkflowPalette({
                 key={serviceKey}
                 type="button"
                 onClick={() => {
+                  onSelectService(serviceKey);
+                  onChangeView("blocks");
                   if (disabled) {
                     if (isSlack) {
                       onSlackUnavailable();
                     } else {
                       onFicUnavailable();
                     }
-                    return;
                   }
-                  onSelectService(serviceKey);
-                  onChangeView("blocks");
                 }}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition",
-                  disabled
-                    ? "cursor-not-allowed opacity-50"
-                    : "hover:-translate-y-[1px] hover:shadow-md",
+                  "flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md",
+                  disabled ? "opacity-60" : null,
                 )}
-                disabled={disabled}
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                   {serviceKey === "slack" ? "S" : "FIC"}
                 </span>
                 <span>{svc.label}</span>
+                {disabled ? (
+                  <span className="ml-auto rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-800">
+                    Non connesso
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -163,30 +164,41 @@ export function WorkflowPalette({
         </div>
       ) : null}
       <div className="space-y-3">
-        {currentService.blocks.map((block) => (
-          <div
-            key={block.id}
-            draggable={
-              !(block.id.startsWith("slack-") && !isSlackConnected) &&
-              !(block.id.startsWith("fic-") && !isFicConnected)
-            }
-            onDragStart={(event) => onDragStart(event, block)}
-            className={cn(
-              "rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition",
-              (block.id.startsWith("slack-") && !isSlackConnected) ||
-                (block.id.startsWith("fic-") && !isFicConnected)
-                ? "cursor-not-allowed opacity-50"
-                : "cursor-grab hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing",
-            )}
-          >
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-foreground">{block.label}</p>
-              {block.hint ? (
-                <p className="text-xs text-muted-foreground">{block.hint}</p>
-              ) : null}
+        {currentService.blocks.map((block) => {
+          const isIntegrationDisabled =
+            (block.id.startsWith("slack-") && !isSlackConnected) ||
+            (block.id.startsWith("fic-") && !isFicConnected);
+          const isPlanned = block.status === "planned";
+          const isDisabled = isIntegrationDisabled || isPlanned;
+
+          return (
+            <div
+              key={block.id}
+              draggable={!isDisabled}
+              onDragStart={(event) => onDragStart(event, block)}
+              className={cn(
+                "rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition",
+                isDisabled
+                  ? "cursor-not-allowed opacity-50"
+                  : "cursor-grab hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing",
+              )}
+            >
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-foreground">{block.label}</p>
+                  {isPlanned ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Soon
+                    </span>
+                  ) : null}
+                </div>
+                {block.hint ? (
+                  <p className="text-xs text-muted-foreground">{block.hint}</p>
+                ) : null}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

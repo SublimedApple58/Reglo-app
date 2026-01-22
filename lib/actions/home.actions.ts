@@ -7,8 +7,8 @@ import { formatError } from "@/lib/utils";
 type HomeOverview = {
   companyName: string;
   metrics: {
-    documentsCompleted30d: number;
-    workflowsCompleted30d: number;
+    documentsCompletedMonth: number;
+    workflowsCompletedMonth: number;
     activeWorkflows: number;
     pendingDocuments: number;
   };
@@ -48,11 +48,12 @@ export async function getHomeOverview() {
       throw new Error("Company not found");
     }
 
-    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const [
-      documentsCompleted30d,
-      workflowsCompleted30d,
+      documentsCompletedMonth,
+      workflowsCompletedMonth,
       activeWorkflows,
       pendingDocuments,
       recentDocuments,
@@ -62,30 +63,34 @@ export async function getHomeOverview() {
         where: {
           companyId: membership.companyId,
           status: "completed",
-          completedAt: { gte: since },
+          completedAt: { gte: monthStart },
         },
       }),
       prisma.workflowRun.count({
         where: {
           companyId: membership.companyId,
           status: "completed",
-          finishedAt: { gte: since },
+          finishedAt: { gte: monthStart },
         },
       }),
       prisma.workflow.count({
         where: { companyId: membership.companyId, status: "active" },
       }),
       prisma.documentRequest.count({
-        where: { companyId: membership.companyId, status: { not: "completed" } },
+        where: {
+          companyId: membership.companyId,
+          status: { not: "completed" },
+          updatedAt: { gte: monthStart },
+        },
       }),
       prisma.documentRequest.findMany({
-        where: { companyId: membership.companyId },
+        where: { companyId: membership.companyId, updatedAt: { gte: monthStart } },
         include: { template: { select: { name: true } } },
         orderBy: { updatedAt: "desc" },
         take: 5,
       }),
       prisma.workflowRun.findMany({
-        where: { companyId: membership.companyId },
+        where: { companyId: membership.companyId, createdAt: { gte: monthStart } },
         include: { workflow: { select: { name: true } } },
         orderBy: { createdAt: "desc" },
         take: 5,
@@ -95,8 +100,8 @@ export async function getHomeOverview() {
     const data: HomeOverview = {
       companyName: membership.company.name,
       metrics: {
-        documentsCompleted30d,
-        workflowsCompleted30d,
+        documentsCompletedMonth,
+        workflowsCompletedMonth,
         activeWorkflows,
         pendingDocuments,
       },

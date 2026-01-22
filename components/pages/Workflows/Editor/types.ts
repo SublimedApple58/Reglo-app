@@ -15,6 +15,7 @@ export type BlockDefinition = {
   label: string;
   kind?: BlockKind;
   hint?: string;
+  status?: "active" | "planned";
 };
 
 export type BlockConfigField = {
