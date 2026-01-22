@@ -17,13 +17,15 @@ const tokenLabelFor = (token: string, variables: VariableOption[]) => {
 };
 
 export const toTokenHtml = (value: string, variables: VariableOption[]) => {
+  const normalized =
+    typeof value === "string" ? value : value == null ? "" : String(value);
   let lastIndex = 0;
   let html = "";
-  for (const match of value.matchAll(tokenRegex)) {
+  for (const match of normalized.matchAll(tokenRegex)) {
     const token = match[1]?.trim();
     if (!token) continue;
     const index = match.index ?? 0;
-    html += escapeHtml(value.slice(lastIndex, index));
+    html += escapeHtml(normalized.slice(lastIndex, index));
     html += `<span data-token="${escapeHtml(
       token,
     )}" contenteditable="false" class="inline-flex items-center rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">${escapeHtml(
@@ -31,7 +33,7 @@ export const toTokenHtml = (value: string, variables: VariableOption[]) => {
     )}</span>`;
     lastIndex = index + match[0].length;
   }
-  html += escapeHtml(value.slice(lastIndex));
+  html += escapeHtml(normalized.slice(lastIndex));
   return html || "";
 };
 

@@ -884,6 +884,15 @@ export function WorkflowEditor(): React.ReactElement {
     setPaletteOpen((prev) => !prev);
   }, []);
 
+  const normalizeConfig = useCallback((config: Record<string, unknown>) => {
+    return Object.fromEntries(
+      Object.entries(config).map(([key, value]) => [
+        key,
+        typeof value === "string" ? value : value == null ? "" : String(value),
+      ]),
+    );
+  }, []);
+
   const openConfigForNode = useCallback(
     (nodeId: string, blockId: string) => {
       const baseConfig = getDefaultConfig(blockId);
@@ -898,12 +907,12 @@ export function WorkflowEditor(): React.ReactElement {
       setSelectedNodeId(nodeId);
       setConfigDraft({
         ...baseConfig,
-        ...(existingConfig as Record<string, string>),
+        ...normalizeConfig(existingConfig as Record<string, unknown>),
       });
       setConfigTarget({ nodeId, blockId });
       setConfigDialogOpen(true);
     },
-    [nodes],
+    [normalizeConfig, nodes],
   );
 
   const openConfigDialog = () => {
