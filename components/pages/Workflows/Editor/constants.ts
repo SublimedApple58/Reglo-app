@@ -145,7 +145,7 @@ export const triggerOptions: TriggerOption[] = [
     label: "Email in ingresso",
     description: "Si attiva quando arriva una mail.",
     icon: Mail,
-    available: false,
+    available: true,
   },
   {
     id: "slack_message",

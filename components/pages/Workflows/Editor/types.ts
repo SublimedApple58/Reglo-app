@@ -90,6 +90,11 @@ export type RunPayloadField = {
   required: boolean;
 };
 
+export type TemplateOption = {
+  label: string;
+  value: string;
+};
+
 export type SlackChannelOption = {
   value: string;
   label: string;

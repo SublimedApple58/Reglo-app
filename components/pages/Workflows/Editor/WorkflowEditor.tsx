@@ -23,15 +23,11 @@ import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHist
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { WorkflowHeader } from "@/components/pages/Workflows/Editor/layout/WorkflowHeader";
-import {
-  getWorkflowById,
-  startWorkflowRun,
-  updateWorkflow,
-} from "@/lib/actions/workflow.actions";
-import { listDocumentTemplates } from "@/lib/actions/document.actions";
+import { startWorkflowRun, updateWorkflow } from "@/lib/actions/workflow.actions";
 import { integrationConnectionsAtom } from "@/atoms/integrations.store";
 import {
   blockConfigDefinitions,
+  primaryNodeStyle,
   secondaryNodeStyle,
   serviceBlocks,
   triggerOptions,
@@ -43,11 +39,6 @@ import type {
   ManualFieldDefinition,
   RunPayloadField,
   ServiceKey,
-  SlackChannelOption,
-  EmailSenderOption,
-  FicClientOption,
-  FicPaymentMethodOption,
-  FicVatTypeOption,
   TriggerType,
   VariableOption,
 } from "@/components/pages/Workflows/Editor/types";
@@ -59,15 +50,19 @@ import {
 } from "@/components/pages/Workflows/Editor/utils";
 import { tokenRegex } from "@/components/pages/Workflows/Editor/shared/token-utils";
 import { WorkflowPalettePanel } from "@/components/pages/Workflows/Editor/panels/WorkflowPalettePanel";
+import { WorkflowAiPanel } from "@/components/pages/Workflows/Editor/panels/WorkflowAiPanel";
 import { BlockConfigDialog } from "@/components/pages/Workflows/Editor/dialogs/BlockConfigDialog";
+import { AiPreviewDialog } from "@/components/pages/Workflows/Editor/dialogs/AiPreviewDialog";
 import { TriggerDialog } from "@/components/pages/Workflows/Editor/dialogs/TriggerDialog";
 import { RunPayloadDialog } from "@/components/pages/Workflows/Editor/dialogs/RunPayloadDialog";
 import { LogicDialog } from "@/components/pages/Workflows/Editor/dialogs/LogicDialog";
 import { LogicIfNode } from "@/components/pages/Workflows/Editor/nodes/LogicIfNode";
 import { LogicLoopNode } from "@/components/pages/Workflows/Editor/nodes/LogicLoopNode";
 import { LogicMergeNode } from "@/components/pages/Workflows/Editor/nodes/LogicMergeNode";
-
-type TemplateOption = { label: string; value: string };
+import { useDocumentTemplates } from "@/components/pages/Workflows/Editor/hooks/useDocumentTemplates";
+import { useIntegrationOptions } from "@/components/pages/Workflows/Editor/hooks/useIntegrationOptions";
+import { useWorkflowLoader } from "@/components/pages/Workflows/Editor/hooks/useWorkflowLoader";
+import { useWorkflowAi } from "@/components/pages/Workflows/Editor/hooks/useWorkflowAi";
 
 type ConfigTouchedNodeData = {
   blockId?: string;
@@ -130,27 +125,7 @@ export function WorkflowEditor(): React.ReactElement {
   ]);
   const [runPayloadDialogOpen, setRunPayloadDialogOpen] = useState(false);
   const [runPayloadFields, setRunPayloadFields] = useState<RunPayloadField[]>([]);
-  const [documentTemplateOptions, setDocumentTemplateOptions] = useState<TemplateOption[]>([]);
-  const [templateBindingKeys, setTemplateBindingKeys] = useState<Record<string, string[]>>({});
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
-  const [emailSenderOptions, setEmailSenderOptions] = useState<EmailSenderOption[]>([]);
-  const [emailSenderLoading, setEmailSenderLoading] = useState(false);
-  const [emailSenderError, setEmailSenderError] = useState<string | null>(null);
-
-  const [slackChannelOptions, setSlackChannelOptions] = useState<SlackChannelOption[]>([]);
-  const [slackChannelLoading, setSlackChannelLoading] = useState(false);
-  const [slackChannelError, setSlackChannelError] = useState<string | null>(null);
-  const [ficClientOptions, setFicClientOptions] = useState<FicClientOption[]>([]);
-  const [ficClientLoading, setFicClientLoading] = useState(false);
-  const [ficClientError, setFicClientError] = useState<string | null>(null);
-  const [ficVatTypeOptions, setFicVatTypeOptions] = useState<FicVatTypeOption[]>([]);
-  const [ficVatTypeLoading, setFicVatTypeLoading] = useState(false);
-  const [ficVatTypeError, setFicVatTypeError] = useState<string | null>(null);
-  const [ficPaymentMethodOptions, setFicPaymentMethodOptions] = useState<
-    FicPaymentMethodOption[]
-  >([]);
-  const [ficPaymentMethodLoading, setFicPaymentMethodLoading] = useState(false);
-  const [ficPaymentMethodError, setFicPaymentMethodError] = useState<string | null>(null);
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -184,6 +159,38 @@ export function WorkflowEditor(): React.ReactElement {
   }, [integrationConnections]);
   const isSlackConnected = integrationState["slack"]?.status === "connected";
   const isFicConnected = integrationState["fatture-in-cloud"]?.status === "connected";
+  const { documentTemplateOptions, templateBindingKeys } = useDocumentTemplates();
+  const {
+    slackChannelOptions,
+    slackChannelLoading,
+    slackChannelError,
+    ficClientOptions,
+    ficClientLoading,
+    ficClientError,
+    ficVatTypeOptions,
+    ficVatTypeLoading,
+    ficVatTypeError,
+    ficPaymentMethodOptions,
+    ficPaymentMethodLoading,
+    ficPaymentMethodError,
+    emailSenderOptions,
+    emailSenderLoading,
+    emailSenderError,
+  } = useIntegrationOptions({ isSlackConnected, isFicConnected });
+  useWorkflowLoader({
+    workflowId,
+    isNew,
+    toast,
+    setWorkflowName,
+    setWorkflowStatus,
+    setTriggerType,
+    setTriggerConfig,
+    setManualFieldDefinitions,
+    setNodes,
+    setEdges,
+    idCounter,
+    manualFieldId,
+  });
   const triggerTemplateMissing =
     triggerType === "document_completed" && !triggerConfig.templateId?.trim();
   const triggerSummaryLabel = useMemo(() => {
@@ -218,234 +225,6 @@ export function WorkflowEditor(): React.ReactElement {
       token: `trigger.payload.${field}`,
     }));
   }, [triggerFieldKeys]);
-
-  useEffect(() => {
-    if (!isSlackConnected) {
-      setSlackChannelOptions([]);
-      setSlackChannelLoading(false);
-      setSlackChannelError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    let active = true;
-
-    setSlackChannelLoading(true);
-    setSlackChannelError(null);
-
-    fetch("/api/integrations/slack/channels", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          success: boolean;
-          data?: SlackChannelOption[];
-          message?: string;
-          error?: string;
-        };
-        if (!active) return [];
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.message ?? payload.error ?? "Impossibile caricare i canali Slack.");
-        }
-        return payload.data ?? [];
-      })
-      .then((data) => {
-        if (!active) return;
-        setSlackChannelOptions(data);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const err = error as Error;
-        if (err.name === "AbortError") return;
-        setSlackChannelOptions([]);
-        setSlackChannelError(err.message ?? "Impossibile caricare i canali Slack.");
-      })
-      .finally(() => {
-        if (!active) return;
-        setSlackChannelLoading(false);
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [isSlackConnected]);
-
-  useEffect(() => {
-    if (!isFicConnected) {
-      setFicClientOptions([]);
-      setFicClientLoading(false);
-      setFicClientError(null);
-      setFicVatTypeOptions([]);
-      setFicVatTypeLoading(false);
-      setFicVatTypeError(null);
-      setFicPaymentMethodOptions([]);
-      setFicPaymentMethodLoading(false);
-      setFicPaymentMethodError(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    let active = true;
-
-    setFicClientLoading(true);
-    setFicClientError(null);
-    setFicVatTypeLoading(true);
-    setFicVatTypeError(null);
-    setFicPaymentMethodLoading(true);
-    setFicPaymentMethodError(null);
-
-    fetch("/api/integrations/fatture-in-cloud/clients", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          success: boolean;
-          data?: FicClientOption[];
-          message?: string;
-        };
-        if (!active) return [];
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.message ?? "Impossibile caricare i clienti FIC.");
-        }
-        return payload.data ?? [];
-      })
-      .then((data) => {
-        if (!active) return;
-        setFicClientOptions(data);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const err = error as Error;
-        if (err.name === "AbortError") return;
-        setFicClientOptions([]);
-        setFicClientError(err.message ?? "Impossibile caricare i clienti FIC.");
-      })
-      .finally(() => {
-        if (!active) return;
-        setFicClientLoading(false);
-      });
-
-    fetch("/api/integrations/fatture-in-cloud/vat-types", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          success: boolean;
-          data?: FicVatTypeOption[];
-          message?: string;
-        };
-        if (!active) return [];
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.message ?? "Impossibile caricare le aliquote FIC.");
-        }
-        return payload.data ?? [];
-      })
-      .then((data) => {
-        if (!active) return;
-        setFicVatTypeOptions(data);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const err = error as Error;
-        if (err.name === "AbortError") return;
-        setFicVatTypeOptions([]);
-        setFicVatTypeError(err.message ?? "Impossibile caricare le aliquote FIC.");
-      })
-      .finally(() => {
-        if (!active) return;
-        setFicVatTypeLoading(false);
-      });
-
-    fetch("/api/integrations/fatture-in-cloud/payment-methods", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          success: boolean;
-          data?: FicPaymentMethodOption[];
-          message?: string;
-        };
-        if (!active) return [];
-        if (!response.ok || !payload.success) {
-          throw new Error(
-            payload.message ?? "Impossibile caricare i metodi di pagamento FIC.",
-          );
-        }
-        return payload.data ?? [];
-      })
-      .then((data) => {
-        if (!active) return;
-        setFicPaymentMethodOptions(data);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const err = error as Error;
-        if (err.name === "AbortError") return;
-        setFicPaymentMethodOptions([]);
-        setFicPaymentMethodError(
-          err.message ?? "Impossibile caricare i metodi di pagamento FIC.",
-        );
-      })
-      .finally(() => {
-        if (!active) return;
-        setFicPaymentMethodLoading(false);
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [isFicConnected]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-
-    setEmailSenderLoading(true);
-    setEmailSenderError(null);
-
-    fetch("/api/email/senders", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        const payload = (await response.json()) as {
-          success: boolean;
-          data?: EmailSenderOption[];
-          message?: string;
-        };
-        if (!active) return [];
-        if (!response.ok || !payload.success) {
-          throw new Error(payload.message ?? "Impossibile caricare i mittenti email.");
-        }
-        return payload.data ?? [];
-      })
-      .then((data) => {
-        if (!active) return;
-        setEmailSenderOptions(data);
-      })
-      .catch((error) => {
-        if (!active) return;
-        const err = error as Error;
-        if (err.name === "AbortError") return;
-        setEmailSenderOptions([]);
-        setEmailSenderError(err.message ?? "Impossibile caricare i mittenti email.");
-      })
-      .finally(() => {
-        if (!active) return;
-        setEmailSenderLoading(false);
-      });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, []);
 
   useEffect(() => {
     if (!configDialogOpen || configBlockId !== "reglo-email" || !emailSenderOptions.length) {
@@ -545,120 +324,10 @@ export function WorkflowEditor(): React.ReactElement {
   }, [nodes]);
 
   React.useEffect(() => {
-    let isMounted = true;
-    const loadWorkflow = async () => {
-      if (!workflowId) return;
-      if (isNew) return;
-      const res = await getWorkflowById(workflowId);
-      if (!res.success || !res.data) {
-        if (isMounted) {
-          toast.error({ description: res.message ?? "Workflow non trovato." });
-        }
-        return;
-      }
-      if (!isMounted) return;
-      setWorkflowName(res.data.name);
-      setWorkflowStatus(res.data.status);
-      const definition = res.data.definition as {
-        canvas?: { nodes?: Node[]; edges?: Edge[] };
-        trigger?: { type?: string; config?: Record<string, unknown> };
-      } | null;
-      const canvasNodes = definition?.canvas?.nodes ?? [];
-      const canvasEdges = definition?.canvas?.edges ?? [];
-      const trigger = definition?.trigger;
-      const incomingTriggerType =
-        trigger?.type === "manual" ||
-        trigger?.type === "document_completed" ||
-        trigger?.type === "email_inbound" ||
-        trigger?.type === "slack_message" ||
-        trigger?.type === "fic_event"
-          ? trigger.type
-          : "manual";
-      setTriggerType(incomingTriggerType);
-      const incomingTriggerConfig =
-        trigger?.config && typeof trigger.config === "object"
-          ? Object.entries(trigger.config).reduce<Record<string, string>>((acc, [key, value]) => {
-              acc[key] = typeof value === "string" ? value : JSON.stringify(value);
-              return acc;
-            }, {})
-          : {};
-      setTriggerConfig(incomingTriggerConfig);
-      const manualFields =
-        trigger?.config && typeof trigger.config === "object"
-          ? (trigger.config as { manualFields?: string[] }).manualFields
-          : undefined;
-      const manualFieldMeta =
-        trigger?.config && typeof trigger.config === "object"
-          ? (trigger.config as { manualFieldMeta?: Array<{ key: string; required: boolean }> })
-              .manualFieldMeta
-          : undefined;
-      if (manualFieldMeta && Array.isArray(manualFieldMeta) && manualFieldMeta.length > 0) {
-        setManualFieldDefinitions(
-          manualFieldMeta.map((field) => ({
-            id: `field-${manualFieldId.current++}`,
-            key: field.key,
-            required: field.required,
-          })),
-        );
-      } else if (manualFields && Array.isArray(manualFields) && manualFields.length > 0) {
-        setManualFieldDefinitions(
-          manualFields.map((field) => ({
-            id: `field-${manualFieldId.current++}`,
-            key: field,
-            required: true,
-          })),
-        );
-      }
-      if (canvasNodes.length > 0) {
-        setNodes(canvasNodes);
-        setEdges(canvasEdges);
-      } else {
-        setNodes(buildNodes(res.data.name, true));
-        setEdges(buildEdges(true));
-      }
-      const nextId = canvasNodes.reduce((max, node) => {
-        const match = /^ts-node-(\d+)$/.exec(node.id);
-        if (!match) return max;
-        const value = Number(match[1]);
-        if (!Number.isFinite(value)) return max;
-        return Math.max(max, value);
-      }, -1);
-      idCounter.current = Math.max(nextId + 1, 0);
-    };
-    loadWorkflow();
-    return () => {
-      isMounted = false;
-    };
-  }, [isNew, toast, workflowId]);
-
-  React.useEffect(() => {
     if (isNew) {
       setTriggerDialogOpen(true);
     }
   }, [isNew]);
-
-  React.useEffect(() => {
-    let isMounted = true;
-    const loadTemplates = async () => {
-      const res = await listDocumentTemplates();
-      if (!res.success || !res.data || !isMounted) return;
-      setDocumentTemplateOptions(
-        res.data.documents.map((template) => ({
-          label: template.title,
-          value: template.id,
-        })),
-      );
-      const bindingsMap: Record<string, string[]> = {};
-      res.data.documents.forEach((template) => {
-        bindingsMap[template.id] = template.bindingKeys ?? [];
-      });
-      setTemplateBindingKeys(bindingsMap);
-    };
-    loadTemplates();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const handleSave = async () => {
     if (!workflowId || isSaving) return;
@@ -1032,6 +701,40 @@ export function WorkflowEditor(): React.ReactElement {
     return candidate;
   }, [nodes]);
 
+  const {
+    aiPrompt,
+    aiQuestions,
+    aiAnswers,
+    aiPreview,
+    aiPreviewOpen,
+    aiAttachTo,
+    aiPanelCollapsed,
+    aiLoading,
+    aiError,
+    setAiPanelCollapsed,
+    setAiPreviewOpen,
+    setAiAttachTo,
+    handleAiPromptChange,
+    handleAiAnswerChange,
+    handleAiGenerate,
+    applyAiPreview,
+    aiPreviewAttachOptions,
+    aiPreviewRemovedLabels,
+  } = useWorkflowAi({
+    nodes,
+    edges,
+    selectedNodeId,
+    workflowName,
+    setWorkflowName,
+    setTriggerType,
+    setTriggerConfig,
+    setManualFieldDefinitions,
+    setNodes,
+    setEdges,
+    getNextNodeId,
+    toast,
+  });
+
   const addStandardNode = useCallback(
     (block: BlockDefinition, position: { x: number; y: number }) => {
       const newId = getNextNodeId();
@@ -1162,7 +865,7 @@ export function WorkflowEditor(): React.ReactElement {
         openConfigForNode(newNodeId, block.id);
       }
     },
-    [reactFlowInstance, addStandardNode, openConfigForNode],
+    [reactFlowInstance, addStandardNode, openConfigForNode, toast],
   );
 
   const onNodesChange = useCallback(
@@ -1522,6 +1225,20 @@ export function WorkflowEditor(): React.ReactElement {
               </ReactFlow>
             </div>
           </div>
+          <WorkflowAiPanel
+            collapsed={aiPanelCollapsed}
+            onToggle={() => setAiPanelCollapsed((prev) => !prev)}
+            prompt={aiPrompt}
+            onPromptChange={handleAiPromptChange}
+            onGenerate={handleAiGenerate}
+            loading={aiLoading}
+            questions={aiQuestions}
+            answers={aiAnswers}
+            onAnswerChange={handleAiAnswerChange}
+            error={aiError}
+            preview={aiPreview}
+            onOpenPreview={() => setAiPreviewOpen(true)}
+          />
         </div>
         {workflowId ? (
           <WorkflowRunHistory workflowId={workflowId} refreshKey={runHistoryKey} />
@@ -1554,6 +1271,18 @@ export function WorkflowEditor(): React.ReactElement {
         ficPaymentMethodLoading={ficPaymentMethodLoading}
         ficPaymentMethodError={ficPaymentMethodError}
         blockId={configBlockId ?? undefined}
+      />
+
+      <AiPreviewDialog
+        open={aiPreviewOpen}
+        onOpenChange={setAiPreviewOpen}
+        preview={aiPreview}
+        attachOptions={aiPreviewAttachOptions}
+        attachTo={aiAttachTo ?? "start"}
+        onAttachChange={(value) => setAiAttachTo(value)}
+        onApply={() => applyAiPreview(aiAttachTo)}
+        onRegenerate={() => setAiPreviewOpen(false)}
+        removedLabels={aiPreviewRemovedLabels}
       />
 
       <TriggerDialog
