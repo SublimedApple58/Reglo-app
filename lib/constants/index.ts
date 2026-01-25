@@ -4,6 +4,8 @@ export const APP_DESCRIPTION =
   'From draft to signature in just a few clicks: Reglo orchestrates your documents and delivers them wherever they’re needed.';
 export const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000';
+export const INBOUND_EMAIL_DOMAIN =
+  process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || 'in.reglo.it';
 
 export const signInDefaultValues = {
   email: 'admin@example.com',

@@ -250,6 +250,9 @@ export async function getWorkflowRunDetails(runId: string) {
         status: run.status,
         startedAt: run.startedAt?.toISOString() ?? null,
         finishedAt: run.finishedAt?.toISOString() ?? null,
+        triggerWarnings: Array.isArray((run.triggerPayload as { _warnings?: unknown })?._warnings)
+          ? ((run.triggerPayload as { _warnings?: unknown })._warnings as string[])
+          : [],
         steps: run.steps.map((step) => ({
           id: step.id,
           nodeId: step.nodeId,

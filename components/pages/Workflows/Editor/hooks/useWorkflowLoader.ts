@@ -17,10 +17,12 @@ export const useWorkflowLoader = ({
   setTriggerType,
   setTriggerConfig,
   setManualFieldDefinitions,
+  setEmailFieldDefinitions,
   setNodes,
   setEdges,
   idCounter,
   manualFieldId,
+  emailFieldId,
 }: {
   workflowId?: string;
   isNew: boolean;
@@ -30,10 +32,12 @@ export const useWorkflowLoader = ({
   setTriggerType: (value: TriggerType) => void;
   setTriggerConfig: (value: Record<string, string>) => void;
   setManualFieldDefinitions: (value: ManualFieldDefinition[]) => void;
+  setEmailFieldDefinitions: (value: ManualFieldDefinition[]) => void;
   setNodes: (value: Node[]) => void;
   setEdges: (value: Edge[]) => void;
   idCounter: React.MutableRefObject<number>;
   manualFieldId: React.MutableRefObject<number>;
+  emailFieldId: React.MutableRefObject<number>;
 }) => {
   useEffect(() => {
     let isMounted = true;
@@ -69,6 +73,14 @@ export const useWorkflowLoader = ({
       const incomingTriggerConfig =
         trigger?.config && typeof trigger.config === "object"
           ? Object.entries(trigger.config).reduce<Record<string, string>>((acc, [key, value]) => {
+              if (
+                key === "manualFields" ||
+                key === "manualFieldMeta" ||
+                key === "emailFields" ||
+                key === "emailFieldMeta"
+              ) {
+                return acc;
+              }
               acc[key] = typeof value === "string" ? value : JSON.stringify(value);
               return acc;
             }, {})
@@ -82,6 +94,15 @@ export const useWorkflowLoader = ({
         trigger?.config && typeof trigger.config === "object"
           ? (trigger.config as { manualFieldMeta?: Array<{ key: string; required: boolean }> })
               .manualFieldMeta
+          : undefined;
+      const emailFields =
+        trigger?.config && typeof trigger.config === "object"
+          ? (trigger.config as { emailFields?: string[] }).emailFields
+          : undefined;
+      const emailFieldMeta =
+        trigger?.config && typeof trigger.config === "object"
+          ? (trigger.config as { emailFieldMeta?: Array<{ key: string; required: boolean }> })
+              .emailFieldMeta
           : undefined;
       if (manualFieldMeta && Array.isArray(manualFieldMeta) && manualFieldMeta.length > 0) {
         setManualFieldDefinitions(
@@ -99,6 +120,25 @@ export const useWorkflowLoader = ({
             required: true,
           })),
         );
+      }
+      if (emailFieldMeta && Array.isArray(emailFieldMeta) && emailFieldMeta.length > 0) {
+        setEmailFieldDefinitions(
+          emailFieldMeta.map((field) => ({
+            id: `email-field-${emailFieldId.current++}`,
+            key: field.key,
+            required: field.required,
+          })),
+        );
+      } else if (emailFields && Array.isArray(emailFields) && emailFields.length > 0) {
+        setEmailFieldDefinitions(
+          emailFields.map((field) => ({
+            id: `email-field-${emailFieldId.current++}`,
+            key: field,
+            required: true,
+          })),
+        );
+      } else {
+        setEmailFieldDefinitions([]);
       }
       if (canvasNodes.length > 0) {
         setNodes(canvasNodes);
@@ -133,5 +173,7 @@ export const useWorkflowLoader = ({
     setWorkflowStatus,
     toast,
     workflowId,
+    emailFieldId,
+    setEmailFieldDefinitions,
   ]);
 };

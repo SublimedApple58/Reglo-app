@@ -72,6 +72,7 @@ export function WorkflowRunHistory({
     status: string;
     startedAt: string | null;
     finishedAt: string | null;
+    triggerWarnings: string[];
     steps: Array<{
       id: string;
       nodeId: string;
@@ -244,6 +245,16 @@ export function WorkflowRunHistory({
                 Avvio: {formatDate(detailsData.startedAt)} · Fine:{" "}
                 {formatDate(detailsData.finishedAt)}
               </div>
+              {detailsData.triggerWarnings?.length ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <p className="font-semibold">Warning trigger</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {detailsData.triggerWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="space-y-3">
                 {detailsData.steps.map((step) => {
                   const error =

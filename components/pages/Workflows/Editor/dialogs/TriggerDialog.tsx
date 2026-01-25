@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { cn } from "@/lib/utils";
+import { INBOUND_EMAIL_DOMAIN } from "@/lib/constants";
 import type {
   ManualFieldDefinition,
   TriggerOption,
@@ -41,6 +42,9 @@ type TriggerDialogProps = {
   manualFieldDefinitions: ManualFieldDefinition[];
   setManualFieldDefinitions: Dispatch<SetStateAction<ManualFieldDefinition[]>>;
   manualFieldIdRef: MutableRefObject<number>;
+  emailFieldDefinitions: ManualFieldDefinition[];
+  setEmailFieldDefinitions: Dispatch<SetStateAction<ManualFieldDefinition[]>>;
+  emailFieldIdRef: MutableRefObject<number>;
   documentTemplateOptions: TemplateOption[];
   triggerTemplateMissing: boolean;
   onUnavailableTrigger?: () => void;
@@ -57,6 +61,9 @@ export function TriggerDialog({
   manualFieldDefinitions,
   setManualFieldDefinitions,
   manualFieldIdRef,
+  emailFieldDefinitions,
+  setEmailFieldDefinitions,
+  emailFieldIdRef,
   documentTemplateOptions,
   triggerTemplateMissing,
   onUnavailableTrigger,
@@ -81,13 +88,13 @@ export function TriggerDialog({
                     key={option.id}
                     type="button"
                     onClick={() => {
-                  if (!option.available) {
-                    onUnavailableTrigger?.();
-                    return;
-                  }
-                  setTriggerType(option.id);
-                  setTriggerConfig({});
-                }}
+                      if (!option.available) {
+                        onUnavailableTrigger?.();
+                        return;
+                      }
+                      setTriggerType(option.id);
+                      setTriggerConfig({});
+                    }}
                     className={cn(
                       "flex w-full flex-col gap-3 rounded-xl border px-4 py-4 text-left transition",
                       isSelected
@@ -223,6 +230,155 @@ export function TriggerDialog({
                       Potrai usare i dati del trigger negli step successivi.
                     </p>
                   )}
+                </div>
+              ) : null}
+              {triggerType === "email_inbound" ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      Quando arriva una mail
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Imposta l&apos;indirizzo di ascolto. Puoi inoltrare le mail
+                      dal tuo provider verso questo indirizzo dedicato.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Indirizzo email *
+                    </p>
+                    <Input
+                      value={triggerConfig.address ?? ""}
+                      onChange={(event) =>
+                        setTriggerConfig((prev) => ({
+                          ...prev,
+                          address: event.target.value,
+                        }))
+                      }
+                      placeholder={`ordini@${INBOUND_EMAIL_DOMAIN}`}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Usa un alias del dominio <strong>{INBOUND_EMAIL_DOMAIN}</strong> per
+                      collegare il workflow.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Filtra mittente
+                      </p>
+                      <Input
+                        value={triggerConfig.fromFilter ?? ""}
+                        onChange={(event) =>
+                          setTriggerConfig((prev) => ({
+                            ...prev,
+                            fromFilter: event.target.value,
+                          }))
+                        }
+                        placeholder="es. ordini@cliente.it"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Filtra oggetto
+                      </p>
+                      <Input
+                        value={triggerConfig.subjectFilter ?? ""}
+                        onChange={(event) =>
+                          setTriggerConfig((prev) => ({
+                            ...prev,
+                            subjectFilter: event.target.value,
+                          }))
+                        }
+                        placeholder="es. Nuovo ordine"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Parole chiave
+                    </p>
+                    <Input
+                      value={triggerConfig.keywords ?? ""}
+                      onChange={(event) =>
+                        setTriggerConfig((prev) => ({
+                          ...prev,
+                          keywords: event.target.value,
+                        }))
+                      }
+                      placeholder="es. ordine, preventivo"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Se presenti, tutte le parole devono apparire nella mail.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Dati da estrarre con AI
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Definisci i campi che vuoi ottenere dal testo della mail.
+                      Se lasci vuoto, avrai solo i metadati della mail.
+                    </p>
+                    <div className="space-y-2">
+                      {emailFieldDefinitions.map((field, index) => (
+                        <div key={field.id} className="flex flex-wrap items-center gap-2">
+                          <Input
+                            value={field.key}
+                            onChange={(event) =>
+                              setEmailFieldDefinitions((prev) =>
+                                prev.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, key: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                            placeholder="Nome dato"
+                            className="min-w-[200px] flex-1"
+                          />
+                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                              checked={field.required}
+                              onCheckedChange={(value) =>
+                                setEmailFieldDefinitions((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, required: Boolean(value) }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            Obbligatorio
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() =>
+                              setEmailFieldDefinitions((prev) =>
+                                prev.filter((_, itemIndex) => itemIndex !== index),
+                              )
+                            }
+                          >
+                            Rimuovi
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          setEmailFieldDefinitions((prev) => [
+                            ...prev,
+                            { id: `email-field-${emailFieldIdRef.current++}`, key: "", required: true },
+                          ])
+                        }
+                      >
+                        Aggiungi dato
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               ) : null}
             </div>

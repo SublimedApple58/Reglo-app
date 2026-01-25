@@ -406,12 +406,27 @@ export async function generateWorkflowPreview({
       };
     });
 
+    const rawTrigger = parsed.data.trigger ?? undefined;
+    const normalizedTrigger =
+      rawTrigger && rawTrigger.type
+        ? {
+            type: rawTrigger.type,
+            templateId: rawTrigger.templateId ?? undefined,
+            manualFields: rawTrigger.manualFields
+              ? rawTrigger.manualFields.map((field) => ({
+                  key: field.key,
+                  required: field.required ?? undefined,
+                }))
+              : undefined,
+          }
+        : undefined;
+
     const preview: AiWorkflowPreview = {
       status: parsed.data.status,
       title: parsed.data.title ?? undefined,
       summary: parsed.data.summary ?? undefined,
       message: parsed.data.message ?? undefined,
-      trigger: parsed.data.trigger ?? undefined,
+      trigger: normalizedTrigger,
       nodes: normalizedNodes ?? undefined,
       edges: parsed.data.edges ?? undefined,
       warnings: parsed.data.warnings ?? undefined,
@@ -485,7 +500,6 @@ export async function generateWorkflowPreview({
         outputTokens,
         totalTokens,
         estimatedCostUsd,
-        model: MODEL_DEFAULT,
       },
     };
   } catch (error) {

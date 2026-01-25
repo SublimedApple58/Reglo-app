@@ -123,6 +123,8 @@ export function WorkflowEditor(): React.ReactElement {
   const [manualFieldDefinitions, setManualFieldDefinitions] = useState<ManualFieldDefinition[]>([
     { id: `field-${manualFieldId.current++}`, key: "", required: true },
   ]);
+  const emailFieldId = useRef(0);
+  const [emailFieldDefinitions, setEmailFieldDefinitions] = useState<ManualFieldDefinition[]>([]);
   const [runPayloadDialogOpen, setRunPayloadDialogOpen] = useState(false);
   const [runPayloadFields, setRunPayloadFields] = useState<RunPayloadField[]>([]);
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
@@ -186,13 +188,17 @@ export function WorkflowEditor(): React.ReactElement {
     setTriggerType,
     setTriggerConfig,
     setManualFieldDefinitions,
+    setEmailFieldDefinitions,
     setNodes,
     setEdges,
     idCounter,
     manualFieldId,
+    emailFieldId,
   });
   const triggerTemplateMissing =
     triggerType === "document_completed" && !triggerConfig.templateId?.trim();
+  const triggerEmailMissing =
+    triggerType === "email_inbound" && !triggerConfig.address?.trim();
   const triggerSummaryLabel = useMemo(() => {
     if (triggerType === "document_completed") return "Template compilato";
     if (triggerType === "email_inbound") return "Email in ingresso";
@@ -201,30 +207,57 @@ export function WorkflowEditor(): React.ReactElement {
     return "Manuale";
   }, [triggerType]);
   const triggerSummarySubtitle = useMemo(() => {
-    if (triggerType !== "document_completed") return undefined;
-    const templateId = triggerConfig.templateId;
-    if (!templateId) return undefined;
-    return (
-      documentTemplateOptions.find((option) => option.value === templateId)?.label ??
-      "Template selezionato"
-    );
-  }, [documentTemplateOptions, triggerConfig.templateId, triggerType]);
-  const triggerNeedsSetup = triggerType !== "manual" && triggerTemplateMissing;
+    if (triggerType === "document_completed") {
+      const templateId = triggerConfig.templateId;
+      if (!templateId) return undefined;
+      return (
+        documentTemplateOptions.find((option) => option.value === templateId)?.label ??
+        "Template selezionato"
+      );
+    }
+    if (triggerType === "email_inbound") {
+      const address = triggerConfig.address?.trim();
+      if (!address) return undefined;
+      return address;
+    }
+    return undefined;
+  }, [documentTemplateOptions, triggerConfig.address, triggerConfig.templateId, triggerType]);
+  const triggerNeedsSetup =
+    triggerType !== "manual" && (triggerTemplateMissing || triggerEmailMissing);
   const triggerFieldKeys = useMemo(() => {
     if (triggerType === "document_completed") {
       return templateBindingKeys[triggerConfig.templateId ?? ""] ?? [];
     }
+    if (triggerType === "email_inbound") {
+      return emailFieldDefinitions
+        .map((field) => field.key.trim())
+        .filter(Boolean);
+    }
     return manualFieldDefinitions
       .map((field) => field.key.trim())
       .filter(Boolean);
-  }, [manualFieldDefinitions, templateBindingKeys, triggerConfig.templateId, triggerType]);
+  }, [
+    emailFieldDefinitions,
+    manualFieldDefinitions,
+    templateBindingKeys,
+    triggerConfig.templateId,
+    triggerType,
+  ]);
 
   const variableOptions = useMemo<VariableOption[]>(() => {
-    return triggerFieldKeys.map((field) => ({
+    const base = triggerFieldKeys.map((field) => ({
       label: field,
       token: `trigger.payload.${field}`,
     }));
-  }, [triggerFieldKeys]);
+    if (triggerType !== "email_inbound") return base;
+    return [
+      ...base,
+      { label: "Email · Mittente", token: "trigger.payload._email.from" },
+      { label: "Email · Destinatario", token: "trigger.payload._email.to" },
+      { label: "Email · Oggetto", token: "trigger.payload._email.subject" },
+      { label: "Email · Testo", token: "trigger.payload._email.text" },
+    ];
+  }, [triggerFieldKeys, triggerType]);
 
   useEffect(() => {
     if (!configDialogOpen || configBlockId !== "reglo-email" || !emailSenderOptions.length) {
@@ -249,6 +282,12 @@ export function WorkflowEditor(): React.ReactElement {
 
   const invalidTriggerTokens = useMemo(() => {
     const allowed = new Set(triggerFieldKeys.map((key) => `trigger.payload.${key}`));
+    if (triggerType === "email_inbound") {
+      allowed.add("trigger.payload._email.subject");
+      allowed.add("trigger.payload._email.from");
+      allowed.add("trigger.payload._email.to");
+      allowed.add("trigger.payload._email.text");
+    }
     const invalid = new Set<string>();
     const checkValue = (value?: string) => {
       if (!value) return;
@@ -279,7 +318,7 @@ export function WorkflowEditor(): React.ReactElement {
       }
     });
     return Array.from(invalid);
-  }, [nodes, triggerFieldKeys]);
+  }, [nodes, triggerFieldKeys, triggerType]);
 
   const templateBindingConflicts = useMemo(() => {
     if (triggerType !== "document_completed") return [];
@@ -347,6 +386,16 @@ export function WorkflowEditor(): React.ReactElement {
           "Trigger non configurato: salvato come Manuale finche' non selezioni un template.",
       });
     }
+    if (triggerType === "email_inbound" && triggerEmailMissing) {
+      resolvedTriggerType = "manual";
+      resolvedTriggerConfig = {};
+      setTriggerType("manual");
+      setTriggerConfig({});
+      toast.error({
+        description:
+          "Trigger email non configurato: salvato come Manuale finche' non scegli un indirizzo.",
+      });
+    }
     const saveTriggerConfig: Record<string, unknown> = {
       ...resolvedTriggerConfig,
     };
@@ -362,6 +411,20 @@ export function WorkflowEditor(): React.ReactElement {
         .filter((field) => field.key.length > 0);
       saveTriggerConfig.manualFields = manualFields;
       saveTriggerConfig.manualFieldMeta = manualFieldMeta;
+    }
+    if (resolvedTriggerType === "email_inbound") {
+      const emailFields = emailFieldDefinitions
+        .map((field) => field.key.trim())
+        .filter(Boolean);
+      const emailFieldMeta: Array<{ key: string; required: boolean }> =
+        emailFieldDefinitions
+          .map((field) => ({
+            key: field.key.trim(),
+            required: field.required,
+          }))
+          .filter((field) => field.key.length > 0);
+      saveTriggerConfig.emailFields = emailFields;
+      saveTriggerConfig.emailFieldMeta = emailFieldMeta;
     }
     const cleanedTriggerConfig = Object.fromEntries(
       Object.entries(saveTriggerConfig).filter(([_, value]) => {
@@ -503,7 +566,7 @@ export function WorkflowEditor(): React.ReactElement {
         setIsRunning(false);
         return;
       }
-    } else if (Object.keys(triggerConfig).length > 0) {
+    } else if (triggerType === "document_completed" && Object.keys(triggerConfig).length > 0) {
       triggerPayload = { ...triggerConfig };
     }
     const res = await startWorkflowRun({ workflowId, triggerType, triggerPayload });
@@ -1296,6 +1359,9 @@ export function WorkflowEditor(): React.ReactElement {
         manualFieldDefinitions={manualFieldDefinitions}
         setManualFieldDefinitions={setManualFieldDefinitions}
         manualFieldIdRef={manualFieldId}
+        emailFieldDefinitions={emailFieldDefinitions}
+        setEmailFieldDefinitions={setEmailFieldDefinitions}
+        emailFieldIdRef={emailFieldId}
         documentTemplateOptions={documentTemplateOptions}
         triggerTemplateMissing={triggerTemplateMissing}
         onUnavailableTrigger={() => toast.error({ description: "Trigger in arrivo." })}
