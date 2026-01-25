@@ -13,16 +13,42 @@ const parseBody = async (req: NextRequest) => {
   if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
     const data: Record<string, unknown> = {};
+    const textKeys = new Set([
+      "text",
+      "text_body",
+      "text_plain",
+      "plain",
+      "body",
+      "body_plain",
+      "stripped_text",
+      "html",
+      "html_body",
+      "body_html",
+      "stripped_html",
+      "content",
+    ]);
     for (const [key, value] of form.entries()) {
       if (typeof value === "string") {
         data[key] = value;
-      } else {
-        data[key] = {
-          filename: value.name,
-          type: value.type,
-          size: value.size,
-        };
+        continue;
       }
+      const isTextLike =
+        textKeys.has(key) ||
+        value.type.startsWith("text/") ||
+        value.type.includes("html");
+      if (isTextLike) {
+        try {
+          data[key] = await value.text();
+        } catch {
+          data[key] = "";
+        }
+        continue;
+      }
+      data[key] = {
+        filename: value.name,
+        type: value.type,
+        size: value.size,
+      };
     }
     return data;
   }
