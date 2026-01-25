@@ -143,8 +143,11 @@ export const extractEmailFields = async ({
   };
 
   if (!response.ok || payload.error) {
+    const fallbackFields = applyFallbacks(schemaKeys, safeText);
     return {
-      fields: Object.fromEntries(schemaKeys.map((key) => [key, ""])),
+      fields: Object.fromEntries(
+        schemaKeys.map((key) => [key, fallbackFields[key] ?? ""]),
+      ),
       warnings: [payload.error?.message || "Errore AI durante l'estrazione email."],
     };
   }

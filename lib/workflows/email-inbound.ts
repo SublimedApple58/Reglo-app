@@ -61,29 +61,73 @@ export const normalizeInboundPayload = (payload: unknown): NormalizedInboundEmai
   if (!data || typeof data !== "object") return null;
   const record = data as Record<string, unknown>;
 
+  const pickString = (source: Record<string, unknown> | null, keys: string[]) => {
+    if (!source) return "";
+    for (const key of keys) {
+      const value = source[key];
+      if (typeof value === "string" && value.trim()) {
+        return value.trim();
+      }
+    }
+    return "";
+  };
+
+  const pickStringFromList = (sources: Record<string, unknown>[], keys: string[]) => {
+    for (const source of sources) {
+      const value = pickString(source, keys);
+      if (value) return value;
+    }
+    return "";
+  };
+
+  const nestedCandidates = [
+    record.email,
+    record.message,
+    record.mail,
+    record.data,
+    record.payload,
+    record.body,
+  ].filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"));
+
   const fromRaw =
-    (record.from as string | undefined) ??
-    (record.sender as string | undefined) ??
-    (record["from"] as string | undefined) ??
-    (record["sender"] as string | undefined);
+    pickString(record, ["from", "sender", "from_email", "fromEmail"]) ||
+    pickStringFromList(nestedCandidates, ["from", "sender", "from_email", "fromEmail"]);
   const toRaw =
     (record.to as string | string[] | undefined) ??
     (record.recipient as string | string[] | undefined) ??
+    (record.recipients as string | string[] | undefined) ??
     (record["to"] as string | string[] | undefined) ??
-    (record["recipients"] as string | string[] | undefined);
+    (record["recipients"] as string | string[] | undefined) ??
+    (record["rcpt"] as string | string[] | undefined);
   const subject =
-    (record.subject as string | undefined) ??
-    (record["Subject"] as string | undefined) ??
+    pickString(record, ["subject", "Subject", "email_subject"]) ||
+    pickStringFromList(nestedCandidates, ["subject", "Subject", "email_subject"]) ||
     "";
   const text =
-    (record.text as string | undefined) ??
-    (record.text_body as string | undefined) ??
-    (record["text"] as string | undefined) ??
-    "";
+    pickString(record, [
+      "text",
+      "text_body",
+      "text_plain",
+      "plain",
+      "body",
+      "body_plain",
+      "stripped_text",
+      "content",
+    ]) ||
+    pickStringFromList(nestedCandidates, [
+      "text",
+      "text_body",
+      "text_plain",
+      "plain",
+      "body",
+      "body_plain",
+      "stripped_text",
+      "content",
+    ]);
   const html =
-    (record.html as string | undefined) ??
-    (record.html_body as string | undefined) ??
-    (record["html"] as string | undefined);
+    pickString(record, ["html", "html_body", "body_html", "stripped_html"]) ||
+    pickStringFromList(nestedCandidates, ["html", "html_body", "body_html", "stripped_html"]) ||
+    undefined;
 
   const from = fromRaw ? normalizeAddress(fromRaw) : "";
   const to = parseRecipients(toRaw);

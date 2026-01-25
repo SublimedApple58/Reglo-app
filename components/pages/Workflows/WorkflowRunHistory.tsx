@@ -72,6 +72,7 @@ export function WorkflowRunHistory({
     status: string;
     startedAt: string | null;
     finishedAt: string | null;
+    triggerPayload: unknown;
     triggerWarnings: string[];
     steps: Array<{
       id: string;
@@ -245,6 +246,16 @@ export function WorkflowRunHistory({
                 Avvio: {formatDate(detailsData.startedAt)} · Fine:{" "}
                 {formatDate(detailsData.finishedAt)}
               </div>
+              {detailsData.triggerPayload ? (
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                    Payload trigger
+                  </p>
+                  <pre className="mt-2 max-h-60 overflow-auto rounded-lg bg-black/90 p-3 text-xs text-white">
+                    {formatJson(detailsData.triggerPayload)}
+                  </pre>
+                </div>
+              ) : null}
               {detailsData.triggerWarnings?.length ? (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                   <p className="font-semibold">Warning trigger</p>

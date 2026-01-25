@@ -243,6 +243,20 @@ export async function getWorkflowRunDetails(runId: string) {
       labelMap.set(node.id, node.config?.label ?? node.id);
     });
 
+    const sanitizeTriggerPayload = (payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return payload;
+      const clone = JSON.parse(JSON.stringify(payload)) as {
+        _email?: { text?: string; html?: string };
+      };
+      if (clone._email?.text && clone._email.text.length > 1200) {
+        clone._email.text = `${clone._email.text.slice(0, 1200)}…`;
+      }
+      if (clone._email?.html && clone._email.html.length > 1200) {
+        clone._email.html = `${clone._email.html.slice(0, 1200)}…`;
+      }
+      return clone;
+    };
+
     return {
       success: true,
       data: {
@@ -250,6 +264,7 @@ export async function getWorkflowRunDetails(runId: string) {
         status: run.status,
         startedAt: run.startedAt?.toISOString() ?? null,
         finishedAt: run.finishedAt?.toISOString() ?? null,
+        triggerPayload: sanitizeTriggerPayload(run.triggerPayload ?? null),
         triggerWarnings: Array.isArray((run.triggerPayload as { _warnings?: unknown })?._warnings)
           ? ((run.triggerPayload as { _warnings?: unknown })._warnings as string[])
           : [],
