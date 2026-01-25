@@ -4,6 +4,25 @@ import { ficFetch, getFicConnection } from "@/trigger/workflow-runner/fic";
 const normalizeSetting = (value: unknown) =>
   typeof value === "string" ? value : value == null ? "" : String(value);
 
+const parseAmount = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return Number.NaN;
+  let cleaned = trimmed.replace(/\s+/g, "").replace(/[€$£]/g, "");
+  cleaned = cleaned.replace(/[^0-9.,-]/g, "");
+  if (cleaned.includes(",") && cleaned.includes(".")) {
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+    } else {
+      cleaned = cleaned.replace(/,/g, "");
+    }
+  } else if (cleaned.includes(",")) {
+    cleaned = cleaned.replace(",", ".");
+  }
+  return Number(cleaned);
+};
+
 export const executeFicCreateInvoice = async ({
   prisma,
   run,
@@ -38,7 +57,7 @@ export const executeFicCreateInvoice = async ({
   }
 
   const clientId = interpolateTemplate(rawClientId, context);
-  const amountValue = Number(interpolateTemplate(rawAmount, context));
+  const amountValue = parseAmount(interpolateTemplate(rawAmount, context));
   if (!Number.isFinite(amountValue) || amountValue <= 0) {
     throw new Error("Importo non valido");
   }
