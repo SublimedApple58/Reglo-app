@@ -21,6 +21,34 @@ const extractJsonFromText = (text: string) => {
   return match?.[0];
 };
 
+const guessNameFromText = (text: string) => {
+  const patterns = [
+    /il mio nome(?:\s+)?(?:è|e)\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /mi chiamo\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /\bsono\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /nome[:\s]+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+};
+
+const applyFallbacks = (keys: string[], text: string) => {
+  const fallback: Record<string, string> = {};
+  keys.forEach((key) => {
+    const lower = key.toLowerCase();
+    if (lower.includes("name") || lower.includes("nome")) {
+      const guess = guessNameFromText(text);
+      if (guess) {
+        fallback[key] = guess;
+      }
+    }
+  });
+  return fallback;
+};
+
 export const extractEmailFields = async ({
   schemaKeys,
   subject,
@@ -68,7 +96,7 @@ export const extractEmailFields = async ({
       model: DEFAULT_MODEL,
       instructions: systemPrompt,
       input: userPrompt,
-      max_output_tokens: 600,
+      max_output_tokens: 1200,
       reasoning: { effort: "low" },
       tools: [
         {
@@ -83,7 +111,11 @@ export const extractEmailFields = async ({
             properties: {
               fields: {
                 type: "object",
-                additionalProperties: { type: "string" },
+                additionalProperties: false,
+                required: schemaKeys,
+                properties: Object.fromEntries(
+                  schemaKeys.map((key) => [key, { type: "string" }]),
+                ),
               },
               warnings: {
                 type: "array",
@@ -146,8 +178,11 @@ export const extractEmailFields = async ({
   }
 
   if (!jsonPayload) {
+    const fallbackFields = applyFallbacks(schemaKeys, safeText);
     return {
-      fields: Object.fromEntries(schemaKeys.map((key) => [key, ""])),
+      fields: Object.fromEntries(
+        schemaKeys.map((key) => [key, fallbackFields[key] ?? ""]),
+      ),
       warnings: ["Risposta AI vuota durante l'estrazione email."],
     };
   }
@@ -157,16 +192,23 @@ export const extractEmailFields = async ({
       fields?: Record<string, string>;
       warnings?: string[];
     };
+    const fallbackFields = applyFallbacks(schemaKeys, safeText);
     const fields: Record<string, string> = Object.fromEntries(
-      schemaKeys.map((key) => [key, parsed.fields?.[key] ?? ""]),
+      schemaKeys.map((key) => [
+        key,
+        parsed.fields?.[key] ?? fallbackFields[key] ?? "",
+      ]),
     );
     return {
       fields,
       warnings: parsed.warnings ?? [],
     };
   } catch (error) {
+    const fallbackFields = applyFallbacks(schemaKeys, safeText);
     return {
-      fields: Object.fromEntries(schemaKeys.map((key) => [key, ""])),
+      fields: Object.fromEntries(
+        schemaKeys.map((key) => [key, fallbackFields[key] ?? ""]),
+      ),
       warnings: ["Impossibile leggere la risposta AI per l'email."],
     };
   }
