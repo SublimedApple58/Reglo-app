@@ -184,7 +184,9 @@ export const triggerEmailInboundWorkflows = async ({
 
   const fetchReceivedEmailContent = async (emailId: string) => {
     const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) return null;
+    if (!apiKey) {
+      return { content: null, warning: "RESEND_API_KEY mancante per recuperare il corpo." };
+    }
     try {
       const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
         headers: {
@@ -192,11 +194,22 @@ export const triggerEmailInboundWorkflows = async ({
           "Content-Type": "application/json",
         },
       });
-      if (!res.ok) return null;
-      const json = (await res.json()) as { data?: { html?: string; text?: string } };
-      return json.data ?? null;
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        return {
+          content: null,
+          warning: `Impossibile recuperare il corpo email da Resend (HTTP ${res.status}). ${errText.slice(0, 140)}`,
+        };
+      }
+      const json = (await res.json()) as {
+        data?: { html?: string; text?: string; body?: string };
+      };
+      return { content: json.data ?? null, warning: null };
     } catch {
-      return null;
+      return {
+        content: null,
+        warning: "Errore durante il recupero del corpo email da Resend.",
+      };
     }
   };
 
@@ -222,13 +235,20 @@ export const triggerEmailInboundWorkflows = async ({
 
     let resolvedText = inbound.text;
     let resolvedHtml = inbound.html;
+    const extraWarnings: string[] = [];
     if (!resolvedText && inbound.emailId) {
-      const content = await fetchReceivedEmailContent(inbound.emailId);
+      const { content, warning } = await fetchReceivedEmailContent(inbound.emailId);
+      if (warning) {
+        extraWarnings.push(warning);
+      }
       if (content) {
-        resolvedText = content.text ?? "";
+        resolvedText = content.text ?? content.body ?? "";
         resolvedHtml = content.html ?? resolvedHtml;
         if (!resolvedText && content.html) {
           resolvedText = htmlToText(content.html);
+        }
+        if (!resolvedText) {
+          extraWarnings.push("Corpo email vuoto anche dopo fetch Resend.");
         }
       }
     }
@@ -269,6 +289,7 @@ export const triggerEmailInboundWorkflows = async ({
       ...requiredFields
         .filter((key) => !fields[key] || !fields[key].trim())
         .map((key) => `Campo mancante: ${key}`),
+      ...extraWarnings,
     ];
 
     const triggerPayload = {
