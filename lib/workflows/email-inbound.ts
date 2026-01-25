@@ -203,8 +203,22 @@ export const triggerEmailInboundWorkflows = async ({
       }
       const json = (await res.json()) as {
         data?: { html?: string; text?: string; body?: string };
+        html?: string;
+        text?: string;
+        body?: string;
       };
-      return { content: json.data ?? null, warning: null };
+      const content = json.data ?? json;
+      const hasContent =
+        typeof content?.text === "string" ||
+        typeof content?.html === "string" ||
+        typeof content?.body === "string";
+      if (!hasContent) {
+        return {
+          content: null,
+          warning: "Resend non ha restituito body/text per la mail ricevuta.",
+        };
+      }
+      return { content, warning: null };
     } catch {
       return {
         content: null,
