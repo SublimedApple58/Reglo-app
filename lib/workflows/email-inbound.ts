@@ -10,6 +10,7 @@ export type NormalizedInboundEmail = {
   subject: string;
   text: string;
   html?: string;
+  emailId?: string;
   raw?: unknown;
 };
 
@@ -103,6 +104,10 @@ export const normalizeInboundPayload = (payload: unknown): NormalizedInboundEmai
     pickString(record, ["subject", "Subject", "email_subject"]) ||
     pickStringFromList(nestedCandidates, ["subject", "Subject", "email_subject"]) ||
     "";
+  const emailId =
+    pickString(record, ["email_id", "emailId", "id"]) ||
+    pickStringFromList(nestedCandidates, ["email_id", "emailId", "id"]) ||
+    undefined;
   const text =
     pickString(record, [
       "text",
@@ -139,6 +144,7 @@ export const normalizeInboundPayload = (payload: unknown): NormalizedInboundEmai
     subject,
     text: normalizedText,
     html: html ?? undefined,
+    emailId: emailId || undefined,
     raw: payload,
   };
 };
@@ -176,6 +182,24 @@ export const triggerEmailInboundWorkflows = async ({
     where: { status: "active" },
   });
 
+  const fetchReceivedEmailContent = async (emailId: string) => {
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) return null;
+    try {
+      const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { data?: { html?: string; text?: string } };
+      return json.data ?? null;
+    } catch {
+      return null;
+    }
+  };
+
   for (const workflow of workflows) {
     const definition = workflow.definition as {
       trigger?: { type?: string; config?: Record<string, unknown> };
@@ -195,6 +219,19 @@ export const triggerEmailInboundWorkflows = async ({
     if (!matchFilter(inbound.from, fromFilter)) continue;
     if (!matchFilter(inbound.subject, subjectFilter)) continue;
     if (!matchKeywords(`${inbound.subject}\n${inbound.text}`, keywords)) continue;
+
+    let resolvedText = inbound.text;
+    let resolvedHtml = inbound.html;
+    if (!resolvedText && inbound.emailId) {
+      const content = await fetchReceivedEmailContent(inbound.emailId);
+      if (content) {
+        resolvedText = content.text ?? "";
+        resolvedHtml = content.html ?? resolvedHtml;
+        if (!resolvedText && content.html) {
+          resolvedText = htmlToText(content.html);
+        }
+      }
+    }
 
     const emailFieldMeta = Array.isArray((config as { emailFieldMeta?: unknown }).emailFieldMeta)
       ? ((config as { emailFieldMeta?: Array<{ key: string; required: boolean }> }).emailFieldMeta ??
@@ -219,8 +256,8 @@ export const triggerEmailInboundWorkflows = async ({
     const extraction = await extractEmailFields({
       schemaKeys,
       subject: inbound.subject,
-      text: inbound.text,
-      html: inbound.html,
+      text: resolvedText,
+      html: resolvedHtml,
     });
 
     const fields = Object.fromEntries(
@@ -237,11 +274,12 @@ export const triggerEmailInboundWorkflows = async ({
     const triggerPayload = {
       ...fields,
       _email: {
+        id: inbound.emailId ?? undefined,
         from: inbound.from,
         to: inbound.to.join(", "),
         subject: inbound.subject,
-        text: inbound.text,
-        html: inbound.html ?? undefined,
+        text: resolvedText,
+        html: resolvedHtml ?? undefined,
       },
       _warnings: warnings,
     };
