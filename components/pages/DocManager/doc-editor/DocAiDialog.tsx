@@ -28,7 +28,7 @@ export function DocAiDialog({
         <DialogHeader>
           <DialogTitle>Configura documento con AI</DialogTitle>
           <DialogDescription>
-            L'AI analizzerà il documento e aggiungerà i campi in automatico. I
+            L&apos;AI analizzerà il documento e aggiungerà i campi in automatico. I
             campi verranno aggiunti a quelli esistenti.
           </DialogDescription>
         </DialogHeader>
