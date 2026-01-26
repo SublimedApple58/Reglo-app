@@ -11,13 +11,16 @@ import { DocEditorSidebar } from "@/components/pages/DocManager/doc-editor/DocEd
 import { DocEditorOverlay } from "@/components/pages/DocManager/doc-editor/DocEditorOverlay";
 import { BindingKeyDialog } from "@/components/pages/DocManager/doc-editor/BindingKeyDialog";
 import { RichTextDialog } from "@/components/pages/DocManager/doc-editor/RichTextDialog";
+import { DocAiDialog } from "@/components/pages/DocManager/doc-editor/DocAiDialog";
 import {
   getDocumentConfig,
   saveDocumentFields,
 } from "@/lib/actions/document.actions";
+import { generateDocumentFields } from "@/lib/actions/doc-ai.actions";
 import { useAtomValue } from "jotai";
 import { userSessionAtom } from "@/atoms/user.store";
 import { companyAtom } from "@/atoms/company.store";
+import { extractDocAiLines } from "@/components/pages/DocManager/doc-editor/doc-ai-utils";
 
 type DocEditorWrapperProps = {
   docId?: string;
@@ -51,6 +54,9 @@ export function DocEditorWrapper({
   const [textDialogOpen, setTextDialogOpen] = React.useState(false);
   const [textFieldId, setTextFieldId] = React.useState<string | null>(null);
   const [textDraft, setTextDraft] = React.useState("");
+  const [aiDialogOpen, setAiDialogOpen] = React.useState(false);
+  const [aiPrompt, setAiPrompt] = React.useState("");
+  const [aiRunning, setAiRunning] = React.useState(false);
   const [dragState, setDragState] = React.useState<{
     id: string;
     page: number;
@@ -520,6 +526,132 @@ export function DocEditorWrapper({
     previewUrl: undefined,
   };
 
+  const clampRatio = (value: number, min = 0, max = 1) =>
+    Math.min(Math.max(value, min), max);
+
+  const normalizeAiField = (field: {
+    type: ToolId;
+    page: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    bindingKey?: string | null;
+    html?: string | null;
+  }): PlacedField => {
+    const tool = toolItems.find((item) => item.id === field.type);
+    const bounds = overlayRefs.current[field.page]?.current?.getBoundingClientRect();
+    const baseWidth = bounds?.width ?? 900;
+    const baseHeight = bounds?.height ?? 1100;
+    const defaultWidth = tool ? tool.width / baseWidth : 0.2;
+    const defaultHeight = tool ? tool.height / baseHeight : 0.04;
+
+    const clampByType = (value: number, type: ToolId, fallback: number) => {
+      if (type === "textarea" || type === "text") {
+        return clampRatio(value, fallback * 0.8, Math.min(0.8, fallback * 2));
+      }
+      return clampRatio(value, fallback * 0.8, Math.min(0.6, fallback * 1.4));
+    };
+
+    const width = clampByType(
+      Number.isFinite(field.width) && field.width > 0 ? field.width : defaultWidth,
+      field.type,
+      defaultWidth,
+    );
+    const height = clampByType(
+      Number.isFinite(field.height) && field.height > 0 ? field.height : defaultHeight,
+      field.type,
+      defaultHeight,
+    );
+    const x = clampRatio(field.x, 0, Math.max(0, 1 - width));
+    const y = clampRatio(field.y, 0, Math.max(0, 1 - height));
+
+    return {
+      id: `field-${idCounter.current++}`,
+      type: field.type,
+      page: field.page,
+      x,
+      y,
+      width,
+      height,
+      bindingKey: field.bindingKey?.trim() || undefined,
+      meta: {
+        unit: "ratio",
+        ...(field.type === "text"
+          ? { html: field.html ?? "<p>Testo generato...</p>" }
+          : {}),
+      },
+    };
+  };
+
+  const handleRunAi = async () => {
+    if (!docId || !companyId || !pdfFile || aiRunning) return;
+    setAiRunning(true);
+    try {
+      const pages = await extractDocAiLines(pdfFile, { maxLinesPerPage: 90 });
+      const res = await generateDocumentFields({
+        companyId,
+        templateId: docId,
+        prompt: aiPrompt.trim() || undefined,
+        pages,
+      });
+
+      if (!res.success) {
+        toast.error({ description: res.message ?? "AI non disponibile." });
+        setAiRunning(false);
+        return;
+      }
+
+      const mappedFields = res.data.fields.map((field) =>
+        normalizeAiField({
+          type: field.type as ToolId,
+          page: field.page,
+          x: field.x,
+          y: field.y,
+          width: field.width,
+          height: field.height,
+          bindingKey: field.bindingKey ?? undefined,
+          html: field.html ?? undefined,
+        }),
+      );
+
+      setFields((prev) => prev.concat(mappedFields));
+      setAiDialogOpen(false);
+      setAiPrompt("");
+
+      const missingBindings = mappedFields.filter(
+        (field) => field.type !== "text" && !field.bindingKey,
+      ).length;
+
+      toast.success({
+        title: "Documento configurato",
+        description: "L'AI ha aggiunto nuovi campi. Verifica e salva.",
+      });
+
+      if (missingBindings > 0) {
+        toast.info({
+          title: "Binding key mancanti",
+          description: `${missingBindings} campi senza binding key. Associali manualmente.`,
+        });
+      }
+
+      const warnings = res.data.warnings ?? [];
+      if (warnings.length > 0) {
+        toast.info({
+          title: "Nota AI",
+          description: warnings.join(" · "),
+        });
+      }
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error ? error.message : "Errore durante l'AI.",
+      });
+    } finally {
+      setAiRunning(false);
+    }
+  };
+
   return (
     <div className="flex min-h-[calc(100vh-160px)] w-full gap-6 p-6">
       <DocEditorSidebar
@@ -527,6 +659,9 @@ export function DocEditorWrapper({
         selectedTool={selectedTool}
         onSelectTool={setSelectedTool}
         onDragTool={handleToolDrag}
+        onOpenAi={() => setAiDialogOpen(true)}
+        aiDisabled={!pdfFile}
+        aiRunning={aiRunning}
       />
 
       <section className="flex min-w-0 flex-1 flex-col gap-4">
@@ -542,31 +677,39 @@ export function DocEditorWrapper({
             </>
           }
         />
-
-        <DocumentCanvas
-          pdfFile={pdfFile ?? undefined}
-          renderOverlay={(pageNumber, _pageRef) => (
-            <DocEditorOverlay
-              key={`overlay-${pageNumber}`}
-              pageNumber={pageNumber}
-              fields={fields}
-              selectedTool={selectedTool}
-              overlayRef={getOverlayRef(pageNumber)}
-              onCanvasClick={(event) => handleCanvasClick(pageNumber, event)}
-              onCanvasDrop={(event) => handleCanvasDrop(pageNumber, event)}
-              onCanvasDragOver={handleCanvasDragOver}
-              onStartDrag={(field, event) =>
-                handleStartDrag(pageNumber, field, event)
-              }
-              onStartResize={(field, event) =>
-                handleStartResize(pageNumber, field, event)
-              }
-              onDeleteField={handleDeleteField}
-              onRequestBinding={handleRequestBinding}
-              onEditText={handleEditTextField}
-            />
-          )}
-        />
+        <div className="relative">
+          <DocumentCanvas
+            pdfFile={pdfFile ?? undefined}
+            renderOverlay={(pageNumber, _pageRef) => (
+              <DocEditorOverlay
+                key={`overlay-${pageNumber}`}
+                pageNumber={pageNumber}
+                fields={fields}
+                selectedTool={selectedTool}
+                overlayRef={getOverlayRef(pageNumber)}
+                onCanvasClick={(event) => handleCanvasClick(pageNumber, event)}
+                onCanvasDrop={(event) => handleCanvasDrop(pageNumber, event)}
+                onCanvasDragOver={handleCanvasDragOver}
+                onStartDrag={(field, event) =>
+                  handleStartDrag(pageNumber, field, event)
+                }
+                onStartResize={(field, event) =>
+                  handleStartResize(pageNumber, field, event)
+                }
+                onDeleteField={handleDeleteField}
+                onRequestBinding={handleRequestBinding}
+                onEditText={handleEditTextField}
+              />
+            )}
+          />
+          {aiRunning ? (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/80">
+              <div className="rounded-2xl border border-border/70 bg-white px-6 py-4 text-sm font-semibold text-foreground shadow-sm">
+                Reglo AI sta configurando il documento...
+              </div>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <BindingKeyDialog
@@ -592,6 +735,17 @@ export function DocEditorWrapper({
           }
         }}
         onSubmit={handleTextSubmit}
+      />
+      <DocAiDialog
+        open={aiDialogOpen}
+        prompt={aiPrompt}
+        isRunning={aiRunning}
+        onPromptChange={setAiPrompt}
+        onOpenChange={(open) => {
+          if (aiRunning) return;
+          setAiDialogOpen(open);
+        }}
+        onConfirm={handleRunAi}
       />
     </div>
   );

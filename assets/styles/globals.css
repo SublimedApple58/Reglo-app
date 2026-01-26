@@ -120,3 +120,53 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer components {
+  .doc-richtext {
+    @apply font-sans text-foreground;
+  }
+
+  .doc-richtext-editor {
+    @apply text-[14px] leading-[1.7];
+  }
+
+  .doc-richtext-preview {
+    @apply text-[12px] leading-[1.55];
+  }
+
+  .doc-richtext p {
+    @apply mb-2;
+  }
+
+  .doc-richtext h1 {
+    @apply mb-2 text-2xl font-semibold tracking-tight;
+  }
+
+  .doc-richtext h2 {
+    @apply mb-2 text-xl font-semibold;
+  }
+
+  .doc-richtext h3 {
+    @apply mb-2 text-lg font-semibold;
+  }
+
+  .doc-richtext blockquote {
+    @apply mb-2 border-l-2 border-border pl-3 italic text-muted-foreground;
+  }
+
+  .doc-richtext ul {
+    @apply mb-2 list-disc pl-5;
+  }
+
+  .doc-richtext ol {
+    @apply mb-2 list-decimal pl-5;
+  }
+
+  .doc-richtext li {
+    @apply mb-1;
+  }
+
+  .doc-richtext a {
+    @apply text-primary underline;
+  }
+}

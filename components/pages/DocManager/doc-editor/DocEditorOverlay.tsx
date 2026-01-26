@@ -102,10 +102,10 @@ export function DocEditorOverlay({
           <div
             key={field.id}
             className={cn(
-              "group absolute cursor-move rounded-md border text-[11px] shadow-sm",
+              "group absolute cursor-move rounded-md border shadow-sm",
               isTextBlock
                 ? "border-border/60 bg-white/90 text-foreground"
-                : "border-primary/40 bg-primary/10 font-semibold text-primary/80",
+                : "border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary/80",
             )}
             style={resolveFieldStyle(field)}
             onMouseDown={(event) => onStartDrag(field, event)}
@@ -153,7 +153,7 @@ export function DocEditorOverlay({
             </DropdownMenu>
             {isTextBlock ? (
               <div
-                className="px-2 py-1 text-[11px] leading-relaxed text-foreground/90 [&_p]:m-0 [&_ul]:m-0 [&_ol]:m-0 [&_li]:m-0"
+                className="doc-richtext doc-richtext-preview max-h-full overflow-hidden px-2.5 py-1.5 text-foreground/90"
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             ) : (

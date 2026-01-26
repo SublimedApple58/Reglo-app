@@ -14,6 +14,9 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import CredentialsSignInForm from './credentials-signin-form';
 import { Sparkles, ShieldCheck, Zap } from 'lucide-react';
+import { prisma } from '@/db/prisma';
+import { signOutUser } from '@/lib/actions/user.actions';
+import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
   title: 'Sign In',
@@ -23,13 +26,59 @@ const SignInPage = async (props: {
   searchParams: Promise<{
     callbackUrl: string;
   }>;
+  params: Promise<{ locale: string }>;
 }) => {
   const { callbackUrl } = await props.searchParams;
+  const { locale } = await props.params;
 
   const session = await auth();
 
-  if (session) {
-    return redirect(callbackUrl || '/');
+  if (session?.user?.id) {
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId: session.user.id },
+      select: { companyId: true },
+    });
+
+    if (!membership) {
+      return (
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <Card className="max-w-lg border-border/70 bg-white/90 shadow-xl">
+            <CardHeader className="space-y-2">
+              <CardTitle className="text-center text-2xl text-[#324e7a]">
+                Accesso non disponibile
+              </CardTitle>
+              <CardDescription className="text-center">
+                Il tuo account non è collegato ad alcuna company. Contatta il
+                supporto oppure esci e accedi con un account diverso.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              <form action={signOutUser} className="w-full">
+                <Button type="submit" className="w-full">
+                  Esci
+                </Button>
+              </form>
+              <Link
+                href={`/${locale}/sign-up`}
+                className="text-center text-sm text-muted-foreground hover:text-foreground"
+              >
+                Crea un nuovo account
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    const fallbackPath = locale ? `/${locale}` : '/';
+    const safeCallback =
+      callbackUrl &&
+      !callbackUrl.includes('/sign-in') &&
+      !callbackUrl.includes('/sign-up')
+        ? callbackUrl
+        : fallbackPath;
+
+    return redirect(safeCallback);
   }
   const translation = await getTranslations('SignInPage'); // or useTranslations for client components
 

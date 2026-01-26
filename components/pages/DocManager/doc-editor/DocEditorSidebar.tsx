@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ToolId, ToolItem } from "../doc-manager.types";
 
@@ -11,6 +11,9 @@ type DocEditorSidebarProps = {
   selectedTool: ToolId | null;
   onSelectTool: (toolId: ToolId | null) => void;
   onDragTool: (event: React.DragEvent<HTMLButtonElement>, toolId: ToolId) => void;
+  onOpenAi?: () => void;
+  aiDisabled?: boolean;
+  aiRunning?: boolean;
 };
 
 export function DocEditorSidebar({
@@ -18,6 +21,9 @@ export function DocEditorSidebar({
   selectedTool,
   onSelectTool,
   onDragTool,
+  onOpenAi,
+  aiDisabled,
+  aiRunning,
 }: DocEditorSidebarProps): React.ReactElement {
   const textTools = tools.filter((tool) => tool.id === "text");
   const fieldTools = tools.filter((tool) => tool.id !== "text");
@@ -72,6 +78,22 @@ export function DocEditorSidebar({
           </p>
           {renderTools(textTools)}
         </div>
+        {onOpenAi ? (
+          <button
+            type="button"
+            onClick={onOpenAi}
+            disabled={aiDisabled || aiRunning}
+            className={cn(
+              "mt-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition",
+              aiDisabled || aiRunning
+                ? "border-border/60 bg-muted text-muted-foreground"
+                : "border-primary/20 bg-primary/5 text-foreground hover:border-primary/30 hover:bg-primary/10",
+            )}
+          >
+            <Sparkles className="h-4 w-4 text-primary/80" />
+            {aiRunning ? "AI in corso..." : "Configura con AI"}
+          </button>
+        ) : null}
       </div>
       <div className="mt-auto" />
     </aside>
