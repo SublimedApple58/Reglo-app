@@ -33,6 +33,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Slack signing secret missing" }, { status: 500 });
   }
 
+  const retryNum = request.headers.get("x-slack-retry-num");
+  if (retryNum) {
+    return NextResponse.json({ ok: true });
+  }
+
   const timestamp = request.headers.get("x-slack-request-timestamp") ?? "";
   const signature = request.headers.get("x-slack-signature") ?? "";
   const body = await request.text();

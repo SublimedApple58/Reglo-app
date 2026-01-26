@@ -29,6 +29,21 @@ const normalizeUserFilter = (value?: string) => {
   return value.trim().replace(/^<@/, "").replace(/>$/, "");
 };
 
+const guessNameFromText = (text: string) => {
+  const patterns = [
+    /il nostro cliente(?:\s+)?(?:è|e)\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /il cliente(?:\s+)?(?:è|e)\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /cliente[:\s]+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /mi chiamo\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+    /\bsono\s+([A-ZÀ-ÖØ-Þ][\p{L}'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\p{L}'’.-]+){0,3})/iu,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+};
+
 export const triggerSlackInboundWorkflows = async ({
   inbound,
 }: {
@@ -112,6 +127,20 @@ export const triggerSlackInboundWorkflows = async ({
       schemaKeys.map((key) => [key, extraction.fields[key] ?? ""]),
     );
 
+    schemaKeys.forEach((key) => {
+      const lower = key.toLowerCase();
+      if (!lower.includes("name") && !lower.includes("nome")) return;
+      const guessed = guessNameFromText(inbound.text);
+      if (!guessed) return;
+      const current = fields[key] ?? "";
+      if (!current || current.length > guessed.length || current.includes(inbound.text)) {
+        fields[key] = guessed;
+      }
+      if (current && current.toLowerCase().includes("cliente")) {
+        fields[key] = guessed;
+      }
+    });
+
     const warnings = [
       ...extraction.warnings,
       ...requiredFields
@@ -130,6 +159,21 @@ export const triggerSlackInboundWorkflows = async ({
       },
       _warnings: warnings,
     };
+
+    if (inbound.eventId) {
+      const existing = await prisma.workflowRun.findFirst({
+        where: {
+          workflowId: workflow.id,
+          triggerType: "slack_message",
+          triggerPayload: {
+            path: ["_slack", "eventId"],
+            equals: inbound.eventId,
+          } as any,
+        },
+        select: { id: true },
+      });
+      if (existing) continue;
+    }
 
     const executionOrder = computeExecutionOrder(definition);
 
