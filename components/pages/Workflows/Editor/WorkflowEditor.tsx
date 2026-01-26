@@ -125,6 +125,8 @@ export function WorkflowEditor(): React.ReactElement {
   ]);
   const emailFieldId = useRef(0);
   const [emailFieldDefinitions, setEmailFieldDefinitions] = useState<ManualFieldDefinition[]>([]);
+  const slackFieldId = useRef(0);
+  const [slackFieldDefinitions, setSlackFieldDefinitions] = useState<ManualFieldDefinition[]>([]);
   const [runPayloadDialogOpen, setRunPayloadDialogOpen] = useState(false);
   const [runPayloadFields, setRunPayloadFields] = useState<RunPayloadField[]>([]);
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
@@ -189,16 +191,19 @@ export function WorkflowEditor(): React.ReactElement {
     setTriggerConfig,
     setManualFieldDefinitions,
     setEmailFieldDefinitions,
+    setSlackFieldDefinitions,
     setNodes,
     setEdges,
     idCounter,
     manualFieldId,
     emailFieldId,
+    slackFieldId,
   });
   const triggerTemplateMissing =
     triggerType === "document_completed" && !triggerConfig.templateId?.trim();
   const triggerEmailMissing =
     triggerType === "email_inbound" && !triggerConfig.address?.trim();
+  const triggerSlackMissing = triggerType === "slack_message" && !isSlackConnected;
   const triggerSummaryLabel = useMemo(() => {
     if (triggerType === "document_completed") return "Template compilato";
     if (triggerType === "email_inbound") return "Email in ingresso";
@@ -220,10 +225,25 @@ export function WorkflowEditor(): React.ReactElement {
       if (!address) return undefined;
       return address;
     }
+    if (triggerType === "slack_message") {
+      const channelId = triggerConfig.channelId;
+      if (!channelId || channelId === "all") return "Tutti i canali";
+      const channelLabel =
+        slackChannelOptions.find((option) => option.value === channelId)?.label ?? channelId;
+      return channelLabel;
+    }
     return undefined;
-  }, [documentTemplateOptions, triggerConfig.address, triggerConfig.templateId, triggerType]);
+  }, [
+    documentTemplateOptions,
+    slackChannelOptions,
+    triggerConfig.address,
+    triggerConfig.channelId,
+    triggerConfig.templateId,
+    triggerType,
+  ]);
   const triggerNeedsSetup =
-    triggerType !== "manual" && (triggerTemplateMissing || triggerEmailMissing);
+    triggerType !== "manual" &&
+    (triggerTemplateMissing || triggerEmailMissing || triggerSlackMissing);
   const triggerFieldKeys = useMemo(() => {
     if (triggerType === "document_completed") {
       return templateBindingKeys[triggerConfig.templateId ?? ""] ?? [];
@@ -233,12 +253,18 @@ export function WorkflowEditor(): React.ReactElement {
         .map((field) => field.key.trim())
         .filter(Boolean);
     }
+    if (triggerType === "slack_message") {
+      return slackFieldDefinitions
+        .map((field) => field.key.trim())
+        .filter(Boolean);
+    }
     return manualFieldDefinitions
       .map((field) => field.key.trim())
       .filter(Boolean);
   }, [
     emailFieldDefinitions,
     manualFieldDefinitions,
+    slackFieldDefinitions,
     templateBindingKeys,
     triggerConfig.templateId,
     triggerType,
@@ -249,14 +275,25 @@ export function WorkflowEditor(): React.ReactElement {
       label: field,
       token: `trigger.payload.${field}`,
     }));
-    if (triggerType !== "email_inbound") return base;
-    return [
-      ...base,
-      { label: "Email · Mittente", token: "trigger.payload._email.from" },
-      { label: "Email · Destinatario", token: "trigger.payload._email.to" },
-      { label: "Email · Oggetto", token: "trigger.payload._email.subject" },
-      { label: "Email · Testo", token: "trigger.payload._email.text" },
-    ];
+    if (triggerType === "email_inbound") {
+      return [
+        ...base,
+        { label: "Email · Mittente", token: "trigger.payload._email.from" },
+        { label: "Email · Destinatario", token: "trigger.payload._email.to" },
+        { label: "Email · Oggetto", token: "trigger.payload._email.subject" },
+        { label: "Email · Testo", token: "trigger.payload._email.text" },
+      ];
+    }
+    if (triggerType === "slack_message") {
+      return [
+        ...base,
+        { label: "Slack · Canale", token: "trigger.payload._slack.channel" },
+        { label: "Slack · Autore", token: "trigger.payload._slack.user" },
+        { label: "Slack · Testo", token: "trigger.payload._slack.text" },
+        { label: "Slack · Timestamp", token: "trigger.payload._slack.ts" },
+      ];
+    }
+    return base;
   }, [triggerFieldKeys, triggerType]);
 
   useEffect(() => {
@@ -287,6 +324,12 @@ export function WorkflowEditor(): React.ReactElement {
       allowed.add("trigger.payload._email.from");
       allowed.add("trigger.payload._email.to");
       allowed.add("trigger.payload._email.text");
+    }
+    if (triggerType === "slack_message") {
+      allowed.add("trigger.payload._slack.channel");
+      allowed.add("trigger.payload._slack.user");
+      allowed.add("trigger.payload._slack.text");
+      allowed.add("trigger.payload._slack.ts");
     }
     const invalid = new Set<string>();
     const checkValue = (value?: string) => {
@@ -396,6 +439,15 @@ export function WorkflowEditor(): React.ReactElement {
           "Trigger email non configurato: salvato come Manuale finche' non scegli un indirizzo.",
       });
     }
+    if (triggerType === "slack_message" && triggerSlackMissing) {
+      resolvedTriggerType = "manual";
+      resolvedTriggerConfig = {};
+      setTriggerType("manual");
+      setTriggerConfig({});
+      toast.error({
+        description: "Slack non connesso: trigger salvato come Manuale.",
+      });
+    }
     const saveTriggerConfig: Record<string, unknown> = {
       ...resolvedTriggerConfig,
     };
@@ -425,6 +477,20 @@ export function WorkflowEditor(): React.ReactElement {
           .filter((field) => field.key.length > 0);
       saveTriggerConfig.emailFields = emailFields;
       saveTriggerConfig.emailFieldMeta = emailFieldMeta;
+    }
+    if (resolvedTriggerType === "slack_message") {
+      const slackFields = slackFieldDefinitions
+        .map((field) => field.key.trim())
+        .filter(Boolean);
+      const slackFieldMeta: Array<{ key: string; required: boolean }> =
+        slackFieldDefinitions
+          .map((field) => ({
+            key: field.key.trim(),
+            required: field.required,
+          }))
+          .filter((field) => field.key.length > 0);
+      saveTriggerConfig.slackFields = slackFields;
+      saveTriggerConfig.slackFieldMeta = slackFieldMeta;
     }
     const cleanedTriggerConfig = Object.fromEntries(
       Object.entries(saveTriggerConfig).filter(([_, value]) => {
@@ -1362,6 +1428,12 @@ export function WorkflowEditor(): React.ReactElement {
         emailFieldDefinitions={emailFieldDefinitions}
         setEmailFieldDefinitions={setEmailFieldDefinitions}
         emailFieldIdRef={emailFieldId}
+        slackFieldDefinitions={slackFieldDefinitions}
+        setSlackFieldDefinitions={setSlackFieldDefinitions}
+        slackFieldIdRef={slackFieldId}
+        slackChannelOptions={slackChannelOptions}
+        slackChannelLoading={slackChannelLoading}
+        slackChannelError={slackChannelError}
         documentTemplateOptions={documentTemplateOptions}
         triggerTemplateMissing={triggerTemplateMissing}
         onUnavailableTrigger={() => toast.error({ description: "Trigger in arrivo." })}

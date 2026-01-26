@@ -45,6 +45,12 @@ type TriggerDialogProps = {
   emailFieldDefinitions: ManualFieldDefinition[];
   setEmailFieldDefinitions: Dispatch<SetStateAction<ManualFieldDefinition[]>>;
   emailFieldIdRef: MutableRefObject<number>;
+  slackFieldDefinitions: ManualFieldDefinition[];
+  setSlackFieldDefinitions: Dispatch<SetStateAction<ManualFieldDefinition[]>>;
+  slackFieldIdRef: MutableRefObject<number>;
+  slackChannelOptions: Array<{ label: string; value: string }>;
+  slackChannelLoading: boolean;
+  slackChannelError?: string | null;
   documentTemplateOptions: TemplateOption[];
   triggerTemplateMissing: boolean;
   onUnavailableTrigger?: () => void;
@@ -64,6 +70,12 @@ export function TriggerDialog({
   emailFieldDefinitions,
   setEmailFieldDefinitions,
   emailFieldIdRef,
+  slackFieldDefinitions,
+  setSlackFieldDefinitions,
+  slackFieldIdRef,
+  slackChannelOptions,
+  slackChannelLoading,
+  slackChannelError,
   documentTemplateOptions,
   triggerTemplateMissing,
   onUnavailableTrigger,
@@ -372,6 +384,158 @@ export function TriggerDialog({
                           setEmailFieldDefinitions((prev) => [
                             ...prev,
                             { id: `email-field-${emailFieldIdRef.current++}`, key: "", required: true },
+                          ])
+                        }
+                      >
+                        Aggiungi dato
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {triggerType === "slack_message" ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-foreground">
+                      Quando arriva un messaggio Slack
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Il workflow parte quando il bot riceve un messaggio in un canale dove è
+                      presente.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Canale (opzionale)
+                    </p>
+                    <Select
+                      value={triggerConfig.channelId ?? "all"}
+                      onValueChange={(value) =>
+                        setTriggerConfig((prev) => ({
+                          ...prev,
+                          channelId: value,
+                        }))
+                      }
+                      disabled={slackChannelLoading || !slackChannelOptions.length}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={
+                            slackChannelLoading
+                              ? "Caricamento canali…"
+                              : slackChannelOptions.length
+                                ? "Tutti i canali"
+                                : slackChannelError
+                                  ? "Canali non disponibili"
+                                  : "Nessun canale disponibile"
+                          }
+                        />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60 overflow-y-auto">
+                        <SelectItem value="all">Tutti i canali</SelectItem>
+                        {slackChannelOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {slackChannelError ? (
+                      <p className="text-xs text-rose-500">{slackChannelError}</p>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Filtra autore
+                      </p>
+                      <Input
+                        value={triggerConfig.userFilter ?? ""}
+                        onChange={(event) =>
+                          setTriggerConfig((prev) => ({
+                            ...prev,
+                            userFilter: event.target.value,
+                          }))
+                        }
+                        placeholder="ID utente Slack"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Parole chiave
+                      </p>
+                      <Input
+                        value={triggerConfig.keywords ?? ""}
+                        onChange={(event) =>
+                          setTriggerConfig((prev) => ({
+                            ...prev,
+                            keywords: event.target.value,
+                          }))
+                        }
+                        placeholder="es. ordine, preventivo"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-sm font-semibold text-foreground">
+                      Dati da estrarre con AI
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Definisci i campi che vuoi ottenere dal messaggio Slack.
+                      Se lasci vuoto, avrai solo i metadati del messaggio.
+                    </p>
+                    <div className="space-y-2">
+                      {slackFieldDefinitions.map((field, index) => (
+                        <div key={field.id} className="flex flex-wrap items-center gap-2">
+                          <Input
+                            value={field.key}
+                            onChange={(event) =>
+                              setSlackFieldDefinitions((prev) =>
+                                prev.map((item, itemIndex) =>
+                                  itemIndex === index
+                                    ? { ...item, key: event.target.value }
+                                    : item,
+                                ),
+                              )
+                            }
+                            placeholder="Nome dato"
+                            className="min-w-[200px] flex-1"
+                          />
+                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                              checked={field.required}
+                              onCheckedChange={(value) =>
+                                setSlackFieldDefinitions((prev) =>
+                                  prev.map((item, itemIndex) =>
+                                    itemIndex === index
+                                      ? { ...item, required: Boolean(value) }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            Obbligatorio
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() =>
+                              setSlackFieldDefinitions((prev) =>
+                                prev.filter((_, itemIndex) => itemIndex !== index),
+                              )
+                            }
+                          >
+                            Rimuovi
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          setSlackFieldDefinitions((prev) => [
+                            ...prev,
+                            { id: `slack-field-${slackFieldIdRef.current++}`, key: "", required: true },
                           ])
                         }
                       >

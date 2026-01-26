@@ -68,8 +68,9 @@ export const insertTokenAtSelection = (
   root: HTMLDivElement | null,
   token: string,
   variables: VariableOption[],
+  selectionRange?: Range | null,
 ) => {
-  if (!root) return;
+  if (!root) return null;
   const label = tokenLabelFor(token, variables);
   const selection = window.getSelection();
   root.focus();
@@ -81,17 +82,30 @@ export const insertTokenAtSelection = (
   span.textContent = label;
   const space = document.createTextNode(" ");
 
-  if (selection && selection.rangeCount > 0) {
-    const range = selection.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(space);
-    range.insertNode(span);
-    range.setStartAfter(space);
-    range.collapse(true);
+  let range: Range | null = selectionRange ?? null;
+  if (range && !root.contains(range.commonAncestorContainer)) {
+    range = null;
+  }
+  if (!range && selection && selection.rangeCount > 0) {
+    const candidate = selection.getRangeAt(0);
+    if (root.contains(candidate.commonAncestorContainer)) {
+      range = candidate;
+    }
+  }
+  if (!range) {
+    range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+
+  range.deleteContents();
+  range.insertNode(space);
+  range.insertNode(span);
+  range.setStartAfter(space);
+  range.collapse(true);
+  if (selection) {
     selection.removeAllRanges();
     selection.addRange(range);
-  } else {
-    root.appendChild(span);
-    root.appendChild(space);
   }
+  return range;
 };

@@ -18,11 +18,13 @@ export const useWorkflowLoader = ({
   setTriggerConfig,
   setManualFieldDefinitions,
   setEmailFieldDefinitions,
+  setSlackFieldDefinitions,
   setNodes,
   setEdges,
   idCounter,
   manualFieldId,
   emailFieldId,
+  slackFieldId,
 }: {
   workflowId?: string;
   isNew: boolean;
@@ -33,11 +35,13 @@ export const useWorkflowLoader = ({
   setTriggerConfig: (value: Record<string, string>) => void;
   setManualFieldDefinitions: (value: ManualFieldDefinition[]) => void;
   setEmailFieldDefinitions: (value: ManualFieldDefinition[]) => void;
+  setSlackFieldDefinitions: (value: ManualFieldDefinition[]) => void;
   setNodes: (value: Node[]) => void;
   setEdges: (value: Edge[]) => void;
   idCounter: React.MutableRefObject<number>;
   manualFieldId: React.MutableRefObject<number>;
   emailFieldId: React.MutableRefObject<number>;
+  slackFieldId: React.MutableRefObject<number>;
 }) => {
   useEffect(() => {
     let isMounted = true;
@@ -77,7 +81,9 @@ export const useWorkflowLoader = ({
                 key === "manualFields" ||
                 key === "manualFieldMeta" ||
                 key === "emailFields" ||
-                key === "emailFieldMeta"
+                key === "emailFieldMeta" ||
+                key === "slackFields" ||
+                key === "slackFieldMeta"
               ) {
                 return acc;
               }
@@ -103,6 +109,15 @@ export const useWorkflowLoader = ({
         trigger?.config && typeof trigger.config === "object"
           ? (trigger.config as { emailFieldMeta?: Array<{ key: string; required: boolean }> })
               .emailFieldMeta
+          : undefined;
+      const slackFields =
+        trigger?.config && typeof trigger.config === "object"
+          ? (trigger.config as { slackFields?: string[] }).slackFields
+          : undefined;
+      const slackFieldMeta =
+        trigger?.config && typeof trigger.config === "object"
+          ? (trigger.config as { slackFieldMeta?: Array<{ key: string; required: boolean }> })
+              .slackFieldMeta
           : undefined;
       if (manualFieldMeta && Array.isArray(manualFieldMeta) && manualFieldMeta.length > 0) {
         setManualFieldDefinitions(
@@ -140,6 +155,25 @@ export const useWorkflowLoader = ({
       } else {
         setEmailFieldDefinitions([]);
       }
+      if (slackFieldMeta && Array.isArray(slackFieldMeta) && slackFieldMeta.length > 0) {
+        setSlackFieldDefinitions(
+          slackFieldMeta.map((field) => ({
+            id: `slack-field-${slackFieldId.current++}`,
+            key: field.key,
+            required: field.required,
+          })),
+        );
+      } else if (slackFields && Array.isArray(slackFields) && slackFields.length > 0) {
+        setSlackFieldDefinitions(
+          slackFields.map((field) => ({
+            id: `slack-field-${slackFieldId.current++}`,
+            key: field,
+            required: true,
+          })),
+        );
+      } else {
+        setSlackFieldDefinitions([]);
+      }
       if (canvasNodes.length > 0) {
         setNodes(canvasNodes);
         setEdges(canvasEdges);
@@ -175,5 +209,7 @@ export const useWorkflowLoader = ({
     workflowId,
     emailFieldId,
     setEmailFieldDefinitions,
+    slackFieldId,
+    setSlackFieldDefinitions,
   ]);
 };

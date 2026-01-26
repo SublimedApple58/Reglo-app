@@ -152,7 +152,7 @@ export const triggerOptions: TriggerOption[] = [
     label: "Messaggio Slack",
     description: "Avvio su evento o messaggio Slack.",
     icon: MessageSquare,
-    available: false,
+    available: true,
   },
   {
     id: "fic_event",
