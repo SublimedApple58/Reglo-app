@@ -168,7 +168,7 @@ export const triggerSlackInboundWorkflows = async ({
           triggerPayload: {
             path: ["_slack", "eventId"],
             equals: inbound.eventId,
-          } as any,
+          } as unknown,
         },
         select: { id: true },
       });
