@@ -90,6 +90,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  console.info("[slack inbound]", {
+    teamId,
+    eventType,
+    channelId,
+    userId,
+    eventId,
+    textPreview: text.slice(0, 160),
+  });
+
   await triggerSlackInboundWorkflows({
     inbound: {
       teamId,

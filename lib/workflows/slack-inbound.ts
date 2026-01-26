@@ -36,13 +36,25 @@ export const triggerSlackInboundWorkflows = async ({
 }) => {
   if (!inbound.teamId) return;
 
-  const connection = await prisma.integrationConnection.findFirst({
+  const connections = await prisma.integrationConnection.findMany({
     where: {
       provider: "SLACK",
-      externalAccountId: inbound.teamId,
       status: "connected",
     },
+    orderBy: { updatedAt: "desc" },
   });
+
+  const connection =
+    connections.find((item) => item.externalAccountId === inbound.teamId) ??
+    connections.find((item) => {
+      const metadata = item.metadata as
+        | { team?: { id?: string }; team_id?: string }
+        | null
+        | undefined;
+      if (!metadata) return false;
+      return metadata.team?.id === inbound.teamId || metadata.team_id === inbound.teamId;
+    }) ??
+    (connections.length === 1 ? connections[0] : null);
 
   if (!connection) return;
 
