@@ -61,6 +61,7 @@ export function TokenInput({
 
   const handleInput = () => {
     onChange(serializeTokenInput(ref.current));
+    captureSelection();
   };
 
   const captureSelection = () => {
@@ -180,7 +181,6 @@ export function TokenInput({
           }}
           onKeyUp={captureSelection}
           onMouseUp={captureSelection}
-          onInput={captureSelection}
           suppressContentEditableWarning
         />
         {!value && placeholder ? (
