@@ -75,8 +75,8 @@ importers:
         specifier: ^3.34.0
         version: 3.36.1(react@19.2.3)
       '@trigger.dev/sdk':
-        specifier: ^4.3.2
-        version: 4.3.2(bufferutil@4.1.0)(typescript@5.9.3)(zod@3.25.76)
+        specifier: 4.3.3
+        version: 4.3.3(bufferutil@4.1.0)(typescript@5.9.3)(zod@3.25.76)
       class-variance-authority:
         specifier: ^0.7.0
         version: 0.7.1
@@ -3037,15 +3037,15 @@ packages:
   '@tailwindcss/postcss@4.1.18':
     resolution: {integrity: sha512-Ce0GFnzAOuPyfV5SxjXGn0CubwGcuDB0zcdaPuCSzAa/2vII24JTkH+I6jcbXLb1ctjZMZZI6OjDaLPJQL1S0g==}
 
-  '@trigger.dev/core@4.3.2':
-    resolution: {integrity: sha512-CToEt1w1jOmpvwOh/gqgC3UKHw36nrHSxaMYRnv5csXFOMgH2BksD/fZ2M/R2Q8kNehlQGagFWoussGmItxZqw==}
+  '@trigger.dev/core@4.3.3':
+    resolution: {integrity: sha512-HPPxbesDiEEuA1U/Qi1RWXVMkQNDCNyB7zhd3cIYd6T0KUTIt6i7ZdaqSRDhkAxva2hpaWXQsQIYwr5Jnsyohw==}
     engines: {node: '>=18.20.0'}
 
-  '@trigger.dev/sdk@4.3.2':
-    resolution: {integrity: sha512-XbzWBHoVFwvW1uyEbiEmztF86gvLgt0OO/aUqgeOixBAsTXRFxI/zd/scBMHK8vE9jB1D2biI8x5of6gRPEK4g==}
+  '@trigger.dev/sdk@4.3.3':
+    resolution: {integrity: sha512-aNKbmn6O8XfAJsQ3j9A8tVUm6nr+5SktHxUs804i7S4BG//b0YX0yhrKwPUe8rUGmFCYxmb3B43OOtZ0MsPyfA==}
     engines: {node: '>=18.20.0'}
     peerDependencies:
-      ai: ^4.2.0 || ^5.0.0
+      ai: ^4.2.0 || ^5.0.0 || ^6.0.0
       zod: ^3.0.0 || ^4.0.0
     peerDependenciesMeta:
       ai:
@@ -9907,7 +9907,7 @@ snapshots:
       postcss: 8.5.6
       tailwindcss: 4.1.18
 
-  '@trigger.dev/core@4.3.2(bufferutil@4.1.0)(typescript@5.9.3)':
+  '@trigger.dev/core@4.3.3(bufferutil@4.1.0)(typescript@5.9.3)':
     dependencies:
       '@bugsnag/cuid': 3.2.1
       '@electric-sql/client': 1.0.14
@@ -9948,11 +9948,11 @@ snapshots:
       - typescript
       - utf-8-validate
 
-  '@trigger.dev/sdk@4.3.2(bufferutil@4.1.0)(typescript@5.9.3)(zod@3.25.76)':
+  '@trigger.dev/sdk@4.3.3(bufferutil@4.1.0)(typescript@5.9.3)(zod@3.25.76)':
     dependencies:
       '@opentelemetry/api': 1.9.0
       '@opentelemetry/semantic-conventions': 1.36.0
-      '@trigger.dev/core': 4.3.2(bufferutil@4.1.0)(typescript@5.9.3)
+      '@trigger.dev/core': 4.3.3(bufferutil@4.1.0)(typescript@5.9.3)
       chalk: 5.6.2
       cronstrue: 2.59.0
       debug: 4.4.3

@@ -40,7 +40,7 @@ export const toTokenHtml = (value: string, variables: VariableOption[]) => {
 export const serializeTokenInput = (root: HTMLDivElement | null) => {
   if (!root) return "";
   const parts: string[] = [];
-  root.childNodes.forEach((node) => {
+  const walk = (node: ChildNode) => {
     if (node.nodeType === Node.TEXT_NODE) {
       parts.push(node.textContent ?? "");
       return;
@@ -55,13 +55,12 @@ export const serializeTokenInput = (root: HTMLDivElement | null) => {
       parts.push("\n");
       return;
     }
-    if (element.tagName === "DIV") {
-      parts.push(element.textContent ?? "");
+    element.childNodes.forEach(walk);
+    if (element.tagName === "DIV" || element.tagName === "P") {
       parts.push("\n");
-      return;
     }
-    parts.push(element.textContent ?? "");
-  });
+  };
+  root.childNodes.forEach(walk);
   return parts.join("").replace(/\n+$/g, "");
 };
 
