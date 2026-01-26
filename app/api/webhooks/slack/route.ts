@@ -58,7 +58,13 @@ export async function POST(request: NextRequest) {
 
   const event = payload.event as Record<string, unknown> | undefined;
   const eventType = event?.type as string | undefined;
-  const teamId = payload.team_id as string | undefined;
+  const teamId =
+    (payload.team_id as string | undefined) ??
+    (event?.team as string | undefined) ??
+    ((payload.team as { id?: string } | undefined)?.id ?? undefined) ??
+    (Array.isArray(payload.authorizations)
+      ? ((payload.authorizations[0] as { team_id?: string } | undefined)?.team_id ?? undefined)
+      : undefined);
 
   if (!teamId || !event || !eventType) {
     return NextResponse.json({ ok: true });
