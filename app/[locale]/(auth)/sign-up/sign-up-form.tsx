@@ -3,7 +3,6 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { signUpDefaultValues } from '@/lib/constants';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -40,7 +39,7 @@ const SignUpForm = () => {
             name='companyName'
             type='text'
             autoComplete='organization'
-            defaultValue={signUpDefaultValues.companyName}
+            placeholder='Acme Srl'
           />
         </div>
         <div>
@@ -50,7 +49,7 @@ const SignUpForm = () => {
             name='name'
             type='text'
             autoComplete='name'
-            defaultValue={signUpDefaultValues.name}
+            placeholder='Mario Rossi'
           />
         </div>
         <div>
@@ -58,39 +57,39 @@ const SignUpForm = () => {
           <Input
             id='email'
             name='email'
-            type='text'
+            type='email'
             autoComplete='email'
-            defaultValue={signUpDefaultValues.email}
+            placeholder='you@company.com'
           />
         </div>
         <div>
           <Label htmlFor='password' style={{marginBottom: 8}}>Password</Label>
-          <Input
-            id='password'
-            name='password'
-            type='password'
-            required
-            autoComplete='password'
-            defaultValue={signUpDefaultValues.password}
-          />
+        <Input
+          id='password'
+          name='password'
+          type='password'
+          required
+          autoComplete='new-password'
+        />
         </div>
         <div>
           <Label htmlFor='confirmPassword' style={{marginBottom: 8}}>Confirm Password</Label>
-          <Input
-            id='confirmPassword'
-            name='confirmPassword'
-            type='password'
-            required
-            autoComplete='confirmPassword'
-            defaultValue={signUpDefaultValues.confirmPassword}
-          />
+        <Input
+          id='confirmPassword'
+          name='confirmPassword'
+          type='password'
+          required
+          autoComplete='new-password'
+        />
         </div>
         <div>
           <SignUpButton />
         </div>
 
-        {data && !data.success && (
-          <div className='text-center text-destructive'>{data.message}</div>
+        {data && !data.success && data.message && (
+          <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive'>
+            {data.message}
+          </div>
         )}
 
         <div className='text-sm text-center text-muted-foreground'>
