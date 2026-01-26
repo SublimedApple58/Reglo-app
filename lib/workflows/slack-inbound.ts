@@ -1,4 +1,5 @@
 import { prisma } from "@/db/prisma";
+import { Prisma } from "@prisma/client";
 import { tasks } from "@trigger.dev/sdk/v3";
 import { computeExecutionOrder } from "@/lib/workflows/engine";
 import { collectTriggerPayloadKeys } from "@/lib/workflows/payload";
@@ -168,7 +169,7 @@ export const triggerSlackInboundWorkflows = async ({
           triggerPayload: {
             path: ["_slack", "eventId"],
             equals: inbound.eventId,
-          } as unknown,
+          } as Prisma.JsonNullableFilter<"WorkflowRun">,
         },
         select: { id: true },
       });
