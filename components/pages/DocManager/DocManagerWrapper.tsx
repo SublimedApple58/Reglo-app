@@ -54,7 +54,7 @@ export function DocManagerWrapper(): React.ReactElement {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isUploading, setIsUploading] = React.useState(false);
   const [isCreating, setIsCreating] = React.useState(false);
-  const [showInput, setShowInput] = React.useState(false);
+  const [showInput, setShowInput] = React.useState(true);
   const [value, setValue] = React.useState("");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [documentName, setDocumentName] = React.useState("");
@@ -228,26 +228,34 @@ export function DocManagerWrapper(): React.ReactElement {
       subTitle="Gestisci e rivedi i documenti caricati. Anteprime rapide, pronto per l'editing."
     >
       <div className="flex flex-1 flex-col gap-5">
-        <form onSubmit={handleSubmit} style={{ width: "200px" }}>
-          <InputButtonProvider showInput={showInput} setShowInput={setShowInput}>
-            <InputButton>
-              <InputButtonAction onClick={() => {}}>
-                <p style={{ color: "white" }}></p>
-              </InputButtonAction>
-              <InputButtonSubmit onClick={() => {}} type="submit" />
-            </InputButton>
-            <InputButtonInput
-              type="text"
-              placeholder="Search..."
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              autoFocus
-            />
-          </InputButtonProvider>
-        </form>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="glass-panel flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+          <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+            <InputButtonProvider
+              showInput={showInput}
+              setShowInput={setShowInput}
+              className="w-full"
+            >
+              <InputButton className="w-full">
+                <InputButtonAction className="hidden" />
+                <InputButtonSubmit
+                  onClick={() => {}}
+                  type="submit"
+                  className="bg-foreground text-background hover:bg-foreground/90"
+                />
+              </InputButton>
+              <InputButtonInput
+                type="text"
+                placeholder="Cerca documenti"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
+                autoFocus
+              />
+            </InputButtonProvider>
+          </form>
+          <div className="flex flex-wrap items-center gap-3">
           <Button
-            className="gap-2"
+            className="gap-2 rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
             size="lg"
             type="button"
             onClick={() => setCreateOpen(true)}
@@ -257,7 +265,7 @@ export function DocManagerWrapper(): React.ReactElement {
             Create new document
           </Button>
           <Button
-            className="gap-2"
+            className="gap-2 rounded-full border-white/60 bg-white/80 text-foreground transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
             variant="outline"
             size="lg"
             type="button"
@@ -278,7 +286,8 @@ export function DocManagerWrapper(): React.ReactElement {
               if (!file) return;
               handleUpload(file);
             }}
-          />
+            />
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -286,7 +295,7 @@ export function DocManagerWrapper(): React.ReactElement {
             ? Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={`doc-skeleton-${index}`}
-                  className="flex flex-col gap-3 rounded-2xl bg-card p-3 shadow-sm"
+                  className="flex flex-col gap-3 rounded-2xl border border-white/40 bg-white/60 p-3 shadow-[0_18px_50px_-40px_rgba(50,78,122,0.35)]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
@@ -296,7 +305,7 @@ export function DocManagerWrapper(): React.ReactElement {
                     <Skeleton className="h-8 w-8 rounded-full" />
                   </div>
                   <div
-                    className="relative overflow-hidden rounded-xl bg-muted/50 shadow-inner"
+                    className="relative overflow-hidden rounded-xl border border-white/50 bg-white/70 shadow-inner"
                     style={{ aspectRatio: "4 / 3" }}
                   >
                     <Skeleton className="h-full w-full rounded-none" />
@@ -314,7 +323,7 @@ export function DocManagerWrapper(): React.ReactElement {
                 ))
               : (
                   <div className="md:col-span-2 xl:col-span-3">
-                    <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center text-sm text-muted-foreground">
+                    <div className="rounded-2xl border border-dashed border-white/60 bg-white/50 p-10 text-center text-sm text-muted-foreground shadow-inner">
                       Nessun documento trovato.
                     </div>
                   </div>
@@ -359,17 +368,19 @@ export function DocManagerWrapper(): React.ReactElement {
 
 function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
   return (
-    <div className="group flex flex-col gap-3 rounded-2xl bg-card p-3 shadow-sm transition hover:-translate-y-[1px] hover:shadow-lg">
+    <div className="glass-card group flex flex-col gap-3 p-3 transition hover:-translate-y-[1px] hover:shadow-[0_26px_60px_-50px_rgba(50,78,122,0.55)]">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">{doc.title}</p>
-          <p className="text-xs text-muted-foreground">{doc.updatedAt} · {doc.owner}</p>
+          <p className="text-xs text-muted-foreground">
+            {doc.updatedAt} · {doc.owner}
+          </p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="rounded-full p-2 text-muted-foreground transition hover:bg-muted/70"
+              className="rounded-full border border-white/60 bg-white/70 p-2 text-muted-foreground shadow-sm transition hover:bg-white"
               aria-label="More actions"
             >
               <MoreHorizontal className="h-4 w-4" />
@@ -393,14 +404,14 @@ function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
         </DropdownMenu>
       </div>
       <div
-        className="relative overflow-hidden rounded-xl bg-muted/50 shadow-inner"
+        className="relative overflow-hidden rounded-xl border border-white/60 bg-white/80 shadow-inner"
         style={{ aspectRatio: "4 / 3" }}
       >
         <PdfPreview src={doc.previewUrl ?? pdfSource} title={doc.title} />
       </div>
       <Link
         href={`/user/doc_manager/${doc.id}`}
-        className="inline-flex items-center justify-center rounded-xl bg-primary/10 px-3 py-2 text-sm font-semibold text-primary transition hover:bg-primary/20"
+        className="inline-flex items-center justify-center rounded-full border border-white/60 bg-white/80 px-4 py-2 text-xs font-semibold text-foreground shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
       >
         Modifica documento
       </Link>

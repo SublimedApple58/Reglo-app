@@ -653,7 +653,11 @@ export function DocEditorWrapper({
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-160px)] w-full gap-6 p-6">
+    <div className="relative flex min-h-[calc(100vh-160px)] w-full gap-6 p-6">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-20 right-8 h-60 w-60 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
+        <div className="absolute bottom-10 left-10 h-48 w-48 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
+      </div>
       <DocEditorSidebar
         tools={toolItems}
         selectedTool={selectedTool}
@@ -664,14 +668,18 @@ export function DocEditorWrapper({
         aiRunning={aiRunning}
       />
 
-      <section className="flex min-w-0 flex-1 flex-col gap-4">
+      <section className="relative flex min-w-0 flex-1 flex-col gap-4">
         <DocumentHeader
           title={resolvedDoc.title}
           subtitle="Documento"
           meta={`${resolvedDoc.updatedAt} - ${resolvedDoc.owner}`}
           actions={
             <>
-              <Button onClick={handleSave} disabled={isSaving}>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="rounded-full px-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
                 {isSaving ? "Saving..." : "Save"}
               </Button>
             </>
@@ -704,7 +712,7 @@ export function DocEditorWrapper({
           />
           {aiRunning ? (
             <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-2xl bg-white/80">
-              <div className="rounded-2xl border border-border/70 bg-white px-6 py-4 text-sm font-semibold text-foreground shadow-sm">
+              <div className="rounded-2xl border border-white/70 bg-white/90 px-6 py-4 text-sm font-semibold text-foreground shadow-lg">
                 Reglo AI sta configurando il documento...
               </div>
             </div>

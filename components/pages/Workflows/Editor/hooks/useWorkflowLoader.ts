@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import type { Edge, Node } from "reactflow";
 
 import { getWorkflowById } from "@/lib/actions/workflow.actions";
-import { buildEdges, buildNodes } from "@/components/pages/Workflows/Editor/utils";
+import {
+  buildEdges,
+  buildNodes,
+  ensureStartEndNodes,
+} from "@/components/pages/Workflows/Editor/utils";
 import type {
   ManualFieldDefinition,
   TriggerType,
@@ -175,7 +179,7 @@ export const useWorkflowLoader = ({
         setSlackFieldDefinitions([]);
       }
       if (canvasNodes.length > 0) {
-        setNodes(canvasNodes);
+        setNodes(ensureStartEndNodes(canvasNodes, res.data.name));
         setEdges(canvasEdges);
       } else {
         setNodes(buildNodes(res.data.name, true));

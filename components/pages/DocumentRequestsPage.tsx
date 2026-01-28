@@ -14,7 +14,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React from "react";
 
 export function DocumentRequestsPage(): React.ReactElement {
-  const [showInput, setShowInput] = React.useState(false);
+  const [showInput, setShowInput] = React.useState(true);
   const [value, setValue] = React.useState("");
   const [totalRows, setTotalRows] = React.useState(0);
   const router = useRouter();
@@ -57,33 +57,29 @@ export function DocumentRequestsPage(): React.ReactElement {
       >
         <ManagementBar totalRows={totalRows} />
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          marginBlock: 16,
-        }}
-      >
-        <form onSubmit={handleSubmit} style={{ width: "200px" }}>
-          <InputButtonProvider showInput={showInput} setShowInput={setShowInput}>
-            <InputButton>
-              <InputButtonAction onClick={() => {}}>
-                <p style={{ color: "white" }}></p>
-              </InputButtonAction>
-              <InputButtonSubmit onClick={() => {}} type="submit" />
+      <div className="glass-panel flex flex-col gap-4 p-4">
+        <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+          <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
+            <InputButton className="w-full">
+              <InputButtonAction className="hidden" />
+              <InputButtonSubmit
+                onClick={() => {}}
+                type="submit"
+                className="bg-foreground text-background hover:bg-foreground/90"
+              />
             </InputButton>
             <InputButtonInput
               type="text"
-              placeholder="Search..."
+              placeholder="Cerca compilazioni"
               value={value}
               onChange={(e) => setValue(e.target.value)}
+              className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
               autoFocus
             />
           </InputButtonProvider>
         </form>
       </div>
-      <div className="table_wrapper">
+      <div className="glass-panel p-4">
         <TableDocumentRequests onRowsChange={setTotalRows} />
       </div>
     </ClientPageWrapper>

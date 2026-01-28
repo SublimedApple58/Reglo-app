@@ -509,7 +509,11 @@ export function SettingsPage(): React.ReactElement {
 
   return (
     <ClientPageWrapper title="Settings">
-      <div className="space-y-6">
+      <div className="relative space-y-6">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
+          <div className="absolute bottom-12 left-8 h-44 w-44 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
+        </div>
         <div className="flex flex-col gap-3">
           <TabsSwitcher
             items={tabItems}
@@ -529,7 +533,7 @@ export function SettingsPage(): React.ReactElement {
               className="space-y-4"
             >
               <form onSubmit={handleAccountSave} className="space-y-4">
-                <Card>
+                <Card className="glass-panel">
                   <CardHeader>
                     <CardTitle>Profile photo</CardTitle>
                     <CardDescription>
@@ -562,6 +566,7 @@ export function SettingsPage(): React.ReactElement {
                         variant="outline"
                         onClick={() => avatarInputRef.current?.click()}
                         disabled={isAvatarUploading}
+                        className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                       >
                         <UploadCloud className="h-4 w-4" />
                         {isAvatarUploading ? "Uploading..." : "Upload image"}
@@ -569,7 +574,7 @@ export function SettingsPage(): React.ReactElement {
                     </div>
                   </CardContent>
                 </Card>
-                <Card>
+                <Card className="glass-panel">
                   <CardHeader>
                     <CardTitle>Account</CardTitle>
                     <CardDescription>
@@ -639,7 +644,7 @@ export function SettingsPage(): React.ReactElement {
                   </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="glass-panel">
                   <CardHeader>
                     <CardTitle>Notifiche personali</CardTitle>
                     <CardDescription>
@@ -684,7 +689,12 @@ export function SettingsPage(): React.ReactElement {
                 </Card>
 
                 <div className="flex flex-wrap items-center justify-end gap-3">
-                  <Button type="submit">Salva impostazioni account</Button>
+                  <Button
+                    type="submit"
+                    className="rounded-full px-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                  >
+                    Salva impostazioni account
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -699,7 +709,7 @@ export function SettingsPage(): React.ReactElement {
             >
               {activeTab === "company" ? (
                 <div className="space-y-4">
-                  <Card>
+                  <Card className="glass-panel">
                     <CardHeader>
                       <CardTitle>Company logo</CardTitle>
                       <CardDescription>
@@ -743,6 +753,7 @@ export function SettingsPage(): React.ReactElement {
                           variant="outline"
                           onClick={() => logoInputRef.current?.click()}
                           disabled={isLogoUploading}
+                          className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                         >
                           <UploadCloud className="h-4 w-4" />
                           {isLogoUploading ? "Uploading..." : "Upload logo"}
@@ -752,7 +763,7 @@ export function SettingsPage(): React.ReactElement {
                   </Card>
 
                   <form onSubmit={handleCompanySave} className="space-y-4">
-                    <Card>
+                    <Card className="glass-panel">
                       <CardHeader>
                         <CardTitle>Company</CardTitle>
                         <CardDescription>
@@ -785,7 +796,7 @@ export function SettingsPage(): React.ReactElement {
                       </CardContent>
                     </Card>
 
-                    <Card className="border-primary/15">
+                    <Card className="glass-panel">
                       <CardHeader>
                         <CardTitle>Sessioni &amp; Accessi</CardTitle>
                         <CardDescription>
@@ -828,14 +839,19 @@ export function SettingsPage(): React.ReactElement {
                     </Card>
 
                     <div className="flex flex-wrap items-center justify-end gap-3">
-                      <Button type="submit">Salva impostazioni company</Button>
+                      <Button
+                        type="submit"
+                        className="rounded-full px-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        Salva impostazioni company
+                      </Button>
                     </div>
                   </form>
 
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <Card className="border-primary/15 bg-muted/30">
+                  <Card className="glass-panel">
                     <CardHeader>
                       <CardTitle>Integrazioni</CardTitle>
                       <CardDescription>
@@ -861,7 +877,10 @@ export function SettingsPage(): React.ReactElement {
                           : "Non collegata";
                       const badgeVariant = isBuiltIn || isConnected ? "accent" : "base";
                       return (
-                        <Card key={integration.id} className="flex h-full flex-col">
+                        <Card
+                          key={integration.id}
+                          className="glass-panel flex h-full flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                        >
                           <CardHeader>
                             <div className="flex items-center justify-between gap-3">
                               <CardTitle>{integration.name}</CardTitle>
@@ -881,7 +900,7 @@ export function SettingsPage(): React.ReactElement {
                               </p>
                             )}
                             {providerKey === "fatture-in-cloud" && isConnected ? (
-                              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                              <div className="space-y-2 rounded-xl border border-white/60 bg-white/65 p-3 shadow-inner">
                                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                                   Azienda FIC
                                 </p>
@@ -915,12 +934,12 @@ export function SettingsPage(): React.ReactElement {
                                   }}
                                   disabled={ficEntityLoading || ficSavingEntity}
                                 >
-                                  <SelectTrigger>
-                                    <SelectValue
-                                      placeholder={
-                                        ficEntityLoading
-                                          ? "Caricamento aziende…"
-                                          : "Seleziona azienda"
+                                    <SelectTrigger className="border-white/60 bg-white/80">
+                                      <SelectValue
+                                        placeholder={
+                                          ficEntityLoading
+                                            ? "Caricamento aziende…"
+                                            : "Seleziona azienda"
                                       }
                                     />
                                   </SelectTrigger>
@@ -940,6 +959,7 @@ export function SettingsPage(): React.ReactElement {
                                         setFicManualEntityId(event.target.value)
                                       }
                                       placeholder="Incolla l'ID azienda FIC"
+                                      className="border-white/60 bg-white/80"
                                     />
                                     <Input
                                       value={ficManualEntityName}
@@ -947,6 +967,7 @@ export function SettingsPage(): React.ReactElement {
                                         setFicManualEntityName(event.target.value)
                                       }
                                       placeholder="Nome azienda (opzionale)"
+                                      className="border-white/60 bg-white/80"
                                     />
                                     <Button
                                       type="button"
@@ -984,6 +1005,7 @@ export function SettingsPage(): React.ReactElement {
                                         });
                                       }}
                                       disabled={ficSavingEntity}
+                                      className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                                     >
                                       Salva ID azienda
                                     </Button>
@@ -1004,7 +1026,7 @@ export function SettingsPage(): React.ReactElement {
                             ) : null}
                             <div className="flex flex-wrap items-center gap-2">
                               {isBuiltIn ? (
-                                <Button variant="outline" disabled>
+                                <Button variant="outline" disabled className="rounded-full">
                                   Disponibile
                                 </Button>
                               ) : (
@@ -1021,6 +1043,7 @@ export function SettingsPage(): React.ReactElement {
                                     }}
                                     variant="outline"
                                     disabled={isConnected}
+                                    className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                                   >
                                     {isConnected ? "Connessa" : "Connetti"}
                                   </Button>
@@ -1030,6 +1053,7 @@ export function SettingsPage(): React.ReactElement {
                                       variant="outline"
                                       onClick={() => handleDisconnect(providerKey)}
                                       disabled={disconnectingProvider === providerKey}
+                                      className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                                     >
                                       {disconnectingProvider === providerKey
                                         ? "Disconnettendo..."
@@ -1038,7 +1062,7 @@ export function SettingsPage(): React.ReactElement {
                                   ) : null}
                                 </>
                               )}
-                              <Button variant="ghost" disabled>
+                              <Button variant="ghost" disabled className="rounded-full">
                                 Dettagli
                               </Button>
                             </div>
@@ -1066,7 +1090,7 @@ function LabeledInput({
   return (
     <div className="space-y-2">
       <LabelMini>{label}</LabelMini>
-      <Input {...props} />
+      <Input className="border-white/60 bg-white/80" {...props} />
     </div>
   );
 }
@@ -1085,10 +1109,10 @@ function BadgeMini({
   return (
     <span
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-semibold",
+        "rounded-full border px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur",
         variant === "accent"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-border bg-background text-muted-foreground",
+          ? "border-emerald-200/70 bg-emerald-50/70 text-emerald-700"
+          : "border-white/60 bg-white/70 text-muted-foreground",
       )}
     >
       {children}
@@ -1108,7 +1132,7 @@ function ToggleRow({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border bg-card px-3 py-3">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-white/60 bg-white/70 px-3 py-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div>
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -1158,7 +1182,7 @@ function CheckboxRow({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-lg border px-3 py-2">
+    <label className="flex items-start gap-3 rounded-lg border border-white/60 bg-white/70 px-3 py-2 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <Checkbox checked={checked} onCheckedChange={() => onChange(!checked)} />
       <span className="text-sm text-foreground">{label}</span>
     </label>
@@ -1180,7 +1204,7 @@ function SelectField({
     <div className="space-y-2">
       <LabelMini>{label}</LabelMini>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full">
+        <SelectTrigger className="w-full border-white/60 bg-white/80">
           <SelectValue placeholder={label} />
         </SelectTrigger>
         <SelectContent>
@@ -1211,10 +1235,10 @@ function TabsSwitcher({
       <div
         role="tablist"
         aria-label="Impostazioni"
-        className="relative flex items-center rounded-xl border bg-muted/60 p-1"
+        className="glass-panel relative flex items-center p-1"
       >
         <motion.div
-          className="absolute bottom-1 top-1 rounded-lg border border-primary/30 bg-background shadow-sm"
+          className="absolute bottom-1 top-1 rounded-lg border border-white/70 bg-white/80 shadow-sm"
           style={{ width: `${width}%`, left: 0 }}
           animate={{ left: `${activeIndex * width}%` }}
           transition={{ type: "spring", stiffness: 260, damping: 26, mass: 0.7 }}
@@ -1225,7 +1249,7 @@ function TabsSwitcher({
             role="tab"
             aria-selected={activeIndex === index}
             className={cn(
-              "relative z-10 flex-1 rounded-lg px-4 py-2 text-sm font-medium transition focus:outline-none",
+              "relative z-10 flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none hover:-translate-y-0.5 hover:text-foreground",
               activeIndex === index
                 ? "text-foreground"
                 : "text-muted-foreground",

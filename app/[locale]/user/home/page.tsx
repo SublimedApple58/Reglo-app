@@ -137,74 +137,79 @@ export default function HomePage(): React.ReactElement {
 
   return (
     <ClientPageWrapper title="Home" hideHero>
-      <div className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
-        <div className="space-y-5">
-          <section className="rounded-3xl border bg-gradient-to-br from-[#e9f2f2] via-white to-[#f6f7fb] p-6 shadow-lg">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#324e7a]">
-                  Bentornato
-                </p>
-                <h1 className="text-2xl font-semibold text-[#324e7a]">
-                  Ciao, {greetingName}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Snapshot operativo del mese corrente.
-                </p>
-              </div>
-              <div className="rounded-2xl border bg-white/80 px-4 py-3 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Workspace
-                </p>
-                <p className="text-lg font-semibold text-[#324e7a]">
-                  {overview?.companyName ?? "Reglo"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Dati aggiornati in tempo reale
-                </p>
-              </div>
-            </div>
-            <div className="mt-6 grid gap-4 md:grid-cols-2">
-              <MetricCard
-                title="Compilazioni completate"
-                value={metrics?.documentsCompletedMonth ?? 0}
-                description="Mese corrente"
-                isLoading={isLoading}
-                accent="bg-[#a9d9d1]"
-                icon={<ClipboardCheck className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Workflow completati"
-                value={metrics?.workflowsCompletedMonth ?? 0}
-                description="Mese corrente"
-                isLoading={isLoading}
-                accent="bg-[#60579e]"
-                icon={<Workflow className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Workflow attivi"
-                value={metrics?.activeWorkflows ?? 0}
-                description="Attivi ora"
-                isLoading={isLoading}
-                accent="bg-[#d8d2f1]"
-                icon={<Sparkles className="h-4 w-4" />}
-              />
-              <MetricCard
-                title="Compilazioni in attesa"
-                value={metrics?.pendingDocuments ?? 0}
-                description="Da completare"
-                isLoading={isLoading}
-                accent="bg-[#e9f2f2]"
-                icon={<ReceiptText className="h-4 w-4" />}
-              />
-            </div>
-          </section>
+      <div className="relative space-y-6">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-[#a9d9d1]/45 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
+          <div className="absolute bottom-0 left-10 h-72 w-72 rounded-full bg-[#60579e]/20 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
+          <div className="absolute left-1/2 top-28 h-40 w-40 -translate-x-1/2 rounded-full bg-[#e5e4f0]/70 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
+        </div>
 
-          <section className="rounded-2xl border bg-card p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+        <section className="glass-surface relative overflow-hidden p-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-2">
+              <span className="glass-chip">Workspace</span>
+              <h1 className="text-2xl font-semibold text-[#324e7a]">
+                Ciao, {greetingName}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Snapshot operativo del mese corrente · {overview?.companyName ?? "Reglo"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button className="rounded-full px-5" onClick={() => setCreateOpen(true)}>
+                Nuovo workflow
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full px-5"
+                onClick={() => router.push("/user/doc_manager")}
+              >
+                Carica documenti
+              </Button>
+            </div>
+          </div>
+          <div className="mt-6 grid gap-3 md:grid-cols-4">
+            <MetricCard
+              title="Compilazioni completate"
+              value={metrics?.documentsCompletedMonth ?? 0}
+              description="Mese corrente"
+              isLoading={isLoading}
+              accent="bg-[#a9d9d1]"
+              icon={<ClipboardCheck className="h-4 w-4" />}
+            />
+            <MetricCard
+              title="Workflow completati"
+              value={metrics?.workflowsCompletedMonth ?? 0}
+              description="Mese corrente"
+              isLoading={isLoading}
+              accent="bg-[#60579e]"
+              icon={<Workflow className="h-4 w-4" />}
+            />
+            <MetricCard
+              title="Workflow attivi"
+              value={metrics?.activeWorkflows ?? 0}
+              description="Attivi ora"
+              isLoading={isLoading}
+              accent="bg-[#d8d2f1]"
+              icon={<Sparkles className="h-4 w-4" />}
+            />
+            <MetricCard
+              title="Compilazioni in attesa"
+              value={metrics?.pendingDocuments ?? 0}
+              description="Da completare"
+              isLoading={isLoading}
+              accent="bg-[#e9f2f2]"
+              icon={<ReceiptText className="h-4 w-4" />}
+            />
+          </div>
+        </section>
+
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <section className="glass-panel relative p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Attivit&#224; recente
+                  Attivita recente
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Eventi del mese corrente su documenti e workflow.
@@ -212,15 +217,14 @@ export default function HomePage(): React.ReactElement {
               </div>
               <Button
                 variant="outline"
-                className="gap-2"
+                className="rounded-full"
                 onClick={() => router.push("/user/compilazioni")}
               >
-                <ClipboardCheck className="h-4 w-4" />
                 Vedi compilazioni
               </Button>
             </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border bg-muted/30 p-4">
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="glass-card p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Compilazioni
                 </p>
@@ -255,7 +259,7 @@ export default function HomePage(): React.ReactElement {
                   )}
                 </div>
               </div>
-              <div className="rounded-xl border bg-muted/30 p-4">
+              <div className="glass-card p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Workflow
                 </p>
@@ -295,19 +299,23 @@ export default function HomePage(): React.ReactElement {
               </div>
             </div>
           </section>
-        </div>
 
-        <div className="space-y-4">
-          <section className="rounded-2xl border bg-white/90 p-4 shadow-sm">
-            <h3 className="text-lg font-semibold text-foreground">Azioni rapide</h3>
-            <p className="text-xs text-muted-foreground">
-              Crea e avvia subito il prossimo flusso.
-            </p>
+          <section className="glass-panel p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  Azioni rapide
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Avvia il prossimo flusso in pochi click.
+                </p>
+              </div>
+            </div>
             <div className="mt-4 space-y-3">
               {quickActions.map((action) => (
                 <button
                   key={action.id}
-                  className="flex w-full items-center justify-between rounded-xl bg-muted/50 px-4 py-3 text-left shadow-sm transition hover:-translate-y-[1px] hover:shadow-md"
+                  className="glass-card flex w-full items-center justify-between px-4 py-3 text-left transition hover:-translate-y-[1px] hover:shadow-[0_22px_60px_-45px_rgba(50,78,122,0.5)]"
                   type="button"
                   onClick={action.onClick}
                 >
@@ -391,7 +399,7 @@ function MetricCard({
   icon: React.ReactElement;
 }): React.ReactElement {
   return (
-    <div className="rounded-2xl border bg-white/80 p-4 shadow-sm">
+    <div className="glass-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -406,7 +414,9 @@ function MetricCard({
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         </div>
-        <span className={`flex h-9 w-9 items-center justify-center rounded-full ${accent}`}>
+        <span
+          className={`flex h-9 w-9 items-center justify-center rounded-full ${accent} shadow-inner`}
+        >
           {icon}
         </span>
       </div>

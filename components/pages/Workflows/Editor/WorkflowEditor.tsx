@@ -19,7 +19,6 @@ import "reactflow/dist/style.css";
 import { useAtomValue } from "jotai";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHistory";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { WorkflowHeader } from "@/components/pages/Workflows/Editor/layout/WorkflowHeader";
@@ -47,6 +46,7 @@ import {
   buildNodes,
   getDefaultConfig,
   getMissingFields,
+  isWorkflowDraft,
 } from "@/components/pages/Workflows/Editor/utils";
 import { tokenRegex } from "@/components/pages/Workflows/Editor/shared/token-utils";
 import { WorkflowPalettePanel } from "@/components/pages/Workflows/Editor/panels/WorkflowPalettePanel";
@@ -96,7 +96,6 @@ export function WorkflowEditor(): React.ReactElement {
   const [edges, setEdges] = useState<Edge[]>(() => buildEdges(true));
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
-  const [runHistoryKey, setRunHistoryKey] = useState(0);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
   const [logicDialogOpen, setLogicDialogOpen] = useState(false);
   const [logicCondition, setLogicCondition] = useState<Condition>({
@@ -405,6 +404,8 @@ export function WorkflowEditor(): React.ReactElement {
       .filter(Boolean) as { nodeId: string; label: string; missing: string[] }[];
   }, [nodes]);
 
+  const workflowIsDraft = useMemo(() => isWorkflowDraft(nodes, edges), [edges, nodes]);
+
   React.useEffect(() => {
     if (isNew) {
       setTriggerDialogOpen(true);
@@ -516,7 +517,7 @@ export function WorkflowEditor(): React.ReactElement {
       animated: edge.animated,
       style: edge.style,
     }));
-    const runtimeNodes = nodes.map((node) => {
+    const runtimeNodes = nodes.filter((node) => node.id !== "end").map((node) => {
       const data = node.data as LogicNodeData | undefined;
       const label =
         typeof node.data === "object" && node.data && "label" in node.data
@@ -580,15 +581,21 @@ export function WorkflowEditor(): React.ReactElement {
         },
       };
     });
-    const runtimeEdges = edges.map((edge) => ({
+    const runtimeEdges = edges
+      .filter((edge) => edge.source !== "end" && edge.target !== "end")
+      .map((edge) => ({
       from: edge.source,
       to: edge.target,
       condition: edge.sourceHandle ? { branch: edge.sourceHandle } : null,
     }));
+    const nextStatus = workflowIsDraft ? "draft" : (workflowStatus as "draft" | "active" | "paused");
+    if (workflowIsDraft && workflowStatus !== "draft") {
+      setWorkflowStatus("draft");
+    }
     const res = await updateWorkflow({
       id: workflowId,
       name: workflowName,
-      status: workflowStatus as "draft" | "active" | "paused",
+      status: nextStatus,
       definition: {
         trigger: { type: resolvedTriggerType, config: cleanedTriggerConfig },
         nodes: runtimeNodes,
@@ -601,7 +608,9 @@ export function WorkflowEditor(): React.ReactElement {
       setIsSaving(false);
       return;
     }
-    toast.success({ description: "Workflow salvato." });
+    toast.success({
+      description: workflowIsDraft ? "Workflow salvato in bozza." : "Workflow salvato.",
+    });
     setIsSaving(false);
   };
 
@@ -642,7 +651,6 @@ export function WorkflowEditor(): React.ReactElement {
       return;
     }
     toast.success({ description: "Workflow avviato." });
-    setRunHistoryKey((prev) => prev + 1);
     setIsRunning(false);
   };
 
@@ -673,7 +681,6 @@ export function WorkflowEditor(): React.ReactElement {
       return;
     }
     toast.success({ description: "Workflow avviato." });
-    setRunHistoryKey((prev) => prev + 1);
     setIsRunning(false);
     setRunPayloadDialogOpen(false);
   };
@@ -1224,12 +1231,14 @@ export function WorkflowEditor(): React.ReactElement {
 
   return (
     <ClientPageWrapper title={workflowName} parentTitle="Workflows" enableBackNavigation>
-      <div className="flex h-full flex-col gap-4">
+      <div className="relative flex h-full flex-col gap-4">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-20 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/35 blur-3xl animate-[float-slow_16s_ease-in-out_infinite]" />
+          <div className="absolute bottom-8 left-16 h-64 w-64 rounded-full bg-[#60579e]/18 blur-3xl animate-[float-slower_20s_ease-in-out_infinite]" />
+          <div className="absolute top-40 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full bg-[#e5e4f0]/60 blur-2xl animate-[float-slow_14s_ease-in-out_infinite]" />
+        </div>
         <WorkflowHeader
           workflowName={workflowName}
-          onWorkflowNameChange={setWorkflowName}
-          workflowStatus={workflowStatus}
-          onWorkflowStatusChange={setWorkflowStatus}
           onRun={handleRun}
           onSave={handleSave}
           isRunning={isRunning}
@@ -1242,7 +1251,7 @@ export function WorkflowEditor(): React.ReactElement {
           onTogglePalette={handleTogglePalette}
         />
         {invalidTriggerTokens.length > 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="glass-panel border-amber-200/70 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">Alcuni dati non sono piu validi.</p>
             <p className="text-xs text-amber-800">
               Hai usato variabili che non esistono piu nel trigger selezionato.
@@ -1260,7 +1269,7 @@ export function WorkflowEditor(): React.ReactElement {
           </div>
         ) : null}
         {templateBindingConflicts.length > 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="glass-panel border-amber-200/70 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">Template non allineati ai dati in ingresso.</p>
             <p className="text-xs text-amber-800">
               Alcuni template nel flusso non hanno binding key compatibili con il
@@ -1279,7 +1288,7 @@ export function WorkflowEditor(): React.ReactElement {
           </div>
         ) : null}
         {warnings.length > 0 ? (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <div className="glass-panel border-amber-200/70 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
             <p className="font-semibold">Attenzione: alcuni blocchi sono incompleti.</p>
             <p className="text-xs text-amber-800">
               Puoi salvare il workflow, ma le azioni potrebbero fallire.
@@ -1317,22 +1326,37 @@ export function WorkflowEditor(): React.ReactElement {
             }
             onClose={() => setPaletteOpen(false)}
           />
-          <div className="relative flex min-h-[560px] flex-1 rounded-xl border bg-card p-4 shadow-sm">
+          <div className="glass-panel relative flex min-h-[560px] flex-1 p-4">
             {!paletteOpen ? (
               <div className="absolute left-4 top-4 z-10">
-                <Button type="button" variant="outline" size="sm" onClick={handleTogglePalette}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={handleTogglePalette}
+                >
                   Aggiungi blocchi
                 </Button>
               </div>
             ) : null}
             {selectedBlockHasConfig ? (
               <div className="absolute right-4 top-4 z-10">
-                <Button type="button" variant="outline" size="sm" onClick={openConfigDialog}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={openConfigDialog}
+                >
                   Configura blocco
                 </Button>
               </div>
             ) : null}
-            <div ref={flowWrapperRef} className="flex-1 rounded-lg bg-background">
+            <div
+              ref={flowWrapperRef}
+              className="flex-1 rounded-2xl bg-white/45 backdrop-blur"
+            >
               <ReactFlow
                 nodes={nodes}
                 edges={edges}
@@ -1369,9 +1393,6 @@ export function WorkflowEditor(): React.ReactElement {
             onOpenPreview={() => setAiPreviewOpen(true)}
           />
         </div>
-        {workflowId ? (
-          <WorkflowRunHistory workflowId={workflowId} refreshKey={runHistoryKey} />
-        ) : null}
       </div>
 
       <BlockConfigDialog

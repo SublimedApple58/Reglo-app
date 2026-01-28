@@ -22,19 +22,21 @@ export function DocumentHeader({
   actions,
 }: DocumentHeaderProps): React.ReactElement {
   return (
-    <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-card p-4 shadow-sm">
+    <header className="glass-panel flex flex-wrap items-center justify-between gap-3 px-5 py-4">
       <div className="flex items-center gap-4">
         {backHref ? (
           <Link
             href={backHref}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+            className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             {backLabel}
           </Link>
         ) : null}
         <div>
-          <p className="text-xs text-muted-foreground">{subtitle}</p>
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {subtitle}
+          </p>
           <h1 className="text-lg font-semibold text-foreground">{title}</h1>
           {meta ? <p className="text-xs text-muted-foreground">{meta}</p> : null}
         </div>

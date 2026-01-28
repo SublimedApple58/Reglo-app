@@ -110,12 +110,12 @@ export function DocumentCanvas({
   );
 
   return (
-    <div className={cn("flex-1 rounded-2xl bg-muted/40 p-6", className)}>
+    <div className={cn("glass-panel flex-1 p-6", className)}>
       <div className="mx-auto w-full max-w-4xl">
         <div
           ref={setRefs}
           className={cn(
-            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-lg bg-white shadow-sm",
+            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-white/70 bg-white/80 shadow-[0_20px_55px_-45px_rgba(50,78,122,0.45)]",
             scrollClassName,
           )}
           style={{
@@ -123,7 +123,7 @@ export function DocumentCanvas({
             maxHeight: maxHeight ? `${maxHeight}px` : undefined,
           }}
         >
-          <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-border/60 bg-white/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
+          <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/70 bg-white/85 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -131,7 +131,7 @@ export function DocumentCanvas({
                 variant="ghost"
                 onClick={handlePrevious}
                 disabled={currentPage <= 1}
-                className="h-7 w-7"
+                className="h-7 w-7 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -141,7 +141,7 @@ export function DocumentCanvas({
                 variant="ghost"
                 onClick={handleNext}
                 disabled={pageCount > 0 ? currentPage >= pageCount : true}
-                className="h-7 w-7"
+                className="h-7 w-7 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -166,7 +166,7 @@ export function DocumentCanvas({
                   }
                 }}
                 inputMode="numeric"
-                className="h-7 w-14 rounded-md border border-border/70 bg-white px-2 text-center text-xs"
+                className="h-7 w-14 rounded-md border border-white/70 bg-white/90 px-2 text-center text-xs shadow-inner"
               />
               <span className="text-xs text-muted-foreground">
                 / {pageCount || 1}

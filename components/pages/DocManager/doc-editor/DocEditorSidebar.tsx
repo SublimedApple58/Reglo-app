@@ -40,10 +40,10 @@ export function DocEditorSidebar({
           onDragStart={(event) => onDragTool(event, tool.id)}
           onClick={() => onSelectTool(isSelected ? null : tool.id)}
           className={cn(
-            "flex items-center gap-2 rounded-xl border px-3 py-2 text-left font-medium transition",
+            "flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
             isSelected
               ? "border-primary/60 bg-primary/10 text-foreground"
-              : "border-border bg-background text-foreground hover:bg-muted/50",
+              : "border-white/70 bg-white/80 text-foreground hover:bg-white",
           )}
         >
           <Icon className="h-4 w-4 text-muted-foreground" />
@@ -53,10 +53,10 @@ export function DocEditorSidebar({
     });
 
   return (
-    <aside className="flex h-full w-56 shrink-0 flex-col gap-4 rounded-2xl bg-card p-4 shadow-sm">
+    <aside className="glass-panel flex h-full w-64 shrink-0 flex-col gap-4 px-4 py-5">
       <Link
         href="/user/doc_manager"
-        className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
+        className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground"
       >
         <ArrowLeft className="h-3.5 w-3.5" />
         BACK
@@ -64,18 +64,14 @@ export function DocEditorSidebar({
       <div>
         <h2 className="text-lg font-semibold text-foreground">Tools</h2>
       </div>
-      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-1 flex-col gap-4 text-sm text-muted-foreground">
         <div className="space-y-2">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Fields
-          </p>
+          <p className="glass-chip w-fit">Fields</p>
           {renderTools(fieldTools)}
         </div>
-        <div className="h-px bg-border/70 my-4" />
+        <div className="glass-divider" />
         <div className="space-y-2 pt-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-            Text block
-          </p>
+          <p className="glass-chip w-fit">Text block</p>
           {renderTools(textTools)}
         </div>
         {onOpenAi ? (
@@ -83,11 +79,11 @@ export function DocEditorSidebar({
             type="button"
             onClick={onOpenAi}
             disabled={aiDisabled || aiRunning}
-            className={cn(
-              "mt-2 flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition",
+          className={cn(
+              "mt-auto flex w-full items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md",
               aiDisabled || aiRunning
-                ? "border-border/60 bg-muted text-muted-foreground"
-                : "border-primary/20 bg-primary/5 text-foreground hover:border-primary/30 hover:bg-primary/10",
+                ? "border-white/60 bg-white/50 text-muted-foreground"
+                : "border-white/70 bg-white/80 text-foreground hover:bg-white",
             )}
           >
             <Sparkles className="h-4 w-4 text-primary/80" />
@@ -95,7 +91,6 @@ export function DocEditorSidebar({
           </button>
         ) : null}
       </div>
-      <div className="mt-auto" />
     </aside>
   );
 }

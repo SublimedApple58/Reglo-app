@@ -51,7 +51,7 @@ export function WorkflowAiPanel({
       <button
         type="button"
         onClick={onToggle}
-        className="flex h-full w-10 flex-col items-center justify-center gap-3 rounded-2xl border border-border/70 bg-card text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground shadow-sm"
+        className="glass-panel flex h-full w-10 flex-col items-center justify-center gap-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         <span className="rotate-90">AI</span>
@@ -62,7 +62,7 @@ export function WorkflowAiPanel({
   const previewReady = preview?.status === "ok" || preview?.status === "blocked";
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-4 rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
+    <aside className="glass-panel flex w-80 shrink-0 flex-col gap-4 p-4">
       <div className="flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
           AI
@@ -85,14 +85,14 @@ export function WorkflowAiPanel({
           value={prompt}
           onChange={(event) => onPromptChange(event.target.value)}
           placeholder="Descrivi il workflow da creare…"
-          className="h-11 rounded-full border-border/70 bg-muted/40 pr-11 text-sm shadow-inner"
+          className="h-11 rounded-full border-white/40 bg-white/70 pr-11 text-sm shadow-inner"
         />
         <button
           type="submit"
           aria-label="Genera preview"
           disabled={loading || !prompt.trim()}
           className={cn(
-            "absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-primary text-primary-foreground shadow-sm transition",
+            "absolute right-1 top-1 flex h-9 w-9 items-center justify-center rounded-full border border-white/60 bg-primary text-primary-foreground shadow-sm transition",
             "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >

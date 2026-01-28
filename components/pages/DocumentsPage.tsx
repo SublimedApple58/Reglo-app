@@ -17,9 +17,10 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import React, { useState, useCallback } from "react";
 import { ArrowUpFromLine, FilePlus2, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export function DocumentsPage(): React.ReactElement {
-  const [showInput, setShowInput] = useState(false);
+  const [showInput, setShowInput] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -64,16 +65,7 @@ export function DocumentsPage(): React.ReactElement {
 
   return (
     <ClientPageWrapper title={"Documents"}>
-      <div
-        style={{
-          width: "auto%",
-          position: "fixed",
-          display: "flex",
-          justifyContent: "center",
-          zIndex: 1000,
-          right: 24,
-        }}
-      >
+      <div className="fixed right-6 z-[1000] flex w-auto justify-center">
         <ManagementBar
           totalRows={totalRows ?? 0}
           actions={[
@@ -100,78 +92,63 @@ export function DocumentsPage(): React.ReactElement {
           ]}
         />
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          marginBlock: 16,
-        }}
-      >
-        <form onSubmit={handleSubmit} style={{ width: "200px" }}>
-          <InputButtonProvider
-            showInput={showInput}
-            setShowInput={setShowInput}
-          >
-            <InputButton>
-              <InputButtonAction onClick={() => {}}>
-                <p style={{ color: "white" }}></p>
-              </InputButtonAction>
-              <InputButtonSubmit
-                onClick={() => {}}
-                type="submit"
-              ></InputButtonSubmit>
-            </InputButton>
-            <InputButtonInput
-              type="text"
-              placeholder="Search..."
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              autoFocus
-            />
-          </InputButtonProvider>
-        </form>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignContent: "start",
-          }}
-        >
-          <Filters filtersParams={filtersParamters} />
-
-          <div
-            className="text-sm text-gray-600 flex items-center gap-1"
-            style={
-              {
-                ...(totalSelected && totalSelected > 0
-                  ? { opacity: 1, transition: "all .3s ease-out" }
-                  : { opacity: 0, transition: "all .3s ease-out" }),
-              }
-            }
-          >
-            Selected{" "}
-            {totalSelected && totalSelected > 0 ? (
-              <SlidingNumber
-                style={{ display: "inline" }}
-                number={totalSelected}
+      <div className="glass-panel flex flex-col gap-4 p-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+            <InputButtonProvider
+              showInput={showInput}
+              setShowInput={setShowInput}
+              className="w-full"
+            >
+              <InputButton className="w-full">
+                <InputButtonAction className="hidden" />
+                <InputButtonSubmit
+                  onClick={() => {}}
+                  type="submit"
+                  className="bg-foreground text-background hover:bg-foreground/90"
+                />
+              </InputButton>
+              <InputButtonInput
+                type="text"
+                placeholder="Cerca documenti"
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
+                autoFocus
               />
-            ) : (
-              "0"
-            )}{" "}
-            out of{" "}
-            {totalSelected && totalRows ? (
-              <SlidingNumber number={totalRows} />
-            ) : (
-              "0"
-            )}{" "}
-            rows.
+            </InputButtonProvider>
+          </form>
+          <div className="flex items-center justify-between gap-4">
+            <Filters filtersParams={filtersParamters} />
+            <div
+              className={cn(
+                "glass-chip flex items-center gap-1 text-[11px]",
+                totalSelected && totalSelected > 0 ? "opacity-100" : "opacity-0",
+              )}
+              style={{ transition: "all .3s ease-out" }}
+            >
+              Selected{" "}
+              {totalSelected && totalSelected > 0 ? (
+                <SlidingNumber
+                  style={{ display: "inline" }}
+                  number={totalSelected}
+                />
+              ) : (
+                "0"
+              )}{" "}
+              out of{" "}
+              {totalSelected && totalRows ? (
+                <SlidingNumber number={totalRows} />
+              ) : (
+                "0"
+              )}{" "}
+              rows.
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="table_wrapper">
+      <div className="glass-panel p-4">
         <TableDocuments />
       </div>
 

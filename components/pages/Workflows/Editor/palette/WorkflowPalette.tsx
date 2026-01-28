@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Shapes } from "lucide-react";
 import type { DragEvent } from "react";
 import { cn } from "@/lib/utils";
 import type {
@@ -37,6 +37,17 @@ export function WorkflowPalette({
   if (paletteView === "menu") {
     return (
       <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Libreria blocchi
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Scegli la categoria da aggiungere.
+            </p>
+          </div>
+          <Shapes className="h-4 w-4 text-muted-foreground" />
+        </div>
         <div className="space-y-3">
           {(["reglo-actions", "doc-manager"] as ServiceKey[]).map((serviceKey) => {
             const svc = serviceBlocks[serviceKey];
@@ -48,7 +59,7 @@ export function WorkflowPalette({
                   onSelectService(serviceKey);
                   onChangeView("blocks");
                 }}
-                className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
+                className="glass-card flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-medium text-foreground transition hover:-translate-y-[1px]"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                   R
@@ -58,9 +69,11 @@ export function WorkflowPalette({
             );
           })}
         </div>
-        <hr className="border-border/60" />
+        <div className="glass-divider" />
         <div className="space-y-2">
-          <p className="text-base font-semibold text-foreground">Integrations</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Integrations
+          </p>
           {(["slack", "fatture-in-cloud"] as ServiceKey[]).map((serviceKey) => {
             const svc = serviceBlocks[serviceKey];
             const isSlack = serviceKey === "slack";
@@ -83,7 +96,7 @@ export function WorkflowPalette({
                   }
                 }}
                 className={cn(
-                  "flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md",
+                  "glass-card flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-medium text-foreground transition hover:-translate-y-[1px]",
                   disabled ? "opacity-60" : null,
                 )}
               >
@@ -100,9 +113,11 @@ export function WorkflowPalette({
             );
           })}
         </div>
-        <hr className="border-border/60" />
+        <div className="glass-divider" />
         <div className="space-y-2">
-          <p className="text-base font-semibold text-foreground">Logica</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Logica
+          </p>
           {(["logic", "flow-control"] as ServiceKey[]).map((serviceKey) => {
             const svc = serviceBlocks[serviceKey];
             return (
@@ -113,7 +128,7 @@ export function WorkflowPalette({
                   onSelectService(serviceKey);
                   onChangeView("blocks");
                 }}
-                className="flex w-full items-center gap-3 rounded-lg bg-white px-3 py-3 text-left text-sm font-medium text-foreground shadow-sm ring-1 ring-black/5 transition hover:-translate-y-[1px] hover:shadow-md"
+                className="glass-card flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-medium text-foreground transition hover:-translate-y-[1px]"
               >
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
                   {serviceKey === "logic" ? "IF" : "WAIT"}
@@ -137,7 +152,7 @@ export function WorkflowPalette({
         <ArrowLeft size={16} />
         Back
       </button>
-      <div className="flex items-center gap-3 rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-black/5">
+      <div className="glass-card flex items-center gap-3 px-3 py-2">
         <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-sm font-semibold text-foreground">
           {selectedService === "slack"
             ? "S"
@@ -154,12 +169,12 @@ export function WorkflowPalette({
         </div>
       </div>
       {selectedService === "slack" && !isSlackConnected ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <div className="glass-panel border-amber-200/70 bg-amber-50/60 px-4 py-3 text-xs text-amber-900">
           Connetti Slack in Settings per sbloccare questi blocchi.
         </div>
       ) : null}
       {selectedService === "fatture-in-cloud" && !isFicConnected ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+        <div className="glass-panel border-amber-200/70 bg-amber-50/60 px-4 py-3 text-xs text-amber-900">
           Connetti Fatture in Cloud in Settings per sbloccare questi blocchi.
         </div>
       ) : null}
@@ -177,10 +192,10 @@ export function WorkflowPalette({
               draggable={!isDisabled}
               onDragStart={(event) => onDragStart(event, block)}
               className={cn(
-                "rounded-2xl bg-white px-4 py-3 text-sm font-medium text-foreground shadow-md transition",
+                "glass-card px-4 py-3 text-sm font-medium text-foreground transition",
                 isDisabled
                   ? "cursor-not-allowed opacity-50"
-                  : "cursor-grab hover:-translate-y-[1px] hover:shadow-lg active:cursor-grabbing",
+                  : "cursor-grab hover:-translate-y-[1px] hover:shadow-[0_22px_60px_-45px_rgba(50,78,122,0.55)] active:cursor-grabbing",
               )}
             >
               <div className="space-y-1">

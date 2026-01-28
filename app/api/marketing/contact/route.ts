@@ -9,6 +9,8 @@ const contactSchema = z.object({
   fullName: z.string().min(2, 'Name is required'),
   email: z.string().email('Invalid email'),
   company: z.string().min(1, 'Company is required'),
+  phone: z.string().optional(),
+  managementSoftware: z.string().optional(),
   process: z.string().optional(),
   source: z.enum(['home', 'demo']).optional(),
 });
@@ -102,7 +104,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const { fullName, email, company, process: need } = parsed.data;
+  const {
+    fullName,
+    email,
+    company,
+    phone,
+    managementSoftware,
+    process: need,
+  } = parsed.data;
 
   try {
     const created = await notion.pages.create({
@@ -117,6 +126,20 @@ export async function POST(request: Request) {
         Email: {
           email,
         },
+        ...(phone
+          ? {
+              Phone: {
+                phone_number: phone,
+              },
+            }
+          : {}),
+        ...(managementSoftware
+          ? {
+              Gestionale: {
+                rich_text: [{ text: { content: managementSoftware } }],
+              },
+            }
+          : {}),
         ...(need
           ? {
               Need: {
@@ -132,6 +155,8 @@ export async function POST(request: Request) {
       `Hey, ${fullName} ha chiesto una demo.`,
       `Email: ${email}`,
       `Azienda: ${company}`,
+      `Telefono: ${phone ?? '-'}`,
+      `Gestionale: ${managementSoftware ?? '-'}`,
       `Need: ${need ?? '-'}`,
       notionUrl ? `Notion: ${notionUrl}` : null,
     ].filter(Boolean);

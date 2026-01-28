@@ -68,7 +68,7 @@
   --chart-3: #324e7a;
   --chart-4: #e5e4f0;
   --chart-5: #e9f2f2;
-  --sidebar: #f4f9f9;
+  --sidebar: #f9fbfc;
   --sidebar-foreground: #324e7a;
   --sidebar-primary: #324e7a;
   --sidebar-primary-foreground: #f8fafc;
@@ -122,6 +122,30 @@
 }
 
 @layer components {
+  .glass-surface {
+    @apply rounded-3xl border border-white/40 bg-white/55 shadow-[0_28px_80px_-55px_rgba(50,78,122,0.55)] backdrop-blur-2xl;
+  }
+
+  .glass-panel {
+    @apply rounded-2xl border border-white/45 bg-white/50 shadow-[0_24px_60px_-45px_rgba(50,78,122,0.5)] backdrop-blur-xl;
+  }
+
+  .glass-card {
+    @apply rounded-2xl border border-white/40 bg-white/60 shadow-[0_16px_45px_-35px_rgba(50,78,122,0.45)] backdrop-blur-xl;
+  }
+
+  .glass-sidebar {
+    @apply border border-white/40 bg-white/55 shadow-[0_28px_70px_-50px_rgba(50,78,122,0.45)] backdrop-blur-2xl;
+  }
+
+  .glass-chip {
+    @apply rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground;
+  }
+
+  .glass-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-border/70 to-transparent;
+  }
+
   .doc-richtext {
     @apply font-sans text-foreground;
   }
@@ -168,5 +192,25 @@
 
   .doc-richtext a {
     @apply text-primary underline;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-10px) translateX(6px);
+  }
+}
+
+@keyframes float-slower {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(12px) translateX(-8px);
   }
 }

@@ -102,10 +102,10 @@ export function DocEditorOverlay({
           <div
             key={field.id}
             className={cn(
-              "group absolute cursor-move rounded-md border shadow-sm",
+              "group absolute cursor-move rounded-lg border shadow-sm backdrop-blur",
               isTextBlock
-                ? "border-border/60 bg-white/90 text-foreground"
-                : "border-primary/40 bg-primary/10 text-[11px] font-semibold text-primary/80",
+                ? "border-white/70 bg-white/85 text-foreground"
+                : "border-primary/30 bg-primary/10 text-[11px] font-semibold text-primary/80",
             )}
             style={resolveFieldStyle(field)}
             onMouseDown={(event) => onStartDrag(field, event)}
@@ -153,11 +153,11 @@ export function DocEditorOverlay({
             </DropdownMenu>
             {isTextBlock ? (
               <div
-                className="doc-richtext doc-richtext-preview max-h-full overflow-hidden px-2.5 py-1.5 text-foreground/90"
+                className="doc-richtext doc-richtext-preview max-h-full overflow-hidden px-3 py-2 text-foreground/90"
                 dangerouslySetInnerHTML={{ __html: html }}
               />
             ) : (
-              <span className="block max-w-full truncate px-2 py-1 leading-none">
+              <span className="block max-w-full truncate px-2.5 py-1 text-[10px] uppercase tracking-[0.18em]">
                 {field.bindingKey?.trim()
                   ? field.bindingKey
                   : field.type === "input"
@@ -169,7 +169,7 @@ export function DocEditorOverlay({
             )}
             {field.type === "textarea" || isTextBlock ? (
               <span
-                className="absolute bottom-1 right-1 h-3 w-3 cursor-nwse-resize rounded-sm border border-primary/60 bg-white/90"
+                className="absolute bottom-1 right-1 h-3 w-3 cursor-nwse-resize rounded-sm border border-primary/50 bg-white/90"
                 onMouseDown={(event) => onStartResize(field, event)}
                 aria-hidden="true"
               />

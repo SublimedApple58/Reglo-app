@@ -16,17 +16,40 @@ import type {
 export const primaryNodeStyle = {
   borderRadius: 14,
   padding: "12px 16px",
-  border: "1px solid rgba(50, 78, 122, 0.2)",
-  background: "#e9f2f2",
+  border: "1px solid rgba(255, 255, 255, 0.7)",
+  background: "rgba(255, 255, 255, 0.85)",
   color: "#324e7a",
   fontWeight: 600,
-  boxShadow: "0 10px 18px -16px rgba(50, 78, 122, 0.4)",
+  boxShadow: "0 18px 30px -24px rgba(50, 78, 122, 0.45)",
+  backdropFilter: "blur(10px)",
 };
 
 export const secondaryNodeStyle = {
   ...primaryNodeStyle,
-  background: "#e5e4f0",
-  border: "1px solid rgba(96, 87, 158, 0.25)",
+  background: "rgba(233, 242, 242, 0.85)",
+  border: "1px solid rgba(169, 217, 209, 0.45)",
+};
+
+export const startNodeStyle = {
+  borderRadius: 18,
+  padding: "14px 18px",
+  border: "1px solid rgba(50, 78, 122, 0.35)",
+  background:
+    "linear-gradient(135deg, rgba(50, 78, 122, 0.92), rgba(96, 87, 158, 0.85))",
+  color: "#f8fafc",
+  fontWeight: 700,
+  boxShadow: "0 22px 38px -26px rgba(50, 78, 122, 0.6)",
+};
+
+export const endNodeStyle = {
+  borderRadius: 18,
+  padding: "14px 18px",
+  border: "1px solid rgba(15, 118, 110, 0.35)",
+  background:
+    "linear-gradient(135deg, rgba(20, 184, 166, 0.9), rgba(52, 211, 153, 0.85))",
+  color: "#f8fafc",
+  fontWeight: 700,
+  boxShadow: "0 22px 38px -26px rgba(15, 118, 110, 0.6)",
 };
 
 export const serviceBlocks: Record<

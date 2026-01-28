@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import {
   Drawer,
   DrawerClose,
@@ -135,7 +136,7 @@ export function WorkflowRunHistory({
   }, [detailsOpen, detailsRunId, toast]);
 
   return (
-    <div className="rounded-2xl border bg-card p-4 shadow-sm">
+    <div className="glass-panel p-4">
       <div className="mb-3">
         <p className="text-sm font-semibold text-foreground">Run history</p>
         <p className="text-xs text-muted-foreground">
@@ -172,8 +173,18 @@ export function WorkflowRunHistory({
             : runs.length
               ? runs.map((run) => (
                   <TableRow key={run.id}>
-                    <TableCell className="font-medium capitalize">
-                      {run.status.replace("_", " ")}
+                    <TableCell>
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          run.status === "completed" && "text-emerald-700",
+                          run.status === "failed" && "text-rose-700",
+                          run.status === "running" && "text-sky-700",
+                          run.status === "waiting" && "text-amber-700",
+                        )}
+                      >
+                        {run.status.replace("_", " ")}
+                      </span>
                     </TableCell>
                     <TableCell>{formatDate(run.startedAt)}</TableCell>
                     <TableCell>{formatDate(run.finishedAt)}</TableCell>
@@ -182,6 +193,7 @@ export function WorkflowRunHistory({
                         type="button"
                         size="sm"
                         variant="ghost"
+                        className="rounded-full px-3 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
                         onClick={() => {
                           setDetailsRunId(run.id);
                           setDetailsOpen(true);
@@ -217,7 +229,7 @@ export function WorkflowRunHistory({
         direction="right"
       >
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,820px)] data-[vaul-drawer-direction=right]:sm:max-w-4xl h-full">
-          <DrawerHeader className="border-b">
+          <DrawerHeader className="border-b border-white/60 bg-white/80 backdrop-blur">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <DrawerTitle>Dettagli run</DrawerTitle>
@@ -228,7 +240,11 @@ export function WorkflowRunHistory({
                 </DrawerDescription>
               </div>
               <DrawerClose asChild>
-                <Button variant="ghost" size="icon">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
+                >
                   <X className="h-4 w-4" />
                 </Button>
               </DrawerClose>

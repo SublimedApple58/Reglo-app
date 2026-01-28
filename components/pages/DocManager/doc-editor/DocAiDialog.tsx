@@ -24,7 +24,7 @@ export function DocAiDialog({
 }: DocAiDialogProps): React.ReactElement {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg glass-panel">
         <DialogHeader>
           <DialogTitle>Configura documento con AI</DialogTitle>
           <DialogDescription>
@@ -40,7 +40,7 @@ export function DocAiDialog({
             value={prompt}
             onChange={(event) => onPromptChange(event.target.value)}
             placeholder="Es. aggiungi un paragrafo di introduzione sopra alla firma"
-            className="min-h-[120px]"
+            className="min-h-[120px] border-white/60 bg-white/80"
             disabled={isRunning}
           />
           <p className="text-xs text-muted-foreground">
@@ -54,10 +54,16 @@ export function DocAiDialog({
             variant="ghost"
             onClick={() => onOpenChange(false)}
             disabled={isRunning}
+            className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
           >
             Annulla
           </Button>
-          <Button type="button" onClick={onConfirm} disabled={isRunning}>
+          <Button
+            type="button"
+            onClick={onConfirm}
+            disabled={isRunning}
+            className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+          >
             {isRunning ? "Analisi in corso..." : "Avvia AI"}
           </Button>
         </DialogFooter>

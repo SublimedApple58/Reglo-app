@@ -24,7 +24,7 @@ export function AdminUsersToolbar({
   totalRows,
   initialQuery,
 }: AdminUsersToolbarProps): React.ReactElement {
-  const [showInput, setShowInput] = React.useState(false);
+  const [showInput, setShowInput] = React.useState(true);
   const [value, setValue] = React.useState(initialQuery ?? "");
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const company = useAtomValue(companyAtom);
@@ -59,15 +59,7 @@ export function AdminUsersToolbar({
 
   return (
     <>
-      <div
-        style={{
-          position: "fixed",
-          display: "flex",
-          justifyContent: "center",
-          zIndex: 1000,
-          right: 24,
-        }}
-      >
+      <div className="fixed right-6 z-[1000] flex justify-center">
         <ManagementBar
           totalRows={totalRows}
           actions={
@@ -85,27 +77,23 @@ export function AdminUsersToolbar({
           }
         />
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-          marginBlock: 16,
-        }}
-      >
-        <form onSubmit={handleSubmit} style={{ width: "200px" }}>
-          <InputButtonProvider showInput={showInput} setShowInput={setShowInput}>
-            <InputButton>
-              <InputButtonAction onClick={() => {}}>
-                <p style={{ color: "white" }}></p>
-              </InputButtonAction>
-              <InputButtonSubmit onClick={() => {}} type="submit" />
+      <div className="glass-panel flex flex-col gap-4 p-4">
+        <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+          <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
+            <InputButton className="w-full">
+              <InputButtonAction className="hidden" />
+              <InputButtonSubmit
+                onClick={() => {}}
+                type="submit"
+                className="bg-foreground text-background hover:bg-foreground/90"
+              />
             </InputButton>
             <InputButtonInput
               type="text"
-              placeholder="Search..."
+              placeholder="Cerca utenti"
               value={value}
               onChange={(e) => setValue(e.target.value)}
+              className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
               autoFocus
             />
           </InputButtonProvider>

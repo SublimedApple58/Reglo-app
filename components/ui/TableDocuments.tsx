@@ -308,13 +308,13 @@ export function TableDocuments({
                     <TableCell>
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                          doc.status === "Bozza" && "bg-slate-100 text-slate-600",
-                          doc.status === "Configurato" && "bg-amber-100 text-amber-700",
-                          doc.status === "Bindato" && "bg-emerald-100 text-emerald-700",
-                          doc.status === "AI" && "bg-cyan-100 text-cyan-700",
+                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          doc.status === "Bozza" && "text-slate-600",
+                          doc.status === "Configurato" && "text-amber-700",
+                          doc.status === "Bindato" && "text-emerald-700",
+                          doc.status === "AI" && "text-cyan-700",
                           !["Bozza", "Configurato", "Bindato", "AI"].includes(doc.status) &&
-                            "bg-muted text-muted-foreground",
+                            "text-muted-foreground",
                         )}
                       >
                         {doc.status}
@@ -324,6 +324,7 @@ export function TableDocuments({
                       <Button
                         type="button"
                         variant="default"
+                        className="rounded-full px-4 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                         onClick={() => {
                           setActiveDocId(doc.id);
                           setOpenDrawer(true);

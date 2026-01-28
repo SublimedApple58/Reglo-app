@@ -178,11 +178,9 @@ export function TableDocumentRequests({
                     <TableCell>
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                          request.status === "completed" &&
-                            "bg-emerald-100 text-emerald-700",
-                          request.status !== "completed" &&
-                            "bg-sky-100 text-sky-700",
+                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          request.status === "completed" && "text-emerald-700",
+                          request.status !== "completed" && "text-sky-700",
                         )}
                       >
                         {statusLabel(request.status)}
@@ -192,6 +190,7 @@ export function TableDocumentRequests({
                       <Button
                         type="button"
                         variant="default"
+                        className="rounded-full px-4 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
                         onClick={() => {
                           setActiveRequestId(request.id);
                           setOpenDrawer(true);

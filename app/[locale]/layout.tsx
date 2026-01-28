@@ -6,7 +6,7 @@ import { NextIntlClientProvider } from 'next-intl';
 import { Toaster } from '@/components/ui/toaster';
 
 const fontVars = {
-  "--font-geist-sans": "system-ui, -apple-system, Segoe UI, sans-serif",
+  "--font-geist-sans": "'Space Grotesk', system-ui, -apple-system, Segoe UI, sans-serif",
 } as React.CSSProperties;
 
 export const metadata: Metadata = {

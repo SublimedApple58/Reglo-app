@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { useAtomValue, useSetAtom } from "jotai";
 import { Workflows } from "@/atoms/TabelsStore";
 import { cn } from "@/lib/utils";
+import { WorkflowSummaryDrawer } from "@/components/pages/Workflows/WorkflowSummaryDrawer";
 
 type Props = {
   selectable?: boolean;
@@ -37,6 +38,8 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
     status: string;
   }[]>([]);
   const [rows, setRowsData] = useState<typeof visibleRows>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [isFading, setIsFading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const isInitialMount = useRef(true);
@@ -149,7 +152,8 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
   }, [filteredRows, page]);
 
   const handleEdit = (id: string) => {
-    router.push(`${pathname}/${id}`);
+    setSelectedWorkflowId(id);
+    setDrawerOpen(true);
   };
 
   const toggleSelect = (id: string) => {
@@ -297,13 +301,10 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
                     <TableCell>
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full border border-black/5 px-2.5 py-1 text-xs font-semibold shadow-[0_2px_8px_rgba(0,0,0,0.08)]",
-                          row.status === "active" &&
-                            "bg-emerald-100 text-emerald-700",
-                          row.status === "draft" &&
-                            "bg-slate-100 text-slate-600",
-                          row.status === "paused" &&
-                            "bg-amber-100 text-amber-700",
+                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          row.status === "active" && "text-emerald-700",
+                          row.status === "draft" && "text-slate-600",
+                          row.status === "paused" && "text-amber-700",
                         )}
                       >
                         {row.status === "paused"
@@ -314,7 +315,12 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button type="button" variant="default" onClick={() => handleEdit(row.id)}>
+                      <Button
+                        type="button"
+                        variant="default"
+                        className="rounded-full px-4 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                        onClick={() => handleEdit(row.id)}
+                      >
                         Edit
                       </Button>
                     </TableCell>
@@ -332,6 +338,14 @@ export function WorkflowsTable({ selectable = false }: Props): React.ReactElemen
                 )}
         </TableBody>
       </Table>
+      <WorkflowSummaryDrawer
+        workflowId={selectedWorkflowId}
+        open={drawerOpen}
+        onOpenChange={(next) => {
+          setDrawerOpen(next);
+          if (!next) setSelectedWorkflowId(null);
+        }}
+      />
     </div>
   );
 }
