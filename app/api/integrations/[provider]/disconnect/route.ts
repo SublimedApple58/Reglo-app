@@ -7,6 +7,7 @@ import {
   providerKeys,
 } from "@/lib/integrations/oauth";
 import { decryptSecret } from "@/lib/integrations/secrets";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 const revokeSlack = async (token: string) => {
   await fetch("https://slack.com/api/auth.revoke", {
@@ -44,14 +45,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Company not found" }, { status: 404 });
-  }
+  const { membership } = await getActiveCompanyContext();
 
   if (membership.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

@@ -184,6 +184,10 @@ export const updateCompanyNameSchema = z.object({
   name: z.string().min(1, 'Company name is required'),
 });
 
+export const createCompanySchema = z.object({
+  name: z.string().min(1, 'Company name is required'),
+});
+
 export const createImageUploadSchema = z.object({
   contentType: z.string().min(1, 'Content type is required'),
   size: z.number().int().positive('File size is required'),
@@ -202,3 +206,20 @@ export const createCompanyInviteSchema = z.object({
 export const acceptCompanyInviteSchema = z.object({
   token: z.string().min(1, 'Invite token is required'),
 });
+
+export const acceptCompanyInvitePasswordSchema = z.object({
+  token: z.string().min(1, 'Invite token is required'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+export const acceptCompanyInviteSignUpSchema = z
+  .object({
+    token: z.string().min(1, 'Invite token is required'),
+    name: z.string().min(1, 'Name is required'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    confirmPassword: z.string().min(6, 'Confirm password is required'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });

@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { prisma } from '@/db/prisma';
 import { createDocumentRequestSchema } from '@/lib/validators';
 import { formatError } from '@/lib/utils';
+import { getActiveCompanyContext } from '@/lib/company-context';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
@@ -68,22 +69,7 @@ export async function createDocumentRequest(
 
 export async function listDocumentRequests() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      throw new Error('User is not authenticated');
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      include: { company: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (!membership) {
-      throw new Error('Company not found');
-    }
+    const { membership } = await getActiveCompanyContext();
 
     const requests = await prisma.documentRequest.findMany({
       where: { companyId: membership.companyId },

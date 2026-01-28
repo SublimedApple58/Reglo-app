@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 type HomeOverview = {
   companyName: string;
@@ -31,22 +31,7 @@ type HomeOverview = {
 
 export async function getHomeOverview() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      throw new Error("User is not authenticated");
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      include: { company: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      throw new Error("Company not found");
-    }
+    const { membership, company } = await getActiveCompanyContext();
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -98,7 +83,7 @@ export async function getHomeOverview() {
     ]);
 
     const data: HomeOverview = {
-      companyName: membership.company.name,
+      companyName: company.name,
       metrics: {
         documentsCompletedMonth,
         workflowsCompletedMonth,

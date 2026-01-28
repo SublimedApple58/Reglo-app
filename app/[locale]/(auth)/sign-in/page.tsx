@@ -34,12 +34,19 @@ const SignInPage = async (props: {
   const session = await auth();
 
   if (session?.user?.id) {
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId: session.user.id },
-      select: { companyId: true },
-    });
+    const [user, memberships] = await prisma.$transaction([
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { activeCompanyId: true },
+      }),
+      prisma.companyMember.findMany({
+        where: { userId: session.user.id },
+        select: { companyId: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
 
-    if (!membership) {
+    if (!memberships.length) {
       return (
         <div className="flex min-h-[60vh] items-center justify-center">
           <Card className="max-w-lg border-border/70 bg-white/90 shadow-xl">
@@ -70,6 +77,18 @@ const SignInPage = async (props: {
       );
     }
 
+    if (!user?.activeCompanyId && memberships.length > 1) {
+      const selectPath = locale ? `/${locale}/select-company` : '/select-company';
+      return redirect(selectPath);
+    }
+
+    if (!user?.activeCompanyId && memberships.length === 1) {
+      await prisma.user.update({
+        where: { id: session.user.id },
+        data: { activeCompanyId: memberships[0].companyId },
+      });
+    }
+
     const fallbackPath = locale ? `/${locale}` : '/';
     const safeCallback =
       callbackUrl &&
@@ -93,6 +112,7 @@ const SignInPage = async (props: {
               height={60}
               alt={`${APP_NAME} logo`}
               priority
+              className='h-full w-full object-cover'
             />
           </span>
           <div>

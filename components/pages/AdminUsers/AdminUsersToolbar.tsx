@@ -10,6 +10,10 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { MailPlus } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { companyAtom } from "@/atoms/company.store";
+import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
 
 type AdminUsersToolbarProps = {
   totalRows: number;
@@ -22,9 +26,12 @@ export function AdminUsersToolbar({
 }: AdminUsersToolbarProps): React.ReactElement {
   const [showInput, setShowInput] = React.useState(false);
   const [value, setValue] = React.useState(initialQuery ?? "");
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const company = useAtomValue(companyAtom);
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isAdmin = company?.role === "admin";
 
   React.useEffect(() => {
     setValue(initialQuery ?? "");
@@ -61,7 +68,22 @@ export function AdminUsersToolbar({
           right: 24,
         }}
       >
-        <ManagementBar totalRows={totalRows} />
+        <ManagementBar
+          totalRows={totalRows}
+          actions={
+            isAdmin
+              ? [
+                  {
+                    id: "invite-member",
+                    label: "Invita utente",
+                    icon: MailPlus,
+                    variant: "default",
+                    onClick: () => setInviteOpen(true),
+                  },
+                ]
+              : []
+          }
+        />
       </div>
       <div
         style={{
@@ -89,6 +111,7 @@ export function AdminUsersToolbar({
           </InputButtonProvider>
         </form>
       </div>
+      <AdminUsersInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
     </>
   );
 }

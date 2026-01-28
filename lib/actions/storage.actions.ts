@@ -16,6 +16,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
+import { getActiveCompanyContext } from '@/lib/company-context';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const UPLOAD_URL_TTL = 60;
@@ -130,18 +131,9 @@ export async function createCompanyLogoUpload(
 ) {
   try {
     const payload = companyLogoUploadSchema.parse(input);
-    const session = await auth();
-    const userId = session?.user?.id;
+    const { membership } = await getActiveCompanyContext();
 
-    if (!userId) {
-      throw new Error('User is not authenticated');
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId, companyId: payload.companyId },
-    });
-
-    if (!membership) {
+    if (membership.companyId !== payload.companyId) {
       throw new Error('User is not authorized for this company');
     }
 
@@ -175,18 +167,9 @@ export async function saveCompanyLogo(
 ) {
   try {
     const payload = companyLogoFinalizeSchema.parse(input);
-    const session = await auth();
-    const userId = session?.user?.id;
+    const { membership } = await getActiveCompanyContext();
 
-    if (!userId) {
-      throw new Error('User is not authenticated');
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId, companyId: payload.companyId },
-    });
-
-    if (!membership) {
+    if (membership.companyId !== payload.companyId) {
       throw new Error('User is not authorized for this company');
     }
 

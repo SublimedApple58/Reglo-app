@@ -1,29 +1,23 @@
-import { auth } from '@/auth';
-import { prisma } from '@/db/prisma';
 import { UserRole } from '@/lib/constants';
 import { redirect } from 'next/navigation';
+import { ACTIVE_COMPANY_REQUIRED, getActiveCompanyContext } from '@/lib/company-context';
 
 const buildSignInPath = (locale?: string) =>
   locale ? `/${locale}/sign-in` : '/sign-in';
+const buildSelectCompanyPath = (locale?: string) =>
+  locale ? `/${locale}/select-company` : '/select-company';
 
 export async function requireUserAndCompany(locale?: string) {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
+  try {
+    const { session, membership } = await getActiveCompanyContext();
+    return { session, membership };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    if (message === ACTIVE_COMPANY_REQUIRED) {
+      redirect(buildSelectCompanyPath(locale));
+    }
     redirect(buildSignInPath(locale));
   }
-
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    select: { companyId: true, role: true },
-  });
-
-  if (!membership) {
-    redirect(buildSignInPath(locale));
-  }
-
-  return { session, membership };
 }
 
 export async function requireCompanyAdmin(locale?: string) {

@@ -42,6 +42,7 @@ const SignUpPage = async (props: {
               height={60}
               alt={`${APP_NAME} logo`}
               priority
+              className='h-full w-full object-cover'
             />
           </span>
           <div>

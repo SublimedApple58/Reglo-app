@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
 import { providerEnumMap } from "@/lib/integrations/oauth";
 import { formatError } from "@/lib/utils";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 export async function POST(request: Request) {
   try {
@@ -16,17 +17,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      return NextResponse.json(
-        { success: false, message: "Company non trovata" },
-        { status: 404 },
-      );
-    }
+    const { membership } = await getActiveCompanyContext();
 
     if (membership.role !== "admin") {
       return NextResponse.json(

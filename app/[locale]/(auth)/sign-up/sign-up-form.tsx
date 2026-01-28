@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { signUpUser } from '@/lib/actions/user.actions';
 import { useSearchParams } from 'next/navigation';
@@ -14,6 +14,11 @@ const SignUpForm = () => {
     success: false,
     message: '',
   });
+  const [companyName, setCompanyName] = useState('');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/';
@@ -40,6 +45,8 @@ const SignUpForm = () => {
             type='text'
             autoComplete='organization'
             placeholder='Acme Srl'
+            value={companyName}
+            onChange={(event) => setCompanyName(event.target.value)}
           />
         </div>
         <div>
@@ -50,6 +57,8 @@ const SignUpForm = () => {
             type='text'
             autoComplete='name'
             placeholder='Mario Rossi'
+            value={name}
+            onChange={(event) => setName(event.target.value)}
           />
         </div>
         <div>
@@ -60,6 +69,8 @@ const SignUpForm = () => {
             type='email'
             autoComplete='email'
             placeholder='you@company.com'
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
           />
         </div>
         <div>
@@ -70,6 +81,8 @@ const SignUpForm = () => {
           type='password'
           required
           autoComplete='new-password'
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
         />
         </div>
         <div>
@@ -80,6 +93,8 @@ const SignUpForm = () => {
           type='password'
           required
           autoComplete='new-password'
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
         />
         </div>
         <div>

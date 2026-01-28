@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { VERIFIED_EMAIL_SENDERS } from "@/lib/constants";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 type SenderOption = {
   value: string;
@@ -11,26 +10,7 @@ type SenderOption = {
 
 export async function GET() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, message: "Utente non autenticato" },
-        { status: 401 },
-      );
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      return NextResponse.json(
-        { success: false, message: "Company non trovata" },
-        { status: 404 },
-      );
-    }
+    const { membership } = await getActiveCompanyContext();
 
     if (membership.role !== "admin") {
       return NextResponse.json(

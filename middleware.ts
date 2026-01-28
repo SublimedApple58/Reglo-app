@@ -20,6 +20,10 @@ const isPublicRoute = (req: NextRequest) => {
     return true;
   }
 
+  if (normalizedPath === '/invite' || normalizedPath.startsWith('/invite/')) {
+    return true;
+  }
+
   const publicPathnameRegex = RegExp(
       `^(/(${routing.locales.join('|')}))?(${publicRoutes
         .flatMap((p) => (p === '/' ? ['', '/'] : p))

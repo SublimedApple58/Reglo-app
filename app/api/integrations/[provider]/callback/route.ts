@@ -9,6 +9,7 @@ import {
   providerKeys,
 } from "@/lib/integrations/oauth";
 import { encryptSecret } from "@/lib/integrations/secrets";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 type SlackTokenResponse = {
   ok: boolean;
@@ -84,21 +85,7 @@ export async function GET(
     );
   }
 
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (!membership) {
-    return NextResponse.redirect(
-      buildRedirectWithStatus(
-        request,
-        buildReturnUrl(request, providerKey),
-        "integrationError",
-        providerKey,
-      ),
-    );
-  }
+  const { membership } = await getActiveCompanyContext();
 
   if (membership.role !== "admin") {
     return NextResponse.redirect(

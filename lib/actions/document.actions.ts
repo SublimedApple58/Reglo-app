@@ -14,6 +14,7 @@ import { PDFDocument } from 'pdf-lib';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getR2Bucket, getR2Client } from '@/lib/storage/r2';
 import { randomUUID } from 'crypto';
+import { getActiveCompanyContext } from '@/lib/company-context';
 
 async function requireCompanyAccess(companyId: string) {
   const session = await auth();
@@ -36,22 +37,7 @@ async function requireCompanyAccess(companyId: string) {
 
 export async function listDocumentTemplates() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      throw new Error('User is not authenticated');
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      include: { company: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (!membership) {
-      throw new Error('Company not found');
-    }
+    const { session, membership, company } = await getActiveCompanyContext();
 
     const templates = await prisma.documentTemplate.findMany({
       where: { companyId: membership.companyId },
@@ -63,7 +49,7 @@ export async function listDocumentTemplates() {
       orderBy: { updatedAt: 'desc' },
     });
 
-    const owner = session?.user?.name ?? membership.company.name;
+    const owner = session?.user?.name ?? company.name;
     const documents = templates.map((template) => {
       const previewUrl = template.sourceUrl
         ? `/api/documents/${template.id}/file`
@@ -100,7 +86,7 @@ export async function listDocumentTemplates() {
       success: true,
       data: {
         companyId: membership.companyId,
-        companyName: membership.company.name,
+        companyName: company.name,
         documents,
       },
     };

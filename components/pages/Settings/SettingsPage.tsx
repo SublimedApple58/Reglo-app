@@ -28,8 +28,7 @@ import { useSession } from "next-auth/react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { updateProfile } from "@/lib/actions/user.actions";
 import { updateCompanyName } from "@/lib/actions/company.actions";
-import { createCompanyInvite } from "@/lib/actions/invite.actions";
-import { MailPlus, UploadCloud } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
 import { companyAtom, companyRefreshAtom } from "@/atoms/company.store";
@@ -110,11 +109,6 @@ export function SettingsPage(): React.ReactElement {
     companyName: "Reglo S.r.l.",
     dataRegion: dataRegionOptions[0],
   });
-  const [inviteForm, setInviteForm] = useState({
-    email: "",
-    role: "member",
-  });
-  const [isInviteSending, setIsInviteSending] = useState(false);
   const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
   const [ficEntities, setFicEntities] = useState<Array<{ value: string; label: string }>>(
     [],
@@ -512,48 +506,6 @@ export function SettingsPage(): React.ReactElement {
     }
   };
 
-  const handleInviteSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
-    event.preventDefault();
-
-    if (!companyId) {
-      toast.error({ description: "Company not found." });
-      return;
-    }
-
-    const email = inviteForm.email.trim();
-    if (!email) {
-      toast.error({ description: "Enter an email address." });
-      return;
-    }
-
-    setIsInviteSending(true);
-    try {
-      const res = await createCompanyInvite({
-        companyId,
-        email,
-        role: inviteForm.role as "member" | "admin",
-      });
-
-      if (!res.success) {
-        throw new Error(res.message ?? "Invite failed.");
-      }
-
-      setInviteForm((prev) => ({ ...prev, email: "" }));
-      toast.success({
-        title: "Invite sent",
-        description: "The invitation email has been sent.",
-      });
-    } catch (error) {
-      toast.error({
-        description:
-          error instanceof Error ? error.message : "Invite failed.",
-      });
-    } finally {
-      setIsInviteSending(false);
-    }
-  };
 
   return (
     <ClientPageWrapper title="Settings">
@@ -880,58 +832,6 @@ export function SettingsPage(): React.ReactElement {
                     </div>
                   </form>
 
-                  <form onSubmit={handleInviteSubmit} className="space-y-4">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Invite team members</CardTitle>
-                        <CardDescription>
-                          Send a simple invite to join your company.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid gap-4 md:grid-cols-[1.4fr_0.6fr]">
-                          <LabeledInput
-                            label="Email"
-                            placeholder="name@company.com"
-                            value={inviteForm.email}
-                            onChange={(event) =>
-                              setInviteForm((prev) => ({
-                                ...prev,
-                                email: event.target.value,
-                              }))
-                            }
-                          />
-                          <div className="space-y-2">
-                            <LabelMini>Role</LabelMini>
-                            <Select
-                              value={inviteForm.role}
-                              onValueChange={(value) =>
-                                setInviteForm((prev) => ({
-                                  ...prev,
-                                  role: value,
-                                }))
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select role" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="member">Member</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <div className="flex flex-wrap items-center justify-end gap-3">
-                      <Button type="submit" disabled={isInviteSending}>
-                        <MailPlus className="h-4 w-4" />
-                        {isInviteSending ? "Sending..." : "Send invite"}
-                      </Button>
-                    </div>
-                  </form>
                 </div>
               ) : (
                 <div className="space-y-4">

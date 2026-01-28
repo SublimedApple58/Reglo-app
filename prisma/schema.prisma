@@ -23,6 +23,7 @@ model User {
   image         String?
   password      String?
   role          String    @default("user")
+  activeCompanyId String? @db.Uuid
   address       Json?     @db.Json
   paymentMethod String?
   createdAt     DateTime  @default(now()) @db.Timestamp(6)
@@ -30,6 +31,7 @@ model User {
   account       Account[]
   session       Session[]
   Order         Order[]
+  activeCompany Company?  @relation("UserActiveCompany", fields: [activeCompanyId], references: [id], onDelete: SetNull)
   companyMembers CompanyMember[]
   companyInvites CompanyInvite[] @relation("CompanyInviteInvitedBy")
   documentRequests DocumentRequest[] @relation("DocumentRequestCreatedBy")
@@ -114,6 +116,7 @@ model Company {
   updatedAt DateTime         @updatedAt
 
   members   CompanyMember[]
+  activeUsers User[] @relation("UserActiveCompany")
   documents DocumentTemplate[]
   invites   CompanyInvite[]
   documentRequests DocumentRequest[]

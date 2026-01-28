@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
+import { getActiveCompanyContext } from "@/lib/company-context";
 import {
   IntegrationProviderKey,
   providerEnumMap,
@@ -15,22 +15,7 @@ const providerKeyMap: Record<string, IntegrationProviderKey> = {
 
 export async function getIntegrationConnections() {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      throw new Error("User is not authenticated");
-    }
-
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      include: { company: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      throw new Error("Company not found");
-    }
+    const { membership } = await getActiveCompanyContext();
 
     if (membership.role !== "admin") {
       throw new Error("Only admins can view integrations");

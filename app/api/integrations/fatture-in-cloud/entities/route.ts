@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { decryptSecret } from "@/lib/integrations/secrets";
 import { providerEnumMap } from "@/lib/integrations/oauth";
 import { formatError } from "@/lib/utils";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 type FicCompany = {
   id?: string;
@@ -45,17 +46,7 @@ export async function GET() {
       );
     }
 
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      return NextResponse.json(
-        { success: false, message: "Company non trovata" },
-        { status: 404 },
-      );
-    }
+    const { membership } = await getActiveCompanyContext();
 
     if (membership.role !== "admin") {
       return NextResponse.json(

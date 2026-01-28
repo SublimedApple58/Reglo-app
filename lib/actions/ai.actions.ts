@@ -1,12 +1,12 @@
 "use server";
 
-import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { z } from "zod";
 import { aiTriggers, buildAiBlocks } from "@/lib/ai/workflow-catalog";
 import type { AiWorkflowPreview } from "@/lib/ai/types";
 import { providerEnumMap } from "@/lib/integrations/oauth";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 const AiPreviewSchema = z.object({
   status: z.enum(["ok", "needs_clarification", "not_possible", "blocked"]),
@@ -92,25 +92,11 @@ export async function generateWorkflowPreview({
   existingNodes,
 }: GenerateWorkflowPreviewArgs): Promise<GenerateWorkflowPreviewResult> {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
-    if (!userId) {
-      throw new Error("User is not authenticated");
-    }
-
     if (!prompt.trim()) {
       return { success: false, message: "Scrivi un prompt per l'AI." };
     }
 
-    const membership = await prisma.companyMember.findFirst({
-      where: { userId },
-      include: { company: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!membership) {
-      throw new Error("Company not found");
-    }
+    const { membership } = await getActiveCompanyContext();
 
     const connections = await prisma.integrationConnection.findMany({
       where: { companyId: membership.companyId, status: "connected" },

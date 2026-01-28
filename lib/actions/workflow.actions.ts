@@ -1,6 +1,5 @@
 'use server';
 
-import { auth } from '@/auth';
 import { prisma } from '@/db/prisma';
 import {
   createWorkflowSchema,
@@ -11,30 +10,15 @@ import { formatError } from '@/lib/utils';
 import { z } from 'zod';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { computeExecutionOrder } from '@/lib/workflows/engine';
+import { getActiveCompanyContext } from '@/lib/company-context';
 
 async function requireCompanyContext() {
-  const session = await auth();
-  const userId = session?.user?.id;
-
-  if (!userId) {
-    throw new Error('User is not authenticated');
-  }
-
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    include: { company: true },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (!membership) {
-    throw new Error('Company not found');
-  }
-
+  const { session, membership, company } = await getActiveCompanyContext();
   return {
-    userId,
+    userId: session?.user?.id,
     companyId: membership.companyId,
-    companyName: membership.company.name,
-    ownerName: session?.user?.name ?? membership.company.name,
+    companyName: company.name,
+    ownerName: session?.user?.name ?? company.name,
   };
 }
 

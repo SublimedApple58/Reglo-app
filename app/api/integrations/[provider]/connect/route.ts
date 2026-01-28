@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { prisma } from "@/db/prisma";
 import {
   IntegrationProviderKey,
   getProviderConfig,
@@ -8,6 +7,7 @@ import {
   providerKeys,
 } from "@/lib/integrations/oauth";
 import { randomUUID } from "crypto";
+import { getActiveCompanyContext } from "@/lib/company-context";
 
 const getReturnUrl = (request: Request) => {
   const referer = request.headers.get("referer");
@@ -34,14 +34,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (!membership) {
-    return NextResponse.json({ error: "Company not found" }, { status: 404 });
-  }
+  const { membership } = await getActiveCompanyContext();
 
   if (membership.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

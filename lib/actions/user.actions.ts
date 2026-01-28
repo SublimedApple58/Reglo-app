@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { PAGE_SIZE } from '../constants';
 import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
+import { getActiveCompanyContext } from '@/lib/company-context';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -73,6 +74,7 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
           email: user.email,
           password: user.password,
           role: 'admin',
+          activeCompanyId: company.id,
         },
       });
 
@@ -183,26 +185,14 @@ type CompanyUserRow = {
 };
 
 async function requireCompanyAdminContext() {
-  const session = await auth();
+  const { session, membership } = await getActiveCompanyContext();
   const userId = session?.user?.id;
 
   if (!userId) {
     throw new Error('User is not authenticated');
   }
 
-  const membership = await prisma.companyMember.findFirst({
-    where: { userId },
-    orderBy: { createdAt: 'asc' },
-  });
-
-  if (!membership) {
-    throw new Error('Company not found');
-  }
-
-  const isAdmin =
-    membership.role === 'admin';
-
-  if (!isAdmin) {
+  if (membership.role !== 'admin') {
     throw new Error('Only admins can manage users');
   }
 
