@@ -207,6 +207,14 @@ export const acceptCompanyInviteSchema = z.object({
   token: z.string().min(1, 'Invite token is required'),
 });
 
+export const resendCompanyInviteSchema = z.object({
+  inviteId: z.string().min(1, 'Invite is required'),
+});
+
+export const cancelCompanyInviteSchema = z.object({
+  inviteId: z.string().min(1, 'Invite is required'),
+});
+
 export const acceptCompanyInvitePasswordSchema = z.object({
   token: z.string().min(1, 'Invite token is required'),
   password: z.string().min(1, 'Password is required'),

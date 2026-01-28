@@ -10,7 +10,9 @@ import {
   acceptCompanyInviteSchema,
   acceptCompanyInvitePasswordSchema,
   acceptCompanyInviteSignUpSchema,
+  cancelCompanyInviteSchema,
   createCompanyInviteSchema,
+  resendCompanyInviteSchema,
 } from '@/lib/validators';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
@@ -100,6 +102,103 @@ export async function createCompanyInvite(
       success: true,
       message: 'Invite sent successfully',
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function resendCompanyInvite(
+  input: z.infer<typeof resendCompanyInviteSchema>
+) {
+  try {
+    const payload = resendCompanyInviteSchema.parse(input);
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      throw new Error('User is not authenticated');
+    }
+
+    const invite = await prisma.companyInvite.findUnique({
+      where: { id: payload.inviteId },
+      include: { company: true },
+    });
+
+    if (!invite) {
+      throw new Error('Invite not found');
+    }
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId, companyId: invite.companyId },
+      include: { company: true },
+    });
+
+    if (!membership || membership.role !== 'admin') {
+      throw new Error('Only admins can resend invites');
+    }
+
+    if (invite.status !== 'pending') {
+      throw new Error('Invite is no longer active');
+    }
+
+    const expiresAt = new Date(
+      Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000
+    );
+
+    const updatedInvite = await prisma.companyInvite.update({
+      where: { id: invite.id },
+      data: { expiresAt },
+    });
+
+    const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${updatedInvite.token}`;
+
+    await sendCompanyInviteEmail({
+      to: invite.email,
+      companyName: invite.company.name,
+      inviteUrl,
+      invitedByName: session?.user?.name ?? null,
+    });
+
+    return { success: true, message: 'Invite resent successfully' };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function cancelCompanyInvite(
+  input: z.infer<typeof cancelCompanyInviteSchema>
+) {
+  try {
+    const payload = cancelCompanyInviteSchema.parse(input);
+    const session = await auth();
+    const userId = session?.user?.id;
+
+    if (!userId) {
+      throw new Error('User is not authenticated');
+    }
+
+    const invite = await prisma.companyInvite.findUnique({
+      where: { id: payload.inviteId },
+    });
+
+    if (!invite) {
+      throw new Error('Invite not found');
+    }
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId, companyId: invite.companyId },
+    });
+
+    if (!membership || membership.role !== 'admin') {
+      throw new Error('Only admins can cancel invites');
+    }
+
+    await prisma.companyInvite.update({
+      where: { id: invite.id },
+      data: { status: 'cancelled' },
+    });
+
+    return { success: true, message: 'Invite cancelled' };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

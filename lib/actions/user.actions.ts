@@ -182,7 +182,14 @@ type CompanyUserRow = {
   name: string;
   email: string;
   role: 'admin' | 'member';
+  status: 'active' | 'invited';
 };
+
+type CompanyUserRowWithDate = CompanyUserRow & { createdAt: Date };
+type CompanyUserRole = CompanyUserRow['role'];
+
+const normalizeMemberRole = (role: string): CompanyUserRole =>
+  role === 'admin' ? 'admin' : 'member';
 
 async function requireCompanyAdminContext() {
   const { session, membership } = await getActiveCompanyContext();
@@ -239,21 +246,59 @@ export async function getCompanyUsers({
     where,
     include: { user: true },
     orderBy: { createdAt: 'desc' },
-    take: limit,
-    skip: (page - 1) * limit,
   });
 
-  const data: CompanyUserRow[] = members.map((member) => ({
+  const invites = await prisma.companyInvite.findMany({
+    where: {
+      companyId: context.companyId,
+      status: 'pending',
+      expiresAt: { gt: new Date() },
+      email:
+        query && query !== 'all'
+          ? {
+              contains: query,
+              mode: 'insensitive',
+            }
+          : undefined,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const memberEmails = new Set(
+    members.map((member) => member.user.email.toLowerCase())
+  );
+
+  const inviteRows: CompanyUserRowWithDate[] = invites
+    .filter((invite) => !memberEmails.has(invite.email.toLowerCase()))
+    .map((invite) => ({
+      id: invite.id,
+      name: invite.email.split('@')[0] || 'Invited',
+      email: invite.email,
+      role: normalizeMemberRole(invite.role),
+      status: 'invited',
+      createdAt: invite.createdAt,
+    }));
+
+  const memberRows: CompanyUserRowWithDate[] = members.map((member) => ({
     id: member.userId,
     name: member.user.name,
     email: member.user.email,
-    role: member.role === 'admin' ? 'admin' : 'member',
+    role: normalizeMemberRole(member.role),
+    status: 'active',
+    createdAt: member.createdAt,
   }));
 
-  const dataCount = await prisma.companyMember.count({ where });
+  const rows = [...inviteRows, ...memberRows].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+
+  const dataCount = rows.length;
+  const paged = rows.slice((page - 1) * limit, page * limit);
 
   return {
-    data,
+    data: paged.map(
+      ({ createdAt, ...rest }) => rest as CompanyUserRow
+    ),
     totalPages: Math.ceil(dataCount / limit),
   };
 }
