@@ -31,25 +31,25 @@ export function SupportPage(): React.ReactElement {
   return (
     <ClientPageWrapper title="Ask support" subTitle="Send a message to Reglo support.">
       <div className="w-full pb-8 pt-2">
-        <div className="max-w-2xl">
+        <div className="max-w-3xl">
           <form
             onSubmit={handleSubmit}
-            className="rounded-2xl border bg-card p-4 shadow-sm"
+            className="glass-panel rounded-3xl border border-white/40 p-6 shadow-sm"
           >
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase text-muted-foreground">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 Your message
               </p>
               <Textarea
                 placeholder="Describe your issue or request..."
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                className="min-h-[180px] resize-none"
+                className="min-h-[200px] resize-none border-white/50 bg-white/80 shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
               />
             </div>
-            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+            <div className="mt-5 flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
               <span>We reply by email in 1-2 business days.</span>
-              <Button type="submit" disabled={isSending}>
+              <Button type="submit" disabled={isSending} className="rounded-full px-5">
                 {isSending ? "Sending..." : "Send message"}
               </Button>
             </div>

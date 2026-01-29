@@ -5,7 +5,6 @@ import { ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type WorkflowHeaderProps = {
-  workflowName: string;
   onRun: () => void;
   onSave: () => void;
   isRunning: boolean;
@@ -19,7 +18,6 @@ type WorkflowHeaderProps = {
 };
 
 export function WorkflowHeader({
-  workflowName,
   onRun,
   onSave,
   isRunning,
@@ -34,13 +32,10 @@ export function WorkflowHeader({
   return (
     <div className="glass-surface flex flex-wrap items-center justify-between gap-3 px-4 py-3">
       <div className="flex min-w-[260px] flex-1 flex-wrap items-center gap-3">
-        <div className="flex min-w-[220px] flex-1 items-center rounded-full border border-white/40 bg-white/70 px-4 py-2 text-sm font-semibold text-foreground shadow-inner">
-          {workflowName}
-        </div>
         <button
           type="button"
           onClick={onOpenTrigger}
-          className="flex min-w-[220px] items-center justify-between gap-3 rounded-full border border-white/40 bg-white/70 px-4 py-2 text-left text-sm font-semibold text-foreground shadow-inner transition hover:bg-white/80"
+          className="flex min-w-[240px] flex-1 items-center justify-between gap-3 rounded-full border border-white/40 bg-white/70 px-4 py-2 text-left text-sm font-semibold text-foreground shadow-inner transition hover:bg-white/80"
         >
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />

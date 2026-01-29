@@ -99,25 +99,29 @@ export function AssistantPage(): React.ReactElement {
 
   return (
     <ClientPageWrapper title="Assistant">
-      <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
-        <Card className="relative">
-          <CardHeader className="flex flex-row items-start justify-between gap-3">
+      <div className="grid gap-4 xl:grid-cols-[2.1fr_1fr]">
+        <Card className="glass-panel relative overflow-hidden">
+          <CardHeader className="relative flex flex-row items-start justify-between gap-3">
             <div>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Assistant sandbox
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 shadow-inner">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </span>
+                Reglo Assistant
               </CardTitle>
-              <CardDescription>
-                Chat essenziale con suggerimenti rapidi e slash commands.
+              <CardDescription className="text-sm">
+                Prompt rapido, comandi smart e suggerimenti contestuali.
               </CardDescription>
             </div>
-            <Badge variant="outline">UI only</Badge>
+            <Badge variant="outline" className="border-white/60 bg-white/70 text-xs">
+              Beta
+            </Badge>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="relative rounded-2xl border bg-muted/30">
+          <CardContent className="relative space-y-4">
+            <div className="relative rounded-3xl border border-white/40 bg-white/60 shadow-inner backdrop-blur">
               <div
                 ref={listRef}
-                className="max-h-[360px] space-y-3 overflow-y-auto p-4"
+                className="max-h-[380px] space-y-3 overflow-y-auto px-4 pb-4 pt-6"
               >
                 <AnimatePresence initial={false}>
                   {messages.map((message) => (
@@ -135,18 +139,18 @@ export function AssistantPage(): React.ReactElement {
                 </AnimatePresence>
 
                 {!messages.length && (
-                  <div className="flex items-center gap-3 rounded-xl border bg-background px-3 py-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/50 bg-white/70 px-3 py-2 text-sm text-muted-foreground shadow-sm">
                     <MessageCircle className="h-4 w-4 text-primary" />
                     Nessun messaggio ancora. Inizia con un comando o una domanda.
                   </div>
                 )}
               </div>
 
-              <div className="space-y-3 border-t bg-background/60 p-3">
+              <div className="space-y-3 border-t border-white/40 bg-white/70 px-4 py-4">
                 {!input.trim() && (
                   <div className="space-y-2">
-                    <p className="text-xs font-medium uppercase text-muted-foreground">
-                      Domande frequenti
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      Suggerimenti
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {frequentQuestions.map((question) => (
@@ -156,7 +160,7 @@ export function AssistantPage(): React.ReactElement {
                           whileTap={{ scale: 0.98 }}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleQuickInsert(question)}
-                          className="rounded-full border bg-muted px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:text-foreground"
+                          className="rounded-full border border-white/50 bg-white/70 px-3 py-2 text-left text-sm text-foreground/80 transition hover:border-primary/40 hover:text-foreground"
                         >
                           {question}
                         </motion.button>
@@ -166,27 +170,35 @@ export function AssistantPage(): React.ReactElement {
                 )}
 
                 <form onSubmit={handleSend} className="relative space-y-2">
-                  <Textarea
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder='Scrivi un prompt o "/" per i comandi rapidi'
-                    className="w-full pr-24"
-                    rows={3}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        sendMessage();
-                      }
-                    }}
-                  />
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Invio per inviare, Shift+Invio per nuova linea</span>
-                    <Badge variant="outline">Mock agent</Badge>
+                  <div className="relative">
+                    <Textarea
+                      ref={inputRef}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder='Scrivi un prompt o "/" per i comandi rapidi'
+                      className="min-h-[110px] w-full border-white/50 bg-white/80 pr-20 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
+                      rows={3}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          sendMessage();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="absolute bottom-3 right-3 h-10 w-10 rounded-full bg-primary text-white shadow-lg"
+                    >
+                      Invia
+                    </Button>
                   </div>
-                  <Button type="submit" className="absolute right-1 top-1 h-8">
-                    Invia
-                  </Button>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Invio per inviare, Shift+Invio per nuova linea</span>
+                    <Badge variant="outline" className="border-white/60 bg-white/70 text-[10px]">
+                      Mock agent
+                    </Badge>
+                  </div>
 
                   <AnimatePresence>
                     {showSlashMenu && (
@@ -211,16 +223,16 @@ export function AssistantPage(): React.ReactElement {
         </Card>
 
         <div className="space-y-4">
-          <Card>
+          <Card className="glass-panel">
             <CardHeader>
-              <CardTitle>Comandi disponibili</CardTitle>
+              <CardTitle className="text-base">Comandi disponibili</CardTitle>
               <CardDescription>Gli stessi mostrati con &ldquo;/&rdquo;.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {slashCommands.map((item) => (
                 <div
                   key={item.command}
-                  className="flex items-start justify-between rounded-lg border px-3 py-2"
+                  className="flex items-start justify-between rounded-2xl border border-white/50 bg-white/70 px-3 py-2 shadow-sm"
                 >
                   <div>
                     <p className="font-mono text-sm text-primary">{item.command}</p>
@@ -239,16 +251,16 @@ export function AssistantPage(): React.ReactElement {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="glass-panel">
             <CardHeader>
-              <CardTitle>Note conversazione</CardTitle>
+              <CardTitle className="text-base">Note conversazione</CardTitle>
               <CardDescription>
                 Solo UI: salva promemoria rapidi sulle chat.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
-                className="min-h-[120px]"
+                className="min-h-[120px] border-white/50 bg-white/80"
                 placeholder="Es. chiedi riepilogo ordini, ricordati di allegare PDF..."
               />
               <Separator />
@@ -266,7 +278,7 @@ export function AssistantPage(): React.ReactElement {
 
 function MessageBubble({ text }: { text: string }) {
   return (
-    <div className="relative max-w-[80%] rounded-2xl bg-gradient-to-br from-primary to-primary/70 px-4 py-3 text-sm text-white shadow-lg">
+    <div className="relative max-w-[80%] rounded-2xl bg-gradient-to-br from-primary/90 to-primary px-4 py-3 text-sm text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.6)]">
       {text}
     </div>
   );
@@ -280,7 +292,7 @@ function CommandPalette({
   onSelect: (command: string) => void;
 }) {
   return (
-    <Card className="shadow-xl">
+    <Card className="glass-panel shadow-xl">
       <CardContent className="p-2">
         <MotionHighlight className="flex flex-col gap-2">
           {commands.length ? (
@@ -291,7 +303,7 @@ function CommandPalette({
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onSelect(item.command)}
                   className={cn(
-                    "flex w-full items-start justify-between rounded-lg px-3 py-2 text-left transition",
+                    "flex w-full items-start justify-between rounded-2xl px-3 py-2 text-left transition",
                     "hover:text-foreground",
                   )}
                 >

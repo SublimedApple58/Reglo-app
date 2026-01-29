@@ -1238,7 +1238,6 @@ export function WorkflowEditor(): React.ReactElement {
           <div className="absolute top-40 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full bg-[#e5e4f0]/60 blur-2xl animate-[float-slow_14s_ease-in-out_infinite]" />
         </div>
         <WorkflowHeader
-          workflowName={workflowName}
           onRun={handleRun}
           onSave={handleSave}
           isRunning={isRunning}
