@@ -21,7 +21,7 @@ export function ClientHeader({
 
   return (
     <header className="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center border-b bg-background/80 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
-      <div className="flex w-full items-center gap-2 px-4 lg:gap-3 lg:px-6">
+      <div className="flex w-full items-center gap-2 px-3 lg:gap-3 lg:px-6">
         {isMobile && (
           <>
             <SidebarTrigger className="-ml-1" />

@@ -138,13 +138,13 @@ export default function HomePage(): React.ReactElement {
   return (
     <ClientPageWrapper title="Home" hideHero>
       <div className="relative space-y-6">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-[#a9d9d1]/45 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
           <div className="absolute bottom-0 left-10 h-72 w-72 rounded-full bg-[#60579e]/20 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
           <div className="absolute left-1/2 top-28 h-40 w-40 -translate-x-1/2 rounded-full bg-[#e5e4f0]/70 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
         </div>
 
-        <section className="glass-surface relative overflow-hidden p-6">
+        <section className="glass-surface glass-strong relative p-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-2">
               <span className="glass-chip">Workspace</span>
@@ -182,7 +182,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.workflowsCompletedMonth ?? 0}
               description="Mese corrente"
               isLoading={isLoading}
-              accent="bg-[#60579e]"
+              accent="bg-[#c9d9f2]"
               icon={<Workflow className="h-4 w-4" />}
             />
             <MetricCard
@@ -190,7 +190,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.activeWorkflows ?? 0}
               description="Attivi ora"
               isLoading={isLoading}
-              accent="bg-[#d8d2f1]"
+              accent="bg-[#e1ecfb]"
               icon={<Sparkles className="h-4 w-4" />}
             />
             <MetricCard
@@ -205,7 +205,7 @@ export default function HomePage(): React.ReactElement {
         </section>
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <section className="glass-panel relative p-5">
+          <section className="glass-panel glass-strong relative p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -224,7 +224,7 @@ export default function HomePage(): React.ReactElement {
               </Button>
             </div>
             <div className="mt-4 grid gap-4 lg:grid-cols-2">
-              <div className="glass-card p-4">
+              <div className="glass-card glass-strong p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Compilazioni
                 </p>
@@ -259,7 +259,7 @@ export default function HomePage(): React.ReactElement {
                   )}
                 </div>
               </div>
-              <div className="glass-card p-4">
+              <div className="glass-card glass-strong p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Workflow
                 </p>
@@ -300,7 +300,7 @@ export default function HomePage(): React.ReactElement {
             </div>
           </section>
 
-          <section className="glass-panel p-5">
+          <section className="glass-panel glass-strong p-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -315,12 +315,12 @@ export default function HomePage(): React.ReactElement {
               {quickActions.map((action) => (
                 <button
                   key={action.id}
-                  className="glass-card flex w-full items-center justify-between px-4 py-3 text-left transition hover:-translate-y-[1px] hover:shadow-[0_22px_60px_-45px_rgba(50,78,122,0.5)]"
+                  className="glass-card glass-strong flex w-full items-center justify-between px-4 py-3 text-left transition hover:-translate-y-[1px] hover:shadow-[0_22px_60px_-45px_rgba(50,78,122,0.5)]"
                   type="button"
                   onClick={action.onClick}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary shadow-inner">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#a9d9d1]/45 text-[#324e7a] shadow-inner">
                       {action.icon}
                     </span>
                     <div>
@@ -399,7 +399,7 @@ function MetricCard({
   icon: React.ReactElement;
 }): React.ReactElement {
   return (
-    <div className="glass-card p-4">
+    <div className="glass-card glass-strong p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">

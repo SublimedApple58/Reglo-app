@@ -42,8 +42,8 @@ export default function ClientPageWrapper({
       />
       <div className="relative flex flex-1">
         {/* <div className="pointer-events-none absolute inset-0 opacity-80 [background-image:linear-gradient(120deg,rgba(59,130,246,0.06),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.05),transparent_30%),linear-gradient(to_bottom,transparent_70%,rgba(0,0,0,0.02))]" /> */}
-        <main className="relative flex-1 px-4 pb-10 pt-4 lg:px-8 lg:pt-6">
-          <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-5 lg:gap-6">
+        <main className="relative flex-1 px-3 pb-10 pt-4 lg:px-6 lg:pt-6">
+          <div className="flex h-full w-full max-w-7xl flex-col gap-5 lg:gap-6">
             {!hideHero && (
               <header className="space-y-2">
                 {enableBackNavigation && label ? (

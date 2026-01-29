@@ -163,6 +163,15 @@ export function BlockConfigDialog({
                         Puoi comunque usare un valore dinamico o incollare un ID canale.
                       </p>
                     ) : null}
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
                   </div>
                 ) : null}
                 {field.optionsSource === "emailSenders" ? (
@@ -205,25 +214,45 @@ export function BlockConfigDialog({
                     {emailSenderError ? (
                       <p className="text-xs text-rose-500">{emailSenderError}</p>
                     ) : null}
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
                   </div>
                 ) : field.type === "select" ? (
-                  <Select
-                    value={configDraft[field.key] ?? ""}
-                    onValueChange={(value) =>
-                      setConfigDraft((prev) => ({ ...prev, [field.key]: value }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona valore" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Select
+                      value={configDraft[field.key] ?? ""}
+                      onValueChange={(value) =>
+                        setConfigDraft((prev) => ({ ...prev, [field.key]: value }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona valore" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {selectOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <VariablePicker
+                      variables={variableOptions}
+                      onSelect={(token) =>
+                        setConfigDraft((prev) => ({
+                          ...prev,
+                          [field.key]: `{{${token}}}`,
+                        }))
+                      }
+                    />
+                  </div>
                 ) : field.optionsSource === "ficClients" ? (
                   <div className="space-y-1">
                     <Select
