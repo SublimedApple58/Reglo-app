@@ -23,6 +23,14 @@ const isPublicRoute = (req: NextRequest) => {
   if (normalizedPath === '/invite' || normalizedPath.startsWith('/invite/')) {
     return true;
   }
+  if (
+    normalizedPath === '/backoffice' ||
+    normalizedPath.startsWith('/backoffice/') ||
+    normalizedPath === '/backoffice-sign-in' ||
+    normalizedPath.startsWith('/backoffice-sign-in/')
+  ) {
+    return true;
+  }
 
   const publicPathnameRegex = RegExp(
       `^(/(${routing.locales.join('|')}))?(${publicRoutes

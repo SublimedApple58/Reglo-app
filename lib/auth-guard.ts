@@ -1,6 +1,7 @@
 import { UserRole } from '@/lib/constants';
 import { redirect } from 'next/navigation';
 import { ACTIVE_COMPANY_REQUIRED, getActiveCompanyContext } from '@/lib/company-context';
+import { validateBackofficeCookie } from '@/lib/backoffice-auth';
 
 const buildSignInPath = (locale?: string) =>
   locale ? `/${locale}/sign-in` : '/sign-in';
@@ -39,4 +40,13 @@ export async function requireRole(role: UserRole) {
   }
 
   return session;
+}
+
+export async function requireGlobalAdmin(locale?: string) {
+  const isValid = await validateBackofficeCookie();
+
+  if (!isValid) {
+    const target = locale ? `/${locale}/backoffice-sign-in` : '/backoffice-sign-in';
+    redirect(target);
+  }
 }

@@ -15,6 +15,18 @@ enum IntegrationProvider {
   FATTURE_IN_CLOUD
 }
 
+enum ServiceKey {
+  DOC_MANAGER
+  WORKFLOWS
+  AI_ASSISTANT
+  AUTOSCUOLE
+}
+
+enum CompanyServiceStatus {
+  ACTIVE
+  DISABLED
+}
+
 model User {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String    @default("NO_NAME")
@@ -123,6 +135,23 @@ model Company {
   workflows Workflow[]
   workflowRuns WorkflowRun[]
   integrationConnections IntegrationConnection[]
+  services CompanyService[]
+}
+
+model CompanyService {
+  id        String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String               @db.Uuid
+  serviceKey ServiceKey
+  status    CompanyServiceStatus @default(ACTIVE)
+  limits    Json?                @db.Json
+  createdAt DateTime             @default(now()) @db.Timestamp(6)
+  updatedAt DateTime             @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, serviceKey])
+  @@index([companyId])
+  @@index([serviceKey])
 }
 
 model CompanyMember {

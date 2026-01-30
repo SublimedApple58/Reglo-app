@@ -5,6 +5,7 @@ import { prisma } from '@/db/prisma';
 import { createDocumentRequestSchema } from '@/lib/validators';
 import { formatError } from '@/lib/utils';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { requireServiceAccess } from '@/lib/service-access';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
@@ -22,6 +23,7 @@ export async function createDocumentRequest(
   input: z.infer<typeof createDocumentRequestSchema>
 ) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = createDocumentRequestSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
@@ -69,7 +71,7 @@ export async function createDocumentRequest(
 
 export async function listDocumentRequests() {
   try {
-    const { membership } = await getActiveCompanyContext();
+    const { membership } = await requireServiceAccess("DOC_MANAGER");
 
     const requests = await prisma.documentRequest.findMany({
       where: { companyId: membership.companyId },
@@ -108,6 +110,7 @@ export async function listDocumentRequests() {
 
 export async function getDocumentRequest(requestId: string) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const session = await auth();
     const userId = session?.user?.id;
 

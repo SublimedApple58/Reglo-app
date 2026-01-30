@@ -50,6 +50,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { setActiveCompany } from "@/lib/actions/company.actions";
 import { integrationsRefreshAtom } from "@/atoms/integrations.store";
+import { isServiceActive, type ServiceKey } from "@/lib/services";
 
 const items = [
   {
@@ -61,21 +62,25 @@ const items = [
     title: "Workflows",
     url: "/workflows",
     icon: Workflow,
+    service: "WORKFLOWS" as ServiceKey,
   },
   {
     title: "Doc manager",
     url: "/doc_manager",
     icon: FolderKanban,
+    service: "DOC_MANAGER" as ServiceKey,
   },
   {
     title: "Documents",
     url: "/documents",
     icon: Folders,
+    service: "DOC_MANAGER" as ServiceKey,
   },
   {
     title: "Compilazioni",
     url: "/compilazioni",
     icon: ClipboardCheck,
+    service: "DOC_MANAGER" as ServiceKey,
   },
 ];
 
@@ -102,6 +107,7 @@ const configurationItems = [
     title: "Assistant",
     url: "/assistant",
     icon: Bot,
+    service: "AI_ASSISTANT" as ServiceKey,
   },
   {
     title: "Ask support",
@@ -272,6 +278,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       }
                     >
                       <div
+                        className={
+                          item.service &&
+                          !isServiceActive(company?.services ?? null, item.service, true)
+                            ? "opacity-60"
+                            : ""
+                        }
                         onClick={() => {
                           router.push(`/user/${item.url}`);
                           if (sidebarIsMobile) {
@@ -280,7 +292,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         }}
                       >
                         <item.icon />
-                        <span>{item.title}</span>
+                        <span className="flex items-center gap-2">
+                          {item.title}
+                          {item.service &&
+                          !isServiceActive(company?.services ?? null, item.service, true) ? (
+                            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Locked
+                            </span>
+                          ) : null}
+                        </span>
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -329,6 +349,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     isActive={mainSection === item.title.toLowerCase()}
                   >
                     <div
+                      className={
+                        item.service &&
+                        !isServiceActive(company?.services ?? null, item.service, true)
+                          ? "opacity-60"
+                          : ""
+                      }
                       onClick={() => {
                         router.push(`/user/${item.url}`);
                         if (sidebarIsMobile) {
@@ -337,7 +363,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       }}
                     >
                       <item.icon />
-                      <span>{item.title}</span>
+                      <span className="flex items-center gap-2">
+                        {item.title}
+                        {item.service &&
+                        !isServiceActive(company?.services ?? null, item.service, true) ? (
+                          <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                            Locked
+                          </span>
+                        ) : null}
+                      </span>
                     </div>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

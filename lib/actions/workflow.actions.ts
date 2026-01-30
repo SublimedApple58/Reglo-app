@@ -11,9 +11,10 @@ import { z } from 'zod';
 import { tasks } from '@trigger.dev/sdk/v3';
 import { computeExecutionOrder } from '@/lib/workflows/engine';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { requireServiceAccess } from '@/lib/service-access';
 
 async function requireCompanyContext() {
-  const { session, membership, company } = await getActiveCompanyContext();
+  const { session, membership, company } = await requireServiceAccess("WORKFLOWS");
   return {
     userId: session?.user?.id,
     companyId: membership.companyId,

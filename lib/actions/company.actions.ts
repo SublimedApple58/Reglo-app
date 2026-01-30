@@ -5,6 +5,7 @@ import { prisma } from '@/db/prisma';
 import { getSignedAssetUrl } from '@/lib/storage/r2';
 import { updateCompanyNameSchema, createCompanySchema } from '@/lib/validators';
 import { formatError } from '@/lib/utils';
+import { normalizeCompanyServices } from '@/lib/services';
 import { z } from 'zod';
 import { getActiveCompanyContext } from '@/lib/company-context';
 
@@ -40,6 +41,7 @@ export async function getCurrentCompany() {
         name: company.name,
         role,
         logoUrl,
+        services: normalizeCompanyServices(company.services),
       },
     };
   } catch (error) {
@@ -68,6 +70,7 @@ export async function getCompanyContext() {
           role,
           logoUrl,
           plan: "Pro plan",
+          services: normalizeCompanyServices(entry.company.services),
         };
       }),
     );
@@ -91,6 +94,7 @@ export async function getCompanyContext() {
           name: company.name,
           role: currentRole,
           logoUrl: activeLogoUrl,
+          services: normalizeCompanyServices(company.services),
         },
         companies,
       },
@@ -116,7 +120,7 @@ export async function getUserCompanies() {
       }),
       prisma.companyMember.findMany({
         where: { userId },
-        include: { company: true },
+        include: { company: { include: { services: true } } },
         orderBy: { createdAt: 'asc' },
       }),
     ]);
@@ -139,6 +143,7 @@ export async function getUserCompanies() {
           role,
           logoUrl,
           plan: 'Pro plan',
+          services: normalizeCompanyServices(membership.company.services),
         };
       })
     );
@@ -209,6 +214,14 @@ export async function createCompanyForUser(
           userId,
           role: 'admin',
         },
+      });
+
+      await tx.companyService.createMany({
+        data: [
+          { companyId: createdCompany.id, serviceKey: 'DOC_MANAGER' },
+          { companyId: createdCompany.id, serviceKey: 'WORKFLOWS' },
+          { companyId: createdCompany.id, serviceKey: 'AI_ASSISTANT' },
+        ],
       });
 
       await tx.user.update({

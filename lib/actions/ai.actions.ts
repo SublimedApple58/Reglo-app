@@ -6,7 +6,7 @@ import { z } from "zod";
 import { aiTriggers, buildAiBlocks } from "@/lib/ai/workflow-catalog";
 import type { AiWorkflowPreview } from "@/lib/ai/types";
 import { providerEnumMap } from "@/lib/integrations/oauth";
-import { getActiveCompanyContext } from "@/lib/company-context";
+import { requireServiceAccess } from "@/lib/service-access";
 
 const AiPreviewSchema = z.object({
   status: z.enum(["ok", "needs_clarification", "not_possible", "blocked"]),
@@ -96,7 +96,7 @@ export async function generateWorkflowPreview({
       return { success: false, message: "Scrivi un prompt per l'AI." };
     }
 
-    const { membership } = await getActiveCompanyContext();
+    const { membership } = await requireServiceAccess("AI_ASSISTANT");
 
     const connections = await prisma.integrationConnection.findMany({
       where: { companyId: membership.companyId, status: "connected" },

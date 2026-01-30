@@ -7,6 +7,11 @@ export const SERVER_URL =
 export const INBOUND_EMAIL_DOMAIN =
   process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || 'in.reglo.it';
 
+export const GLOBAL_ADMIN_EMAIL =
+  process.env.GLOBAL_ADMIN_EMAIL || 'tiziano.difelice@reglo.it';
+export const GLOBAL_ADMIN_PASSWORD =
+  process.env.GLOBAL_ADMIN_PASSWORD || 'Reglo2026!';
+
 export const signInDefaultValues = {
   email: 'admin@example.com',
   password: '123456',

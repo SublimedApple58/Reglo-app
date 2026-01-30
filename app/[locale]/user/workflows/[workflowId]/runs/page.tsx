@@ -1,5 +1,6 @@
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { WorkflowRunHistory } from "@/components/pages/Workflows/WorkflowRunHistory";
+import { ServiceGate } from "@/components/ui/service-gate";
 import { getWorkflowById } from "@/lib/actions/workflow.actions";
 
 export default async function WorkflowRunsPage({
@@ -18,7 +19,9 @@ export default async function WorkflowRunsPage({
       parentTitle="Workflows"
       enableBackNavigation
     >
-      <WorkflowRunHistory workflowId={workflowId} />
+      <ServiceGate service="WORKFLOWS">
+        <WorkflowRunHistory workflowId={workflowId} />
+      </ServiceGate>
     </ClientPageWrapper>
   );
 }

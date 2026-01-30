@@ -24,6 +24,8 @@ import { Button } from "@/components/ui/button";
 import { WorkflowHeader } from "@/components/pages/Workflows/Editor/layout/WorkflowHeader";
 import { startWorkflowRun, updateWorkflow } from "@/lib/actions/workflow.actions";
 import { integrationConnectionsAtom } from "@/atoms/integrations.store";
+import { companyAtom } from "@/atoms/company.store";
+import { isServiceActive } from "@/lib/services";
 import {
   blockConfigDefinitions,
   primaryNodeStyle,
@@ -129,6 +131,11 @@ export function WorkflowEditor(): React.ReactElement {
   const [runPayloadDialogOpen, setRunPayloadDialogOpen] = useState(false);
   const [runPayloadFields, setRunPayloadFields] = useState<RunPayloadField[]>([]);
   const integrationConnections = useAtomValue(integrationConnectionsAtom);
+  const company = useAtomValue(companyAtom);
+  const aiEnabled = useMemo(
+    () => isServiceActive(company?.services ?? null, "AI_ASSISTANT", true),
+    [company?.services],
+  );
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -1377,20 +1384,35 @@ export function WorkflowEditor(): React.ReactElement {
               </ReactFlow>
             </div>
           </div>
-          <WorkflowAiPanel
-            collapsed={aiPanelCollapsed}
-            onToggle={() => setAiPanelCollapsed((prev) => !prev)}
-            prompt={aiPrompt}
-            onPromptChange={handleAiPromptChange}
-            onGenerate={handleAiGenerate}
-            loading={aiLoading}
-            questions={aiQuestions}
-            answers={aiAnswers}
-            onAnswerChange={handleAiAnswerChange}
-            error={aiError}
-            preview={aiPreview}
-            onOpenPreview={() => setAiPreviewOpen(true)}
-          />
+          {aiEnabled ? (
+            <WorkflowAiPanel
+              collapsed={aiPanelCollapsed}
+              onToggle={() => setAiPanelCollapsed((prev) => !prev)}
+              prompt={aiPrompt}
+              onPromptChange={handleAiPromptChange}
+              onGenerate={handleAiGenerate}
+              loading={aiLoading}
+              questions={aiQuestions}
+              answers={aiAnswers}
+              onAnswerChange={handleAiAnswerChange}
+              error={aiError}
+              preview={aiPreview}
+              onOpenPreview={() => setAiPreviewOpen(true)}
+            />
+          ) : (
+            <div className="glass-panel glass-strong flex w-80 shrink-0 flex-col gap-3 p-4 text-sm text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                AI Assistant
+              </p>
+              <p className="text-sm font-semibold text-foreground">
+                Modulo non attivo
+              </p>
+              <p className="text-xs text-muted-foreground">
+                L&apos;AI assistant non è attivo per questa company. Puoi
+                abilitarlo dal backoffice.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

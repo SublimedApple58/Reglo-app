@@ -15,6 +15,7 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getR2Bucket, getR2Client } from '@/lib/storage/r2';
 import { randomUUID } from 'crypto';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { requireServiceAccess } from '@/lib/service-access';
 
 async function requireCompanyAccess(companyId: string) {
   const session = await auth();
@@ -37,7 +38,7 @@ async function requireCompanyAccess(companyId: string) {
 
 export async function listDocumentTemplates() {
   try {
-    const { session, membership, company } = await getActiveCompanyContext();
+    const { session, membership, company } = await requireServiceAccess("DOC_MANAGER");
 
     const templates = await prisma.documentTemplate.findMany({
       where: { companyId: membership.companyId },
@@ -99,6 +100,7 @@ export async function createDocumentTemplate(
   input: z.infer<typeof createDocumentTemplateSchema>
 ) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = createDocumentTemplateSchema.parse(input);
     await requireCompanyAccess(payload.companyId);
 
@@ -124,6 +126,7 @@ export async function createBlankDocumentTemplate(
   input: z.infer<typeof createDocumentTemplateSchema>
 ) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = createDocumentTemplateSchema.parse(input);
     await requireCompanyAccess(payload.companyId);
 
@@ -161,6 +164,7 @@ export async function createBlankDocumentTemplate(
 
 export async function deleteDocumentTemplate(templateId: string) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const session = await auth();
     const userId = session?.user?.id;
 
@@ -232,6 +236,7 @@ export async function saveDocumentFields(
   input: z.infer<typeof saveDocumentFieldsSchema>
 ) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = saveDocumentFieldsSchema.parse(input);
     await requireCompanyAccess(payload.companyId);
 
@@ -276,6 +281,7 @@ export async function getDocumentConfig(
   input: z.infer<typeof getDocumentConfigSchema>
 ) {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = getDocumentConfigSchema.parse(input);
     await requireCompanyAccess(payload.companyId);
 

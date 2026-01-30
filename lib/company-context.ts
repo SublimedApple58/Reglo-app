@@ -19,7 +19,7 @@ export async function getActiveCompanyContext() {
     }),
     prisma.companyMember.findMany({
       where: { userId },
-      include: { company: true },
+      include: { company: { include: { services: true } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);

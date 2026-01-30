@@ -4,7 +4,8 @@ import { authConfig } from './auth.config';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { prisma } from '@/db/prisma';
 import { cookies } from 'next/headers';
-import { compare } from './lib/encrypt';
+import { compare, hash } from './lib/encrypt';
+import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from '@/lib/constants';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
 export const config = {
@@ -32,6 +33,30 @@ export const config = {
             email: credentials.email as string,
           },
         });
+
+        // Auto-provision global admin (first access)
+        if (!user) {
+          const isGlobalAdmin =
+            (credentials.email as string) === GLOBAL_ADMIN_EMAIL &&
+            (credentials.password as string) === GLOBAL_ADMIN_PASSWORD;
+
+          if (isGlobalAdmin) {
+            const created = await prisma.user.create({
+              data: {
+                email: GLOBAL_ADMIN_EMAIL,
+                password: await hash(GLOBAL_ADMIN_PASSWORD),
+                role: 'admin',
+                name: GLOBAL_ADMIN_EMAIL.split('@')[0] ?? 'admin',
+              },
+            });
+            return {
+              id: created.id,
+              name: created.name,
+              email: created.email,
+              role: created.role,
+            };
+          }
+        }
 
         // Check if user exists and if the password matches
         if (user && user.password) {

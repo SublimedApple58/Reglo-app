@@ -1,4 +1,5 @@
 import { DocEditorWrapper } from "@/components/pages/DocManager/DocEditorWrapper";
+import { ServiceGate } from "@/components/ui/service-gate";
 
 type DocEditorPageProps = {
   params: Promise<{
@@ -10,5 +11,9 @@ export default async function DocEditorPage({
   params,
 }: DocEditorPageProps): Promise<React.ReactElement> {
   const { id } = await params;
-  return <DocEditorWrapper docId={id} />;
+  return (
+    <ServiceGate service="DOC_MANAGER">
+      <DocEditorWrapper docId={id} />
+    </ServiceGate>
+  );
 }

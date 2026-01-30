@@ -86,6 +86,14 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
         },
       });
 
+      await tx.companyService.createMany({
+        data: [
+          { companyId: company.id, serviceKey: 'DOC_MANAGER' },
+          { companyId: company.id, serviceKey: 'WORKFLOWS' },
+          { companyId: company.id, serviceKey: 'AI_ASSISTANT' },
+        ],
+      });
+
       return createdUser;
     });
 

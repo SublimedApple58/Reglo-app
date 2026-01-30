@@ -4,6 +4,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
+import { requireServiceAccess } from "@/lib/service-access";
 
 const DocAiInputSchema = z.object({
   companyId: z.string(),
@@ -51,6 +52,7 @@ export async function generateDocumentFields(
   input: z.infer<typeof DocAiInputSchema>,
 ): Promise<GenerateDocumentFieldsResult> {
   try {
+    await requireServiceAccess("DOC_MANAGER");
     const payload = DocAiInputSchema.parse(input);
     const session = await auth();
     const userId = session?.user?.id;
