@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
@@ -22,6 +23,7 @@ export function ServiceGate({
   showBlocked?: boolean;
 }) {
   const company = useAtomValue(companyAtom);
+  const router = useRouter();
 
   const active = useMemo(
     () => isServiceActive(company?.services ?? null, service, true),
@@ -32,7 +34,12 @@ export function ServiceGate({
   if (!showBlocked) return null;
 
   return (
-    <div className={cn("flex h-full w-full items-center justify-center", className)}>
+    <div
+      className={cn(
+        "fixed inset-0 z-40 flex items-center justify-center p-6",
+        className,
+      )}
+    >
       <Card className="glass-panel glass-strong w-full max-w-xl p-8">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -45,7 +52,14 @@ export function ServiceGate({
             Questo modulo non e&apos; attivo per la tua company. Contatta Reglo per abilitarlo.
           </p>
           <div className="pt-2">
-            <Button variant="outline">Richiedi attivazione</Button>
+            <Button
+              variant="outline"
+              onClick={() =>
+                router.push(`/user/support?topic=service-activation&service=${service}`)
+              }
+            >
+              Richiedi attivazione
+            </Button>
           </div>
         </div>
       </Card>
