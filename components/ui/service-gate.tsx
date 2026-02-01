@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
@@ -24,6 +25,7 @@ export function ServiceGate({
 }) {
   const company = useAtomValue(companyAtom);
   const router = useRouter();
+  const locale = useLocale();
 
   const active = useMemo(
     () => isServiceActive(company?.services ?? null, service, true),
@@ -36,11 +38,11 @@ export function ServiceGate({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-40 flex items-center justify-center p-6",
+        "fixed inset-0 z-40 flex items-center justify-center p-6 pointer-events-none",
         className,
       )}
     >
-      <Card className="glass-panel glass-strong w-full max-w-xl p-8">
+      <Card className="glass-panel glass-strong w-full max-w-xl p-8 pointer-events-auto">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Servizio non attivo
@@ -54,9 +56,11 @@ export function ServiceGate({
           <div className="pt-2">
             <Button
               variant="outline"
-              onClick={() =>
-                router.push(`/user/support?topic=service-activation&service=${service}`)
-              }
+              onClick={() => {
+                router.push(
+                  `/${locale}/user/support?topic=service-activation&service=${service}`,
+                );
+              }}
             >
               Richiedi attivazione
             </Button>

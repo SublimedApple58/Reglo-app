@@ -1,15 +1,30 @@
 "use client";
 
 import React from "react";
+import { useSearchParams } from "next/navigation";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
 export function SupportPage(): React.ReactElement {
+  const searchParams = useSearchParams();
+  const topic = searchParams.get("topic");
+  const service = searchParams.get("service");
+  const presetMessage = React.useMemo(() => {
+    if (topic !== "service-activation") return "";
+    const serviceLabel = service ? service.replace(/_/g, " ").toLowerCase() : "un servizio";
+    return `Ciao Reglo, vorrei attivare ${serviceLabel} per la mia company.`;
+  }, [service, topic]);
+
   const [message, setMessage] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const toast = useFeedbackToast();
+
+  React.useEffect(() => {
+    if (!presetMessage) return;
+    setMessage((current) => (current.trim() ? current : presetMessage));
+  }, [presetMessage]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
