@@ -152,7 +152,7 @@ export default function HomePage(): React.ReactElement {
                 Ciao, {greetingName}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Snapshot operativo del mese corrente · {overview?.companyName ?? "Reglo"}
+                Flusso operativo del mese corrente · {overview?.companyName ?? "Reglo"}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
