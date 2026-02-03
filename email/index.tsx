@@ -32,32 +32,80 @@ const emailFooterLogo = EMAIL_FOOTER_LOGO?.trim()
   ? EMAIL_FOOTER_LOGO
   : `${SERVER_URL.replace(/\/$/, '')}/assets/exented_logo.png`;
 
+const PRIMARY = "#324D7A";
+const ACCENT = "#AFE2D4";
+const BG = "#F2FBF8";
+const BORDER = "#D8ECE7";
+
 const buildEmailBody = (content: string) => {
-  const escaped = escapeHtml(content).replace(/\r?\n/g, '<br/>');
+  const escaped = escapeHtml(content).replace(/\r?\n/g, "<br/>");
+  const host = SERVER_URL.replace(/^https?:\/\//, "");
+
+  // Table-based layout for maximum email client compatibility.
   return `
-    <div style="font-family: Inter,-apple-system,system-ui, sans-serif; color: #111827; padding: 32px 0; display: flex; justify-content: center;">
-      <div style="width: 100%; max-width: 460px; background: #ffffff; border-radius: 24px; padding: 32px; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);">
-        <div style="margin-bottom: 24px; font-size: 16px; line-height: 1.6;">
-          ${escaped}
-        </div>
-        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;" />
-        <div style="display: flex; flex-direction: column; align-items: center; gap: 8px;">
-          <img
-            src="${emailFooterLogo}"
-            alt="Reglo extended logo"
-            width="400"
-            height="108"
-            style="display: block; width: 100%; height: auto; object-fit: contain; margin: 0;"
-          />
-          <p style="margin: 12px 0 4px; font-weight: 600; letter-spacing: 0.05em;">
-            Reglo · Automations & Docs
-          </p>
-          <p style="margin: 0; color: #6b7280; font-size: 13px;">
-            <a href="${SERVER_URL}" style="color: #2563eb; text-decoration: none;">${SERVER_URL.replace(/^https?:\/\//, '')}</a>
-          </p>
-        </div>
-      </div>
+    <div style="display:none; max-height:0; overflow:hidden; opacity:0; color:transparent;">
+      Reglo
     </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BG}; margin:0; padding:0; width:100%;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; border:1px solid ${BORDER}; border-radius:28px; overflow:hidden; background:#ffffff;">
+            <tr>
+              <td style="background:${PRIMARY}; padding:18px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle">
+                      <div style="display:flex; align-items:center; gap:12px;">
+                        <img src="${emailProfilePicture}" width="36" height="36" alt="Reglo" style="display:block; border-radius:999px; background:${ACCENT};" />
+                        <div style="color:#ffffff;">
+                          <div style="font-size:14px; font-weight:700; letter-spacing:0.02em;">Reglo</div>
+                          <div style="font-size:12px; opacity:0.9;">Automations & Docs</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td valign="middle" align="right">
+                      <span style="display:inline-block; background:${ACCENT}; color:${PRIMARY}; font-size:11px; font-weight:700; letter-spacing:0.18em; text-transform:uppercase; padding:8px 12px; border-radius:999px;">
+                        Update
+                      </span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:26px 24px; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:${PRIMARY}; font-size:16px; line-height:1.7;">
+                ${escaped}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 24px 24px;">
+                <div style="height:1px; background:${BORDER}; margin:0 0 18px 0;"></div>
+                <div style="text-align:center;">
+                  <img
+                    src="${emailFooterLogo}"
+                    alt="Reglo"
+                    width="400"
+                    height="108"
+                    style="display:block; width:100%; height:auto; object-fit:contain; margin:0 auto 10px auto;"
+                  />
+                  <div style="font-size:13px; font-weight:700; letter-spacing:0.04em; color:${PRIMARY};">
+                    Reglo · Automations & Docs
+                  </div>
+                  <div style="margin-top:6px; font-size:13px; color:#4B5F7A;">
+                    <a href="${SERVER_URL}" style="color:${PRIMARY}; text-decoration:none; font-weight:600;">${host}</a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background:${ACCENT}; padding:14px 24px; text-align:center; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; color:${PRIMARY}; font-size:12px; line-height:1.5;">
+                Se non ti aspettavi questa email, puoi ignorarla.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
   `;
 };
 

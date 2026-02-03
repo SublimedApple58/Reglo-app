@@ -24,7 +24,7 @@ type AutoscuolaContext = {
 };
 
 const renderTemplate = (template: string, context: AutoscuolaContext) => {
-  const safe = template ?? "";
+  const safe = (template ?? "").replace(/\\n/g, "\n");
   return safe.replace(tokenRegex, (_, token: string) => {
     const path = token.trim().split(".");
     let current: unknown = context;
