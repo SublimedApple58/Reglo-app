@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
@@ -174,30 +181,36 @@ export function AutoscuoleAgendaPage() {
             <DialogTitle>Nuovo appuntamento</DialogTitle>
           </DialogHeader>
           <form className="space-y-3" onSubmit={handleCreate}>
-            <select
-              className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+            <Select
               value={form.studentId}
-              onChange={(event) => setForm((prev) => ({ ...prev, studentId: event.target.value }))}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
             >
-              <option value="">Seleziona allievo</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.firstName} {student.lastName}
-                </option>
-              ))}
-            </select>
-            <select
-              className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona allievo" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((student) => (
+                  <SelectItem key={student.id} value={student.id}>
+                    {student.firstName} {student.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
               value={form.type}
-              onChange={(event) => setForm((prev) => ({ ...prev, type: event.target.value }))}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, type: value }))}
             >
-              <option value="guida">Guida</option>
-              <option value="esame">Esame</option>
-            </select>
-            <Input
-              type="datetime-local"
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="guida">Guida</SelectItem>
+                <SelectItem value="esame">Esame</SelectItem>
+              </SelectContent>
+            </Select>
+            <DateTimePicker
               value={form.startsAt}
-              onChange={(event) => setForm((prev) => ({ ...prev, startsAt: event.target.value }))}
+              onChange={(value) => setForm((prev) => ({ ...prev, startsAt: value }))}
             />
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
@@ -211,5 +224,153 @@ export function AutoscuoleAgendaPage() {
         </DialogContent>
       </Dialog>
     </ClientPageWrapper>
+  );
+}
+
+const WEEK_DAYS = ["L", "M", "M", "G", "V", "S", "D"];
+
+const pad = (value: number) => value.toString().padStart(2, "0");
+
+const formatDateTimeLocal = (date: Date) =>
+  `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
+
+const generateTimeOptions = () => {
+  const times: string[] = [];
+  for (let hour = 7; hour <= 21; hour += 1) {
+    times.push(`${pad(hour)}:00`);
+    times.push(`${pad(hour)}:30`);
+  }
+  return times;
+};
+
+function DateTimePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const initialDate = value ? new Date(value) : null;
+  const [month, setMonth] = React.useState<Date>(initialDate ?? new Date());
+  const [selectedDate, setSelectedDate] = React.useState<Date | null>(initialDate);
+  const [time, setTime] = React.useState<string>(
+    initialDate ? `${pad(initialDate.getHours())}:${pad(initialDate.getMinutes())}` : "09:00",
+  );
+
+  React.useEffect(() => {
+    if (!value) return;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return;
+    setSelectedDate(parsed);
+    setMonth(parsed);
+    setTime(`${pad(parsed.getHours())}:${pad(parsed.getMinutes())}`);
+  }, [value]);
+
+  const buildCalendar = () => {
+    const year = month.getFullYear();
+    const monthIndex = month.getMonth();
+    const firstDay = new Date(year, monthIndex, 1);
+    const lastDay = new Date(year, monthIndex + 1, 0);
+    const startOffset = (firstDay.getDay() + 6) % 7; // Monday = 0
+    const totalDays = lastDay.getDate();
+    const cells: Array<Date | null> = [];
+    for (let i = 0; i < startOffset; i += 1) cells.push(null);
+    for (let day = 1; day <= totalDays; day += 1) {
+      cells.push(new Date(year, monthIndex, day));
+    }
+    while (cells.length % 7 !== 0) cells.push(null);
+    return cells;
+  };
+
+  const applySelection = (date: Date | null, nextTime = time) => {
+    if (!date) return;
+    const [hours, minutes] = nextTime.split(":").map(Number);
+    const next = new Date(date);
+    next.setHours(hours, minutes, 0, 0);
+    setSelectedDate(next);
+    onChange(formatDateTimeLocal(next));
+  };
+
+  const days = buildCalendar();
+  const timeOptions = generateTimeOptions();
+
+  return (
+    <div className="rounded-2xl border border-white/60 bg-white/80 p-3">
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-white/80"
+          onClick={() =>
+            setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+          }
+        >
+          ←
+        </button>
+        <div className="text-sm font-medium text-foreground">
+          {month.toLocaleDateString("it-IT", { month: "long", year: "numeric" })}
+        </div>
+        <button
+          type="button"
+          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-white/80"
+          onClick={() =>
+            setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+          }
+        >
+          →
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
+        {WEEK_DAYS.map((day) => (
+          <div key={day} className="py-1 font-semibold">
+            {day}
+          </div>
+        ))}
+        {days.map((day, index) => {
+          const isSelected =
+            day && selectedDate && day.toDateString() === selectedDate.toDateString();
+          return (
+            <button
+              key={`${day?.toISOString() ?? "empty"}-${index}`}
+              type="button"
+              disabled={!day}
+              onClick={() => applySelection(day)}
+              className={[
+                "h-9 rounded-lg text-sm",
+                day ? "hover:bg-[#dfeff0] text-foreground" : "opacity-0",
+                isSelected ? "bg-[#aee2d4] text-[#1f2a44] font-semibold" : "",
+              ].join(" ")}
+            >
+              {day?.getDate() ?? ""}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-3">
+        <Select
+          value={time}
+          onValueChange={(value) => {
+            setTime(value);
+            if (selectedDate) {
+              applySelection(selectedDate, value);
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Seleziona orario" />
+          </SelectTrigger>
+          <SelectContent>
+            {timeOptions.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   );
 }

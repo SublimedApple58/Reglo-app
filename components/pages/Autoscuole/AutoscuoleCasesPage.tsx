@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaCase,
@@ -159,14 +166,12 @@ export function AutoscuoleCasesPage() {
                     </TableCell>
                     <TableCell>{item.category || "—"}</TableCell>
                     <TableCell>
-                      <select
-                        className="h-9 rounded-md border border-white/60 bg-white/80 px-2 text-xs"
+                      <Select
                         value={item.status}
-                        onChange={async (event) => {
-                          const nextStatus = event.target.value;
+                        onValueChange={async (value) => {
                           const res = await updateAutoscuolaCaseStatus({
                             caseId: item.id,
-                            status: nextStatus,
+                            status: value,
                           });
                           if (!res.success) {
                             toast.error({
@@ -178,17 +183,22 @@ export function AutoscuoleCasesPage() {
                           }
                           setCases((prev) =>
                             prev.map((row) =>
-                              row.id === item.id ? { ...row, status: nextStatus } : row,
+                              row.id === item.id ? { ...row, status: value } : row,
                             ),
                           );
                         }}
                       >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="h-9 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell>
                       {new Date(item.createdAt).toLocaleDateString("it-IT")}
@@ -213,18 +223,21 @@ export function AutoscuoleCasesPage() {
             <DialogTitle>Nuova pratica</DialogTitle>
           </DialogHeader>
           <form className="space-y-3" onSubmit={handleCreate}>
-            <select
-              className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+            <Select
               value={form.studentId}
-              onChange={(event) => setForm((prev) => ({ ...prev, studentId: event.target.value }))}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
             >
-              <option value="">Seleziona allievo</option>
-              {students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.firstName} {student.lastName}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona allievo" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((student) => (
+                  <SelectItem key={student.id} value={student.id}>
+                    {student.firstName} {student.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Input
               placeholder="Categoria (es. B)"
               value={form.category}

@@ -9,6 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
@@ -18,6 +25,7 @@ import {
   updateAutoscuolaRule,
 } from "@/lib/actions/autoscuola-communications.actions";
 import { autoscuolaTemplateVariables } from "@/lib/autoscuole/variables";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type Rule = {
   id: string;
@@ -51,6 +59,7 @@ const emptyDraft = () => ({
 
 export function AutoscuoleCommunicationsPage() {
   const toast = useFeedbackToast();
+  const isMobile = useIsMobile();
   const [rules, setRules] = React.useState<Rule[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -194,6 +203,7 @@ export function AutoscuoleCommunicationsPage() {
 
       <Drawer
         open={isCreating || !!activeRule}
+        direction={isMobile ? "bottom" : "right"}
         onOpenChange={() => {
           setActiveRule(null);
           setIsCreating(false);
@@ -208,23 +218,27 @@ export function AutoscuoleCommunicationsPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Tipo regola
               </p>
-              <select
-                className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+              <Select
                 value={ruleDraft.type}
-                onChange={(event) => {
-                  const value = event.target.value;
+                onValueChange={(value) =>
                   setRuleDraft((prev) => ({
                     ...prev,
                     type: value,
                     appointmentType: value === "APPOINTMENT_BEFORE" ? "esame" : "",
-                    deadlineType: value === "CASE_DEADLINE_BEFORE" ? "PINK_SHEET_EXPIRES" : prev.deadlineType,
-                  }));
-                }}
+                    deadlineType:
+                      value === "CASE_DEADLINE_BEFORE" ? "PINK_SHEET_EXPIRES" : prev.deadlineType,
+                  }))
+                }
               >
-                <option value="APPOINTMENT_BEFORE">Promemoria appuntamento</option>
-                <option value="CASE_STATUS_CHANGED">Cambio stato pratica</option>
-                <option value="CASE_DEADLINE_BEFORE">Scadenza pratica</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona il tipo regola" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="APPOINTMENT_BEFORE">Promemoria appuntamento</SelectItem>
+                  <SelectItem value="CASE_STATUS_CHANGED">Cambio stato pratica</SelectItem>
+                  <SelectItem value="CASE_DEADLINE_BEFORE">Scadenza pratica</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
@@ -260,32 +274,36 @@ export function AutoscuoleCommunicationsPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Canale
               </p>
-              <select
-                className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+              <Select
                 value={ruleDraft.channel}
-                onChange={(event) =>
-                  setRuleDraft((prev) => ({ ...prev, channel: event.target.value }))
-                }
+                onValueChange={(value) => setRuleDraft((prev) => ({ ...prev, channel: value }))}
               >
-                <option value="email">Email</option>
-                <option value="whatsapp">WhatsApp</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona un canale" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="email">Email</SelectItem>
+                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Target
               </p>
-              <select
-                className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+              <Select
                 value={ruleDraft.target}
-                onChange={(event) =>
-                  setRuleDraft((prev) => ({ ...prev, target: event.target.value }))
-                }
+                onValueChange={(value) => setRuleDraft((prev) => ({ ...prev, target: value }))}
               >
-                <option value="student">Allievo</option>
-                <option value="staff">Staff</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona un target" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="student">Allievo</SelectItem>
+                  <SelectItem value="staff">Staff</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {ruleDraft.type === "CASE_DEADLINE_BEFORE" ? (
@@ -293,16 +311,18 @@ export function AutoscuoleCommunicationsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Tipo scadenza
                 </p>
-                <select
-                  className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+                <Select
                   value={ruleDraft.deadlineType}
-                  onChange={(event) =>
-                    setRuleDraft((prev) => ({ ...prev, deadlineType: event.target.value }))
-                  }
+                  onValueChange={(value) => setRuleDraft((prev) => ({ ...prev, deadlineType: value }))}
                 >
-                  <option value="PINK_SHEET_EXPIRES">Foglio rosa</option>
-                  <option value="MEDICAL_EXPIRES">Visita medica</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona tipo scadenza" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="PINK_SHEET_EXPIRES">Foglio rosa</SelectItem>
+                    <SelectItem value="MEDICAL_EXPIRES">Visita medica</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
 
@@ -311,16 +331,18 @@ export function AutoscuoleCommunicationsPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                   Tipo appuntamento
                 </p>
-                <select
-                  className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+                <Select
                   value={ruleDraft.appointmentType}
-                  onChange={(event) =>
-                    setRuleDraft((prev) => ({ ...prev, appointmentType: event.target.value }))
-                  }
+                  onValueChange={(value) => setRuleDraft((prev) => ({ ...prev, appointmentType: value }))}
                 >
-                  <option value="guida">Guida</option>
-                  <option value="esame">Esame</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona tipo appuntamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="guida">Guida</SelectItem>
+                    <SelectItem value="esame">Esame</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
 
