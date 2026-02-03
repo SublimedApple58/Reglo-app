@@ -30,5 +30,4 @@ Rendere l'interfaccia **viva, premium e minimale** con un look “liquid glass�
 
 ## Non‑obiettivi per ora
 - Mobile UI (app React Native dedicata)
-- Dark mode (post‑MVP)
 
