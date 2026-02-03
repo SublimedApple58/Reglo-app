@@ -135,6 +135,14 @@ model Company {
   workflows Workflow[]
   workflowRuns WorkflowRun[]
   integrationConnections IntegrationConnection[]
+  autoscuolaStudents AutoscuolaStudent[]
+  autoscuolaCases AutoscuolaCase[]
+  autoscuolaAppointments AutoscuolaAppointment[]
+  autoscuolaDocuments AutoscuolaDocument[]
+  autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
+  autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
+  autoscuolaMessageRules AutoscuolaMessageRule[]
+  autoscuolaMessageLogs AutoscuolaMessageLog[]
   services CompanyService[]
 }
 
@@ -323,4 +331,194 @@ model WorkflowRunStep {
 
   @@index([runId])
   @@index([status])
+}
+
+model AutoscuolaStudent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  firstName String
+  lastName  String
+  email     String?
+  phone     String?
+  status    String   @default("active")
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cases     AutoscuolaCase[]
+  appointments AutoscuolaAppointment[]
+  documents AutoscuolaDocument[]
+  paymentPlans AutoscuolaPaymentPlan[]
+  messageLogs AutoscuolaMessageLog[]
+
+  @@index([companyId])
+  @@index([status])
+  @@index([lastName, firstName])
+}
+
+model AutoscuolaCase {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  category  String?
+  status    String   @default("iscritto")
+  theoryExamAt DateTime? @db.Timestamp(6)
+  drivingExamAt DateTime? @db.Timestamp(6)
+  pinkSheetExpiresAt DateTime? @db.Timestamp(6)
+  medicalExpiresAt DateTime? @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  appointments AutoscuolaAppointment[]
+  paymentPlans AutoscuolaPaymentPlan[]
+
+  @@index([companyId])
+  @@index([studentId])
+  @@index([status])
+}
+
+model AutoscuolaAppointment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  caseId    String?  @db.Uuid
+  type      String
+  startsAt  DateTime @db.Timestamp(6)
+  endsAt    DateTime? @db.Timestamp(6)
+  status    String   @default("scheduled")
+  instructorName String?
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  case      AutoscuolaCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  messageLogs AutoscuolaMessageLog[]
+
+  @@index([companyId])
+  @@index([studentId])
+  @@index([startsAt])
+}
+
+model AutoscuolaDocument {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  name      String
+  status    String   @default("missing")
+  fileUrl   String?
+  expiresAt DateTime? @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([studentId])
+}
+
+model AutoscuolaPaymentPlan {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  caseId    String?  @db.Uuid
+  totalAmount Decimal @db.Decimal(12, 2)
+  currency  String   @default("EUR")
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  case      AutoscuolaCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  installments AutoscuolaPaymentInstallment[]
+
+  @@index([companyId])
+  @@index([studentId])
+}
+
+model AutoscuolaPaymentInstallment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId    String   @db.Uuid
+  dueDate   DateTime @db.Timestamp(6)
+  amount    Decimal  @db.Decimal(12, 2)
+  status    String   @default("pending")
+  paidAt    DateTime? @db.Timestamp(6)
+  invoiceId String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  plan      AutoscuolaPaymentPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([dueDate])
+}
+
+model AutoscuolaMessageTemplate {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  name      String
+  channel   String
+  subject   String?
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rules     AutoscuolaMessageRule[]
+  logs      AutoscuolaMessageLog[]
+
+  @@index([companyId])
+}
+
+model AutoscuolaMessageRule {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  templateId String  @db.Uuid
+  type      String   // APPOINTMENT_BEFORE, CASE_STATUS_CHANGED
+  appointmentType String? // guida, esame
+  offsetDays Int     @default(0)
+  channel   String   // email, sms
+  target    String   // student, staff
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  template  AutoscuolaMessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  logs      AutoscuolaMessageLog[]
+
+  @@index([companyId])
+  @@index([type])
+}
+
+model AutoscuolaMessageLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @db.Uuid
+  ruleId      String   @db.Uuid
+  templateId  String   @db.Uuid
+  appointmentId String? @db.Uuid
+  studentId   String?  @db.Uuid
+  channel     String
+  recipient   String
+  status      String   @default("sent")
+  error       String?
+  payload     Json?
+  sentAt      DateTime @default(now()) @db.Timestamp(6)
+
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rule        AutoscuolaMessageRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  template    AutoscuolaMessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  student     AutoscuolaStudent? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([ruleId])
+  @@index([appointmentId])
+  @@unique([ruleId, appointmentId, recipient, channel])
 }

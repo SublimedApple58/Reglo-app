@@ -10,6 +10,7 @@ import {
   Users,
   FolderKanban,
   ClipboardCheck,
+  GraduationCap,
   ChevronsUpDown,
   Plus,
 } from "lucide-react";
@@ -81,6 +82,12 @@ const items = [
     url: "/compilazioni",
     icon: ClipboardCheck,
     service: "DOC_MANAGER" as ServiceKey,
+  },
+  {
+    title: "Autoscuole",
+    url: "/autoscuole",
+    icon: GraduationCap,
+    service: "AUTOSCUOLE" as ServiceKey,
   },
 ];
 
