@@ -164,7 +164,7 @@ export default function HomePage(): React.ReactElement {
                 className="rounded-full px-5"
                 onClick={() => router.push("/user/doc_manager")}
               >
-                Carica documenti
+                Carica documento
               </Button>
             </div>
           </div>
