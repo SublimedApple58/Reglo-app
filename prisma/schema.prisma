@@ -482,6 +482,7 @@ model AutoscuolaMessageRule {
   templateId String  @db.Uuid
   type      String   // APPOINTMENT_BEFORE, CASE_STATUS_CHANGED
   appointmentType String? // guida, esame
+  deadlineType String? // PINK_SHEET_EXPIRES, MEDICAL_EXPIRES
   offsetDays Int     @default(0)
   channel   String   // email, sms
   target    String   // student, staff

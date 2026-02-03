@@ -30,6 +30,7 @@ type Rule = {
   id: string;
   type: string;
   appointmentType: string | null;
+  deadlineType?: string | null;
   offsetDays: number;
   channel: string;
   target: string;
@@ -53,6 +54,7 @@ export function AutoscuoleCommunicationsPage() {
     channel: "email",
     target: "student",
     appointmentType: "",
+    deadlineType: "PINK_SHEET_EXPIRES",
   });
 
   const load = React.useCallback(async () => {
@@ -90,7 +92,7 @@ export function AutoscuoleCommunicationsPage() {
                 Regole automatiche
               </p>
               <p className="text-sm text-muted-foreground">
-                Definisci quando inviare email o WhatsApp per esami, guide e aggiornamenti pratica.
+                Definisci quando inviare email o WhatsApp per esami, guide, scadenze e aggiornamenti pratica.
               </p>
             </div>
           </div>
@@ -102,7 +104,13 @@ export function AutoscuoleCommunicationsPage() {
                     <p className="text-sm font-semibold text-foreground">
                       {rule.type === "CASE_STATUS_CHANGED"
                         ? "Aggiornamento pratica"
-                        : `Promemoria ${rule.appointmentType ?? "appuntamento"}`}
+                        : rule.type === "CASE_DEADLINE_BEFORE"
+                          ? `Scadenza ${
+                              rule.deadlineType === "MEDICAL_EXPIRES"
+                                ? "visita medica"
+                                : "foglio rosa"
+                            }`
+                          : `Promemoria ${rule.appointmentType ?? "appuntamento"}`}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {rule.type === "CASE_STATUS_CHANGED"
@@ -133,6 +141,7 @@ export function AutoscuoleCommunicationsPage() {
                         channel: rule.channel,
                         target: rule.target,
                         appointmentType: rule.appointmentType ?? "",
+                        deadlineType: rule.deadlineType ?? "PINK_SHEET_EXPIRES",
                       });
                     }}
                   >
@@ -296,6 +305,23 @@ export function AutoscuoleCommunicationsPage() {
                 />
               </div>
             ) : null}
+            {activeRule?.type === "CASE_DEADLINE_BEFORE" ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Giorni di anticipo
+                </p>
+                <Input
+                  type="number"
+                  value={ruleDraft.offsetDays}
+                  onChange={(event) =>
+                    setRuleDraft((prev) => ({
+                      ...prev,
+                      offsetDays: Number(event.target.value),
+                    }))
+                  }
+                />
+              </div>
+            ) : null}
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Canale
@@ -326,6 +352,23 @@ export function AutoscuoleCommunicationsPage() {
                 <option value="staff">Staff</option>
               </select>
             </div>
+            {activeRule?.type === "CASE_DEADLINE_BEFORE" ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Tipo scadenza
+                </p>
+                <select
+                  className="h-10 w-full rounded-md border border-white/60 bg-white/80 px-3 text-sm"
+                  value={ruleDraft.deadlineType}
+                  onChange={(event) =>
+                    setRuleDraft((prev) => ({ ...prev, deadlineType: event.target.value }))
+                  }
+                >
+                  <option value="PINK_SHEET_EXPIRES">Foglio rosa</option>
+                  <option value="MEDICAL_EXPIRES">Visita medica</option>
+                </select>
+              </div>
+            ) : null}
             {activeRule?.type === "APPOINTMENT_BEFORE" ? (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -356,6 +399,10 @@ export function AutoscuoleCommunicationsPage() {
                   channel: ruleDraft.channel as "email" | "whatsapp" | "sms",
                   target: ruleDraft.target as "student" | "staff",
                   appointmentType: ruleDraft.appointmentType || null,
+                  deadlineType:
+                    activeRule.type === "CASE_DEADLINE_BEFORE"
+                      ? ruleDraft.deadlineType
+                      : null,
                 });
                 if (!res.success) {
                   toast.error({

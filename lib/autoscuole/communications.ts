@@ -20,7 +20,23 @@ type AutoscuolaContext = {
   case?: {
     status?: string;
     category?: string | null;
+    deadlineLabel?: string;
+    deadlineDate?: string;
+    pinkSheetExpiresAt?: string;
+    medicalExpiresAt?: string;
   };
+};
+
+const formatDate = (value?: Date | string | null) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("it-IT");
+};
+
+const DEADLINE_LABELS: Record<string, string> = {
+  PINK_SHEET_EXPIRES: "Foglio rosa",
+  MEDICAL_EXPIRES: "Visita medica",
 };
 
 const renderTemplate = (template: string, context: AutoscuolaContext) => {
@@ -111,6 +127,7 @@ export const sendAutoscuolaMessage = async ({
   caseData,
   appointmentId,
   studentId,
+  dedupeKey,
 }: {
   prisma?: PrismaClientLike;
   rule: {
@@ -126,9 +143,17 @@ export const sendAutoscuolaMessage = async ({
   };
   student?: { firstName: string; lastName: string; email?: string | null; phone?: string | null };
   appointment?: { date?: string; type?: string };
-  caseData?: { status?: string; category?: string | null };
+  caseData?: {
+    status?: string;
+    category?: string | null;
+    deadlineLabel?: string;
+    deadlineDate?: string;
+    pinkSheetExpiresAt?: string;
+    medicalExpiresAt?: string;
+  };
   appointmentId?: string | null;
   studentId?: string | null;
+  dedupeKey?: string;
 }) => {
   const context: AutoscuolaContext = {
     student,
@@ -173,16 +198,28 @@ export const sendAutoscuolaMessage = async ({
   }
 
   for (const recipient of recipients) {
-    const existing = appointmentId
+    const existing = dedupeKey
       ? await prisma.autoscuolaMessageLog.findFirst({
           where: {
             ruleId: rule.id,
-            appointmentId,
             recipient,
             channel: normalizedChannel,
+            payload: {
+              path: ["dedupeKey"],
+              equals: dedupeKey,
+            },
           },
         })
-      : null;
+      : appointmentId
+        ? await prisma.autoscuolaMessageLog.findFirst({
+            where: {
+              ruleId: rule.id,
+              appointmentId,
+              recipient,
+              channel: normalizedChannel,
+            },
+          })
+        : null;
     if (existing) continue;
 
     try {
@@ -209,6 +246,7 @@ export const sendAutoscuolaMessage = async ({
           payload: {
             subject,
             body,
+            ...(dedupeKey ? { dedupeKey } : {}),
           },
         },
       });
@@ -227,6 +265,7 @@ export const sendAutoscuolaMessage = async ({
           payload: {
             subject,
             body,
+            ...(dedupeKey ? { dedupeKey } : {}),
           },
         },
       });
@@ -330,5 +369,74 @@ export const notifyAutoscuolaCaseStatusChange = async ({
       studentId: student.id,
       appointmentId: null,
     });
+  }
+};
+
+export const processAutoscuolaCaseDeadlines = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+  windowMinutes = 5,
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+  windowMinutes?: number;
+}) => {
+  const rules = await prisma.autoscuolaMessageRule.findMany({
+    where: { active: true, type: "CASE_DEADLINE_BEFORE" },
+    include: { template: true },
+  });
+
+  const deadlineFieldMap: Record<string, "pinkSheetExpiresAt" | "medicalExpiresAt"> = {
+    PINK_SHEET_EXPIRES: "pinkSheetExpiresAt",
+    MEDICAL_EXPIRES: "medicalExpiresAt",
+  };
+
+  for (const rule of rules) {
+    const deadlineKey = rule.deadlineType ?? "";
+    const field = deadlineFieldMap[deadlineKey];
+    if (!field) continue;
+
+    const offsetDays = Number(rule.offsetDays ?? 0);
+    const targetTime = new Date(now);
+    targetTime.setDate(targetTime.getDate() + offsetDays);
+
+    const start = new Date(targetTime.getTime() - windowMinutes * 60 * 1000);
+    const end = new Date(targetTime.getTime() + windowMinutes * 60 * 1000);
+
+    const cases = await prisma.autoscuolaCase.findMany({
+      where: {
+        companyId: rule.companyId,
+        [field]: { gte: start, lte: end },
+      },
+      include: { student: true },
+    });
+
+    for (const item of cases) {
+      const deadlineDate = item[field];
+      const dedupeKey = `${rule.id}:${item.id}:${deadlineKey}:${formatDate(deadlineDate)}`;
+
+      await sendAutoscuolaMessage({
+        prisma,
+        rule,
+        template: rule.template,
+        student: {
+          firstName: item.student.firstName,
+          lastName: item.student.lastName,
+          email: item.student.email,
+          phone: item.student.phone,
+        },
+        caseData: {
+          status: item.status,
+          category: item.category,
+          deadlineLabel: DEADLINE_LABELS[deadlineKey] ?? "Scadenza",
+          deadlineDate: formatDate(deadlineDate),
+          pinkSheetExpiresAt: formatDate(item.pinkSheetExpiresAt),
+          medicalExpiresAt: formatDate(item.medicalExpiresAt),
+        },
+        studentId: item.studentId,
+        appointmentId: null,
+        dedupeKey,
+      });
+    }
   }
 };

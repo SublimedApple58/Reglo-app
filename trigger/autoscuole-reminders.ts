@@ -1,6 +1,9 @@
 import { schedules } from "@trigger.dev/sdk/v3";
 import { getPrisma } from "@/trigger/workflow-runner/prisma";
-import { processAutoscuolaAppointmentReminders } from "@/lib/autoscuole/communications";
+import {
+  processAutoscuolaAppointmentReminders,
+  processAutoscuolaCaseDeadlines,
+} from "@/lib/autoscuole/communications";
 
 export const autoscuoleReminders = schedules.task({
   id: "autoscuole-reminders",
@@ -8,6 +11,7 @@ export const autoscuoleReminders = schedules.task({
   run: async () => {
     const prisma = await getPrisma();
     await processAutoscuolaAppointmentReminders({ prisma });
+    await processAutoscuolaCaseDeadlines({ prisma });
     return { ok: true };
   },
 });

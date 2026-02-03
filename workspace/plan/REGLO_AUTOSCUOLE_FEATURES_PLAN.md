@@ -70,19 +70,20 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 **Valore:** evita dimenticanze critiche (foglio rosa, visite, revisioni).
 
 **Scope V1:**
-- Scadenze per pratica/allievo
-- Alert automatici interni via email
+- Scadenze per pratica/allievo (foglio rosa, visita medica)
+- Alert automatici interni via email/WhatsApp allo staff
 
 **UI:**
 - Tab “Scadenze” con stato e priorità
-- Configurazione anticipo (es. 30 giorni)
+- Regole comunicazioni dedicate alle scadenze (offset giorni)
 
 **Automazione:**
-- Trigger su `Case.deadlineDate`
-- Workflow “Scadenza imminente”
+- Trigger su date `Case.pinkSheetExpiresAt` / `Case.medicalExpiresAt`
+- Scheduler minuti con deduplica per scadenza
 
 **Dipendenze:**
 - Email (Resend)
+- WhatsApp (Twilio) opzionale
 
 ---
 
@@ -178,8 +179,8 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 ---
 
 ## Stato attuale
-- ✅ **Feature #1 Comunicazioni automatiche con Allievi e Staff** (email + SMS) — completata
-- ⏳ Feature #2 Scadenze + Promemoria — da fare
+- ✅ **Feature #1 Comunicazioni automatiche con Allievi e Staff** (email + WhatsApp) — completata
+- ✅ Feature #2 Scadenze + Promemoria — completata
 - ⏳ Feature #3 Pagamenti + FIC — da fare
 - ⏳ Feature #4 Documenti + Modulistica — da fare
 - ⏳ Feature #5 KPI & Reportistica — da fare

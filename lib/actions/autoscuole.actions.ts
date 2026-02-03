@@ -102,6 +102,61 @@ export async function getAutoscuolaOverview() {
   }
 }
 
+export async function getAutoscuolaDeadlines() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const now = new Date();
+    const soonThreshold = new Date(now);
+    soonThreshold.setDate(soonThreshold.getDate() + 30);
+
+    const cases = await prisma.autoscuolaCase.findMany({
+      where: {
+        companyId,
+        OR: [
+          { pinkSheetExpiresAt: { not: null } },
+          { medicalExpiresAt: { not: null } },
+        ],
+      },
+      include: { student: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const items = cases.flatMap((item) => {
+      const deadlines = [
+        { type: "PINK_SHEET_EXPIRES", date: item.pinkSheetExpiresAt },
+        { type: "MEDICAL_EXPIRES", date: item.medicalExpiresAt },
+      ].filter((entry) => entry.date);
+
+      return deadlines.map((entry) => {
+        const deadlineDate = entry.date as Date;
+        const status =
+          deadlineDate < now
+            ? "overdue"
+            : deadlineDate <= soonThreshold
+              ? "soon"
+              : "ok";
+        return {
+          id: `${item.id}-${entry.type}`,
+          caseId: item.id,
+          studentId: item.studentId,
+          studentName: `${item.student.firstName} ${item.student.lastName}`,
+          deadlineType: entry.type,
+          deadlineDate,
+          status,
+          caseStatus: item.status,
+        };
+      });
+    });
+
+    items.sort((a, b) => a.deadlineDate.getTime() - b.deadlineDate.getTime());
+
+    return { success: true, data: items };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function getAutoscuolaStudents(search?: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");

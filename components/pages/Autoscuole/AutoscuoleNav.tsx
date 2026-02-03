@@ -11,6 +11,7 @@ const navItems = [
   { label: "Allievi", href: "/user/autoscuole/students" },
   { label: "Pratiche", href: "/user/autoscuole/cases" },
   { label: "Agenda", href: "/user/autoscuole/agenda" },
+  { label: "Scadenze", href: "/user/autoscuole/scadenze" },
   { label: "Documenti", href: "/user/autoscuole/documents" },
   { label: "Pagamenti", href: "/user/autoscuole/payments" },
   { label: "Comunicazioni", href: "/user/autoscuole/comunicazioni" },

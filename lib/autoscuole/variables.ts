@@ -8,4 +8,8 @@ export const autoscuolaTemplateVariables: VariableOption[] = [
   { label: "Data appuntamento", token: "appointment.date" },
   { label: "Tipo appuntamento", token: "appointment.type" },
   { label: "Stato pratica", token: "case.status" },
+  { label: "Scadenza (tipo)", token: "case.deadlineLabel" },
+  { label: "Scadenza (data)", token: "case.deadlineDate" },
+  { label: "Scadenza foglio rosa", token: "case.pinkSheetExpiresAt" },
+  { label: "Scadenza visita medica", token: "case.medicalExpiresAt" },
 ];
