@@ -19,6 +19,20 @@ const updateRuleSchema = z.object({
   target: z.enum(["student", "staff"]),
   appointmentType: z.string().optional().nullable(),
   deadlineType: z.string().optional().nullable(),
+  subject: z.string().optional().nullable(),
+  body: z.string().min(1),
+});
+
+const createRuleSchema = z.object({
+  type: z.enum(["APPOINTMENT_BEFORE", "CASE_STATUS_CHANGED", "CASE_DEADLINE_BEFORE"]),
+  active: z.boolean(),
+  offsetDays: z.number().int().min(0).max(365),
+  channel: z.enum(["email", "whatsapp", "sms"]),
+  target: z.enum(["student", "staff"]),
+  appointmentType: z.string().optional().nullable(),
+  deadlineType: z.string().optional().nullable(),
+  subject: z.string().optional().nullable(),
+  body: z.string().min(1),
 });
 
 const ensureDefaults = async (companyId: string) => {
@@ -257,7 +271,93 @@ export async function updateAutoscuolaRule(
       },
     });
 
+    await prisma.autoscuolaMessageTemplate.update({
+      where: { id: rule.templateId, companyId: membership.companyId },
+      data: {
+        subject: payload.subject ?? null,
+        body: payload.body,
+        channel: payload.channel,
+      },
+    });
+
     return { success: true, data: rule };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function createAutoscuolaRule(
+  input: z.infer<typeof createRuleSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = createRuleSchema.parse(input);
+
+    const name = (() => {
+      if (payload.type === "CASE_STATUS_CHANGED") return "Aggiornamento pratica";
+      if (payload.type === "CASE_DEADLINE_BEFORE") {
+        return payload.deadlineType === "MEDICAL_EXPIRES"
+          ? "Scadenza visita medica"
+          : "Scadenza foglio rosa";
+      }
+      return `Promemoria ${payload.appointmentType ?? "appuntamento"}`;
+    })();
+
+    const template = await prisma.autoscuolaMessageTemplate.create({
+      data: {
+        companyId: membership.companyId,
+        name,
+        channel: payload.channel,
+        subject: payload.subject ?? null,
+        body: payload.body,
+      },
+    });
+
+    const rule = await prisma.autoscuolaMessageRule.create({
+      data: {
+        companyId: membership.companyId,
+        templateId: template.id,
+        type: payload.type,
+        appointmentType: payload.appointmentType ?? null,
+        deadlineType: payload.deadlineType ?? null,
+        offsetDays: payload.offsetDays,
+        channel: payload.channel,
+        target: payload.target,
+        active: payload.active,
+      },
+    });
+
+    return { success: true, data: rule };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function deleteAutoscuolaRule(id: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+
+    const rule = await prisma.autoscuolaMessageRule.findFirst({
+      where: { id, companyId: membership.companyId },
+    });
+    if (!rule) {
+      return { success: false, message: "Regola non trovata." };
+    }
+
+    await prisma.autoscuolaMessageRule.delete({
+      where: { id, companyId: membership.companyId },
+    });
+
+    const stillUsed = await prisma.autoscuolaMessageRule.count({
+      where: { templateId: rule.templateId },
+    });
+    if (!stillUsed) {
+      await prisma.autoscuolaMessageTemplate.delete({
+        where: { id: rule.templateId, companyId: membership.companyId },
+      });
+    }
+
+    return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
