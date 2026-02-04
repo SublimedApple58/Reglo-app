@@ -138,6 +138,11 @@ model Company {
   autoscuolaStudents AutoscuolaStudent[]
   autoscuolaCases AutoscuolaCase[]
   autoscuolaAppointments AutoscuolaAppointment[]
+  autoscuolaInstructors AutoscuolaInstructor[]
+  autoscuolaVehicles AutoscuolaVehicle[]
+  autoscuolaAvailabilitySlots AutoscuolaAvailabilitySlot[]
+  autoscuolaBookingRequests AutoscuolaBookingRequest[]
+  autoscuolaWaitlistOffers AutoscuolaWaitlistOffer[]
   autoscuolaDocuments AutoscuolaDocument[]
   autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
   autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
@@ -351,6 +356,8 @@ model AutoscuolaStudent {
   documents AutoscuolaDocument[]
   paymentPlans AutoscuolaPaymentPlan[]
   messageLogs AutoscuolaMessageLog[]
+  bookingRequests AutoscuolaBookingRequest[]
+  waitlistResponses AutoscuolaWaitlistResponse[]
 
   @@index([companyId])
   @@index([status])
@@ -385,11 +392,13 @@ model AutoscuolaAppointment {
   companyId String   @db.Uuid
   studentId String   @db.Uuid
   caseId    String?  @db.Uuid
+  slotId    String?  @db.Uuid
   type      String
   startsAt  DateTime @db.Timestamp(6)
   endsAt    DateTime? @db.Timestamp(6)
   status    String   @default("scheduled")
-  instructorName String?
+  instructorId String? @db.Uuid
+  vehicleId String? @db.Uuid
   notes     String?
   createdAt DateTime @default(now()) @db.Timestamp(6)
   updatedAt DateTime @updatedAt
@@ -397,11 +406,119 @@ model AutoscuolaAppointment {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
   case      AutoscuolaCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  slot      AutoscuolaAvailabilitySlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
+  instructor AutoscuolaInstructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  vehicle    AutoscuolaVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   messageLogs AutoscuolaMessageLog[]
 
   @@index([companyId])
   @@index([studentId])
   @@index([startsAt])
+  @@index([instructorId])
+  @@index([vehicleId])
+  @@index([slotId])
+}
+
+model AutoscuolaInstructor {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  name      String
+  phone     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments AutoscuolaAppointment[]
+
+  @@index([companyId])
+}
+
+model AutoscuolaVehicle {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  name      String
+  plate     String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments AutoscuolaAppointment[]
+
+  @@index([companyId])
+}
+
+model AutoscuolaAvailabilitySlot {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  ownerType String
+  ownerId   String   @db.Uuid
+  startsAt  DateTime @db.Timestamp(6)
+  endsAt    DateTime @db.Timestamp(6)
+  status    String   @default("open")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments AutoscuolaAppointment[]
+  waitlistOffers AutoscuolaWaitlistOffer[]
+
+  @@index([companyId])
+  @@index([ownerType, ownerId])
+  @@index([startsAt])
+  @@unique([companyId, ownerType, ownerId, startsAt])
+}
+
+model AutoscuolaBookingRequest {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String   @db.Uuid
+  studentId   String   @db.Uuid
+  desiredDate DateTime @db.Timestamp(6)
+  status      String   @default("pending")
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([studentId])
+  @@index([desiredDate])
+}
+
+model AutoscuolaWaitlistOffer {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  slotId    String   @db.Uuid
+  status    String   @default("broadcasted")
+  sentAt    DateTime @db.Timestamp(6)
+  expiresAt DateTime @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  slot      AutoscuolaAvailabilitySlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  responses AutoscuolaWaitlistResponse[]
+
+  @@index([companyId])
+  @@index([slotId])
+}
+
+model AutoscuolaWaitlistResponse {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offerId   String   @db.Uuid
+  studentId String   @db.Uuid
+  status    String   @default("accepted")
+  respondedAt DateTime @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  offer     AutoscuolaWaitlistOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([offerId])
+  @@index([studentId])
 }
 
 model AutoscuolaDocument {

@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "AutoscuolaAvailabilitySlot_companyId_ownerType_ownerId_startsAt" RENAME TO "AutoscuolaAvailabilitySlot_companyId_ownerType_ownerId_star_key";

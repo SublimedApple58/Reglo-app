@@ -6,6 +6,7 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
+import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
 
 const createStudentSchema = z.object({
   firstName: z.string().min(1),
@@ -33,13 +34,33 @@ const createAppointmentSchema = z.object({
   startsAt: z.string().min(1),
   endsAt: z.string().optional().nullable(),
   status: z.string().optional(),
-  instructorName: z.string().optional(),
+  instructorId: z.string().uuid(),
+  vehicleId: z.string().uuid(),
   notes: z.string().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
   caseId: z.string().uuid(),
   status: z.string().min(1),
+});
+
+const cancelAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+});
+
+const updateAppointmentStatusSchema = z.object({
+  appointmentId: z.string().uuid(),
+  status: z.string().min(1),
+});
+
+const createInstructorSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().optional(),
+});
+
+const createVehicleSchema = z.object({
+  name: z.string().min(1),
+  plate: z.string().optional(),
 });
 
 const importStudentsSchema = z.object({
@@ -298,6 +319,8 @@ export async function getAutoscuolaAppointments() {
       include: {
         student: true,
         case: true,
+        instructor: true,
+        vehicle: true,
       },
       orderBy: { startsAt: "asc" },
     });
@@ -316,16 +339,52 @@ export async function createAutoscuolaAppointment(
     const companyId = membership.companyId;
     const payload = createAppointmentSchema.parse(input);
 
+    const [instructor, vehicle] = await Promise.all([
+      prisma.autoscuolaInstructor.findFirst({
+        where: { id: payload.instructorId, companyId },
+      }),
+      prisma.autoscuolaVehicle.findFirst({
+        where: { id: payload.vehicleId, companyId },
+      }),
+    ]);
+
+    if (!instructor || !vehicle) {
+      return {
+        success: false,
+        message: "Seleziona istruttore e veicolo validi.",
+      };
+    }
+
+    const slotTime = new Date(payload.startsAt);
+    const conflict = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        startsAt: slotTime,
+        status: { notIn: ["cancelled"] },
+        OR: [
+          { instructorId: payload.instructorId },
+          { vehicleId: payload.vehicleId },
+        ],
+      },
+    });
+    if (conflict) {
+      return {
+        success: false,
+        message: "Slot non disponibile per istruttore o veicolo.",
+      };
+    }
+
     const appointment = await prisma.autoscuolaAppointment.create({
       data: {
         companyId,
         studentId: payload.studentId,
         caseId: payload.caseId || null,
         type: payload.type,
-        startsAt: new Date(payload.startsAt),
+        startsAt: slotTime,
         endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
         status: payload.status ?? "scheduled",
-        instructorName: payload.instructorName ?? null,
+        instructorId: payload.instructorId,
+        vehicleId: payload.vehicleId,
         notes: payload.notes ?? null,
       },
     });
@@ -334,6 +393,254 @@ export async function createAutoscuolaAppointment(
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
+}
+
+export async function cancelAutoscuolaAppointment(
+  input: z.infer<typeof cancelAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = cancelAppointmentSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: { status: "cancelled" },
+    });
+
+    if (appointment.slotId) {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + 15 * 60 * 1000);
+
+      await prisma.autoscuolaAvailabilitySlot.updateMany({
+        where: {
+          companyId: membership.companyId,
+          startsAt: appointment.startsAt,
+          status: "booked",
+        },
+        data: { status: "open" },
+      });
+
+      await broadcastWaitlistOffer({
+        companyId: membership.companyId,
+        slotId: appointment.slotId,
+        startsAt: appointment.startsAt,
+        expiresAt,
+      });
+
+      return {
+        success: true,
+        data: { rescheduled: false, broadcasted: true },
+      };
+    }
+
+    const slotMinutes = 30;
+    const startHour = 7;
+    const endHour = 21;
+    const scanStart = new Date(appointment.startsAt);
+    scanStart.setMinutes(scanStart.getMinutes() + slotMinutes);
+    const scanEnd = new Date(appointment.startsAt);
+    scanEnd.setDate(scanEnd.getDate() + 7);
+
+    const [existing, instructors, vehicles] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          startsAt: { gte: scanStart, lte: scanEnd },
+          status: { notIn: ["cancelled"] },
+        },
+      }),
+      prisma.autoscuolaInstructor.findMany({
+        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        orderBy: { name: "asc" },
+      }),
+      prisma.autoscuolaVehicle.findMany({
+        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+
+    if (!instructors.length || !vehicles.length) {
+      return { success: true, data: { rescheduled: false } };
+    }
+
+    const busy = new Map<
+      string,
+      { instructors: Set<string>; vehicles: Set<string> }
+    >();
+    for (const item of existing) {
+      const key = slotKey(item.startsAt);
+      const entry =
+        busy.get(key) ?? { instructors: new Set<string>(), vehicles: new Set<string>() };
+      if (item.instructorId) entry.instructors.add(item.instructorId);
+      if (item.vehicleId) entry.vehicles.add(item.vehicleId);
+      busy.set(key, entry);
+    }
+
+    let newStartsAt: Date | null = null;
+    let newInstructorId: string | null = null;
+    let newVehicleId: string | null = null;
+    for (let day = new Date(scanStart); day <= scanEnd; day.setDate(day.getDate() + 1)) {
+      for (let hour = startHour; hour < endHour; hour += 1) {
+        for (let minutes = 0; minutes < 60; minutes += slotMinutes) {
+          const candidate = new Date(day);
+          candidate.setHours(hour, minutes, 0, 0);
+          if (candidate <= scanStart) continue;
+          if (candidate > scanEnd) break;
+          const key = slotKey(candidate);
+          const occupied = busy.get(key);
+          const busyInstructors = occupied?.instructors ?? new Set<string>();
+          const busyVehicles = occupied?.vehicles ?? new Set<string>();
+          const availableInstructor = instructors.find(
+            (item) => !busyInstructors.has(item.id),
+          );
+          if (!availableInstructor) continue;
+          const availableVehicle = vehicles.find(
+            (item) => !busyVehicles.has(item.id),
+          );
+          if (!availableVehicle) continue;
+          newStartsAt = candidate;
+          newInstructorId = availableInstructor.id;
+          newVehicleId = availableVehicle.id;
+          break;
+        }
+        if (newStartsAt) break;
+      }
+      if (newStartsAt) break;
+    }
+
+    if (!newStartsAt || !newInstructorId || !newVehicleId) {
+      return { success: true, data: { rescheduled: false } };
+    }
+
+    await prisma.autoscuolaAppointment.create({
+      data: {
+        companyId: membership.companyId,
+        studentId: appointment.studentId,
+        caseId: appointment.caseId,
+        type: appointment.type,
+        startsAt: newStartsAt,
+        status: "scheduled",
+        instructorId: newInstructorId,
+        vehicleId: newVehicleId,
+        notes: appointment.notes,
+      },
+    });
+
+    return {
+      success: true,
+      data: { rescheduled: true, newStartsAt },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function updateAutoscuolaAppointmentStatus(
+  input: z.infer<typeof updateAppointmentStatusSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = updateAppointmentStatusSchema.parse(input);
+
+    const updated = await prisma.autoscuolaAppointment.update({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+      data: { status: payload.status },
+    });
+
+    return { success: true, data: updated };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaInstructors() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const instructors = await prisma.autoscuolaInstructor.findMany({
+      where: { companyId },
+      orderBy: { name: "asc" },
+    });
+
+    return { success: true, data: instructors };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function createAutoscuolaInstructor(
+  input: z.infer<typeof createInstructorSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = createInstructorSchema.parse(input);
+
+    const instructor = await prisma.autoscuolaInstructor.create({
+      data: {
+        companyId,
+        name: payload.name,
+        phone: payload.phone || null,
+      },
+    });
+
+    return { success: true, data: instructor };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaVehicles() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const vehicles = await prisma.autoscuolaVehicle.findMany({
+      where: { companyId },
+      orderBy: { name: "asc" },
+    });
+
+    return { success: true, data: vehicles };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function createAutoscuolaVehicle(
+  input: z.infer<typeof createVehicleSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = createVehicleSchema.parse(input);
+
+    const vehicle = await prisma.autoscuolaVehicle.create({
+      data: {
+        companyId,
+        name: payload.name,
+        plate: payload.plate || null,
+      },
+    });
+
+    return { success: true, data: vehicle };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+function slotKey(date: Date) {
+  const pad = (value: number) => value.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours(),
+  )}:${pad(date.getMinutes())}`;
 }
 
 export async function updateAutoscuolaCaseStatus(

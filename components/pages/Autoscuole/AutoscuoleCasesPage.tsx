@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaCase,
@@ -55,6 +56,8 @@ export function AutoscuoleCasesPage() {
     studentId: "",
     category: "",
     status: "",
+    pinkSheetExpiresAt: "",
+    medicalExpiresAt: "",
   });
 
   const load = React.useCallback(async () => {
@@ -103,6 +106,8 @@ export function AutoscuoleCasesPage() {
       studentId: form.studentId,
       category: form.category || undefined,
       status: form.status || undefined,
+      pinkSheetExpiresAt: form.pinkSheetExpiresAt || undefined,
+      medicalExpiresAt: form.medicalExpiresAt || undefined,
     });
     if (!res.success) {
       toast.error({
@@ -111,7 +116,13 @@ export function AutoscuoleCasesPage() {
       return;
     }
     setCreateOpen(false);
-    setForm({ studentId: "", category: "", status: "" });
+    setForm({
+      studentId: "",
+      category: "",
+      status: "",
+      pinkSheetExpiresAt: "",
+      medicalExpiresAt: "",
+    });
     load();
   };
 
@@ -248,6 +259,30 @@ export function AutoscuoleCasesPage() {
               value={form.status}
               onChange={(event) => setForm((prev) => ({ ...prev, status: event.target.value }))}
             />
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Scadenza foglio rosa
+                </p>
+                <DatePicker
+                  value={form.pinkSheetExpiresAt}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, pinkSheetExpiresAt: value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Scadenza visita medica
+                </p>
+                <DatePicker
+                  value={form.medicalExpiresAt}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, medicalExpiresAt: value }))
+                  }
+                />
+              </div>
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Annulla

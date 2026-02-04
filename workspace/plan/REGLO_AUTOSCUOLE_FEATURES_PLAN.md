@@ -1,44 +1,56 @@
-# Reglo Autoscuole — Features Plan (V1 senza SIDA)
+# Reglo Autoscuole — Features Plan (V1)
 
 ## 0) Obiettivo
-Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati gestiti direttamente in Reglo (manuale + import CSV). Le feature sono in **ordine di importanza** come da input.
+Sviluppare il **modulo Autoscuole** in V1 senza integrazione SIDA, allineato al Master Plan.
 
-**Assunzioni chiave:**
-- Reglo è modulare: Core (Doc Manager, Workflows, AI Assistant) + Modulo Autoscuole.
-- Autoscuole richiede **Workflows + Doc Manager** (AI Assistant opzionale).
-- V1 è **read/write solo in Reglo**; SIDA arriverà via Reglo Hub.
+**Assunzioni chiave (locked):**
+- Scheduling V1 a **regole statiche** con **auto‑reschedule**
+- **Waitlist semplice**
+- **Ruolo singolo per utente**
+- **Student UI assente** in V1
+- **No Slack** (Email + WhatsApp)
+- Pagamenti = **rate + Fatture in Cloud**
 
 ---
 
 ## 1) Fondazioni comuni (necessarie per tutte le feature)
 ### 1.1 Modello dati Autoscuole (minimo)
-**Entità:**
+**Entità core:**
 - `Student` (allievo)
 - `Case` (pratica + stato)
 - `Appointment` (guida/esame)
 - `Document` (upload + richieste)
 - `PaymentPlan` + `PaymentInstallment`
 
+**Entità scheduling:**
+- `Instructor`
+- `Vehicle`
+- `Availability`
+- `Waitlist`
+
 **Campi chiave (minimi):**
 - Student: nome, cognome, telefono, email, stato, note
-- Case: categoria, stato, date rilevanti (esame, foglio rosa, scadenze)
-- Appointment: tipo, data/ora, istruttore, stato
+- Case: categoria, stato, **scadenze** (foglio rosa, visita medica)
+- Appointment: tipo, data/ora, istruttore, veicolo, stato
 
 ### 1.2 UI Autoscuole (pagine base)
-- **Allievi** (lista + scheda)
-- **Pratiche** (lista + stato)
-- **Agenda** (guide/esami)
-- **Documenti** (per allievo)
-- **Pagamenti** (piani + scadenze)
+- **Dashboard** (Owner)
+- **Allievi**
+- **Pratiche**
+- **Agenda**
+- **Scadenze**
+- **Documenti**
+- **Pagamenti**
+- **Comunicazioni**
 
 ### 1.3 Import CSV (baseline)
 - Import iniziale Allievi/Pratiche/Appuntamenti
 - Mapping colonne → campi Reglo
 
 ### 1.4 Centro Comunicazioni
-- Template email/SMS/WhatsApp
+- Regole + messaggi in un unico blocco (no template separati)
+- Variabili dinamiche (TokenInput)
 - Log messaggi inviati
-- Preferenze canali per allievo
 
 ---
 
@@ -46,44 +58,36 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 **Valore:** riduce no‑show e lavoro manuale.
 
 **Scope V1:**
-- Template personalizzabili (email + SMS).
-- Scheduling automatico (es. 7 giorni prima + reminder giorno prima).
-
-**UI:**
-- Template editor (oggetto, testo, variabili)
-- Regole trigger (esame, guida, cambio stato pratica)
+- Regole personalizzabili (Email + WhatsApp)
+- Scheduling automatico (T‑7, T‑1)
+- Messaggi dinamici
 
 **Automazione:**
-- Trigger da Appointment + Case status.
-- Workflow standard “Promemoria” (pre‑configurato).
+- Trigger da Appointment + Case status
 
 **Dipendenze:**
-- Email: **Resend** (già in Reglo)
-- SMS: **Twilio** (proposto per V1)
+- Email: Resend
+- WhatsApp: Twilio (sandbox accettato)
 
-**Output:**
-- invio automatico ai contatti definiti.
+**Stato:** ✅ completata
 
 ---
 
 ## 3) Feature #2 — Gestione scadenze e promemoria automatici
-**Valore:** evita dimenticanze critiche (foglio rosa, visite, revisioni).
+**Valore:** evita dimenticanze critiche (foglio rosa, visite).
 
 **Scope V1:**
-- Scadenze per pratica/allievo (foglio rosa, visita medica)
-- Alert automatici interni via email/WhatsApp allo staff
+- Scadenze per pratica/allievo
+- Alert automatici staff via Email/WhatsApp
 
 **UI:**
-- Tab “Scadenze” con stato e priorità
-- Regole comunicazioni dedicate alle scadenze (offset giorni)
+- Pagina “Scadenze” con stato e priorità
+- Regole dedicate per scadenze
 
 **Automazione:**
-- Trigger su date `Case.pinkSheetExpiresAt` / `Case.medicalExpiresAt`
-- Scheduler minuti con deduplica per scadenza
+- Trigger su `Case.pinkSheetExpiresAt` / `Case.medicalExpiresAt`
 
-**Dipendenze:**
-- Email (Resend)
-- WhatsApp (Twilio) opzionale
+**Stato:** ✅ completata
 
 ---
 
@@ -93,7 +97,7 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 **Scope V1:**
 - Piano rateale
 - Generazione fattura elettronica (FIC)
-- Sollecito automatico se scaduta
+- Sollecito automatico per rate scadute
 
 **UI:**
 - Scheda Pagamenti (piano rate, stato)
@@ -101,10 +105,6 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 
 **Automazione:**
 - Trigger su `PaymentInstallment.dueDate`
-- Workflow “Sollecito ritardo”
-
-**Dipendenze:**
-- **Fatture in Cloud** (già integrato)
 
 ---
 
@@ -112,20 +112,12 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 **Valore:** elimina carta, precompila moduli.
 
 **Scope V1:**
-- Archivio documenti per allievo
-- Checklist documenti mancanti
-- Moduli precompilati (Doc Manager)
-
-**UI:**
-- Tab Documenti nella scheda allievo
-- Stato documenti (missing / ok)
+- Checklist documenti
+- Upload documenti
+- Stato: missing / ok / expired
 
 **Automazione:**
-- Workflow “Documenti mancanti”
-- Invio promemoria automatico
-
-**Dipendenze:**
-- Doc Manager (core)
+- Promemoria automatici su documenti mancanti
 
 ---
 
@@ -133,72 +125,49 @@ Sviluppare il **modulo Autoscuole** senza integrazione con SIDA, usando dati ges
 **Valore:** decisioni basate su dati reali.
 
 **Scope V1:**
-- KPI base: iscritti, tasso promossi, ore guida, rate in ritardo
-- Trend ultimo mese
-
-**UI:**
-- Dashboard Autoscuole
-- Grafici + cards
-
-**Data sources:**
-- Student + Case + Appointment + Payment
+- KPI base (saturazione, ore perse, trend iscritti, cashflow)
 
 ---
 
 ## 7) Feature #6 — Notifiche interne (WhatsApp)
-**Nota:** sostituisce la vecchia Slack request.
-
 **Scope V1:**
-- Notifiche a gruppo/staff su WhatsApp (es. disdette)
-- Template interni
-
-**Dipendenze:**
-- **WhatsApp Cloud API (Meta)**
+- Notifiche a gruppo/staff su WhatsApp
 
 ---
 
 ## 8) Feature #7 — Comunicazioni WhatsApp automatiche con allievi
 **Scope V1:**
-- Inviare reminder ed eventi via WhatsApp
-- Usare template pre-approvati (policy Meta)
-
-**Dipendenze:**
-- **WhatsApp Cloud API (Meta)**
+- Messaggi WhatsApp automatici agli allievi
 
 ---
 
-## 9) Milestone consigliate (V1 senza SIDA)
-1) **Core Autoscuole** (data model + UI base + CSV import)
-2) **Comunicazioni automatiche** (email + SMS)
-3) **Scadenze + promemoria**
-4) **Pagamenti + FIC**
-5) **Documenti + checklist**
-6) **KPI dashboard**
-7) **WhatsApp interno + WhatsApp allievi**
+## 9) Milestone consigliate (V1)
+1) Core Autoscuole (data model + UI base + CSV)
+2) Comunicazioni automatiche
+3) Scadenze + promemoria
+4) Pagamenti + FIC
+5) Documenti + checklist
+6) KPI dashboard
+7) WhatsApp interno + WhatsApp allievi
+8) Mobile app + Availability Engine
 
 ---
 
 ## Stato attuale
-- ✅ **Feature #1 Comunicazioni automatiche con Allievi e Staff** (email + WhatsApp) — completata
+- ✅ Feature #1 Comunicazioni automatiche — completata
 - ✅ Feature #2 Scadenze + Promemoria — completata
 - ⏳ Feature #3 Pagamenti + FIC — da fare
-- ⏳ Feature #4 Documenti + Modulistica — da fare
-- ⏳ Feature #5 KPI & Reportistica — da fare
-- ⏳ Feature #6 Notifiche interne WhatsApp — da fare
-- ⏳ Feature #7 WhatsApp automatiche allievi — da fare
+- ⏳ Feature #4 Documenti + Checklist — da fare
+- ⏳ Feature #5 KPI — da fare
+- ⏳ Feature #6 WhatsApp interno — da fare
+- ⏳ Feature #7 WhatsApp allievi — da fare
+- ⏳ Feature #8 Mobile + Availability Engine — da fare
 
 ---
 
-## 10) Cosa serve da te (prima di sviluppare)
-- Conferma provider SMS (Twilio ok?)
-- Conferma WhatsApp provider (Meta Cloud ok?)
-- Conferma struttura dati minima (Student/Case/Appointment)
-- Conferma se l’import CSV deve essere immediatamente disponibile
-
----
-
-## 11) Output finale V1 (senza SIDA)
-- Reglo Autoscuole funzionante con dati manuali/CSV
-- Comunicazioni automatiche attive
+## Output finale V1
+- Autoscuole operativa per segreteria/istruttori
+- Scheduling base con auto‑reschedule
+- Comunicazioni e scadenze automatizzate
 - Pagamenti e documenti gestibili
-- KPI visibili e monitorabili
+- KPI base per Owner

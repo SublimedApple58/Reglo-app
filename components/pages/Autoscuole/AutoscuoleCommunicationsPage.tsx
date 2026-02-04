@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
@@ -243,11 +244,10 @@ export function AutoscuoleCommunicationsPage() {
 
             <div className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
               <span>Attiva regola</span>
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={ruleDraft.active}
-                onChange={(event) =>
-                  setRuleDraft((prev) => ({ ...prev, active: event.target.checked }))
+                onCheckedChange={(checked) =>
+                  setRuleDraft((prev) => ({ ...prev, active: Boolean(checked) }))
                 }
               />
             </div>
