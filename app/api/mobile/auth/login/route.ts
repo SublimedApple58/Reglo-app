@@ -75,6 +75,10 @@ export async function POST(request: Request) {
     companyId: activeCompanyId ?? null,
   });
 
+  const activeMembership = memberships.find(
+    (entry) => entry.companyId === activeCompanyId,
+  );
+
   return NextResponse.json({
     success: true,
     data: {
@@ -87,11 +91,13 @@ export async function POST(request: Request) {
         role: user.role,
       },
       activeCompanyId,
+      autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
       companies: memberships.map((entry) => ({
         id: entry.company.id,
         name: entry.company.name,
         logoKey: entry.company.logoKey,
         role: entry.role,
+        autoscuolaRole: entry.autoscuolaRole,
         services: entry.company.services,
       })),
     },

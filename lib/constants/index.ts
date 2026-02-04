@@ -39,6 +39,7 @@ export enum UserRole {
 export const USER_ROLES = Object.values(UserRole);
 
 export const COMPANY_MEMBER_ROLES = ['admin', 'member'] as const;
+export const AUTOSCUOLA_ROLES = ['OWNER', 'INSTRUCTOR', 'STUDENT'] as const;
 
 export const DEFAULT_EMAIL_SENDER =
   process.env.DEFAULT_EMAIL_SENDER || 'no-reply@reglo.it';

@@ -82,6 +82,17 @@ export async function updateCompanyService(input: z.infer<typeof updateCompanySe
       });
     }
 
+    if (payload.serviceKey === "AUTOSCUOLE" && status === "ACTIVE") {
+      await prisma.companyMember.updateMany({
+        where: { companyId: payload.companyId, role: "admin" },
+        data: { autoscuolaRole: "OWNER" },
+      });
+      await prisma.companyMember.updateMany({
+        where: { companyId: payload.companyId, role: { not: "admin" } },
+        data: { autoscuolaRole: "STUDENT" },
+      });
+    }
+
     return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };

@@ -48,6 +48,7 @@ type AdminUserRow = {
   name: string;
   email: string;
   role: "admin" | "member";
+  autoscuolaRole?: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
   status: "active" | "invited";
 };
 
@@ -125,6 +126,7 @@ export function AdminUsersTable({
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Ruolo</TableHead>
+              <TableHead>Ruolo Autoscuola</TableHead>
               <TableHead>Stato</TableHead>
               <TableHead className="text-right">Azioni</TableHead>
             </TableRow>
@@ -179,6 +181,25 @@ export function AdminUsersTable({
                       )}
                     >
                       {isAdmin ? "Admin" : "Member"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                        user.autoscuolaRole === "OWNER"
+                          ? "text-sky-700"
+                          : user.autoscuolaRole === "INSTRUCTOR"
+                            ? "text-indigo-700"
+                            : "text-emerald-700",
+                      )}
+                    >
+                      {user.autoscuolaRole === "OWNER"
+                        ? "Titolare"
+                        : user.autoscuolaRole === "INSTRUCTOR"
+                          ? "Istruttore"
+                          : "Allievo"}
                     </Badge>
                   </TableCell>
                   <TableCell>

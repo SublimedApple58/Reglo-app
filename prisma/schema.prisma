@@ -27,6 +27,12 @@ enum CompanyServiceStatus {
   DISABLED
 }
 
+enum AutoscuolaRole {
+  OWNER
+  INSTRUCTOR
+  STUDENT
+}
+
 model User {
   id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String    @default("NO_NAME")
@@ -190,6 +196,7 @@ model CompanyMember {
   companyId String   @db.Uuid
   userId    String   @db.Uuid
   role      String   @default("member")
+  autoscuolaRole AutoscuolaRole @default(STUDENT)
   createdAt DateTime @default(now()) @db.Timestamp(6)
   updatedAt DateTime @updatedAt
 

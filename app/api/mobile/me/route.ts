@@ -35,6 +35,10 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "asc" },
   });
 
+  const activeMembership = memberships.find(
+    (entry) => entry.companyId === user.activeCompanyId,
+  );
+
   return NextResponse.json({
     success: true,
     data: {
@@ -45,11 +49,13 @@ export async function GET(request: Request) {
         role: user.role,
       },
       activeCompanyId: user.activeCompanyId,
+      autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
       companies: memberships.map((entry) => ({
         id: entry.company.id,
         name: entry.company.name,
         logoKey: entry.company.logoKey,
         role: entry.role,
+        autoscuolaRole: entry.autoscuolaRole,
         services: entry.company.services,
       })),
     },

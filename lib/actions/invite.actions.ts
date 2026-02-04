@@ -6,6 +6,7 @@ import { sendCompanyInviteEmail } from '@/email';
 import { routing } from '@/i18n/routing';
 import { SERVER_URL } from '@/lib/constants';
 import { formatError } from '@/lib/utils';
+import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
 import {
   acceptCompanyInviteSchema,
   acceptCompanyInvitePasswordSchema,
@@ -351,6 +352,7 @@ export async function acceptCompanyInvite(
           companyId: invite.companyId,
           userId,
           role: invite.role,
+          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
         },
       });
     }
@@ -420,6 +422,7 @@ export async function acceptCompanyInviteWithPassword(
           companyId: invite.companyId,
           userId: user.id,
           role: invite.role,
+          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
         },
       });
     }
@@ -498,6 +501,7 @@ export async function acceptCompanyInviteAndRegister(
           companyId: invite.companyId,
           userId: user.id,
           role: invite.role,
+          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
         },
       });
 

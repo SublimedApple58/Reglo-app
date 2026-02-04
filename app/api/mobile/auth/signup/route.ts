@@ -4,6 +4,7 @@ import { signUpFormSchema } from "@/lib/validators";
 import { hash } from "@/lib/encrypt";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
+import { getDefaultAutoscuolaRole } from "@/lib/autoscuole/roles";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
           companyId: company.id,
           userId: user.id,
           role: "admin",
+          autoscuolaRole: getDefaultAutoscuolaRole("admin"),
         },
       });
 
@@ -63,16 +65,18 @@ export async function POST(request: Request) {
           email: createdUser.user.email,
           role: createdUser.user.role,
         },
-        activeCompanyId: createdUser.company.id,
-        companies: [
-          {
-            id: createdUser.company.id,
-            name: createdUser.company.name,
-            logoKey: createdUser.company.logoKey,
-            role: "admin",
-            services: await prisma.companyService.findMany({
-              where: { companyId: createdUser.company.id },
-            }),
+      activeCompanyId: createdUser.company.id,
+      autoscuolaRole: getDefaultAutoscuolaRole("admin"),
+      companies: [
+        {
+          id: createdUser.company.id,
+          name: createdUser.company.name,
+          logoKey: createdUser.company.logoKey,
+          role: "admin",
+          autoscuolaRole: getDefaultAutoscuolaRole("admin"),
+          services: await prisma.companyService.findMany({
+            where: { companyId: createdUser.company.id },
+          }),
           },
         ],
       },

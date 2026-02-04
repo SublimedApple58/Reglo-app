@@ -16,6 +16,7 @@ import { PAGE_SIZE } from '../constants';
 import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -83,6 +84,7 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
           companyId: company.id,
           userId: createdUser.id,
           role: 'admin',
+          autoscuolaRole: getDefaultAutoscuolaRole('admin'),
         },
       });
 
@@ -190,6 +192,7 @@ type CompanyUserRow = {
   name: string;
   email: string;
   role: 'admin' | 'member';
+  autoscuolaRole?: 'OWNER' | 'INSTRUCTOR' | 'STUDENT' | null;
   status: 'active' | 'invited';
 };
 
@@ -283,6 +286,7 @@ export async function getCompanyUsers({
       name: invite.email.split('@')[0] || 'Invited',
       email: invite.email,
       role: normalizeMemberRole(invite.role),
+      autoscuolaRole: invite.role === 'admin' ? 'OWNER' : 'STUDENT',
       status: 'invited',
       createdAt: invite.createdAt,
     }));
@@ -292,6 +296,7 @@ export async function getCompanyUsers({
     name: member.user.name,
     email: member.user.email,
     role: normalizeMemberRole(member.role),
+    autoscuolaRole: member.autoscuolaRole,
     status: 'active',
     createdAt: member.createdAt,
   }));
@@ -416,7 +421,10 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
           userId: user.id,
         },
       },
-      data: { role: user.role },
+      data: {
+        role: user.role,
+        ...(user.autoscuolaRole ? { autoscuolaRole: user.autoscuolaRole } : {}),
+      },
     });
 
     revalidatePath('/admin/users');

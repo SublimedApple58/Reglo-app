@@ -81,6 +81,7 @@ export const updateProfileSchema = z.object({
 export const updateUserSchema = updateProfileSchema.extend({
   id: z.string().min(1, 'ID is required'),
   role: z.enum(['member', 'admin']),
+  autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
 });
 
 export const documentFieldSchema = z.object({

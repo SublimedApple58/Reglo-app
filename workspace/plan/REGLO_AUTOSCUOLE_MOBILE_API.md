@@ -13,6 +13,26 @@
 - Usare `x-reglo-company-id` solo quando serve cambiare company attiva.
 - Loggare errori di rete in console (debug).
 
+## Ruoli Autoscuola (OBBLIGATORIO)
+L’app mobile **deve cambiare UI/feature** in base a `autoscuolaRole`.
+Il BE restituisce il ruolo in:
+- `POST /api/mobile/auth/login` → `data.autoscuolaRole`
+- `GET /api/mobile/me` → `data.autoscuolaRole`
+- `companies[].autoscuolaRole`
+
+Mappa ruoli:
+- `OWNER` → **Titolare**
+- `INSTRUCTOR` → **Istruttore**
+- `STUDENT` → **Allievo**
+
+Comportamento richiesto:
+- Se `autoscuolaRole` è `null` o mancante → mostra schermata blocco con CTA “Contatta admin”.
+- **Owner**: dashboard KPI + gestione veicoli + disponibilità veicoli + override slot.
+- **Instructor**: agenda giornaliera + check‑in/no‑show/completed + disponibilità personali + gestione veicoli (view/edit).
+- **Student**: disponibilità personali + prenota guida (giorno + preferenze) + annulla + storico.
+
+Nota: il ruolo è **per-company**. Se l’utente cambia company, **ricalcola UI** in base al nuovo `autoscuolaRole`.
+
 ## Auth
 - `POST /api/mobile/auth/login`
   - **Input:** `{ email, password }`
@@ -91,6 +111,22 @@ Per cambiare company attiva, passare `x-reglo-company-id` o usare `/api/mobile/a
 
 ---
 
+## Prompt operativo per l’agente mobile (copiabile)
+```
+Obiettivo: integrare il BE Reglo Autoscuole nel progetto mobile.
+Base URL: https://app.reglo.it/api
+Auth: usa Bearer token. Endpoint login/signup/logout/me/select-company.
+Gestisci ruoli autoscuola:
+- Ruolo si trova in data.autoscuolaRole (login/me) e in companies[].autoscuolaRole.
+- Se ruolo assente/null, blocca l’esperienza con CTA “Contatta admin”.
+UI role-based:
+OWNER: dashboard KPI + gestione veicoli + disponibilità veicoli + override slot.
+INSTRUCTOR: agenda giornaliera + check‑in/no‑show/completed + disponibilità + veicoli.
+STUDENT: disponibilità personali + prenota/annulla guida + storico.
+Per cambiare company: usa /api/mobile/auth/select-company o header x-reglo-company-id.
+Usa i tipi TS e gli endpoint definiti nel file REGLO_AUTOSCUOLE_MOBILE_API.md.
+```
+
 ## Tipi TypeScript (V1)
 
 ```ts
@@ -119,6 +155,7 @@ export type CompanySummary = {
   name: string;
   logoKey: string | null;
   role: "admin" | "member" | string;
+  autoscuolaRole: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
   services: CompanyService[];
 };
 
@@ -134,12 +171,14 @@ export type AuthPayload = {
   expiresAt: IsoDate;
   user: UserPublic;
   activeCompanyId: Uuid | null;
+  autoscuolaRole: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
   companies: CompanySummary[];
 };
 
 export type MePayload = {
   user: UserPublic;
   activeCompanyId: Uuid | null;
+  autoscuolaRole: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
   companies: CompanySummary[];
 };
 

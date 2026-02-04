@@ -8,6 +8,7 @@ import { formatError } from '@/lib/utils';
 import { normalizeCompanyServices } from '@/lib/services';
 import { z } from 'zod';
 import { getActiveCompanyContext } from '@/lib/company-context';
+import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
 
 type CompanyRole = 'admin' | 'member';
 
@@ -213,6 +214,7 @@ export async function createCompanyForUser(
           companyId: createdCompany.id,
           userId,
           role: 'admin',
+          autoscuolaRole: getDefaultAutoscuolaRole('admin'),
         },
       });
 
