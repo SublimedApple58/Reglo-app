@@ -47,6 +47,7 @@ model User {
   companyMembers CompanyMember[]
   companyInvites CompanyInvite[] @relation("CompanyInviteInvitedBy")
   documentRequests DocumentRequest[] @relation("DocumentRequestCreatedBy")
+  mobileTokens MobileAccessToken[]
 }
 
 model Account {
@@ -86,6 +87,23 @@ model VerificationToken {
   expires    DateTime
 
   @@id([identifier, token])
+}
+
+model MobileAccessToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  companyId String?  @db.Uuid
+  tokenHash String   @unique
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  lastUsedAt DateTime? @db.Timestamp(6)
+  expiresAt DateTime @db.Timestamp(6)
+
+  user     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company  Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([expiresAt])
 }
 
 model Order {
@@ -149,6 +167,7 @@ model Company {
   autoscuolaMessageRules AutoscuolaMessageRule[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
   services CompanyService[]
+  mobileTokens MobileAccessToken[]
 }
 
 model CompanyService {
