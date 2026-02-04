@@ -48,7 +48,7 @@ type AdminUserRow = {
   name: string;
   email: string;
   role: "admin" | "member";
-  autoscuolaRole?: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
+  autoscuolaRole?: "OWNER" | "INSTRUCTOR" | "STUDENT";
   status: "active" | "invited";
 };
 
@@ -69,7 +69,10 @@ export function AdminUsersTable({
   const formId = "update-user-form";
 
   const handleOpen = (user: AdminUserRow) => {
-    setActiveUser(user);
+    setActiveUser({
+      ...user,
+      autoscuolaRole: user.autoscuolaRole ?? "STUDENT",
+    });
     setOpen(true);
   };
 

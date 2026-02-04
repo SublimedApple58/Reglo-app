@@ -45,7 +45,7 @@ const AdminUserPage = async ({
     name: user.name,
     email: user.email,
     role: user.role,
-    autoscuolaRole: user.autoscuolaRole,
+    autoscuolaRole: user.autoscuolaRole ?? undefined,
     status: user.status,
   }));
 
