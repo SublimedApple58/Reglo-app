@@ -24,7 +24,6 @@ import {
   getAutoscuolaStudents,
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
-  createAutoscuolaInstructor,
   createAutoscuolaVehicle,
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
@@ -38,10 +37,16 @@ type AppointmentRow = {
   type: string;
   status: string;
   startsAt: string | Date;
+  endsAt?: string | Date | null;
   student: StudentOption;
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
 };
+
+const DAY_START_HOUR = 7;
+const DAY_END_HOUR = 22;
+const SLOT_MINUTES = 30;
+const PIXELS_PER_MINUTE = 1.6;
 
 export function AutoscuoleAgendaPage() {
   const toast = useFeedbackToast();
@@ -51,16 +56,19 @@ export function AutoscuoleAgendaPage() {
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [instructorFilter, setInstructorFilter] = React.useState("all");
+  const [vehicleFilter, setVehicleFilter] = React.useState("all");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [form, setForm] = React.useState({
     studentId: "",
     type: "guida",
     startsAt: "",
+    endsAt: "",
     instructorId: "",
     vehicleId: "",
   });
-  const [newInstructor, setNewInstructor] = React.useState("");
+  const [durationPreset, setDurationPreset] = React.useState<number | null>(60);
   const [newVehicle, setNewVehicle] = React.useState("");
 
   const load = React.useCallback(async () => {
@@ -108,25 +116,47 @@ export function AutoscuoleAgendaPage() {
     load();
   }, [load]);
 
-  const filtered = appointments.filter((item) => {
-    if (!search.trim()) return true;
-    const term = search.toLowerCase();
-    return (
-      item.student.firstName.toLowerCase().includes(term) ||
-      item.student.lastName.toLowerCase().includes(term) ||
-      item.type.toLowerCase().includes(term)
-    );
-  });
+  const weekEnd = addDays(weekStart, 7);
 
-  const visibleAppointments = filtered.filter((item) => item.status !== "cancelled");
+  const filtered = appointments.filter((item) => {
+    if (item.status === "cancelled") return false;
+    const term = search.trim().toLowerCase();
+    if (
+      term &&
+      !item.student.firstName.toLowerCase().includes(term) &&
+      !item.student.lastName.toLowerCase().includes(term) &&
+      !item.type.toLowerCase().includes(term)
+    ) {
+      return false;
+    }
+    if (instructorFilter !== "all" && item.instructor?.id !== instructorFilter) {
+      return false;
+    }
+    if (vehicleFilter !== "all" && item.vehicle?.id !== vehicleFilter) {
+      return false;
+    }
+    const start = toDate(item.startsAt);
+    const end = getAppointmentEnd(item);
+    return start < weekEnd && end > weekStart;
+  });
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.studentId || !form.startsAt || !form.instructorId || !form.vehicleId) return;
+    if (!form.studentId || !form.startsAt || !form.instructorId || !form.vehicleId) {
+      toast.info({ description: "Completa tutti i campi richiesti." });
+      return;
+    }
+    const startDate = toDate(form.startsAt);
+    const endDate = form.endsAt ? toDate(form.endsAt) : null;
+    if (endDate && endDate <= startDate) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
       type: form.type,
       startsAt: form.startsAt,
+      endsAt: form.endsAt || undefined,
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
     });
@@ -141,9 +171,11 @@ export function AutoscuoleAgendaPage() {
       studentId: "",
       type: "guida",
       startsAt: "",
+      endsAt: "",
       instructorId: "",
       vehicleId: "",
     });
+    setDurationPreset(60);
     load();
   };
 
@@ -184,23 +216,6 @@ export function AutoscuoleAgendaPage() {
     load();
   };
 
-  const handleAddInstructor = async () => {
-    if (!newInstructor.trim()) {
-      toast.info({ description: "Inserisci un nome istruttore." });
-      return;
-    }
-    const res = await createAutoscuolaInstructor({ name: newInstructor.trim() });
-    if (!res.success || !res.data) {
-      toast.error({
-        description: res.message ?? "Impossibile creare l'istruttore.",
-      });
-      return;
-    }
-    setNewInstructor("");
-    setForm((prev) => ({ ...prev, instructorId: res.data.id }));
-    load();
-  };
-
   const handleAddVehicle = async () => {
     if (!newVehicle.trim()) {
       toast.info({ description: "Inserisci un nome veicolo." });
@@ -218,19 +233,52 @@ export function AutoscuoleAgendaPage() {
     load();
   };
 
-  const slots = buildSlots(7, 21, 30);
-  const days = Array.from({ length: 7 }, (_, index) =>
-    addDays(weekStart, index),
-  );
+  const handleStartChange = (value: string) => {
+    setForm((prev) => {
+      const next = { ...prev, startsAt: value };
+      if (durationPreset) {
+        const nextEnd = addMinutesToDateTime(value, durationPreset);
+        if (nextEnd) next.endsAt = nextEnd;
+      }
+      return next;
+    });
+  };
 
-  const appointmentMap = new Map<string, AppointmentRow[]>();
-  for (const appointment of visibleAppointments) {
-    const date = new Date(appointment.startsAt);
-    const key = buildSlotKey(date);
-    const current = appointmentMap.get(key) ?? [];
-    current.push(appointment);
-    appointmentMap.set(key, current);
-  }
+  const handleEndChange = (value: string) => {
+    setDurationPreset(null);
+    setForm((prev) => ({ ...prev, endsAt: value }));
+  };
+
+  const handleDurationPreset = (minutes: number) => {
+    if (!form.startsAt) {
+      toast.info({ description: "Seleziona prima un orario di inizio." });
+      return;
+    }
+    const nextEnd = addMinutesToDateTime(form.startsAt, minutes);
+    if (!nextEnd) return;
+    setDurationPreset(minutes);
+    setForm((prev) => ({ ...prev, endsAt: nextEnd }));
+  };
+
+  const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
+  const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
+  const hourMarks = Array.from(
+    { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
+    (_, index) => DAY_START_HOUR + index,
+  );
+  const appointmentsByDay = days.map((day) => {
+    const dayStart = new Date(day);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = addDays(dayStart, 1);
+    return filtered
+      .filter((appointment) => {
+        const start = toDate(appointment.startsAt);
+        const end = getAppointmentEnd(appointment);
+        return start < dayEnd && end > dayStart;
+      })
+      .sort((a, b) => toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime());
+  });
 
   return (
     <ClientPageWrapper
@@ -242,13 +290,41 @@ export function AutoscuoleAgendaPage() {
         <AutoscuoleNav />
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="min-w-[220px]">
-            <Input
-              placeholder="Cerca appuntamenti"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="border-white/60 bg-white/80"
-            />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-[220px]">
+              <Input
+                placeholder="Cerca appuntamenti"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="border-white/60 bg-white/80"
+              />
+            </div>
+            <Select value={instructorFilter} onValueChange={setInstructorFilter}>
+              <SelectTrigger className="min-w-[200px]">
+                <SelectValue placeholder="Filtra istruttore" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti gli istruttori</SelectItem>
+                {instructors.map((instructor) => (
+                  <SelectItem key={instructor.id} value={instructor.id}>
+                    {instructor.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
+              <SelectTrigger className="min-w-[200px]">
+                <SelectValue placeholder="Filtra veicolo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i veicoli</SelectItem>
+                {vehicles.map((vehicle) => (
+                  <SelectItem key={vehicle.id} value={vehicle.id}>
+                    {vehicle.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Button
@@ -280,8 +356,8 @@ export function AutoscuoleAgendaPage() {
             <Skeleton className="h-[420px] w-full" />
           ) : (
             <div className="overflow-x-auto">
-              <div className="min-w-[980px]">
-                <div className="grid grid-cols-[90px_repeat(7,minmax(140px,1fr))] gap-2 text-xs text-muted-foreground">
+              <div className="min-w-[980px] space-y-3">
+                <div className="grid grid-cols-[80px_repeat(7,minmax(160px,1fr))] gap-3 text-xs text-muted-foreground">
                   <div />
                   {days.map((day) => (
                     <div key={day.toISOString()} className="text-center font-semibold">
@@ -293,102 +369,133 @@ export function AutoscuoleAgendaPage() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 space-y-2">
-                  {slots.map((slot) => (
-                    <div
-                      key={slot.label}
-                      className="grid grid-cols-[90px_repeat(7,minmax(140px,1fr))] gap-2"
-                    >
-                      <div className="pt-2 text-xs text-muted-foreground">
-                        {slot.label}
-                      </div>
-                      {days.map((day) => {
-                        const cellKey = buildSlotKey(
-                          new Date(
-                            day.getFullYear(),
-                            day.getMonth(),
-                            day.getDate(),
-                            slot.hours,
-                            slot.minutes,
-                          ),
-                        );
-                        const items = appointmentMap.get(cellKey) ?? [];
-                        return (
+                <div className="grid grid-cols-[80px_repeat(7,minmax(160px,1fr))] gap-3">
+                  <div className="relative">
+                    <div style={{ height: calendarHeight }} className="relative">
+                      {hourMarks.map((hour) => (
+                        <div
+                          key={hour}
+                          className="absolute left-0 right-0 text-[11px] text-muted-foreground"
+                          style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE - 6 }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="min-w-[36px]">{`${pad(hour)}:00`}</span>
+                            <span className="h-px flex-1 bg-white/40" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {days.map((day, dayIndex) => {
+                    const dayStart = new Date(day);
+                    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+                    const dayEnd = new Date(day);
+                    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+                    const dayAppointments = appointmentsByDay[dayIndex] ?? [];
+
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/70"
+                        style={{ height: calendarHeight }}
+                      >
+                        {hourMarks.map((hour) => (
                           <div
-                            key={`${cellKey}`}
-                            className="min-h-[64px] rounded-2xl border border-white/50 bg-white/70 p-2"
-                          >
-                            {items.map((item) => (
-                              <div
-                                key={item.id}
-                                className="glass-card glass-strong mb-2 flex flex-col gap-1 rounded-xl p-2 text-xs"
-                              >
+                            key={hour}
+                            className="absolute left-0 right-0 h-px bg-white/30"
+                            style={{
+                              top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE,
+                            }}
+                          />
+                        ))}
+                        {dayAppointments.map((item) => {
+                          const start = toDate(item.startsAt);
+                          const end = getAppointmentEnd(item);
+                          const clippedStart = start < dayStart ? dayStart : start;
+                          const clippedEnd = end > dayEnd ? dayEnd : end;
+                          const offsetMinutes = Math.max(
+                            0,
+                            diffMinutes(clippedStart, dayStart),
+                          );
+                          const durationMinutes = Math.max(
+                            15,
+                            diffMinutes(clippedEnd, clippedStart),
+                          );
+                          const top = offsetMinutes * PIXELS_PER_MINUTE;
+                          const height = durationMinutes * PIXELS_PER_MINUTE;
+                          const statusMeta = getStatusMeta(item.status);
+                          const showDetails = durationMinutes >= 60;
+
+                          return (
+                            <div
+                              key={item.id}
+                              className={`absolute left-2 right-2 rounded-xl border p-2 text-[11px] shadow-sm ${statusMeta.className}`}
+                              style={{ top, height }}
+                            >
+                              <div className="flex items-center justify-between gap-2">
                                 <div className="font-semibold text-foreground">
                                   {item.student.firstName} {item.student.lastName}
                                 </div>
-                                <div className="text-muted-foreground">
-                                  {item.type}
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  {item.instructor?.name
-                                    ? `Istruttore: ${item.instructor.name}`
-                                    : "Istruttore: —"}
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  {item.vehicle?.name
-                                    ? `Veicolo: ${item.vehicle.name}`
-                                    : "Veicolo: —"}
-                                </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <Badge variant="secondary">{item.status}</Badge>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() => handleCancel(item.id)}
-                                  >
-                                    Cancella
-                                  </Button>
-                                </div>
-                                <div className="flex flex-wrap gap-1 pt-1">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() =>
-                                      handleStatusUpdate(item.id, "checked_in")
-                                    }
-                                  >
-                                    Check‑in
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() =>
-                                      handleStatusUpdate(item.id, "no_show")
-                                    }
-                                  >
-                                    No‑show
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 px-2 text-[11px]"
-                                    onClick={() =>
-                                      handleStatusUpdate(item.id, "completed")
-                                    }
-                                  >
-                                    Completa
-                                  </Button>
-                                </div>
+                                <Badge variant="secondary">{statusMeta.label}</Badge>
                               </div>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                              <div className="text-[11px] text-muted-foreground">
+                                {item.type} · {formatTimeRange(start, end)} ·{" "}
+                                {Math.round(diffMinutes(end, start))}m
+                              </div>
+                              {showDetails ? (
+                                <>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {item.instructor?.name
+                                      ? `Istruttore: ${item.instructor.name}`
+                                      : "Istruttore: —"}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {item.vehicle?.name
+                                      ? `Veicolo: ${item.vehicle.name}`
+                                      : "Veicolo: —"}
+                                  </div>
+                                </>
+                              ) : null}
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => handleStatusUpdate(item.id, "checked_in")}
+                                >
+                                  Check‑in
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => handleStatusUpdate(item.id, "no_show")}
+                                >
+                                  No‑show
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => handleStatusUpdate(item.id, "completed")}
+                                >
+                                  Completa
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => handleCancel(item.id)}
+                                >
+                                  Cancella
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -446,20 +553,9 @@ export function AutoscuoleAgendaPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Nuovo istruttore"
-                value={newInstructor}
-                onChange={(event) => setNewInstructor(event.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleAddInstructor}
-              >
-                Aggiungi
-              </Button>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Gli istruttori arrivano dagli utenti con ruolo istruttore.
+            </p>
             <Select
               value={form.vehicleId}
               onValueChange={(value) =>
@@ -491,10 +587,32 @@ export function AutoscuoleAgendaPage() {
                 Aggiungi
               </Button>
             </div>
-            <DateTimePicker
-              value={form.startsAt}
-              onChange={(value) => setForm((prev) => ({ ...prev, startsAt: value }))}
-            />
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Inizio</div>
+              <DateTimePicker value={form.startsAt} onChange={handleStartChange} />
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                Durata rapida
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[30, 60, 90, 120].map((minutes) => (
+                  <Button
+                    key={minutes}
+                    type="button"
+                    size="sm"
+                    variant={durationPreset === minutes ? "default" : "outline"}
+                    onClick={() => handleDurationPreset(minutes)}
+                  >
+                    {minutes} min
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Fine</div>
+              <DateTimePicker value={form.endsAt} onChange={handleEndChange} />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Annulla
@@ -547,18 +665,49 @@ function pad(value: number) {
   return value.toString().padStart(2, "0");
 }
 
-function buildSlots(startHour: number, endHour: number, stepMinutes: number) {
-  const slots: { label: string; hours: number; minutes: number }[] = [];
-  for (let hour = startHour; hour < endHour; hour += 1) {
-    for (let minutes = 0; minutes < 60; minutes += stepMinutes) {
-      slots.push({ label: `${pad(hour)}:${pad(minutes)}`, hours: hour, minutes });
-    }
-  }
-  return slots;
+function toDate(value: string | Date | null | undefined) {
+  if (!value) return new Date("");
+  return value instanceof Date ? value : new Date(value);
 }
 
-function buildSlotKey(date: Date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+function diffMinutes(a: Date, b: Date) {
+  return (a.getTime() - b.getTime()) / 60000;
+}
+
+function getAppointmentEnd(appointment: AppointmentRow) {
+  const start = toDate(appointment.startsAt);
+  const end = appointment.endsAt ? toDate(appointment.endsAt) : null;
+  if (end && !Number.isNaN(end.getTime())) return end;
+  return new Date(start.getTime() + SLOT_MINUTES * 60 * 1000);
+}
+
+function formatTime(date: Date) {
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatTimeRange(start: Date, end: Date) {
+  return `${formatTime(start)}-${formatTime(end)}`;
+}
+
+function addMinutesToDateTime(value: string, minutes: number) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setMinutes(date.getMinutes() + minutes);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
     date.getHours(),
   )}:${pad(date.getMinutes())}`;
+}
+
+function getStatusMeta(status: string) {
+  const normalized = status.toLowerCase();
+  if (normalized === "checked_in") {
+    return { label: "Check‑in", className: "border-emerald-200/70 bg-emerald-100/70" };
+  }
+  if (normalized === "completed") {
+    return { label: "Completa", className: "border-indigo-200/70 bg-indigo-100/70" };
+  }
+  if (normalized === "no_show") {
+    return { label: "No‑show", className: "border-rose-200/70 bg-rose-100/70" };
+  }
+  return { label: "In programma", className: "border-sky-200/70 bg-sky-100/70" };
 }

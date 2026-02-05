@@ -7,6 +7,7 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
+import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 
 const createStudentSchema = z.object({
   firstName: z.string().min(1),
@@ -54,9 +55,9 @@ const updateAppointmentStatusSchema = z.object({
 });
 
 const createInstructorSchema = z.object({
-  name: z.string().min(1),
+  userId: z.string().uuid(),
+  name: z.string().min(1).optional(),
   phone: z.string().optional(),
-  userId: z.string().uuid().optional().nullable(),
 });
 
 const createVehicleSchema = z.object({
@@ -69,7 +70,7 @@ const updateInstructorSchema = z.object({
   name: z.string().min(1).optional(),
   phone: z.string().optional().nullable(),
   status: z.string().optional(),
-  userId: z.string().uuid().optional().nullable(),
+  userId: z.string().uuid().optional(),
 });
 
 const updateVehicleSchema = z.object({
@@ -382,10 +383,28 @@ export async function createAutoscuolaAppointment(
     }
 
     const slotTime = new Date(payload.startsAt);
-    const conflict = await prisma.autoscuolaAppointment.findFirst({
+    if (Number.isNaN(slotTime.getTime())) {
+      return { success: false, message: "Orario di inizio non valido." };
+    }
+    const slotEnd = payload.endsAt
+      ? new Date(payload.endsAt)
+      : new Date(slotTime.getTime() + 30 * 60 * 1000);
+    if (Number.isNaN(slotEnd.getTime()) || slotEnd <= slotTime) {
+      return {
+        success: false,
+        message: "Orario di fine non valido.",
+      };
+    }
+
+    const scanStart = new Date(slotTime);
+    scanStart.setDate(scanStart.getDate() - 1);
+    const scanEnd = new Date(slotEnd);
+    scanEnd.setDate(scanEnd.getDate() + 1);
+
+    const conflicts = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
-        startsAt: slotTime,
+        startsAt: { gte: scanStart, lt: scanEnd },
         status: { notIn: ["cancelled"] },
         OR: [
           { instructorId: payload.instructorId },
@@ -393,7 +412,12 @@ export async function createAutoscuolaAppointment(
         ],
       },
     });
-    if (conflict) {
+    const hasConflict = conflicts.some((item) => {
+      const start = item.startsAt;
+      const end = item.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
+      return start < slotEnd && end > slotTime;
+    });
+    if (hasConflict) {
       return {
         success: false,
         message: "Slot non disponibile per istruttore o veicolo.",
@@ -407,7 +431,7 @@ export async function createAutoscuolaAppointment(
         caseId: payload.caseId || null,
         type: payload.type,
         startsAt: slotTime,
-        endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
+        endsAt: slotEnd,
         status: payload.status ?? "scheduled",
         instructorId: payload.instructorId,
         vehicleId: payload.vehicleId,
@@ -608,8 +632,35 @@ export async function getAutoscuolaInstructors() {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
 
+    const members = await prisma.companyMember.findMany({
+      where: { companyId, autoscuolaRole: "INSTRUCTOR" },
+      include: { user: true },
+    });
+
+    await Promise.all(
+      members.map((member) => {
+        const name =
+          member.user?.name ??
+          member.user?.email?.split("@")[0] ??
+          "Istruttore";
+        return getOrCreateInstructorForUser({
+          companyId,
+          userId: member.userId,
+          name,
+        });
+      }),
+    );
+
     const instructors = await prisma.autoscuolaInstructor.findMany({
-      where: { companyId },
+      where: {
+        companyId,
+        userId: { not: null },
+        user: {
+          companyMembers: {
+            some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+          },
+        },
+      },
       orderBy: { name: "asc" },
     });
 
@@ -627,12 +678,44 @@ export async function createAutoscuolaInstructor(
     const companyId = membership.companyId;
     const payload = createInstructorSchema.parse(input);
 
-    const instructor = await prisma.autoscuolaInstructor.create({
-      data: {
+    const member = await prisma.companyMember.findFirst({
+      where: {
         companyId,
-        name: payload.name,
-        phone: payload.phone || null,
-        userId: payload.userId ?? null,
+        userId: payload.userId,
+        autoscuolaRole: "INSTRUCTOR",
+      },
+      include: { user: true },
+    });
+    if (!member) {
+      return {
+        success: false,
+        message: "Seleziona un utente con ruolo istruttore.",
+      };
+    }
+
+    const name =
+      payload.name?.trim() ||
+      member.user?.name ||
+      member.user?.email?.split("@")[0] ||
+      "Istruttore";
+
+    const instructor = await prisma.autoscuolaInstructor.upsert({
+      where: {
+        companyId_userId: {
+          companyId,
+          userId: payload.userId,
+        },
+      },
+      update: {
+        name,
+        phone: payload.phone ?? null,
+        status: "active",
+      },
+      create: {
+        companyId,
+        userId: payload.userId,
+        name,
+        phone: payload.phone ?? null,
       },
     });
 
@@ -687,6 +770,22 @@ export async function updateAutoscuolaInstructor(
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     ensureAutoscuolaRole(membership, ["OWNER"]);
     const payload = updateInstructorSchema.parse(input);
+
+    if (payload.userId) {
+      const member = await prisma.companyMember.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: payload.userId,
+          autoscuolaRole: "INSTRUCTOR",
+        },
+      });
+      if (!member) {
+        return {
+          success: false,
+          message: "Utente non valido per ruolo istruttore.",
+        };
+      }
+    }
 
     const existing = await prisma.autoscuolaInstructor.findFirst({
       where: { id: payload.instructorId, companyId: membership.companyId },
