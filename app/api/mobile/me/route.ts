@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
 import { prisma } from "@/db/prisma";
+import { getSignedAssetUrl } from "@/lib/storage/r2";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -35,6 +36,29 @@ export async function GET(request: Request) {
     orderBy: { createdAt: "asc" },
   });
 
+  const companies = await Promise.all(
+    memberships.map(async (entry) => {
+      let logoUrl: string | null = null;
+      if (entry.company.logoKey) {
+        try {
+          logoUrl = await getSignedAssetUrl(entry.company.logoKey);
+        } catch {
+          logoUrl = null;
+        }
+      }
+
+      return {
+        id: entry.company.id,
+        name: entry.company.name,
+        logoKey: entry.company.logoKey,
+        logoUrl,
+        role: entry.role,
+        autoscuolaRole: entry.autoscuolaRole,
+        services: entry.company.services,
+      };
+    }),
+  );
+
   const activeMembership = memberships.find(
     (entry) => entry.companyId === user.activeCompanyId,
   );
@@ -50,14 +74,7 @@ export async function GET(request: Request) {
       },
       activeCompanyId: user.activeCompanyId,
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
-      companies: memberships.map((entry) => ({
-        id: entry.company.id,
-        name: entry.company.name,
-        logoKey: entry.company.logoKey,
-        role: entry.role,
-        autoscuolaRole: entry.autoscuolaRole,
-        services: entry.company.services,
-      })),
+      companies,
     },
   });
 }

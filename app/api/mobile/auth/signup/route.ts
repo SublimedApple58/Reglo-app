@@ -5,6 +5,7 @@ import { hash } from "@/lib/encrypt";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getDefaultAutoscuolaRole } from "@/lib/autoscuole/roles";
+import { getSignedAssetUrl } from "@/lib/storage/r2";
 
 export async function POST(request: Request) {
   try {
@@ -54,6 +55,15 @@ export async function POST(request: Request) {
       companyId: createdUser.company.id,
     });
 
+    let logoUrl: string | null = null;
+    if (createdUser.company.logoKey) {
+      try {
+        logoUrl = await getSignedAssetUrl(createdUser.company.logoKey);
+      } catch {
+        logoUrl = null;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       data: {
@@ -65,18 +75,19 @@ export async function POST(request: Request) {
           email: createdUser.user.email,
           role: createdUser.user.role,
         },
-      activeCompanyId: createdUser.company.id,
-      autoscuolaRole: getDefaultAutoscuolaRole("admin"),
-      companies: [
-        {
-          id: createdUser.company.id,
-          name: createdUser.company.name,
-          logoKey: createdUser.company.logoKey,
-          role: "admin",
-          autoscuolaRole: getDefaultAutoscuolaRole("admin"),
-          services: await prisma.companyService.findMany({
-            where: { companyId: createdUser.company.id },
-          }),
+        activeCompanyId: createdUser.company.id,
+        autoscuolaRole: getDefaultAutoscuolaRole("admin"),
+        companies: [
+          {
+            id: createdUser.company.id,
+            name: createdUser.company.name,
+            logoKey: createdUser.company.logoKey,
+            logoUrl,
+            role: "admin",
+            autoscuolaRole: getDefaultAutoscuolaRole("admin"),
+            services: await prisma.companyService.findMany({
+              where: { companyId: createdUser.company.id },
+            }),
           },
         ],
       },

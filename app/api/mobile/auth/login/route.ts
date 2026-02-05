@@ -3,6 +3,7 @@ import { prisma } from "@/db/prisma";
 import { compare, hash } from "@/lib/encrypt";
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
 import { issueMobileToken } from "@/lib/mobile-auth";
+import { getSignedAssetUrl } from "@/lib/storage/r2";
 
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -61,6 +62,29 @@ export async function POST(request: Request) {
     );
   }
 
+  const companies = await Promise.all(
+    memberships.map(async (entry) => {
+      let logoUrl: string | null = null;
+      if (entry.company.logoKey) {
+        try {
+          logoUrl = await getSignedAssetUrl(entry.company.logoKey);
+        } catch {
+          logoUrl = null;
+        }
+      }
+
+      return {
+        id: entry.company.id,
+        name: entry.company.name,
+        logoKey: entry.company.logoKey,
+        logoUrl,
+        role: entry.role,
+        autoscuolaRole: entry.autoscuolaRole,
+        services: entry.company.services,
+      };
+    }),
+  );
+
   let activeCompanyId = user.activeCompanyId;
   if (!activeCompanyId && memberships.length === 1) {
     activeCompanyId = memberships[0].companyId;
@@ -92,14 +116,7 @@ export async function POST(request: Request) {
       },
       activeCompanyId,
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
-      companies: memberships.map((entry) => ({
-        id: entry.company.id,
-        name: entry.company.name,
-        logoKey: entry.company.logoKey,
-        role: entry.role,
-        autoscuolaRole: entry.autoscuolaRole,
-        services: entry.company.services,
-      })),
+      companies,
     },
   });
 }
