@@ -166,6 +166,7 @@ model Company {
   autoscuolaInstructors AutoscuolaInstructor[]
   autoscuolaVehicles AutoscuolaVehicle[]
   autoscuolaAvailabilitySlots AutoscuolaAvailabilitySlot[]
+  autoscuolaWeeklyAvailabilities AutoscuolaWeeklyAvailability[]
   autoscuolaBookingRequests AutoscuolaBookingRequest[]
   autoscuolaWaitlistOffers AutoscuolaWaitlistOffer[]
   autoscuolaDocuments AutoscuolaDocument[]
@@ -478,6 +479,24 @@ model AutoscuolaVehicle {
   appointments AutoscuolaAppointment[]
 
   @@index([companyId])
+}
+
+model AutoscuolaWeeklyAvailability {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  ownerType String
+  ownerId   String   @db.Uuid
+  daysOfWeek Int[]
+  startMinutes Int
+  endMinutes Int
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([ownerType, ownerId])
+  @@unique([companyId, ownerType, ownerId])
 }
 
 model AutoscuolaAvailabilitySlot {

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
@@ -47,11 +48,12 @@ const respondOfferSchema = z.object({
 });
 
 const SLOT_MINUTES = 30;
-const DEFAULT_AVAILABILITY_WEEKS = 4;
 const DEFAULT_MAX_DAYS = 4;
 
-const slotKey = (date: Date) =>
-  `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+const minutesFromDate = (date: Date) => date.getHours() * 60 + date.getMinutes();
+
+const normalizeDays = (days: number[] | undefined) =>
+  Array.from(new Set((days ?? []).filter((day) => day >= 0 && day <= 6))).sort();
 
 const parseTime = (value?: string) => {
   if (!value) return null;
@@ -75,68 +77,6 @@ const parseDateOnly = (value: string) => {
   return new Date(value);
 };
 
-const getRangeStartEnd = (date: Date, startTime?: string, endTime?: string) => {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-
-  if (startTime && endTime) {
-    const startTimeParsed = parseTime(startTime);
-    const endTimeParsed = parseTime(endTime);
-    if (!startTimeParsed || !endTimeParsed) {
-      return { start, end };
-    }
-    start.setHours(startTimeParsed.hours, startTimeParsed.minutes, 0, 0);
-    end.setHours(endTimeParsed.hours, endTimeParsed.minutes, 0, 0);
-  }
-
-  return { start, end };
-};
-
-const buildRecurringRanges = ({
-  startsAt,
-  endsAt,
-  daysOfWeek,
-  weeks,
-}: {
-  startsAt: Date;
-  endsAt: Date;
-  daysOfWeek?: number[];
-  weeks: number;
-}) => {
-  if (!daysOfWeek || daysOfWeek.length === 0) {
-    return [{ start: startsAt, end: endsAt }];
-  }
-
-  const ranges: Array<{ start: Date; end: Date }> = [];
-  const anchorDate = new Date(startsAt);
-  anchorDate.setHours(0, 0, 0, 0);
-  const startHours = startsAt.getHours();
-  const startMinutes = startsAt.getMinutes();
-  const endHours = endsAt.getHours();
-  const endMinutes = endsAt.getMinutes();
-
-  for (let week = 0; week < weeks; week += 1) {
-    for (const day of daysOfWeek) {
-      const candidate = new Date(anchorDate);
-      const offset = (day - candidate.getDay() + 7) % 7;
-      candidate.setDate(candidate.getDate() + offset + week * 7);
-
-      if (week === 0 && candidate < anchorDate) continue;
-
-      const rangeStart = new Date(candidate);
-      rangeStart.setHours(startHours, startMinutes, 0, 0);
-      const rangeEnd = new Date(candidate);
-      rangeEnd.setHours(endHours, endMinutes, 0, 0);
-      if (rangeEnd <= rangeStart) continue;
-      if (rangeStart < startsAt) continue;
-      ranges.push({ start: rangeStart, end: rangeEnd });
-    }
-  }
-
-  return ranges;
-};
 
 const getSlotEnd = (start: Date, durationMinutes: number) => {
   const end = new Date(start);
@@ -150,54 +90,46 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
     const payload = slotSchema.parse(input);
     const start = new Date(payload.startsAt);
     const end = new Date(payload.endsAt);
-    const weeks = payload.weeks ?? DEFAULT_AVAILABILITY_WEEKS;
+    const daysOfWeek = normalizeDays(payload.daysOfWeek);
 
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+    if (!daysOfWeek.length) {
+      return { success: false, message: "Seleziona almeno un giorno." };
+    }
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       return { success: false, message: "Intervallo non valido." };
     }
 
-    const ranges = buildRecurringRanges({
-      startsAt: start,
-      endsAt: end,
-      daysOfWeek: payload.daysOfWeek,
-      weeks,
-    });
-
-    if (!ranges.length) {
-      return { success: false, message: "Nessuno slot generato." };
+    const startMinutes = minutesFromDate(start);
+    const endMinutes = minutesFromDate(end);
+    if (endMinutes <= startMinutes) {
+      return { success: false, message: "Intervallo non valido." };
     }
 
-    const slots: Array<{
-      companyId: string;
-      ownerType: string;
-      ownerId: string;
-      startsAt: Date;
-      endsAt: Date;
-      status: string;
-    }> = [];
-
-    for (const range of ranges) {
-      for (let cursor = new Date(range.start); cursor < range.end; ) {
-        const next = new Date(cursor.getTime() + SLOT_MINUTES * 60 * 1000);
-        if (next > range.end) break;
-        slots.push({
+    const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
+      where: {
+        companyId_ownerType_ownerId: {
           companyId: membership.companyId,
           ownerType: payload.ownerType,
           ownerId: payload.ownerId,
-          startsAt: new Date(cursor),
-          endsAt: next,
-          status: "open",
-        });
-        cursor = next;
-      }
-    }
-
-    const created = await prisma.autoscuolaAvailabilitySlot.createMany({
-      data: slots,
-      skipDuplicates: true,
+        },
+      },
+      update: {
+        daysOfWeek,
+        startMinutes,
+        endMinutes,
+      },
+      create: {
+        companyId: membership.companyId,
+        ownerType: payload.ownerType,
+        ownerId: payload.ownerId,
+        daysOfWeek,
+        startMinutes,
+        endMinutes,
+      },
     });
 
-    return { success: true, data: { count: created.count } };
+    return { success: true, data: { count: availability ? 1 : 0 } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -207,40 +139,15 @@ export async function deleteAvailabilitySlots(input: z.infer<typeof deleteSlotsS
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = deleteSlotsSchema.parse(input);
-    const start = new Date(payload.startsAt);
-    const end = new Date(payload.endsAt);
-    const weeks = payload.weeks ?? DEFAULT_AVAILABILITY_WEEKS;
-
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
-      return { success: false, message: "Intervallo non valido." };
-    }
-
-    const ranges = buildRecurringRanges({
-      startsAt: start,
-      endsAt: end,
-      daysOfWeek: payload.daysOfWeek,
-      weeks,
+    const deleted = await prisma.autoscuolaWeeklyAvailability.deleteMany({
+      where: {
+        companyId: membership.companyId,
+        ownerType: payload.ownerType,
+        ownerId: payload.ownerId,
+      },
     });
 
-    if (!ranges.length) {
-      return { success: false, message: "Nessuno slot da rimuovere." };
-    }
-
-    let deletedCount = 0;
-    for (const range of ranges) {
-      const deleted = await prisma.autoscuolaAvailabilitySlot.deleteMany({
-        where: {
-          companyId: membership.companyId,
-          ownerType: payload.ownerType,
-          ownerId: payload.ownerId,
-          status: "open",
-          startsAt: { gte: range.start, lt: range.end },
-        },
-      });
-      deletedCount += deleted.count;
-    }
-
-    return { success: true, data: { count: deletedCount } };
+    return { success: true, data: { count: deleted.count } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -251,25 +158,60 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = getSlotsSchema.parse(input);
 
-    const where: Record<string, unknown> = {
-      companyId: membership.companyId,
-    };
-
-    if (payload.ownerType) where.ownerType = payload.ownerType;
-    if (payload.ownerId) where.ownerId = payload.ownerId;
-
-    if (payload.date) {
-      const dayStart = new Date(payload.date);
-      dayStart.setHours(0, 0, 0, 0);
-      const dayEnd = new Date(dayStart);
-      dayEnd.setDate(dayEnd.getDate() + 1);
-      where.startsAt = { gte: dayStart, lt: dayEnd };
+    if (!payload.date) {
+      return { success: true, data: [] };
     }
 
-    const slots = await prisma.autoscuolaAvailabilitySlot.findMany({
-      where,
-      orderBy: { startsAt: "asc" },
+    const dayStart = new Date(payload.date);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayOfWeek = dayStart.getDay();
+
+    const availabilityWhere: Record<string, unknown> = {
+      companyId: membership.companyId,
+    };
+    if (payload.ownerType) availabilityWhere.ownerType = payload.ownerType;
+    if (payload.ownerId) availabilityWhere.ownerId = payload.ownerId;
+
+    const availabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
+      where: availabilityWhere,
     });
+
+    const slots = availabilities.flatMap((availability) => {
+      if (!availability.daysOfWeek.includes(dayOfWeek)) return [];
+      if (availability.endMinutes <= availability.startMinutes) return [];
+      const startMinutes = Math.ceil(availability.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+      const lastStart = availability.endMinutes - SLOT_MINUTES;
+      const ownerSlots: Array<{
+        id: string;
+        companyId: string;
+        ownerType: string;
+        ownerId: string;
+        startsAt: Date;
+        endsAt: Date;
+        status: string;
+        createdAt: Date;
+        updatedAt: Date;
+      }> = [];
+      for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
+        const startsAt = new Date(dayStart);
+        startsAt.setMinutes(minutes, 0, 0);
+        const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+        ownerSlots.push({
+          id: randomUUID(),
+          companyId: membership.companyId,
+          ownerType: availability.ownerType,
+          ownerId: availability.ownerId,
+          startsAt,
+          endsAt,
+          status: "open",
+          createdAt: startsAt,
+          updatedAt: startsAt,
+        });
+      }
+      return ownerSlots;
+    });
+
+    slots.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
     return { success: true, data: slots };
   } catch (error) {
@@ -288,11 +230,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
     const preferredDate = parseDateOnly(payload.preferredDate);
     preferredDate.setHours(0, 0, 0, 0);
-    const preferredDayEnd = new Date(preferredDate);
-    preferredDayEnd.setDate(preferredDayEnd.getDate() + 1);
 
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
-    const [activeInstructors, activeVehicles] = await Promise.all([
+    const [activeInstructors, activeVehicles, studentAvailability] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: { companyId: membership.companyId, status: { not: "inactive" } },
         select: { id: true },
@@ -301,38 +241,56 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         where: { companyId: membership.companyId, status: { not: "inactive" } },
         select: { id: true },
       }),
+      prisma.autoscuolaWeeklyAvailability.findFirst({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "student",
+          ownerId: payload.studentId,
+        },
+      }),
     ]);
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = activeVehicles.map((item) => item.id);
 
-    const buildSlotMap = <T extends { ownerId: string; startsAt: Date; id: string }>(
-      slots: T[],
-    ) => {
-      const map = new Map<string, Map<number, T>>();
-      for (const slot of slots) {
-        const byOwner = map.get(slot.ownerId) ?? new Map<number, T>();
-        byOwner.set(slot.startsAt.getTime(), slot);
-        map.set(slot.ownerId, byOwner);
-      }
-      return map;
-    };
+    const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
+      activeInstructorIds.length
+        ? prisma.autoscuolaWeeklyAvailability.findMany({
+            where: {
+              companyId: membership.companyId,
+              ownerType: "instructor",
+              ownerId: { in: activeInstructorIds },
+            },
+          })
+        : [],
+      activeVehicleIds.length
+        ? prisma.autoscuolaWeeklyAvailability.findMany({
+            where: {
+              companyId: membership.companyId,
+              ownerType: "vehicle",
+              ownerId: { in: activeVehicleIds },
+            },
+          })
+        : [],
+    ]);
 
-    const getSpanSlots = <T extends { id: string }>(
-      map: Map<number, T>,
-      startMs: number,
-    ) => {
-      const first = map.get(startMs);
-      if (!first) return null;
-      if (durationSlots === 1) return [first];
-      const second = map.get(startMs + SLOT_MINUTES * 60 * 1000);
-      if (!second) return null;
-      return [first, second];
-    };
+    const instructorAvailabilityMap = new Map(
+      instructorAvailabilities.map((availability) => [
+        availability.ownerId,
+        availability,
+      ]),
+    );
+    const vehicleAvailabilityMap = new Map(
+      vehicleAvailabilities.map((availability) => [
+        availability.ownerId,
+        availability,
+      ]),
+    );
 
     const buildAppointmentMaps = (
       appointments: Array<{
         instructorId: string | null;
         vehicleId: string | null;
+        studentId: string;
         startsAt: Date;
         endsAt: Date | null;
       }>,
@@ -357,6 +315,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const start = appointment.startsAt.getTime();
         const end =
           appointment.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
+        add(appointment.studentId, start, end);
         if (appointment.instructorId) {
           add(appointment.instructorId, start, end);
         }
@@ -377,94 +336,114 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return intervals.some((interval) => start < interval.end && end > interval.start);
     };
 
-    const findCandidateForRange = async (
-      rangeStart: Date,
-      rangeEnd: Date,
+    const isOwnerAvailable = (
+      availability:
+        | { daysOfWeek: number[]; startMinutes: number; endMinutes: number }
+        | null
+        | undefined,
+      dayOfWeek: number,
+      startMinutes: number,
+      endMinutes: number,
+    ) => {
+      if (!availability) return false;
+      if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
+      if (availability.endMinutes <= availability.startMinutes) return false;
+      return startMinutes >= availability.startMinutes && endMinutes <= availability.endMinutes;
+    };
+
+    const buildCandidateStarts = (
+      dayStart: Date,
+      window: { startMinutes: number; endMinutes: number },
+    ) => {
+      const first = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+      const lastStart = window.endMinutes - payload.durationMinutes;
+      if (lastStart < first) return [];
+      const candidates: Date[] = [];
+      for (let minutes = first; minutes <= lastStart; minutes += SLOT_MINUTES) {
+        const start = new Date(dayStart);
+        start.setHours(0, 0, 0, 0);
+        start.setMinutes(minutes, 0, 0);
+        candidates.push(start);
+      }
+      return candidates;
+    };
+
+    const findCandidateForDay = async (
+      dayStart: Date,
+      preferredWindow?: { startMinutes: number; endMinutes: number },
       forcedStart?: Date,
     ) => {
-      if (!activeInstructorIds.length || !activeVehicleIds.length) {
+      if (!studentAvailability) return null;
+      if (!activeInstructorIds.length || !activeVehicleIds.length) return null;
+
+      const dayOfWeek = dayStart.getDay();
+      if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) {
         return null;
       }
+
+      let startMinutes = studentAvailability.startMinutes;
+      let endMinutes = studentAvailability.endMinutes;
+      if (preferredWindow) {
+        startMinutes = Math.max(startMinutes, preferredWindow.startMinutes);
+        endMinutes = Math.min(endMinutes, preferredWindow.endMinutes);
+      }
+      if (endMinutes - startMinutes < payload.durationMinutes) {
+        return null;
+      }
+
+      const window = { startMinutes, endMinutes };
+      let candidateStarts = buildCandidateStarts(dayStart, window);
+      if (forcedStart) {
+        const forcedMinutes = minutesFromDate(forcedStart);
+        if (forcedMinutes % SLOT_MINUTES !== 0) return null;
+        if (forcedMinutes < window.startMinutes) return null;
+        if (forcedMinutes + payload.durationMinutes > window.endMinutes) return null;
+        candidateStarts = [forcedStart];
+      }
+      if (!candidateStarts.length) return null;
+
+      const rangeStart = new Date(dayStart);
+      rangeStart.setHours(0, 0, 0, 0);
+      const rangeEnd = new Date(rangeStart);
+      rangeEnd.setDate(rangeEnd.getDate() + 1);
       const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-      const [studentSlots, instructorSlots, vehicleSlots, appointments] =
-        await Promise.all([
-          prisma.autoscuolaAvailabilitySlot.findMany({
-            where: {
-              companyId: membership.companyId,
-              ownerType: "student",
-              ownerId: payload.studentId,
-              status: "open",
-              startsAt: { gte: rangeStart, lt: rangeEnd },
-            },
-            orderBy: { startsAt: "asc" },
-          }),
-          prisma.autoscuolaAvailabilitySlot.findMany({
-            where: {
-              companyId: membership.companyId,
-              ownerType: "instructor",
-              status: "open",
-              ownerId: { in: activeInstructorIds },
-              startsAt: { gte: rangeStart, lt: rangeEnd },
-            },
-            orderBy: { startsAt: "asc" },
-          }),
-          prisma.autoscuolaAvailabilitySlot.findMany({
-            where: {
-              companyId: membership.companyId,
-              ownerType: "vehicle",
-              status: "open",
-              ownerId: { in: activeVehicleIds },
-              startsAt: { gte: rangeStart, lt: rangeEnd },
-            },
-            orderBy: { startsAt: "asc" },
-          }),
-          prisma.autoscuolaAppointment.findMany({
-            where: {
-              companyId: membership.companyId,
-              status: { notIn: ["cancelled"] },
-              startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-            },
-          }),
-        ]);
+      const appointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+        },
+      });
 
-      const studentMap = buildSlotMap(studentSlots).get(payload.studentId);
-      if (!studentMap) return null;
-
-      const instructorMap = buildSlotMap(instructorSlots);
-      const vehicleMap = buildSlotMap(vehicleSlots);
       const appointmentMaps = buildAppointmentMaps(appointments);
-
-      const candidateStarts = forcedStart
-        ? [forcedStart.getTime()]
-        : Array.from(studentMap.keys()).sort((a, b) => a - b);
+      const studentIntervals = appointmentMaps.intervals.get(payload.studentId);
 
       let best: {
         start: Date;
         end: Date;
         instructorId: string;
         vehicleId: string;
-        studentSlotIds: string[];
-        instructorSlotIds: string[];
-        vehicleSlotIds: string[];
         score: number;
       } | null = null;
 
-      for (const startMs of candidateStarts) {
-        const startDate = new Date(startMs);
+      for (const startDate of candidateStarts) {
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
+        const startMs = startDate.getTime();
         if (startDate < rangeStart || endDate > rangeEnd) continue;
+        if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
-        const studentSlotsSpan = getSpanSlots(studentMap, startMs);
-        if (!studentSlotsSpan) continue;
+        const candidateStartMinutes = minutesFromDate(startDate);
+        const candidateEndMinutes = candidateStartMinutes + payload.durationMinutes;
 
         const availableInstructors: Array<{
           id: string;
-          slotIds: string[];
           score: number;
         }> = [];
-        for (const [ownerId, map] of instructorMap.entries()) {
-          const spanSlots = getSpanSlots(map, startMs);
-          if (!spanSlots) continue;
+        for (const ownerId of activeInstructorIds) {
+          const availability = instructorAvailabilityMap.get(ownerId);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
+            continue;
+          }
           const intervals = appointmentMaps.intervals.get(ownerId);
           if (overlaps(intervals, startMs, endDate.getTime())) continue;
           const score =
@@ -472,19 +451,19 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
           availableInstructors.push({
             id: ownerId,
-            slotIds: spanSlots.map((slot) => slot.id),
             score,
           });
         }
 
         const availableVehicles: Array<{
           id: string;
-          slotIds: string[];
           score: number;
         }> = [];
-        for (const [ownerId, map] of vehicleMap.entries()) {
-          const spanSlots = getSpanSlots(map, startMs);
-          if (!spanSlots) continue;
+        for (const ownerId of activeVehicleIds) {
+          const availability = vehicleAvailabilityMap.get(ownerId);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
+            continue;
+          }
           const intervals = appointmentMaps.intervals.get(ownerId);
           if (overlaps(intervals, startMs, endDate.getTime())) continue;
           const score =
@@ -492,7 +471,6 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
           availableVehicles.push({
             id: ownerId,
-            slotIds: spanSlots.map((slot) => slot.id),
             score,
           });
         }
@@ -508,15 +486,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const vehicleChoice = availableVehicles[0];
         const score = instructorChoice.score + vehicleChoice.score;
 
-        if (!best || score > best.score || (score === best.score && startMs < best.start.getTime())) {
+        if (
+          !best ||
+          score > best.score ||
+          (score === best.score && startMs < best.start.getTime())
+        ) {
           best = {
             start: startDate,
             end: endDate,
             instructorId: instructorChoice.id,
             vehicleId: vehicleChoice.id,
-            studentSlotIds: studentSlotsSpan.map((slot) => slot.id),
-            instructorSlotIds: instructorChoice.slotIds,
-            vehicleSlotIds: vehicleChoice.slotIds,
             score,
           };
         }
@@ -531,24 +510,80 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         return { success: false, message: "Slot selezionato non valido." };
       }
       const rangeStart = new Date(selectedStart);
-      const rangeEnd = getSlotEnd(rangeStart, payload.durationMinutes);
-      const candidate = await findCandidateForRange(rangeStart, rangeEnd, selectedStart);
+      rangeStart.setHours(0, 0, 0, 0);
+      const candidate = await findCandidateForDay(rangeStart, undefined, selectedStart);
       if (!candidate) {
         return { success: false, message: "Slot non disponibile." };
       }
 
       const appointment = await prisma.$transaction(async (tx) => {
-        await tx.autoscuolaAvailabilitySlot.updateMany({
+        const studentSlot = await tx.autoscuolaAvailabilitySlot.upsert({
           where: {
-            id: {
-              in: [
-                ...candidate.studentSlotIds,
-                ...candidate.instructorSlotIds,
-                ...candidate.vehicleSlotIds,
-              ],
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "student",
+              ownerId: payload.studentId,
+              startsAt: candidate.start,
             },
           },
-          data: { status: "booked" },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "student",
+            ownerId: payload.studentId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
+        });
+
+        await tx.autoscuolaAvailabilitySlot.upsert({
+          where: {
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "instructor",
+              ownerId: candidate.instructorId,
+              startsAt: candidate.start,
+            },
+          },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "instructor",
+            ownerId: candidate.instructorId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
+        });
+
+        await tx.autoscuolaAvailabilitySlot.upsert({
+          where: {
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "vehicle",
+              ownerId: candidate.vehicleId,
+              startsAt: candidate.start,
+            },
+          },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "vehicle",
+            ownerId: candidate.vehicleId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
         });
 
         return tx.autoscuolaAppointment.create({
@@ -561,7 +596,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: "scheduled",
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
-            slotId: candidate.studentSlotIds[0],
+            slotId: studentSlot.id,
           },
         });
       });
@@ -578,33 +613,91 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return { success: true, data: { matched: true, appointment, request } };
     }
 
-    let candidate = null as Awaited<ReturnType<typeof findCandidateForRange>> | null;
+    let candidate = null as Awaited<ReturnType<typeof findCandidateForDay>> | null;
     if (payload.preferredStartTime && payload.preferredEndTime) {
-      const range = getRangeStartEnd(
-        preferredDate,
-        payload.preferredStartTime,
-        payload.preferredEndTime,
-      );
-      candidate = await findCandidateForRange(range.start, range.end);
+      const parsedStart = parseTime(payload.preferredStartTime);
+      const parsedEnd = parseTime(payload.preferredEndTime);
+      if (parsedStart && parsedEnd) {
+        candidate = await findCandidateForDay(preferredDate, {
+          startMinutes: parsedStart.hours * 60 + parsedStart.minutes,
+          endMinutes: parsedEnd.hours * 60 + parsedEnd.minutes,
+        });
+      }
     }
 
     if (!candidate) {
-      candidate = await findCandidateForRange(preferredDate, preferredDayEnd);
+      candidate = await findCandidateForDay(preferredDate);
     }
 
     if (candidate) {
       const appointment = await prisma.$transaction(async (tx) => {
-        await tx.autoscuolaAvailabilitySlot.updateMany({
+        const studentSlot = await tx.autoscuolaAvailabilitySlot.upsert({
           where: {
-            id: {
-              in: [
-                ...candidate.studentSlotIds,
-                ...candidate.instructorSlotIds,
-                ...candidate.vehicleSlotIds,
-              ],
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "student",
+              ownerId: payload.studentId,
+              startsAt: candidate.start,
             },
           },
-          data: { status: "booked" },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "student",
+            ownerId: payload.studentId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
+        });
+
+        await tx.autoscuolaAvailabilitySlot.upsert({
+          where: {
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "instructor",
+              ownerId: candidate.instructorId,
+              startsAt: candidate.start,
+            },
+          },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "instructor",
+            ownerId: candidate.instructorId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
+        });
+
+        await tx.autoscuolaAvailabilitySlot.upsert({
+          where: {
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: "vehicle",
+              ownerId: candidate.vehicleId,
+              startsAt: candidate.start,
+            },
+          },
+          update: {
+            endsAt: candidate.end,
+            status: "booked",
+          },
+          create: {
+            companyId: membership.companyId,
+            ownerType: "vehicle",
+            ownerId: candidate.vehicleId,
+            startsAt: candidate.start,
+            endsAt: candidate.end,
+            status: "booked",
+          },
         });
 
         return tx.autoscuolaAppointment.create({
@@ -617,7 +710,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: "scheduled",
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
-            slotId: candidate.studentSlotIds[0],
+            slotId: studentSlot.id,
           },
         });
       });
@@ -638,9 +731,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     for (let offset = 1; offset <= maxDays; offset += 1) {
       const altDay = new Date(preferredDate);
       altDay.setDate(altDay.getDate() + offset);
-      const altEnd = new Date(altDay);
-      altEnd.setDate(altEnd.getDate() + 1);
-      const altCandidate = await findCandidateForRange(altDay, altEnd);
+      const altCandidate = await findCandidateForDay(altDay);
       if (altCandidate) {
         suggestion = { startsAt: altCandidate.start, endsAt: altCandidate.end };
         break;
