@@ -15,6 +15,7 @@ export type ServiceLimits = {
   documentsPerMonth?: number;
   workflowRunsPerMonth?: number;
   aiCreditsPerMonth?: number;
+  availabilityWeeks?: number;
 };
 
 export type CompanyServiceInfo = {

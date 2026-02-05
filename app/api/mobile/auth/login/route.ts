@@ -4,6 +4,7 @@ import { compare, hash } from "@/lib/encrypt";
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
+import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -103,6 +104,16 @@ export async function POST(request: Request) {
     (entry) => entry.companyId === activeCompanyId,
   );
 
+  let instructorId: string | null = null;
+  if (activeCompanyId && activeMembership?.autoscuolaRole === "INSTRUCTOR") {
+    const instructor = await getOrCreateInstructorForUser({
+      companyId: activeCompanyId,
+      userId: user.id,
+      name: user.name ?? user.email.split("@")[0] ?? "Istruttore",
+    });
+    instructorId = instructor.id;
+  }
+
   return NextResponse.json({
     success: true,
     data: {
@@ -116,6 +127,7 @@ export async function POST(request: Request) {
       },
       activeCompanyId,
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
+      instructorId,
       companies,
     },
   });

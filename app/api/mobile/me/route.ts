@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
 import { prisma } from "@/db/prisma";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
+import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -63,6 +64,16 @@ export async function GET(request: Request) {
     (entry) => entry.companyId === user.activeCompanyId,
   );
 
+  let instructorId: string | null = null;
+  if (user.activeCompanyId && activeMembership?.autoscuolaRole === "INSTRUCTOR") {
+    const instructor = await getOrCreateInstructorForUser({
+      companyId: user.activeCompanyId,
+      userId: user.id,
+      name: user.name ?? user.email.split("@")[0] ?? "Istruttore",
+    });
+    instructorId = instructor.id;
+  }
+
   return NextResponse.json({
     success: true,
     data: {
@@ -74,6 +85,7 @@ export async function GET(request: Request) {
       },
       activeCompanyId: user.activeCompanyId,
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,
+      instructorId,
       companies,
     },
   });

@@ -54,6 +54,7 @@ model User {
   companyInvites CompanyInvite[] @relation("CompanyInviteInvitedBy")
   documentRequests DocumentRequest[] @relation("DocumentRequestCreatedBy")
   mobileTokens MobileAccessToken[]
+  autoscuolaInstructors AutoscuolaInstructor[]
 }
 
 model Account {
@@ -448,6 +449,7 @@ model AutoscuolaAppointment {
 model AutoscuolaInstructor {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId String   @db.Uuid
+  userId    String?  @db.Uuid
   name      String
   phone     String?
   status    String   @default("active")
@@ -455,9 +457,12 @@ model AutoscuolaInstructor {
   updatedAt DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments AutoscuolaAppointment[]
 
   @@index([companyId])
+  @@index([userId])
+  @@unique([companyId, userId])
 }
 
 model AutoscuolaVehicle {

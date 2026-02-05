@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   createAvailabilitySlots,
   getAvailabilitySlots,
+  deleteAvailabilitySlots,
 } from "@/lib/actions/autoscuole-availability.actions";
 
 export async function GET(request: Request) {
@@ -21,5 +22,11 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const payload = await request.json();
   const res = await createAvailabilitySlots(payload);
+  return NextResponse.json(res, { status: res.success ? 200 : 400 });
+}
+
+export async function DELETE(request: Request) {
+  const payload = await request.json();
+  const res = await deleteAvailabilitySlots(payload);
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

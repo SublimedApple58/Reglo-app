@@ -77,6 +77,7 @@ export async function POST(request: Request) {
         },
         activeCompanyId: createdUser.company.id,
         autoscuolaRole: getDefaultAutoscuolaRole("admin"),
+        instructorId: null,
         companies: [
           {
             id: createdUser.company.id,
