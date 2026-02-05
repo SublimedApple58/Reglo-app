@@ -39,6 +39,8 @@ const bookingRequestSchema = z.object({
   preferredEndTime: z.string().optional(),
   maxDays: z.number().int().min(0).max(7).optional(),
   selectedStartsAt: z.string().optional(),
+  excludeStartsAt: z.string().optional(),
+  requestId: z.string().uuid().optional(),
 });
 
 const respondOfferSchema = z.object({
@@ -336,6 +338,37 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return intervals.some((interval) => start < interval.end && end > interval.start);
     };
 
+    const excludedStartMs = payload.excludeStartsAt
+      ? new Date(payload.excludeStartsAt).getTime()
+      : null;
+
+    const upsertBookingRequest = async (status: "pending" | "matched") => {
+      if (payload.requestId) {
+        const existing = await prisma.autoscuolaBookingRequest.findFirst({
+          where: {
+            id: payload.requestId,
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+          },
+        });
+        if (existing) {
+          return prisma.autoscuolaBookingRequest.update({
+            where: { id: existing.id },
+            data: { status, desiredDate: preferredDate },
+          });
+        }
+      }
+
+      return prisma.autoscuolaBookingRequest.create({
+        data: {
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          desiredDate: preferredDate,
+          status,
+        },
+      });
+    };
+
     const isOwnerAvailable = (
       availability:
         | { daysOfWeek: number[]; startMinutes: number; endMinutes: number }
@@ -429,6 +462,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       for (const startDate of candidateStarts) {
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
+        if (excludedStartMs && startMs === excludedStartMs) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
@@ -601,14 +635,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         });
       });
 
-      const request = await prisma.autoscuolaBookingRequest.create({
-        data: {
-          companyId: membership.companyId,
-          studentId: payload.studentId,
-          desiredDate: preferredDate,
-          status: "matched",
-        },
-      });
+      const request = await upsertBookingRequest("matched");
 
       return { success: true, data: { matched: true, appointment, request } };
     }
@@ -630,101 +657,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     if (candidate) {
-      const appointment = await prisma.$transaction(async (tx) => {
-        const studentSlot = await tx.autoscuolaAvailabilitySlot.upsert({
-          where: {
-            companyId_ownerType_ownerId_startsAt: {
-              companyId: membership.companyId,
-              ownerType: "student",
-              ownerId: payload.studentId,
-              startsAt: candidate.start,
-            },
-          },
-          update: {
-            endsAt: candidate.end,
-            status: "booked",
-          },
-          create: {
-            companyId: membership.companyId,
-            ownerType: "student",
-            ownerId: payload.studentId,
-            startsAt: candidate.start,
-            endsAt: candidate.end,
-            status: "booked",
-          },
-        });
+      const request = await upsertBookingRequest("pending");
 
-        await tx.autoscuolaAvailabilitySlot.upsert({
-          where: {
-            companyId_ownerType_ownerId_startsAt: {
-              companyId: membership.companyId,
-              ownerType: "instructor",
-              ownerId: candidate.instructorId,
-              startsAt: candidate.start,
-            },
-          },
-          update: {
-            endsAt: candidate.end,
-            status: "booked",
-          },
-          create: {
-            companyId: membership.companyId,
-            ownerType: "instructor",
-            ownerId: candidate.instructorId,
-            startsAt: candidate.start,
-            endsAt: candidate.end,
-            status: "booked",
-          },
-        });
-
-        await tx.autoscuolaAvailabilitySlot.upsert({
-          where: {
-            companyId_ownerType_ownerId_startsAt: {
-              companyId: membership.companyId,
-              ownerType: "vehicle",
-              ownerId: candidate.vehicleId,
-              startsAt: candidate.start,
-            },
-          },
-          update: {
-            endsAt: candidate.end,
-            status: "booked",
-          },
-          create: {
-            companyId: membership.companyId,
-            ownerType: "vehicle",
-            ownerId: candidate.vehicleId,
-            startsAt: candidate.start,
-            endsAt: candidate.end,
-            status: "booked",
-          },
-        });
-
-        return tx.autoscuolaAppointment.create({
-          data: {
-            companyId: membership.companyId,
-            studentId: payload.studentId,
-            type: "guida",
-            startsAt: candidate.start,
-            endsAt: candidate.end,
-            status: "scheduled",
-            instructorId: candidate.instructorId,
-            vehicleId: candidate.vehicleId,
-            slotId: studentSlot.id,
-          },
-        });
-      });
-
-      const request = await prisma.autoscuolaBookingRequest.create({
+      return {
+        success: true,
         data: {
-          companyId: membership.companyId,
-          studentId: payload.studentId,
-          desiredDate: preferredDate,
-          status: "matched",
+          matched: false,
+          request,
+          suggestion: { startsAt: candidate.start, endsAt: candidate.end },
         },
-      });
-
-      return { success: true, data: { matched: true, appointment, request } };
+      };
     }
 
     let suggestion: { startsAt: Date; endsAt: Date } | null = null;
@@ -738,14 +680,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
     }
 
-    const request = await prisma.autoscuolaBookingRequest.create({
-      data: {
-        companyId: membership.companyId,
-        studentId: payload.studentId,
-        desiredDate: preferredDate,
-        status: "pending",
-      },
-    });
+    const request = await upsertBookingRequest("pending");
 
     return {
       success: true,
