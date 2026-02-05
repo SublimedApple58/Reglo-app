@@ -162,7 +162,7 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       return { success: true, data: [] };
     }
 
-    const dayStart = new Date(payload.date);
+    const dayStart = parseDateOnly(payload.date);
     dayStart.setHours(0, 0, 0, 0);
     const dayOfWeek = dayStart.getDay();
 
