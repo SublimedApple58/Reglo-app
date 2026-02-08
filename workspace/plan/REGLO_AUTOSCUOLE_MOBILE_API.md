@@ -55,9 +55,9 @@ Nota: il ruolo è **per-company**. Se l’utente cambia company, **ricalcola UI*
   - **Output:** `ApiSuccess<AutoscuolaOverview>`
 - `GET /api/autoscuole/students` (+ `?search=`)
   - **Output:** `ApiSuccess<AutoscuolaStudent[]>`
+  - **Nota:** lista derivata dalla Directory utenti (`CompanyMember.autoscuolaRole=STUDENT`).
 - `POST /api/autoscuole/students`
-  - **Input:** `CreateStudentInput`
-  - **Output:** `ApiSuccess<AutoscuolaStudent>`
+  - **Status:** `405` (disattivato: gli allievi si gestiscono solo dalla Directory utenti).
 - `GET /api/autoscuole/cases`
   - **Output:** `ApiSuccess<AutoscuolaCase[]>`
 - `POST /api/autoscuole/cases`

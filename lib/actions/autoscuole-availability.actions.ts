@@ -138,6 +138,16 @@ const hasAppointmentConflict = (
     return appointment.startsAt < endsAt && appointmentEnd > startsAt;
   });
 
+const ensureStudentMembership = async (companyId: string, studentId: string) =>
+  prisma.companyMember.findFirst({
+    where: {
+      companyId,
+      autoscuolaRole: "STUDENT",
+      userId: studentId,
+    },
+    select: { userId: true },
+  });
+
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -767,14 +777,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     }
 
     const [student, existingResponse, studentAvailability] = await Promise.all([
-      prisma.autoscuolaStudent.findFirst({
-        where: {
-          id: payload.studentId,
-          companyId: membership.companyId,
-          status: { not: "inactive" },
-        },
-        select: { id: true },
-      }),
+      ensureStudentMembership(membership.companyId, payload.studentId),
       prisma.autoscuolaWaitlistResponse.findFirst({
         where: {
           offerId: offer.id,
@@ -935,14 +938,10 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
     const now = new Date();
     const limit = payload.limit ?? 5;
 
-    const student = await prisma.autoscuolaStudent.findFirst({
-      where: {
-        id: payload.studentId,
-        companyId: membership.companyId,
-        status: { not: "inactive" },
-      },
-      select: { id: true },
-    });
+    const student = await ensureStudentMembership(
+      membership.companyId,
+      payload.studentId,
+    );
     if (!student) {
       return { success: false, message: "Allievo non valido." };
     }
@@ -1052,23 +1051,25 @@ export async function broadcastWaitlistOffer({
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const students = await prisma.autoscuolaStudent.findMany({
+  const students = await prisma.companyMember.findMany({
     where: {
       companyId,
-      status: { not: "inactive" },
-      ...(excludeStudentIds.length ? { id: { notIn: excludeStudentIds } } : {}),
+      autoscuolaRole: "STUDENT",
+      ...(excludeStudentIds.length ? { userId: { notIn: excludeStudentIds } } : {}),
     },
-    select: {
-      id: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      phone: true,
+    include: {
+      user: {
+        select: {
+          id: true,
+          email: true,
+          phone: true,
+        },
+      },
     },
   });
   if (!students.length) return offer;
 
-  const studentIds = students.map((student) => student.id);
+  const studentIds = students.map((student) => student.user.id);
   const [availabilities, appointments, service] = await Promise.all([
     prisma.autoscuolaWeeklyAvailability.findMany({
       where: {
@@ -1110,11 +1111,11 @@ export async function broadcastWaitlistOffer({
   }
 
   const availableStudents = students.filter((student) => {
-    const availability = availabilityByStudent.get(student.id);
+    const availability = availabilityByStudent.get(student.user.id);
     if (!isWeeklyAvailabilityCovering(availability, slot.startsAt, slot.endsAt)) {
       return false;
     }
-    const booked = appointmentsByStudent.get(student.id) ?? [];
+    const booked = appointmentsByStudent.get(student.user.id) ?? [];
     return !hasAppointmentConflict(booked, slot.startsAt, slot.endsAt);
   });
   if (!availableStudents.length) return offer;
@@ -1136,7 +1137,7 @@ export async function broadcastWaitlistOffer({
     const emails = Array.from(
       new Set(
         availableStudents
-          .map((student) => student.email?.trim().toLowerCase())
+          .map((student) => student.user.email?.trim().toLowerCase())
           .filter((email): email is string => Boolean(email)),
       ),
     );
@@ -1183,9 +1184,9 @@ export async function broadcastWaitlistOffer({
   for (const student of availableStudents) {
     if (channels.includes("email")) {
       try {
-        if (student.email) {
+        if (student.user.email) {
           await sendDynamicEmail({
-            to: student.email,
+            to: student.user.email,
             subject: title,
             body: message,
           });
@@ -1197,8 +1198,8 @@ export async function broadcastWaitlistOffer({
 
     if (channels.includes("whatsapp")) {
       try {
-        if (student.phone) {
-          await sendAutoscuolaWhatsApp({ to: student.phone, body: message });
+        if (student.user.phone) {
+          await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
         }
       } catch (error) {
         console.error("Waitlist WhatsApp error", error);

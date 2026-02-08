@@ -105,6 +105,102 @@ const ensureAutoscuolaRole = (
   }
 };
 
+const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
+const normalizeEmail = (value: string | null | undefined) =>
+  normalizeText(value).toLowerCase();
+
+const parseNameParts = (name: string | null, email: string) => {
+  const cleanName = normalizeText(name).replace(/\s+/g, " ");
+  if (cleanName) {
+    const [firstName, ...rest] = cleanName.split(" ");
+    const lastName = rest.join(" ").trim();
+    return {
+      firstName: firstName || "Allievo",
+      lastName: lastName || "Reglo",
+    };
+  }
+
+  const localPart = email.split("@")[0] || "allievo";
+  return {
+    firstName: localPart.slice(0, 1).toUpperCase() + localPart.slice(1),
+    lastName: "Reglo",
+  };
+};
+
+const matchesStudentQuery = (
+  student: {
+    firstName: string;
+    lastName: string;
+    email: string | null;
+    phone: string | null;
+  },
+  query?: string,
+) => {
+  const term = normalizeText(query).toLowerCase();
+  if (!term) return true;
+  return (
+    normalizeText(student.firstName).toLowerCase().includes(term) ||
+    normalizeText(student.lastName).toLowerCase().includes(term) ||
+    normalizeText(student.email).toLowerCase().includes(term) ||
+    normalizeText(student.phone).toLowerCase().includes(term)
+  );
+};
+
+type UserSnapshot = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+};
+
+const toStudentProfile = (user: UserSnapshot, createdAt: Date) => {
+  const email = normalizeEmail(user.email);
+  const nameParts = parseNameParts(user.name, email);
+  return {
+    id: user.id,
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    email: email || null,
+    phone: user.phone ?? null,
+    status: "active",
+    createdAt,
+  };
+};
+
+const listDirectoryStudents = async (companyId: string) => {
+  const members = await prisma.companyMember.findMany({
+    where: {
+      companyId,
+      autoscuolaRole: "STUDENT",
+    },
+    include: {
+      user: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return members.map((member) => toStudentProfile(member.user, member.createdAt));
+};
+
+const mapCaseStudent = (student: UserSnapshot) => {
+  const email = normalizeEmail(student.email);
+  const nameParts = parseNameParts(student.name, email);
+  return {
+    id: student.id,
+    firstName: nameParts.firstName,
+    lastName: nameParts.lastName,
+    email: email || null,
+    phone: student.phone ?? null,
+  };
+};
+
 export async function getAutoscuolaOverview() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -119,7 +215,12 @@ export async function getAutoscuolaOverview() {
       upcomingAppointmentsCount,
       overdueInstallmentsCount,
     ] = await Promise.all([
-      prisma.autoscuolaStudent.count({ where: { companyId } }),
+      prisma.companyMember.count({
+        where: {
+          companyId,
+          autoscuolaRole: "STUDENT",
+        },
+      }),
       prisma.autoscuolaCase.count({
         where: { companyId, status: { not: "archived" } },
       }),
@@ -168,7 +269,16 @@ export async function getAutoscuolaDeadlines() {
           { medicalExpiresAt: { not: null } },
         ],
       },
-      include: { student: true },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -180,6 +290,7 @@ export async function getAutoscuolaDeadlines() {
 
       return deadlines.map((entry) => {
         const deadlineDate = entry.date as Date;
+        const studentProfile = mapCaseStudent(item.student);
         const status =
           deadlineDate < now
             ? "overdue"
@@ -190,7 +301,7 @@ export async function getAutoscuolaDeadlines() {
           id: `${item.id}-${entry.type}`,
           caseId: item.id,
           studentId: item.studentId,
-          studentName: `${item.student.firstName} ${item.student.lastName}`,
+          studentName: `${studentProfile.firstName} ${studentProfile.lastName}`,
           deadlineType: entry.type,
           deadlineDate,
           status,
@@ -211,25 +322,9 @@ export async function getAutoscuolaStudents(search?: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
-    const query = search?.trim();
-
-    const students = await prisma.autoscuolaStudent.findMany({
-      where: {
-        companyId,
-        ...(query
-          ? {
-              OR: [
-                { firstName: { contains: query, mode: "insensitive" } },
-                { lastName: { contains: query, mode: "insensitive" } },
-                { email: { contains: query, mode: "insensitive" } },
-                { phone: { contains: query, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
+    const students = (await listDirectoryStudents(companyId)).filter((student) =>
+      matchesStudentQuery(student, search),
+    );
     return { success: true, data: students };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -238,23 +333,13 @@ export async function getAutoscuolaStudents(search?: string) {
 
 export async function createAutoscuolaStudent(input: z.infer<typeof createStudentSchema>) {
   try {
-    const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const companyId = membership.companyId;
-    const payload = createStudentSchema.parse(input);
-
-    const student = await prisma.autoscuolaStudent.create({
-      data: {
-        companyId,
-        firstName: payload.firstName,
-        lastName: payload.lastName,
-        email: payload.email || null,
-        phone: payload.phone || null,
-        status: payload.status ?? "active",
-        notes: payload.notes,
-      },
-    });
-
-    return { success: true, data: student };
+    await requireServiceAccess("AUTOSCUOLE");
+    createStudentSchema.parse(input);
+    return {
+      success: false,
+      message:
+        "Gli allievi vengono gestiti dalla Directory utenti. Imposta il ruolo Allievo in Directory.",
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -262,29 +347,13 @@ export async function createAutoscuolaStudent(input: z.infer<typeof createStuden
 
 export async function importAutoscuolaStudents(input: z.infer<typeof importStudentsSchema>) {
   try {
-    const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const companyId = membership.companyId;
-    const payload = importStudentsSchema.parse(input);
-
-    if (!payload.rows.length) {
-      return { success: false, message: "Nessuna riga valida da importare." };
-    }
-
-    const data = payload.rows.map((row) => ({
-      companyId,
-      firstName: row.firstName,
-      lastName: row.lastName,
-      email: row.email || null,
-      phone: row.phone || null,
-      status: row.status ?? "active",
-      notes: row.notes ?? null,
-    }));
-
-    const created = await prisma.autoscuolaStudent.createMany({
-      data,
-    });
-
-    return { success: true, data: { count: created.count } };
+    await requireServiceAccess("AUTOSCUOLE");
+    importStudentsSchema.parse(input);
+    return {
+      success: false,
+      message:
+        "Import CSV disattivato: gli allievi si gestiscono dalla Directory utenti (ruolo Allievo).",
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -298,12 +367,25 @@ export async function getAutoscuolaCases() {
     const cases = await prisma.autoscuolaCase.findMany({
       where: { companyId },
       include: {
-        student: true,
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
     });
 
-    return { success: true, data: cases };
+    return {
+      success: true,
+      data: cases.map((item) => ({
+        ...item,
+        student: mapCaseStudent(item.student),
+      })),
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -314,6 +396,17 @@ export async function createAutoscuolaCase(input: z.infer<typeof createCaseSchem
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
     const payload = createCaseSchema.parse(input);
+    const studentMember = await prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        autoscuolaRole: "STUDENT",
+        userId: payload.studentId,
+      },
+      select: { userId: true },
+    });
+    if (!studentMember) {
+      return { success: false, message: "Allievo non valido per questa company." };
+    }
 
     const newCase = await prisma.autoscuolaCase.create({
       data: {
@@ -346,7 +439,14 @@ export async function getAutoscuolaAppointments() {
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where: { companyId },
       include: {
-        student: true,
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
         case: true,
         instructor: true,
         vehicle: true,
@@ -354,7 +454,13 @@ export async function getAutoscuolaAppointments() {
       orderBy: { startsAt: "asc" },
     });
 
-    return { success: true, data: appointments };
+    return {
+      success: true,
+      data: appointments.map((item) => ({
+        ...item,
+        student: mapCaseStudent(item.student),
+      })),
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -369,8 +475,22 @@ export async function createAutoscuolaAppointment(
     const payload = createAppointmentSchema.parse(input);
 
     const [student, instructor, vehicle] = await Promise.all([
-      prisma.autoscuolaStudent.findFirst({
-        where: { id: payload.studentId, companyId },
+      prisma.companyMember.findFirst({
+        where: {
+          companyId,
+          autoscuolaRole: "STUDENT",
+          userId: payload.studentId,
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
       }),
       prisma.autoscuolaInstructor.findFirst({
         where: { id: payload.instructorId, companyId },
@@ -449,47 +569,30 @@ export async function createAutoscuolaAppointment(
     }
 
     let notificationSent = false;
-    const studentEmail = student.email?.trim().toLowerCase();
-    if (studentEmail) {
-      const members = await prisma.companyMember.findMany({
-        where: {
-          companyId,
-          autoscuolaRole: "STUDENT",
-          user: { email: studentEmail },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-            },
-          },
-        },
+    const userIds = [student.user.id];
+    if (userIds.length) {
+      const when = slotTime.toLocaleString("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
       });
-      const userIds = Array.from(new Set(members.map((member) => member.user.id)));
-      if (userIds.length) {
-        const when = slotTime.toLocaleString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
+      try {
+        const pushResult = await sendAutoscuolaPushToUsers({
+          companyId,
+          userIds,
+          title: "Reglo Autoscuole · Nuova proposta guida",
+          body: `Hai ricevuto una proposta per il ${when}. Apri Reglo per i dettagli.`,
+          data: {
+            kind: "appointment_proposal",
+            appointmentId: appointment.id,
+            startsAt: appointment.startsAt.toISOString(),
+            type: appointment.type,
+          },
         });
-        try {
-          const pushResult = await sendAutoscuolaPushToUsers({
-            companyId,
-            userIds,
-            title: "Reglo Autoscuole · Nuova proposta guida",
-            body: `Hai ricevuto una proposta per il ${when}. Apri Reglo per i dettagli.`,
-            data: {
-              kind: "appointment_proposal",
-              appointmentId: appointment.id,
-              startsAt: appointment.startsAt.toISOString(),
-              type: appointment.type,
-            },
-          });
-          notificationSent = pushResult.sent > 0;
-        } catch (error) {
-          console.error("Appointment proposal push error", error);
-        }
+        notificationSent = pushResult.sent > 0;
+      } catch (error) {
+        console.error("Appointment proposal push error", error);
       }
     }
 
@@ -941,23 +1044,39 @@ export async function updateAutoscuolaCaseStatus(
     const updated = await prisma.autoscuolaCase.update({
       where: { id: payload.caseId, companyId: membership.companyId },
       data: { status: payload.status },
-      include: { student: true },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
     });
+    const studentProfile = mapCaseStudent(updated.student);
 
     await notifyAutoscuolaCaseStatusChange({
       companyId: membership.companyId,
       caseId: updated.id,
       status: updated.status,
       student: {
-        id: updated.student.id,
-        firstName: updated.student.firstName,
-        lastName: updated.student.lastName,
-        email: updated.student.email,
-        phone: updated.student.phone,
+        id: studentProfile.id,
+        firstName: studentProfile.firstName,
+        lastName: studentProfile.lastName,
+        email: studentProfile.email,
+        phone: studentProfile.phone,
       },
     });
 
-    return { success: true, data: updated };
+    return {
+      success: true,
+      data: {
+        ...updated,
+        student: studentProfile,
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

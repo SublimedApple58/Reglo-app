@@ -44,6 +44,7 @@ model User {
   activeCompanyId String? @db.Uuid
   address       Json?     @db.Json
   paymentMethod String?
+  phone         String?
   createdAt     DateTime  @default(now()) @db.Timestamp(6)
   updatedAt     DateTime  @updatedAt
   account       Account[]
@@ -56,6 +57,13 @@ model User {
   mobileTokens MobileAccessToken[]
   pushDevices MobilePushDevice[]
   autoscuolaInstructors AutoscuolaInstructor[]
+  autoscuolaCases AutoscuolaCase[]
+  autoscuolaAppointments AutoscuolaAppointment[]
+  autoscuolaBookingRequests AutoscuolaBookingRequest[]
+  autoscuolaWaitlistResponses AutoscuolaWaitlistResponse[]
+  autoscuolaDocuments AutoscuolaDocument[]
+  autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
+  autoscuolaMessageLogs AutoscuolaMessageLog[]
 }
 
 model Account {
@@ -182,7 +190,6 @@ model Company {
   workflows Workflow[]
   workflowRuns WorkflowRun[]
   integrationConnections IntegrationConnection[]
-  autoscuolaStudents AutoscuolaStudent[]
   autoscuolaCases AutoscuolaCase[]
   autoscuolaAppointments AutoscuolaAppointment[]
   autoscuolaInstructors AutoscuolaInstructor[]
@@ -389,32 +396,6 @@ model WorkflowRunStep {
   @@index([status])
 }
 
-model AutoscuolaStudent {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @db.Uuid
-  firstName String
-  lastName  String
-  email     String?
-  phone     String?
-  status    String   @default("active")
-  notes     String?
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt
-
-  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  cases     AutoscuolaCase[]
-  appointments AutoscuolaAppointment[]
-  documents AutoscuolaDocument[]
-  paymentPlans AutoscuolaPaymentPlan[]
-  messageLogs AutoscuolaMessageLog[]
-  bookingRequests AutoscuolaBookingRequest[]
-  waitlistResponses AutoscuolaWaitlistResponse[]
-
-  @@index([companyId])
-  @@index([status])
-  @@index([lastName, firstName])
-}
-
 model AutoscuolaCase {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId String   @db.Uuid
@@ -429,7 +410,7 @@ model AutoscuolaCase {
   updatedAt DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
   appointments AutoscuolaAppointment[]
   paymentPlans AutoscuolaPaymentPlan[]
 
@@ -455,7 +436,7 @@ model AutoscuolaAppointment {
   updatedAt DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
   case      AutoscuolaCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
   slot      AutoscuolaAvailabilitySlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor AutoscuolaInstructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
@@ -553,7 +534,7 @@ model AutoscuolaBookingRequest {
   updatedAt   DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@index([companyId])
   @@index([studentId])
@@ -588,7 +569,7 @@ model AutoscuolaWaitlistResponse {
   updatedAt DateTime @updatedAt
 
   offer     AutoscuolaWaitlistOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@index([offerId])
   @@index([studentId])
@@ -606,7 +587,7 @@ model AutoscuolaDocument {
   updatedAt DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@index([companyId])
   @@index([studentId])
@@ -624,7 +605,7 @@ model AutoscuolaPaymentPlan {
   updatedAt DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student   AutoscuolaStudent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
   case      AutoscuolaCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
   installments AutoscuolaPaymentInstallment[]
 
@@ -706,7 +687,7 @@ model AutoscuolaMessageLog {
   rule        AutoscuolaMessageRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   template    AutoscuolaMessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
   appointment AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
-  student     AutoscuolaStudent? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  student     User? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([ruleId])

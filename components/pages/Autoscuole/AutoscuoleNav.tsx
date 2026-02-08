@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { label: "Dashboard", href: "/user/autoscuole" },
-  { label: "Allievi", href: "/user/autoscuole/students" },
   { label: "Pratiche", href: "/user/autoscuole/cases" },
   { label: "Agenda", href: "/user/autoscuole/agenda" },
   { label: "Disponibilità", href: "/user/autoscuole/disponibilita" },

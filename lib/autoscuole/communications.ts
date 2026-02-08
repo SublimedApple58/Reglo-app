@@ -79,6 +79,43 @@ const parseReminderChannels = (value: unknown) => {
   return unique.length ? unique : [...DEFAULT_REMINDER_CHANNELS];
 };
 
+const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
+const normalizeEmail = (value: string | null | undefined) =>
+  normalizeText(value).toLowerCase();
+
+const parseNameParts = (name: string | null, email: string) => {
+  const cleanName = normalizeText(name).replace(/\s+/g, " ");
+  if (cleanName) {
+    const [firstName, ...rest] = cleanName.split(" ");
+    return {
+      firstName: firstName || "Allievo",
+      lastName: rest.join(" ").trim() || "Reglo",
+    };
+  }
+  const localPart = email.split("@")[0] || "allievo";
+  return {
+    firstName: localPart.slice(0, 1).toUpperCase() + localPart.slice(1),
+    lastName: "Reglo",
+  };
+};
+
+const mapStudentFromUser = (user: {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+}) => {
+  const email = normalizeEmail(user.email);
+  const parts = parseNameParts(user.name, email);
+  return {
+    id: user.id,
+    firstName: parts.firstName,
+    lastName: parts.lastName,
+    email: email || null,
+    phone: user.phone,
+  };
+};
+
 
 const resolveRecipients = async ({
   prisma,
@@ -293,21 +330,29 @@ export const processAutoscuolaAppointmentReminders = async ({
         startsAt: { gte: start, lte: end },
       },
       include: {
-        student: true,
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
         case: true,
       },
     });
 
     for (const appointment of appointments) {
+      const studentProfile = mapStudentFromUser(appointment.student);
       await sendAutoscuolaMessage({
         prisma,
         rule,
         template: rule.template,
         student: {
-          firstName: appointment.student.firstName,
-          lastName: appointment.student.lastName,
-          email: appointment.student.email,
-          phone: appointment.student.phone,
+          firstName: studentProfile.firstName,
+          lastName: studentProfile.lastName,
+          email: studentProfile.email,
+          phone: studentProfile.phone,
         },
         appointment: {
           date: appointment.startsAt.toLocaleString("it-IT"),
@@ -399,22 +444,32 @@ export const processAutoscuolaCaseDeadlines = async ({
         companyId: rule.companyId,
         [field]: { gte: start, lte: end },
       },
-      include: { student: true },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
     });
 
     for (const item of cases) {
       const deadlineDate = item[field];
       const dedupeKey = `${rule.id}:${item.id}:${deadlineKey}:${formatDate(deadlineDate)}`;
+      const studentProfile = mapStudentFromUser(item.student);
 
       await sendAutoscuolaMessage({
         prisma,
         rule,
         template: rule.template,
         student: {
-          firstName: item.student.firstName,
-          lastName: item.student.lastName,
-          email: item.student.email,
-          phone: item.student.phone,
+          firstName: studentProfile.firstName,
+          lastName: studentProfile.lastName,
+          email: studentProfile.email,
+          phone: studentProfile.phone,
         },
         caseData: {
           status: item.status,
@@ -469,7 +524,14 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           startsAt: { gte: targetStudent, lt: targetStudentEnd },
         },
         include: {
-          student: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
           instructor: { include: { user: { select: { id: true, email: true } } } },
           vehicle: true,
         },
@@ -481,36 +543,22 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           startsAt: { gte: targetInstructor, lt: targetInstructorEnd },
         },
         include: {
-          student: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
           instructor: { include: { user: { select: { id: true, email: true } } } },
           vehicle: true,
         },
       }),
     ]);
 
-    const studentEmailList = Array.from(
-      new Set(
-        studentAppointments
-          .map((appointment) => appointment.student.email?.trim().toLowerCase())
-          .filter((email): email is string => Boolean(email)),
-      ),
-    );
-    const studentUserByEmail = new Map<string, string>();
-    if (studentEmailList.length) {
-      const members = await prisma.companyMember.findMany({
-        where: {
-          companyId: service.companyId,
-          autoscuolaRole: "STUDENT",
-          user: { email: { in: studentEmailList } },
-        },
-        include: { user: { select: { id: true, email: true } } },
-      });
-      for (const member of members) {
-        studentUserByEmail.set(member.user.email.toLowerCase(), member.user.id);
-      }
-    }
-
     for (const appointment of studentAppointments) {
+      const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
         weekday: "short",
         day: "2-digit",
@@ -528,10 +576,10 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
         ),
       );
       const body = `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
-      if (studentChannels.includes("email") && appointment.student.email) {
+      if (studentChannels.includes("email") && studentProfile.email) {
         try {
           await sendDynamicEmail({
-            to: appointment.student.email,
+            to: studentProfile.email,
             subject: "Reglo Autoscuole · Reminder guida",
             body,
           });
@@ -539,22 +587,19 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           console.error("Student reminder email error", error);
         }
       }
-      if (studentChannels.includes("whatsapp") && appointment.student.phone) {
+      if (studentChannels.includes("whatsapp") && studentProfile.phone) {
         try {
-          await sendAutoscuolaWhatsApp({ to: appointment.student.phone, body });
+          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
         } catch (error) {
           console.error("Student reminder WhatsApp error", error);
         }
       }
       if (studentChannels.includes("push")) {
-        const userId = appointment.student.email
-          ? studentUserByEmail.get(appointment.student.email.trim().toLowerCase())
-          : null;
-        if (userId) {
+        if (appointment.studentId) {
           try {
             await sendAutoscuolaPushToUsers({
               companyId: service.companyId,
-              userIds: [userId],
+              userIds: [appointment.studentId],
               title: "Reminder guida",
               body,
               data: {
@@ -572,6 +617,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     for (const appointment of instructorAppointments) {
       const instructor = appointment.instructor;
       if (!instructor) continue;
+      const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
         weekday: "short",
         day: "2-digit",
@@ -588,7 +634,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
             60000,
         ),
       );
-      const studentName = `${appointment.student.firstName} ${appointment.student.lastName}`.trim();
+      const studentName = `${studentProfile.firstName} ${studentProfile.lastName}`.trim();
       const body = `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
       if (instructorChannels.includes("email") && instructor.user?.email) {
         try {
