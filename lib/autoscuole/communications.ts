@@ -4,6 +4,7 @@ import { tokenRegex } from "@/components/pages/Workflows/Editor/shared/token-uti
 import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -39,6 +40,9 @@ const DEADLINE_LABELS: Record<string, string> = {
   PINK_SHEET_EXPIRES: "Foglio rosa",
   MEDICAL_EXPIRES: "Visita medica",
 };
+const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
+const DEFAULT_REMINDER_MINUTES = 60;
+const DEFAULT_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
 
 const renderTemplate = (template: string, context: AutoscuolaContext) => {
   const safe = (template ?? "").replace(/\\n/g, "\n");
@@ -55,6 +59,24 @@ const renderTemplate = (template: string, context: AutoscuolaContext) => {
     }
     return current == null ? "" : String(current);
   });
+};
+
+const parseReminderMinutes = (value: unknown) => {
+  if (typeof value !== "number") return DEFAULT_REMINDER_MINUTES;
+  const normalized = Math.trunc(value);
+  return REMINDER_MINUTES.includes(normalized as (typeof REMINDER_MINUTES)[number])
+    ? normalized
+    : DEFAULT_REMINDER_MINUTES;
+};
+
+const parseReminderChannels = (value: unknown) => {
+  if (!Array.isArray(value)) return [...DEFAULT_REMINDER_CHANNELS];
+  const channels = value.filter(
+    (item): item is "push" | "whatsapp" | "email" =>
+      item === "push" || item === "whatsapp" || item === "email",
+  );
+  const unique = Array.from(new Set(channels));
+  return unique.length ? unique : [...DEFAULT_REMINDER_CHANNELS];
 };
 
 
@@ -406,6 +428,203 @@ export const processAutoscuolaCaseDeadlines = async ({
         appointmentId: null,
         dedupeKey,
       });
+    }
+  }
+};
+
+export const processAutoscuolaConfiguredAppointmentReminders = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => {
+  const services = await prisma.companyService.findMany({
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    select: { companyId: true, limits: true },
+  });
+
+  const activeStatuses = ["scheduled", "confirmed"];
+
+  for (const service of services) {
+    const limits = (service.limits ?? {}) as Record<string, unknown>;
+    const studentMinutes = parseReminderMinutes(limits.studentReminderMinutes);
+    const instructorMinutes = parseReminderMinutes(limits.instructorReminderMinutes);
+    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
+    const instructorChannels = parseReminderChannels(limits.instructorReminderChannels);
+
+    const targetStudent = new Date(now.getTime() + studentMinutes * 60 * 1000);
+    targetStudent.setSeconds(0, 0);
+    const targetStudentEnd = new Date(targetStudent.getTime() + 60 * 1000);
+
+    const targetInstructor = new Date(now.getTime() + instructorMinutes * 60 * 1000);
+    targetInstructor.setSeconds(0, 0);
+    const targetInstructorEnd = new Date(targetInstructor.getTime() + 60 * 1000);
+
+    const [studentAppointments, instructorAppointments] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: service.companyId,
+          status: { in: activeStatuses },
+          startsAt: { gte: targetStudent, lt: targetStudentEnd },
+        },
+        include: {
+          student: true,
+          instructor: { include: { user: { select: { id: true, email: true } } } },
+          vehicle: true,
+        },
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: service.companyId,
+          status: { in: activeStatuses },
+          startsAt: { gte: targetInstructor, lt: targetInstructorEnd },
+        },
+        include: {
+          student: true,
+          instructor: { include: { user: { select: { id: true, email: true } } } },
+          vehicle: true,
+        },
+      }),
+    ]);
+
+    const studentEmailList = Array.from(
+      new Set(
+        studentAppointments
+          .map((appointment) => appointment.student.email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+      ),
+    );
+    const studentUserByEmail = new Map<string, string>();
+    if (studentEmailList.length) {
+      const members = await prisma.companyMember.findMany({
+        where: {
+          companyId: service.companyId,
+          autoscuolaRole: "STUDENT",
+          user: { email: { in: studentEmailList } },
+        },
+        include: { user: { select: { id: true, email: true } } },
+      });
+      for (const member of members) {
+        studentUserByEmail.set(member.user.email.toLowerCase(), member.user.id);
+      }
+    }
+
+    for (const appointment of studentAppointments) {
+      const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const durationMinutes = Math.max(
+        30,
+        Math.round(
+          ((appointment.endsAt?.getTime() ??
+            appointment.startsAt.getTime() + 30 * 60 * 1000) -
+            appointment.startsAt.getTime()) /
+            60000,
+        ),
+      );
+      const body = `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
+      if (studentChannels.includes("email") && appointment.student.email) {
+        try {
+          await sendDynamicEmail({
+            to: appointment.student.email,
+            subject: "Reglo Autoscuole · Reminder guida",
+            body,
+          });
+        } catch (error) {
+          console.error("Student reminder email error", error);
+        }
+      }
+      if (studentChannels.includes("whatsapp") && appointment.student.phone) {
+        try {
+          await sendAutoscuolaWhatsApp({ to: appointment.student.phone, body });
+        } catch (error) {
+          console.error("Student reminder WhatsApp error", error);
+        }
+      }
+      if (studentChannels.includes("push")) {
+        const userId = appointment.student.email
+          ? studentUserByEmail.get(appointment.student.email.trim().toLowerCase())
+          : null;
+        if (userId) {
+          try {
+            await sendAutoscuolaPushToUsers({
+              companyId: service.companyId,
+              userIds: [userId],
+              title: "Reminder guida",
+              body,
+              data: {
+                kind: "appointment_reminder_student",
+                appointmentId: appointment.id,
+                startsAt: appointment.startsAt.toISOString(),
+              },
+            });
+          } catch (error) {
+            console.error("Student reminder push error", error);
+          }
+        }
+      }
+    }
+    for (const appointment of instructorAppointments) {
+      const instructor = appointment.instructor;
+      if (!instructor) continue;
+      const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const durationMinutes = Math.max(
+        30,
+        Math.round(
+          ((appointment.endsAt?.getTime() ??
+            appointment.startsAt.getTime() + 30 * 60 * 1000) -
+            appointment.startsAt.getTime()) /
+            60000,
+        ),
+      );
+      const studentName = `${appointment.student.firstName} ${appointment.student.lastName}`.trim();
+      const body = `Promemoria guida con ${studentName} il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
+      if (instructorChannels.includes("email") && instructor.user?.email) {
+        try {
+          await sendDynamicEmail({
+            to: instructor.user.email,
+            subject: "Reglo Autoscuole · Reminder guida",
+            body,
+          });
+        } catch (error) {
+          console.error("Instructor reminder email error", error);
+        }
+      }
+      if (instructorChannels.includes("whatsapp") && instructor.phone) {
+        try {
+          await sendAutoscuolaWhatsApp({ to: instructor.phone, body });
+        } catch (error) {
+          console.error("Instructor reminder WhatsApp error", error);
+        }
+      }
+      if (instructorChannels.includes("push") && instructor.userId) {
+        try {
+          await sendAutoscuolaPushToUsers({
+            companyId: service.companyId,
+            userIds: [instructor.userId],
+            title: "Reminder guida",
+            body,
+            data: {
+              kind: "appointment_reminder_instructor",
+              appointmentId: appointment.id,
+              startsAt: appointment.startsAt.toISOString(),
+            },
+          });
+        } catch (error) {
+          console.error("Instructor reminder push error", error);
+        }
+      }
     }
   }
 };

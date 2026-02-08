@@ -54,6 +54,7 @@ model User {
   companyInvites CompanyInvite[] @relation("CompanyInviteInvitedBy")
   documentRequests DocumentRequest[] @relation("DocumentRequestCreatedBy")
   mobileTokens MobileAccessToken[]
+  pushDevices MobilePushDevice[]
   autoscuolaInstructors AutoscuolaInstructor[]
 }
 
@@ -111,6 +112,27 @@ model MobileAccessToken {
   @@index([userId])
   @@index([companyId])
   @@index([expiresAt])
+}
+
+model MobilePushDevice {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  companyId  String?  @db.Uuid
+  token      String   @unique
+  platform   String
+  deviceId   String?
+  appVersion String?
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+  updatedAt  DateTime @updatedAt
+  lastSeenAt DateTime @default(now()) @db.Timestamp(6)
+  disabledAt DateTime? @db.Timestamp(6)
+
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company    Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([companyId])
+  @@index([disabledAt])
 }
 
 model Order {
@@ -176,6 +198,7 @@ model Company {
   autoscuolaMessageLogs AutoscuolaMessageLog[]
   services CompanyService[]
   mobileTokens MobileAccessToken[]
+  pushDevices MobilePushDevice[]
 }
 
 model CompanyService {

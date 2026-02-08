@@ -12,7 +12,12 @@ const updateCompanyServiceSchema = z.object({
   companyId: z.string().min(1),
   serviceKey: z.enum(["DOC_MANAGER", "WORKFLOWS", "AI_ASSISTANT", "AUTOSCUOLE"]),
   status: z.enum(["active", "disabled"]),
-  limits: z.record(z.string(), z.number().nullable()).optional(),
+  limits: z
+    .record(
+      z.string(),
+      z.union([z.number(), z.string(), z.boolean(), z.null(), z.array(z.string())]),
+    )
+    .optional(),
 });
 
 const backofficeSignInSchema = z.object({
@@ -66,9 +71,9 @@ export async function updateCompanyService(input: z.infer<typeof updateCompanySe
         where: { id: existing.id },
         data: {
           status,
-          limits: (payload.limits ?? existing.limits ?? undefined) as
-            | Record<string, number | null>
-            | undefined,
+          limits:
+            (payload.limits ?? (existing.limits as Record<string, unknown> | null) ?? undefined) ??
+            undefined,
         },
       });
     } else {

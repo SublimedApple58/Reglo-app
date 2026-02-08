@@ -9,6 +9,10 @@ const DEFAULT_AVAILABILITY_WEEKS = 4;
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
 const DEFAULT_STUDENT_REMINDER_MINUTES = 60;
 const DEFAULT_INSTRUCTOR_REMINDER_MINUTES = 60;
+const CHANNELS = ["push", "whatsapp", "email"] as const;
+const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
+const DEFAULT_STUDENT_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
+const DEFAULT_INSTRUCTOR_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
 
 const reminderMinutesSchema = z
   .number()
@@ -17,22 +21,47 @@ const reminderMinutesSchema = z
     message: "Preavviso non valido.",
   });
 
+const channelSchema = z.enum(CHANNELS);
+const channelListSchema = z
+  .array(channelSchema)
+  .min(1, "Seleziona almeno un canale.")
+  .max(CHANNELS.length)
+  .transform((channels) => Array.from(new Set(channels)));
+
 const autoscuolaSettingsPatchSchema = z
   .object({
     availabilityWeeks: z.number().int().min(1).max(12).optional(),
     studentReminderMinutes: reminderMinutesSchema.optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
+    slotFillChannels: channelListSchema.optional(),
+    studentReminderChannels: channelListSchema.optional(),
+    instructorReminderChannels: channelListSchema.optional(),
   })
   .refine(
     (value) =>
       value.availabilityWeeks !== undefined ||
       value.studentReminderMinutes !== undefined ||
-      value.instructorReminderMinutes !== undefined,
+      value.instructorReminderMinutes !== undefined ||
+      value.slotFillChannels !== undefined ||
+      value.studentReminderChannels !== undefined ||
+      value.instructorReminderChannels !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   );
 
 const canManageSettings = (role: string, autoscuolaRole: string | null) =>
   role === "admin" || autoscuolaRole === "OWNER";
+
+const asChannelList = (
+  value: unknown,
+  fallback: readonly (typeof CHANNELS)[number][],
+) => {
+  if (!Array.isArray(value)) return [...fallback];
+  const normalized = value.filter((item): item is (typeof CHANNELS)[number] =>
+    typeof item === "string" && (CHANNELS as readonly string[]).includes(item),
+  );
+  const unique = Array.from(new Set(normalized));
+  return unique.length ? unique : [...fallback];
+};
 
 export async function getAutoscuolaSettings() {
   try {
@@ -55,6 +84,18 @@ export async function getAutoscuolaSettings() {
       typeof limits.instructorReminderMinutes === "number"
         ? limits.instructorReminderMinutes
         : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
+    const slotFillChannels = asChannelList(
+      limits.slotFillChannels,
+      DEFAULT_SLOT_FILL_CHANNELS,
+    );
+    const studentReminderChannels = asChannelList(
+      limits.studentReminderChannels,
+      DEFAULT_STUDENT_REMINDER_CHANNELS,
+    );
+    const instructorReminderChannels = asChannelList(
+      limits.instructorReminderChannels,
+      DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
+    );
 
     return {
       success: true,
@@ -62,6 +103,9 @@ export async function getAutoscuolaSettings() {
         availabilityWeeks,
         studentReminderMinutes,
         instructorReminderMinutes,
+        slotFillChannels,
+        studentReminderChannels,
+        instructorReminderChannels,
       },
     };
   } catch (error) {
@@ -97,6 +141,18 @@ export async function updateAutoscuolaSettings(
       typeof limits.instructorReminderMinutes === "number"
         ? limits.instructorReminderMinutes
         : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
+    const previousSlotFillChannels = asChannelList(
+      limits.slotFillChannels,
+      DEFAULT_SLOT_FILL_CHANNELS,
+    );
+    const previousStudentReminderChannels = asChannelList(
+      limits.studentReminderChannels,
+      DEFAULT_STUDENT_REMINDER_CHANNELS,
+    );
+    const previousInstructorReminderChannels = asChannelList(
+      limits.instructorReminderChannels,
+      DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
+    );
 
     const nextLimits = {
       ...limits,
@@ -105,6 +161,11 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderMinutes ?? previousStudentReminderMinutes,
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
+      slotFillChannels: payload.slotFillChannels ?? previousSlotFillChannels,
+      studentReminderChannels:
+        payload.studentReminderChannels ?? previousStudentReminderChannels,
+      instructorReminderChannels:
+        payload.instructorReminderChannels ?? previousInstructorReminderChannels,
     };
 
     if (service) {
@@ -129,6 +190,9 @@ export async function updateAutoscuolaSettings(
         availabilityWeeks: nextLimits.availabilityWeeks,
         studentReminderMinutes: nextLimits.studentReminderMinutes,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
+        slotFillChannels: nextLimits.slotFillChannels,
+        studentReminderChannels: nextLimits.studentReminderChannels,
+        instructorReminderChannels: nextLimits.instructorReminderChannels,
       },
     };
   } catch (error) {

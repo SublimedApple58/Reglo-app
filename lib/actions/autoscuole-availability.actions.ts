@@ -7,6 +7,7 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -57,6 +58,20 @@ const getWaitlistOffersSchema = z.object({
 
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
+const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
+
+const normalizeChannels = (
+  value: unknown,
+  fallback: readonly ("push" | "whatsapp" | "email")[],
+) => {
+  if (!Array.isArray(value)) return [...fallback];
+  const channels = value.filter(
+    (item): item is "push" | "whatsapp" | "email" =>
+      item === "push" || item === "whatsapp" || item === "email",
+  );
+  const unique = Array.from(new Set(channels));
+  return unique.length ? unique : [...fallback];
+};
 
 const minutesFromDate = (date: Date) => date.getHours() * 60 + date.getMinutes();
 
@@ -1054,7 +1069,7 @@ export async function broadcastWaitlistOffer({
   if (!students.length) return offer;
 
   const studentIds = students.map((student) => student.id);
-  const [availabilities, appointments] = await Promise.all([
+  const [availabilities, appointments, service] = await Promise.all([
     prisma.autoscuolaWeeklyAvailability.findMany({
       where: {
         companyId,
@@ -1074,6 +1089,10 @@ export async function broadcastWaitlistOffer({
         startsAt: true,
         endsAt: true,
       },
+    }),
+    prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
     }),
   ]);
 
@@ -1098,6 +1117,12 @@ export async function broadcastWaitlistOffer({
     const booked = appointmentsByStudent.get(student.id) ?? [];
     return !hasAppointmentConflict(booked, slot.startsAt, slot.endsAt);
   });
+  if (!availableStudents.length) return offer;
+
+  const channels = normalizeChannels(
+    (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
+    DEFAULT_SLOT_FILL_CHANNELS,
+  );
 
   const formattedDate = slot.startsAt.toLocaleDateString("it-IT");
   const formattedTime = slot.startsAt.toLocaleTimeString("it-IT", {
@@ -1105,26 +1130,79 @@ export async function broadcastWaitlistOffer({
     minute: "2-digit",
   });
   const message = `Si e liberato uno slot guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare la proposta.`;
+  const title = "Reglo Autoscuole · Slot guida disponibile";
+
+  if (channels.includes("push")) {
+    const emails = Array.from(
+      new Set(
+        availableStudents
+          .map((student) => student.email?.trim().toLowerCase())
+          .filter((email): email is string => Boolean(email)),
+      ),
+    );
+
+    if (emails.length) {
+      const members = await prisma.companyMember.findMany({
+        where: {
+          companyId,
+          autoscuolaRole: "STUDENT",
+          user: { email: { in: emails } },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      const studentUserIds = members.map((member) => member.user.id);
+      if (studentUserIds.length) {
+        try {
+          await sendAutoscuolaPushToUsers({
+            companyId,
+            userIds: studentUserIds,
+            title,
+            body: message,
+            data: {
+              kind: "slot_fill_offer",
+              offerId: offer.id,
+              slotId: slot.id,
+              startsAt: slot.startsAt.toISOString(),
+            },
+          });
+        } catch (error) {
+          console.error("Waitlist push error", error);
+        }
+      }
+    }
+  }
 
   for (const student of availableStudents) {
-    try {
-      if (student.email) {
-        await sendDynamicEmail({
-          to: student.email,
-          subject: "Reglo Autoscuole · Slot guida disponibile",
-          body: message,
-        });
+    if (channels.includes("email")) {
+      try {
+        if (student.email) {
+          await sendDynamicEmail({
+            to: student.email,
+            subject: title,
+            body: message,
+          });
+        }
+      } catch (error) {
+        console.error("Waitlist email error", error);
       }
-    } catch (error) {
-      console.error("Waitlist email error", error);
     }
 
-    try {
-      if (student.phone) {
-        await sendAutoscuolaWhatsApp({ to: student.phone, body: message });
+    if (channels.includes("whatsapp")) {
+      try {
+        if (student.phone) {
+          await sendAutoscuolaWhatsApp({ to: student.phone, body: message });
+        }
+      } catch (error) {
+        console.error("Waitlist WhatsApp error", error);
       }
-    } catch (error) {
-      console.error("Waitlist WhatsApp error", error);
     }
   }
 

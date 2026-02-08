@@ -18,6 +18,9 @@ export type ServiceLimits = {
   availabilityWeeks?: number;
   studentReminderMinutes?: number;
   instructorReminderMinutes?: number;
+  slotFillChannels?: ("push" | "whatsapp" | "email")[];
+  studentReminderChannels?: ("push" | "whatsapp" | "email")[];
+  instructorReminderChannels?: ("push" | "whatsapp" | "email")[];
 };
 
 export type CompanyServiceInfo = {

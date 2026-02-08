@@ -7,6 +7,7 @@ import { AutoscuoleNav } from "./AutoscuoleNav";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -42,6 +43,12 @@ const formatDateLocal = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+const CHANNEL_OPTIONS = [
+  { value: "push", label: "Push" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "Email" },
+] as const;
+type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
 
 export function AutoscuoleResourcesPage() {
   const toast = useFeedbackToast();
@@ -51,6 +58,19 @@ export function AutoscuoleResourcesPage() {
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
+  const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
+    "push",
+    "whatsapp",
+    "email",
+  ]);
+  const [studentReminderChannels, setStudentReminderChannels] = React.useState<ChannelValue[]>([
+    "push",
+    "whatsapp",
+    "email",
+  ]);
+  const [instructorReminderChannels, setInstructorReminderChannels] = React.useState<
+    ChannelValue[]
+  >(["push", "whatsapp", "email"]);
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
@@ -127,6 +147,9 @@ export function AutoscuoleResourcesPage() {
       setAvailabilityWeeks(String(res.data.availabilityWeeks));
       setStudentReminderMinutes(String(res.data.studentReminderMinutes));
       setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+      setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
+      setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
+      setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
     };
     loadSettings();
     return () => {
@@ -159,6 +182,18 @@ export function AutoscuoleResourcesPage() {
       toast.error({ description: "Preavviso reminder istruttore non valido." });
       return;
     }
+    if (!slotFillChannels.length) {
+      toast.error({ description: "Seleziona almeno un canale per slot-fill." });
+      return;
+    }
+    if (!studentReminderChannels.length) {
+      toast.error({ description: "Seleziona almeno un canale per reminder allievo." });
+      return;
+    }
+    if (!instructorReminderChannels.length) {
+      toast.error({ description: "Seleziona almeno un canale per reminder istruttore." });
+      return;
+    }
 
     setSavingSettings(true);
     const res = await updateAutoscuolaSettings({
@@ -167,6 +202,9 @@ export function AutoscuoleResourcesPage() {
         parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
       instructorReminderMinutes:
         parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
+      slotFillChannels,
+      studentReminderChannels,
+      instructorReminderChannels,
     });
     setSavingSettings(false);
 
@@ -180,7 +218,21 @@ export function AutoscuoleResourcesPage() {
     setAvailabilityWeeks(String(res.data.availabilityWeeks));
     setStudentReminderMinutes(String(res.data.studentReminderMinutes));
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
+    setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
+    setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
+  };
+
+  const toggleChannel = (
+    channel: ChannelValue,
+    setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>,
+  ) => {
+    setter((current) =>
+      current.includes(channel)
+        ? current.filter((item) => item !== channel)
+        : [...current, channel],
+    );
   };
 
   return (
@@ -257,6 +309,29 @@ export function AutoscuoleResourcesPage() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <ChannelGroup
+              title="Slot fill"
+              value={slotFillChannels}
+              onToggle={(channel) =>
+                toggleChannel(channel, setSlotFillChannels)
+              }
+            />
+            <ChannelGroup
+              title="Reminder allievo"
+              value={studentReminderChannels}
+              onToggle={(channel) =>
+                toggleChannel(channel, setStudentReminderChannels)
+              }
+            />
+            <ChannelGroup
+              title="Reminder istruttore"
+              value={instructorReminderChannels}
+              onToggle={(channel) =>
+                toggleChannel(channel, setInstructorReminderChannels)
+              }
+            />
           </div>
           <div className="flex justify-end">
             <Button onClick={handleSaveSettings} disabled={savingSettings}>
@@ -387,4 +462,34 @@ function pad(value: number) {
 
 function formatTime(date: Date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function ChannelGroup({
+  title,
+  value,
+  onToggle,
+}: {
+  title: string;
+  value: ChannelValue[];
+  onToggle: (channel: ChannelValue) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
+      <div className="text-xs font-medium text-muted-foreground">{title}</div>
+      <div className="space-y-2">
+        {CHANNEL_OPTIONS.map((channel) => (
+          <label
+            key={channel.value}
+            className="flex items-center justify-between gap-2 text-xs text-foreground"
+          >
+            <span>{channel.label}</span>
+            <Checkbox
+              checked={value.includes(channel.value)}
+              onCheckedChange={() => onToggle(channel.value)}
+            />
+          </label>
+        ))}
+      </div>
+    </div>
+  );
 }
