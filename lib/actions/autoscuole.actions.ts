@@ -8,6 +8,7 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
+import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 
 const createStudentSchema = z.object({
   firstName: z.string().min(1),
@@ -38,6 +39,7 @@ const createAppointmentSchema = z.object({
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid(),
   notes: z.string().optional(),
+  sendProposal: z.boolean().optional().default(false),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -366,7 +368,10 @@ export async function createAutoscuolaAppointment(
     const companyId = membership.companyId;
     const payload = createAppointmentSchema.parse(input);
 
-    const [instructor, vehicle] = await Promise.all([
+    const [student, instructor, vehicle] = await Promise.all([
+      prisma.autoscuolaStudent.findFirst({
+        where: { id: payload.studentId, companyId },
+      }),
       prisma.autoscuolaInstructor.findFirst({
         where: { id: payload.instructorId, companyId },
       }),
@@ -375,10 +380,10 @@ export async function createAutoscuolaAppointment(
       }),
     ]);
 
-    if (!instructor || !vehicle) {
+    if (!student || !instructor || !vehicle) {
       return {
         success: false,
-        message: "Seleziona istruttore e veicolo validi.",
+        message: "Seleziona allievo, istruttore e veicolo validi.",
       };
     }
 
@@ -432,14 +437,69 @@ export async function createAutoscuolaAppointment(
         type: payload.type,
         startsAt: slotTime,
         endsAt: slotEnd,
-        status: payload.status ?? "scheduled",
+        status: payload.status ?? (payload.sendProposal ? "proposal" : "scheduled"),
         instructorId: payload.instructorId,
         vehicleId: payload.vehicleId,
         notes: payload.notes ?? null,
       },
     });
 
-    return { success: true, data: appointment };
+    if (!payload.sendProposal) {
+      return { success: true, data: appointment, message: "Appuntamento creato." };
+    }
+
+    let notificationSent = false;
+    const studentEmail = student.email?.trim().toLowerCase();
+    if (studentEmail) {
+      const members = await prisma.companyMember.findMany({
+        where: {
+          companyId,
+          autoscuolaRole: "STUDENT",
+          user: { email: studentEmail },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+            },
+          },
+        },
+      });
+      const userIds = Array.from(new Set(members.map((member) => member.user.id)));
+      if (userIds.length) {
+        const when = slotTime.toLocaleString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        try {
+          const pushResult = await sendAutoscuolaPushToUsers({
+            companyId,
+            userIds,
+            title: "Reglo Autoscuole · Nuova proposta guida",
+            body: `Hai ricevuto una proposta per il ${when}. Apri Reglo per i dettagli.`,
+            data: {
+              kind: "appointment_proposal",
+              appointmentId: appointment.id,
+              startsAt: appointment.startsAt.toISOString(),
+              type: appointment.type,
+            },
+          });
+          notificationSent = pushResult.sent > 0;
+        } catch (error) {
+          console.error("Appointment proposal push error", error);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: appointment,
+      message: notificationSent
+        ? "Proposta creata e notifica inviata all'allievo."
+        : "Proposta creata. Notifica push non inviata.",
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

@@ -29,6 +29,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -67,6 +68,7 @@ export function AutoscuoleAgendaPage() {
     endsAt: "",
     instructorId: "",
     vehicleId: "",
+    sendProposal: false,
   });
   const [durationPreset, setDurationPreset] = React.useState<number | null>(60);
   const [newVehicle, setNewVehicle] = React.useState("");
@@ -159,6 +161,7 @@ export function AutoscuoleAgendaPage() {
       endsAt: form.endsAt || undefined,
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
+      sendProposal: form.sendProposal,
     });
     if (!res.success) {
       toast.error({
@@ -174,8 +177,10 @@ export function AutoscuoleAgendaPage() {
       endsAt: "",
       instructorId: "",
       vehicleId: "",
+      sendProposal: false,
     });
     setDurationPreset(60);
+    toast.success({ description: res.message ?? "Operazione completata." });
     load();
   };
 
@@ -613,6 +618,15 @@ export function AutoscuoleAgendaPage() {
               <div className="text-xs text-muted-foreground">Fine</div>
               <DateTimePicker value={form.endsAt} onChange={handleEndChange} />
             </div>
+            <div className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
+              <span className="text-sm">Manda proposta</span>
+              <Checkbox
+                checked={form.sendProposal}
+                onCheckedChange={(checked) =>
+                  setForm((prev) => ({ ...prev, sendProposal: Boolean(checked) }))
+                }
+              />
+            </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
                 Annulla
@@ -626,7 +640,7 @@ export function AutoscuoleAgendaPage() {
                   !form.vehicleId
                 }
               >
-                Salva
+                {form.sendProposal ? "Invia proposta" : "Salva"}
               </Button>
             </DialogFooter>
           </form>
@@ -708,6 +722,9 @@ function getStatusMeta(status: string) {
   }
   if (normalized === "no_show") {
     return { label: "No‑show", className: "border-rose-200/70 bg-rose-100/70" };
+  }
+  if (normalized.includes("proposal")) {
+    return { label: "Proposta", className: "border-amber-200/70 bg-amber-100/80" };
   }
   return { label: "In programma", className: "border-sky-200/70 bg-sky-100/70" };
 }
