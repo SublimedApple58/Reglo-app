@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
@@ -24,12 +23,12 @@ import {
   getAutoscuolaStudents,
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
-  createAutoscuolaVehicle,
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DatePicker } from "@/components/ui/date-picker";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -48,6 +47,12 @@ const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 22;
 const SLOT_MINUTES = 30;
 const PIXELS_PER_MINUTE = 1.6;
+const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 }, (_, index) => {
+  const total = DAY_START_HOUR * 60 + index * 30;
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  return `${pad(hours)}:${pad(minutes)}`;
+});
 
 export function AutoscuoleAgendaPage() {
   const toast = useFeedbackToast();
@@ -63,15 +68,12 @@ export function AutoscuoleAgendaPage() {
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [form, setForm] = React.useState({
     studentId: "",
-    type: "guida",
-    startsAt: "",
-    endsAt: "",
+    day: "",
+    time: "09:00",
     instructorId: "",
     vehicleId: "",
     sendProposal: false,
   });
-  const [durationPreset, setDurationPreset] = React.useState<number | null>(60);
-  const [newVehicle, setNewVehicle] = React.useState("");
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -144,21 +146,20 @@ export function AutoscuoleAgendaPage() {
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.studentId || !form.startsAt || !form.instructorId || !form.vehicleId) {
+    if (!form.studentId || !form.day || !form.time || !form.instructorId || !form.vehicleId) {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
     }
-    const startDate = toDate(form.startsAt);
-    const endDate = form.endsAt ? toDate(form.endsAt) : null;
-    if (endDate && endDate <= startDate) {
-      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+    const startsAt = buildLocalDateTime(form.day, form.time);
+    const startDate = toDate(startsAt);
+    if (Number.isNaN(startDate.getTime())) {
+      toast.error({ description: "Data o orario non validi." });
       return;
     }
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
-      type: form.type,
-      startsAt: form.startsAt,
-      endsAt: form.endsAt || undefined,
+      type: "guida",
+      startsAt,
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
       sendProposal: form.sendProposal,
@@ -172,14 +173,12 @@ export function AutoscuoleAgendaPage() {
     setCreateOpen(false);
     setForm({
       studentId: "",
-      type: "guida",
-      startsAt: "",
-      endsAt: "",
+      day: "",
+      time: "09:00",
       instructorId: "",
       vehicleId: "",
       sendProposal: false,
     });
-    setDurationPreset(60);
     toast.success({ description: res.message ?? "Operazione completata." });
     load();
   };
@@ -219,50 +218,6 @@ export function AutoscuoleAgendaPage() {
       return;
     }
     load();
-  };
-
-  const handleAddVehicle = async () => {
-    if (!newVehicle.trim()) {
-      toast.info({ description: "Inserisci un nome veicolo." });
-      return;
-    }
-    const res = await createAutoscuolaVehicle({ name: newVehicle.trim() });
-    if (!res.success || !res.data) {
-      toast.error({
-        description: res.message ?? "Impossibile creare il veicolo.",
-      });
-      return;
-    }
-    setNewVehicle("");
-    setForm((prev) => ({ ...prev, vehicleId: res.data.id }));
-    load();
-  };
-
-  const handleStartChange = (value: string) => {
-    setForm((prev) => {
-      const next = { ...prev, startsAt: value };
-      if (durationPreset) {
-        const nextEnd = addMinutesToDateTime(value, durationPreset);
-        if (nextEnd) next.endsAt = nextEnd;
-      }
-      return next;
-    });
-  };
-
-  const handleEndChange = (value: string) => {
-    setDurationPreset(null);
-    setForm((prev) => ({ ...prev, endsAt: value }));
-  };
-
-  const handleDurationPreset = (minutes: number) => {
-    if (!form.startsAt) {
-      toast.info({ description: "Seleziona prima un orario di inizio." });
-      return;
-    }
-    const nextEnd = addMinutesToDateTime(form.startsAt, minutes);
-    if (!nextEnd) return;
-    setDurationPreset(minutes);
-    setForm((prev) => ({ ...prev, endsAt: nextEnd }));
   };
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
@@ -513,34 +468,32 @@ export function AutoscuoleAgendaPage() {
           <DialogHeader>
             <DialogTitle>Nuovo appuntamento</DialogTitle>
           </DialogHeader>
-          <form className="space-y-3" onSubmit={handleCreate}>
-            <Select
-              value={form.studentId}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona allievo" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={student.id}>
-                    {student.firstName} {student.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={form.type}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, type: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="guida">Guida</SelectItem>
-                <SelectItem value="esame">Esame</SelectItem>
-              </SelectContent>
-            </Select>
+          <form className="space-y-4" onSubmit={handleCreate}>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Giorno</div>
+              <DatePicker
+                value={form.day}
+                onChange={(value) => setForm((prev) => ({ ...prev, day: value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Orario</div>
+              <Select
+                value={form.time}
+                onValueChange={(value) => setForm((prev) => ({ ...prev, time: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona orario" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Select
               value={form.instructorId}
               onValueChange={(value) =>
@@ -558,9 +511,21 @@ export function AutoscuoleAgendaPage() {
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">
-              Gli istruttori arrivano dagli utenti con ruolo istruttore.
-            </p>
+            <Select
+              value={form.studentId}
+              onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Seleziona allievo" />
+              </SelectTrigger>
+              <SelectContent>
+                {students.map((student) => (
+                  <SelectItem key={student.id} value={student.id}>
+                    {student.firstName} {student.lastName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select
               value={form.vehicleId}
               onValueChange={(value) =>
@@ -578,46 +543,6 @@ export function AutoscuoleAgendaPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Nuovo veicolo"
-                value={newVehicle}
-                onChange={(event) => setNewVehicle(event.target.value)}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleAddVehicle}
-              >
-                Aggiungi
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Inizio</div>
-              <DateTimePicker value={form.startsAt} onChange={handleStartChange} />
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">
-                Durata rapida
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {[30, 60, 90, 120].map((minutes) => (
-                  <Button
-                    key={minutes}
-                    type="button"
-                    size="sm"
-                    variant={durationPreset === minutes ? "default" : "outline"}
-                    onClick={() => handleDurationPreset(minutes)}
-                  >
-                    {minutes} min
-                  </Button>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Fine</div>
-              <DateTimePicker value={form.endsAt} onChange={handleEndChange} />
-            </div>
             <div className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
               <span className="text-sm">Manda proposta</span>
               <Checkbox
@@ -635,7 +560,8 @@ export function AutoscuoleAgendaPage() {
                 type="submit"
                 disabled={
                   !form.studentId ||
-                  !form.startsAt ||
+                  !form.day ||
+                  !form.time ||
                   !form.instructorId ||
                   !form.vehicleId
                 }
@@ -703,13 +629,11 @@ function formatTimeRange(start: Date, end: Date) {
   return `${formatTime(start)}-${formatTime(end)}`;
 }
 
-function addMinutesToDateTime(value: string, minutes: number) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setMinutes(date.getMinutes() + minutes);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
-    date.getHours(),
-  )}:${pad(date.getMinutes())}`;
+function buildLocalDateTime(day: string, time: string) {
+  if (!day || !time) return "";
+  const [hoursRaw, minutesRaw] = time.split(":").map(Number);
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutesRaw)) return "";
+  return `${day}T${pad(hoursRaw)}:${pad(minutesRaw)}`;
 }
 
 function getStatusMeta(status: string) {
