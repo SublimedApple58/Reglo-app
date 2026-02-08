@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
@@ -49,6 +50,11 @@ const respondOfferSchema = z.object({
   response: z.enum(["accept", "decline"]),
 });
 
+const getWaitlistOffersSchema = z.object({
+  studentId: z.string().uuid(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
 
@@ -85,6 +91,37 @@ const getSlotEnd = (start: Date, durationMinutes: number) => {
   end.setMinutes(end.getMinutes() + durationMinutes);
   return end;
 };
+
+const isWeeklyAvailabilityCovering = (
+  availability:
+    | { daysOfWeek: number[]; startMinutes: number; endMinutes: number }
+    | null
+    | undefined,
+  startsAt: Date,
+  endsAt: Date,
+) => {
+  if (!availability) return false;
+  const dayOfWeek = startsAt.getDay();
+  if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
+  if (availability.endMinutes <= availability.startMinutes) return false;
+  const startMinutes = minutesFromDate(startsAt);
+  const endMinutes = minutesFromDate(endsAt);
+  return (
+    startMinutes >= availability.startMinutes &&
+    endMinutes <= availability.endMinutes
+  );
+};
+
+const hasAppointmentConflict = (
+  appointments: Array<{ startsAt: Date; endsAt: Date | null }>,
+  startsAt: Date,
+  endsAt: Date,
+) =>
+  appointments.some((appointment) => {
+    const appointmentEnd =
+      appointment.endsAt ?? getSlotEnd(appointment.startsAt, SLOT_MINUTES);
+    return appointment.startsAt < endsAt && appointmentEnd > startsAt;
+  });
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
   try {
@@ -714,17 +751,86 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       return { success: false, message: "Offerta non più valida." };
     }
 
-    const response = await prisma.autoscuolaWaitlistResponse.create({
-      data: {
-        offerId: offer.id,
+    const [student, existingResponse, studentAvailability] = await Promise.all([
+      prisma.autoscuolaStudent.findFirst({
+        where: {
+          id: payload.studentId,
+          companyId: membership.companyId,
+          status: { not: "inactive" },
+        },
+        select: { id: true },
+      }),
+      prisma.autoscuolaWaitlistResponse.findFirst({
+        where: {
+          offerId: offer.id,
+          studentId: payload.studentId,
+        },
+      }),
+      prisma.autoscuolaWeeklyAvailability.findFirst({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "student",
+          ownerId: payload.studentId,
+        },
+      }),
+    ]);
+
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    if (existingResponse) {
+      return { success: false, message: "Hai già risposto a questa offerta." };
+    }
+
+    const today = new Date(offer.slot.startsAt);
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const studentAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: membership.companyId,
         studentId: payload.studentId,
-        status: payload.response === "accept" ? "accepted" : "declined",
-        respondedAt: now,
+        status: { not: "cancelled" },
+        startsAt: { gte: today, lt: tomorrow },
       },
+      select: { startsAt: true, endsAt: true },
     });
 
     if (payload.response === "decline") {
+      const response = await prisma.autoscuolaWaitlistResponse.create({
+        data: {
+          offerId: offer.id,
+          studentId: payload.studentId,
+          status: "declined",
+          respondedAt: now,
+        },
+      });
       return { success: true, data: { accepted: false, response } };
+    }
+
+    if (offer.slot.status !== "open") {
+      return { success: false, message: "Slot non disponibile." };
+    }
+
+    if (
+      !isWeeklyAvailabilityCovering(
+        studentAvailability,
+        offer.slot.startsAt,
+        offer.slot.endsAt,
+      )
+    ) {
+      return { success: false, message: "Non sei disponibile in questa fascia oraria." };
+    }
+
+    if (
+      hasAppointmentConflict(
+        studentAppointments,
+        offer.slot.startsAt,
+        offer.slot.endsAt,
+      )
+    ) {
+      return { success: false, message: "Hai già una guida in questa fascia oraria." };
     }
 
     const slotTime = offer.slot.startsAt;
@@ -752,17 +858,32 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     }
 
     const appointment = await prisma.$transaction(async (tx) => {
-      await tx.autoscuolaAvailabilitySlot.updateMany({
+      const response = await tx.autoscuolaWaitlistResponse.create({
+        data: {
+          offerId: offer.id,
+          studentId: payload.studentId,
+          status: "accepted",
+          respondedAt: now,
+        },
+      });
+
+      const bookedSlots = await tx.autoscuolaAvailabilitySlot.updateMany({
         where: { id: { in: [offer.slotId, instructorSlot.id, vehicleSlot.id] } },
         data: { status: "booked" },
       });
+      if (bookedSlots.count < 3) {
+        throw new Error("Slot non disponibile.");
+      }
 
-      await tx.autoscuolaWaitlistOffer.update({
-        where: { id: offer.id },
+      const updatedOffer = await tx.autoscuolaWaitlistOffer.updateMany({
+        where: { id: offer.id, status: "broadcasted" },
         data: { status: "accepted" },
       });
+      if (!updatedOffer.count) {
+        throw new Error("Offerta non più valida.");
+      }
 
-      return tx.autoscuolaAppointment.create({
+      const appointment = await tx.autoscuolaAppointment.create({
         data: {
           companyId: membership.companyId,
           studentId: payload.studentId,
@@ -775,9 +896,106 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           slotId: offer.slotId,
         },
       });
+
+      return { appointment, response };
     });
 
-    return { success: true, data: { accepted: true, appointment, response } };
+    return {
+      success: true,
+      data: {
+        accepted: true,
+        appointment: appointment.appointment,
+        response: appointment.response,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getWaitlistOffersSchema.parse(input);
+    const now = new Date();
+    const limit = payload.limit ?? 5;
+
+    const student = await prisma.autoscuolaStudent.findFirst({
+      where: {
+        id: payload.studentId,
+        companyId: membership.companyId,
+        status: { not: "inactive" },
+      },
+      select: { id: true },
+    });
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const [studentAvailability, offers, appointments] = await Promise.all([
+      prisma.autoscuolaWeeklyAvailability.findFirst({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "student",
+          ownerId: payload.studentId,
+        },
+      }),
+      prisma.autoscuolaWaitlistOffer.findMany({
+        where: {
+          companyId: membership.companyId,
+          status: "broadcasted",
+          expiresAt: { gt: now },
+          slot: {
+            startsAt: { gt: now },
+            status: "open",
+          },
+        },
+        include: {
+          slot: true,
+          responses: {
+            where: { studentId: payload.studentId },
+            select: { id: true },
+          },
+        },
+        orderBy: { sentAt: "desc" },
+        take: limit * 3,
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          status: { not: "cancelled" },
+          startsAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        },
+        select: { startsAt: true, endsAt: true },
+      }),
+    ]);
+
+    if (!studentAvailability) {
+      return { success: true, data: [] };
+    }
+
+    const visible = offers
+      .filter((offer) => !offer.responses.length)
+      .filter((offer) =>
+        isWeeklyAvailabilityCovering(
+          studentAvailability,
+          offer.slot.startsAt,
+          offer.slot.endsAt,
+        ),
+      )
+      .filter(
+        (offer) =>
+          !hasAppointmentConflict(
+            appointments,
+            offer.slot.startsAt,
+            offer.slot.endsAt,
+          ),
+      )
+      .slice(0, limit)
+      .map(({ responses: _responses, ...offer }) => offer);
+
+    return { success: true, data: visible };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -788,11 +1006,13 @@ export async function broadcastWaitlistOffer({
   slotId,
   startsAt,
   expiresAt,
+  excludeStudentIds = [],
 }: {
   companyId: string;
   slotId: string;
   startsAt: Date;
   expiresAt: Date;
+  excludeStudentIds?: string[];
 }) {
   const offer = await prisma.autoscuolaWaitlistOffer.create({
     data: {
@@ -804,26 +1024,105 @@ export async function broadcastWaitlistOffer({
     },
   });
 
-  const dayStart = new Date(startsAt);
+  const slot = await prisma.autoscuolaAvailabilitySlot.findFirst({
+    where: {
+      id: slotId,
+      companyId,
+    },
+  });
+  if (!slot) return offer;
+
+  const dayStart = new Date(slot.startsAt);
   dayStart.setHours(0, 0, 0, 0);
   const dayEnd = new Date(dayStart);
   dayEnd.setDate(dayEnd.getDate() + 1);
 
-  const pending = await prisma.autoscuolaBookingRequest.findMany({
+  const students = await prisma.autoscuolaStudent.findMany({
     where: {
       companyId,
-      status: "pending",
-      desiredDate: { gte: dayStart, lt: dayEnd },
+      status: { not: "inactive" },
+      ...(excludeStudentIds.length ? { id: { notIn: excludeStudentIds } } : {}),
     },
-    include: { student: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+    },
+  });
+  if (!students.length) return offer;
+
+  const studentIds = students.map((student) => student.id);
+  const [availabilities, appointments] = await Promise.all([
+    prisma.autoscuolaWeeklyAvailability.findMany({
+      where: {
+        companyId,
+        ownerType: "student",
+        ownerId: { in: studentIds },
+      },
+    }),
+    prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: { in: studentIds },
+        status: { not: "cancelled" },
+        startsAt: { gte: dayStart, lt: dayEnd },
+      },
+      select: {
+        studentId: true,
+        startsAt: true,
+        endsAt: true,
+      },
+    }),
+  ]);
+
+  const availabilityByStudent = new Map(
+    availabilities.map((availability) => [availability.ownerId, availability]),
+  );
+  const appointmentsByStudent = new Map<
+    string,
+    Array<{ startsAt: Date; endsAt: Date | null }>
+  >();
+  for (const appointment of appointments) {
+    const list = appointmentsByStudent.get(appointment.studentId) ?? [];
+    list.push({ startsAt: appointment.startsAt, endsAt: appointment.endsAt });
+    appointmentsByStudent.set(appointment.studentId, list);
+  }
+
+  const availableStudents = students.filter((student) => {
+    const availability = availabilityByStudent.get(student.id);
+    if (!isWeeklyAvailabilityCovering(availability, slot.startsAt, slot.endsAt)) {
+      return false;
+    }
+    const booked = appointmentsByStudent.get(student.id) ?? [];
+    return !hasAppointmentConflict(booked, slot.startsAt, slot.endsAt);
   });
 
-  for (const request of pending) {
-    const phone = request.student.phone;
-    if (!phone) continue;
-    const message = `Slot disponibile il ${startsAt.toLocaleDateString("it-IT")} alle ${startsAt.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}. Apri Reglo per prenotare.`;
+  const formattedDate = slot.startsAt.toLocaleDateString("it-IT");
+  const formattedTime = slot.startsAt.toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const message = `Si e liberato uno slot guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare la proposta.`;
+
+  for (const student of availableStudents) {
     try {
-      await sendAutoscuolaWhatsApp({ to: phone, body: message });
+      if (student.email) {
+        await sendDynamicEmail({
+          to: student.email,
+          subject: "Reglo Autoscuole · Slot guida disponibile",
+          body: message,
+        });
+      }
+    } catch (error) {
+      console.error("Waitlist email error", error);
+    }
+
+    try {
+      if (student.phone) {
+        await sendAutoscuolaWhatsApp({ to: student.phone, body: message });
+      }
     } catch (error) {
       console.error("Waitlist WhatsApp error", error);
     }

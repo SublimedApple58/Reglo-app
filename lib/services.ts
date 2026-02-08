@@ -16,6 +16,8 @@ export type ServiceLimits = {
   workflowRunsPerMonth?: number;
   aiCreditsPerMonth?: number;
   availabilityWeeks?: number;
+  studentReminderMinutes?: number;
+  instructorReminderMinutes?: number;
 };
 
 export type CompanyServiceInfo = {

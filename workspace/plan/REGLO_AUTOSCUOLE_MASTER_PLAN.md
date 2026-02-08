@@ -7,33 +7,35 @@ Piano master per costruire il modulo **Reglo Autoscuole** con architettura coere
 
 ## 1) System Architecture (Core)
 
-### 1.1 Intelligent Scheduling & Optimization Engine — V1
-**Obiettivo:** gestire automaticamente slot istruttori/veicoli e reagire a cancellazioni o assenze.
+### 1.1 Intelligent Scheduling & Optimization Engine — V1 (aggiornato)
+**Obiettivo:** eliminare tempi morti e mantenere gli slot **attaccati** tra loro; reagire a cancellazioni/assenze con riempimento automatico.
 
-**Decisioni V1:**
-- Motore con **regole statiche** (no ottimizzazione avanzata)
+**Decisioni V1 (locked):**
+- Motore con **regole statiche** (no ottimizzazione avanzata), ma con **heuristica anti‑buchi**
+  - preferire slot che attaccano una guida precedente/successiva
 - **Auto‑reschedule** in caso di cancellazione/assenza
-- **Waitlist semplice** (notifica top 3 se si libera slot)
+- **Slot‑offer** (notifiche push/email) quando si libera uno slot
+- UX proposta slot: **Accetta / Rifiuta** (no “proponimi altro”)
 
 **Vincoli base (V1):**
 - Orari lavoro
 - Durata lezione + buffer fisso
-- Disponibilità istruttori + veicoli
+- Disponibilità istruttori + veicoli + allievi
 
 **Flussi chiave:**
-- Creazione appuntamento → validazione disponibilità
-- Assenza/allievo cancella → auto‑reschedule se possibile
-- Se nessun slot → notifica staff + waitlist
+- Creazione appuntamento → matching + scelta slot con priorità “anti‑buchi”
+- Allievo cancella → crea **slot‑offer** + invio push/email a studenti compatibili
+- Se nessuno accetta → slot resta open
 
 ---
 
-## 1.3 Mobile + Availability Engine (estensione V1)
-**Obiettivo:** saturare gli slot evitando ore vuote tramite disponibilità granulari e broadcast WhatsApp.
+## 1.3 Mobile + Availability Engine (estensione V1, aggiornato)
+**Obiettivo:** saturare gli slot evitando ore vuote tramite disponibilità granulari e **slot‑offer** push/email.
 
 **Decisioni V1 (locked):**
 - Mobile **React Native + Expo**, iOS‑first (effetti glass/blur)
 - **Slot singoli** da 30 minuti
-- **Broadcast WhatsApp** a lista (no push in V1)
+- **Push + Email** per slot liberi (al posto del broadcast WhatsApp)
 - **Risorse libere** al reschedule (può cambiare istruttore/veicolo)
 
 **Nuove entità (DB):**
@@ -45,8 +47,8 @@ Piano master per costruire il modulo **Reglo Autoscuole** con architettura coere
 
 **Flussi chiave:**
 - Inserimento disponibilità (allievo/istruttore/veicolo)
-- Richiesta guida → matching engine su slot
-- Cancella slot → broadcast WhatsApp (primo che accetta prende)
+- Richiesta guida → matching engine su slot (anti‑buchi)
+- Cancella slot → **slot‑offer** + push/email (first‑come, first‑served)
 - Nessuna risposta → slot resta open
 
 **UX mobile per ruolo:**
@@ -103,21 +105,27 @@ Piano master per costruire il modulo **Reglo Autoscuole** con architettura coere
 
 ---
 
-## 3) Communication & Notification Layer
+## 3) Communication & Notification Layer (aggiornato)
 
 ### 3.1 Canali
-- **Email + WhatsApp** (no Slack in V1)
+- **Email + Push** (no Slack in V1)
 
 ### 3.2 Trigger automatici
 - Appuntamento creato/aggiornato
-- Appuntamento cancellato / no‑show
+- Appuntamento cancellato / no‑show → **slot‑offer**
 - Cambio stato pratica
 - Scadenze imminenti
+- **Reminder pre‑guida** (allievo/istruttore)
 
 ### 3.3 Flussi V1
 - Conferma prenotazione
-- Promemoria T‑7 / T‑1
+- **Reminder pre‑guida** configurabile (120/60/30/20/15 min)
 - Alert scadenze (foglio rosa, visita medica)
+
+### 3.4 Settings autoscuola (Web)
+- Sezione Autoscuola → setting:
+  - **Reminder allievo** (120/60/30/20/15 min)
+  - **Reminder istruttore** (120/60/30/20/15 min)
 
 ---
 

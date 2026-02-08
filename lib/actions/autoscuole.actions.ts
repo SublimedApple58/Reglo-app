@@ -499,6 +499,7 @@ export async function cancelAutoscuolaAppointment(
         slotId: appointment.slotId,
         startsAt: appointment.startsAt,
         expiresAt,
+        excludeStudentIds: [appointment.studentId],
       });
 
       return {

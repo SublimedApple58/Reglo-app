@@ -6,11 +6,23 @@ import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
 } from "@/lib/actions/autoscuole.actions";
 import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  getAutoscuolaSettings,
+  updateAutoscuolaSettings,
+} from "@/lib/actions/autoscuole-settings.actions";
 
 type ResourceOption = { id: string; name: string };
 type AvailabilitySlot = {
@@ -29,10 +41,16 @@ type AvailabilityRange = {
 const formatDateLocal = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
+const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+
 export function AutoscuoleResourcesPage() {
   const toast = useFeedbackToast();
   const [date, setDate] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
+  const [savingSettings, setSavingSettings] = React.useState(false);
+  const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
+  const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
+  const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
@@ -96,8 +114,74 @@ export function AutoscuoleResourcesPage() {
   }, [loadResources]);
 
   React.useEffect(() => {
+    let active = true;
+    const loadSettings = async () => {
+      const res = await getAutoscuolaSettings();
+      if (!active) return;
+      if (!res.success || !res.data) {
+        toast.error({
+          description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
+        });
+        return;
+      }
+      setAvailabilityWeeks(String(res.data.availabilityWeeks));
+      setStudentReminderMinutes(String(res.data.studentReminderMinutes));
+      setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    };
+    loadSettings();
+    return () => {
+      active = false;
+    };
+  }, [toast]);
+
+  React.useEffect(() => {
     loadAvailability(date);
   }, [date, loadAvailability]);
+
+  const handleSaveSettings = async () => {
+    const parsedWeeks = Number(availabilityWeeks);
+    const parsedStudentReminder = Number(studentReminderMinutes);
+    const parsedInstructorReminder = Number(instructorReminderMinutes);
+
+    if (Number.isNaN(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 12) {
+      toast.error({ description: "Settimane disponibilità non valide (1-12)." });
+      return;
+    }
+    if (!REMINDER_OPTIONS.includes(parsedStudentReminder as (typeof REMINDER_OPTIONS)[number])) {
+      toast.error({ description: "Preavviso reminder allievo non valido." });
+      return;
+    }
+    if (
+      !REMINDER_OPTIONS.includes(
+        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
+      )
+    ) {
+      toast.error({ description: "Preavviso reminder istruttore non valido." });
+      return;
+    }
+
+    setSavingSettings(true);
+    const res = await updateAutoscuolaSettings({
+      availabilityWeeks: parsedWeeks,
+      studentReminderMinutes:
+        parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
+      instructorReminderMinutes:
+        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
+    });
+    setSavingSettings(false);
+
+    if (!res.success || !res.data) {
+      toast.error({
+        description: res.message ?? "Impossibile aggiornare le impostazioni autoscuola.",
+      });
+      return;
+    }
+
+    setAvailabilityWeeks(String(res.data.availabilityWeeks));
+    setStudentReminderMinutes(String(res.data.studentReminderMinutes));
+    setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    toast.success({ description: "Impostazioni autoscuola aggiornate." });
+  };
 
   return (
     <ClientPageWrapper title="Autoscuole" subTitle="Disponibilità istruttori e veicoli" hideHero>
@@ -115,6 +199,69 @@ export function AutoscuoleResourcesPage() {
           </div>
           <div className="w-[280px]">
             <DatePicker value={date} onChange={setDate} />
+          </div>
+        </div>
+
+        <div className="glass-panel glass-strong space-y-3 p-4">
+          <div>
+            <div className="text-sm font-semibold text-foreground">
+              Reminder pre-guida
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Definisci con quanto preavviso inviare promemoria a allievo e istruttore.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Settimane disponibilità</div>
+              <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Settimane" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
+                    <SelectItem key={weeks} value={String(weeks)}>
+                      {weeks} settimane
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Reminder allievo</div>
+              <Select value={studentReminderMinutes} onValueChange={setStudentReminderMinutes}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Minuti" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REMINDER_OPTIONS.map((minutes) => (
+                    <SelectItem key={minutes} value={String(minutes)}>
+                      {minutes} minuti
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs font-medium text-muted-foreground">Reminder istruttore</div>
+              <Select value={instructorReminderMinutes} onValueChange={setInstructorReminderMinutes}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Minuti" />
+                </SelectTrigger>
+                <SelectContent>
+                  {REMINDER_OPTIONS.map((minutes) => (
+                    <SelectItem key={minutes} value={String(minutes)}>
+                      {minutes} minuti
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? "Salvataggio..." : "Salva impostazioni"}
+            </Button>
           </div>
         </div>
 
