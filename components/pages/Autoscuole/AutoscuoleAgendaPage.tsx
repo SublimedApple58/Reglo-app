@@ -29,6 +29,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -227,6 +233,7 @@ export function AutoscuoleAgendaPage() {
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
     (_, index) => DAY_START_HOUR + index,
   );
+  const now = new Date();
   const appointmentsByDay = days.map((day) => {
     const dayStart = new Date(day);
     dayStart.setHours(0, 0, 0, 0);
@@ -356,7 +363,7 @@ export function AutoscuoleAgendaPage() {
                     return (
                       <div
                         key={day.toISOString()}
-                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-white/70"
+                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-[linear-gradient(transparent_29px,rgba(255,255,255,0.55)_30px)] bg-[length:100%_30px]"
                         style={{ height: calendarHeight }}
                       >
                         {hourMarks.map((hour) => (
@@ -384,73 +391,81 @@ export function AutoscuoleAgendaPage() {
                           const top = offsetMinutes * PIXELS_PER_MINUTE;
                           const height = durationMinutes * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status);
+                          const endTime = getAppointmentEnd(item);
+                          const isPast = endTime.getTime() < now.getTime();
+                          const canUpdate = !isPast && !["cancelled", "completed", "no_show"].includes(item.status);
+                          const canComplete = !isPast && item.status === "checked_in";
                           const showDetails = durationMinutes >= 60;
 
                           return (
-                            <div
-                              key={item.id}
-                              className={`absolute left-2 right-2 rounded-xl border p-2 text-[11px] shadow-sm ${statusMeta.className}`}
-                              style={{ top, height }}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="font-semibold text-foreground">
-                                  {item.student.firstName} {item.student.lastName}
+                            <DropdownMenu key={item.id}>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
+                                  style={{ top, height }}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="font-semibold text-foreground">
+                                      {item.student.firstName} {item.student.lastName}
+                                    </div>
+                                    <Badge variant="secondary">{statusMeta.label}</Badge>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {item.type} · {formatTimeRange(start, end)} ·{" "}
+                                    {Math.round(diffMinutes(end, start))}m
+                                  </div>
+                                  {showDetails ? (
+                                    <>
+                                      <div className="text-[11px] text-muted-foreground">
+                                        {item.instructor?.name
+                                          ? `Istruttore: ${item.instructor.name}`
+                                          : "Istruttore: —"}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground">
+                                        {item.vehicle?.name
+                                          ? `Veicolo: ${item.vehicle.name}`
+                                          : "Veicolo: —"}
+                                      </div>
+                                    </>
+                                  ) : null}
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="start"
+                                side="right"
+                                sideOffset={12}
+                                className="w-56 rounded-2xl border border-white/70 bg-white/90 p-2 shadow-[0_20px_55px_-35px_rgba(50,78,122,0.45)]"
+                              >
+                                <div className="px-2 pb-2 text-xs text-muted-foreground">
+                                  {isPast ? "Slot passato" : "Azioni"}
                                 </div>
-                                <Badge variant="secondary">{statusMeta.label}</Badge>
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {item.type} · {formatTimeRange(start, end)} ·{" "}
-                                {Math.round(diffMinutes(end, start))}m
-                              </div>
-                              {showDetails ? (
-                                <>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {item.instructor?.name
-                                      ? `Istruttore: ${item.instructor.name}`
-                                      : "Istruttore: —"}
-                                  </div>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {item.vehicle?.name
-                                      ? `Veicolo: ${item.vehicle.name}`
-                                      : "Veicolo: —"}
-                                  </div>
-                                </>
-                              ) : null}
-                              <div className="mt-2 flex flex-wrap gap-1">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
+                                <DropdownMenuItem
+                                  disabled={!canUpdate}
                                   onClick={() => handleStatusUpdate(item.id, "checked_in")}
                                 >
                                   Check‑in
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canUpdate}
                                   onClick={() => handleStatusUpdate(item.id, "no_show")}
                                 >
                                   No‑show
-                                </Button>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canComplete}
                                   onClick={() => handleStatusUpdate(item.id, "completed")}
                                 >
                                   Completa
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px]"
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={!canUpdate}
                                   onClick={() => handleCancel(item.id)}
                                 >
                                   Cancella
-                                </Button>
-                              </div>
-                            </div>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           );
                         })}
                       </div>
