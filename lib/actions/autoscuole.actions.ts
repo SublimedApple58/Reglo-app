@@ -569,6 +569,9 @@ export async function createAutoscuolaAppointment(
     }
 
     let notificationSent = false;
+    let pushSummary:
+      | { sent: number; failed: number; skipped: number; invalidated: number }
+      | null = null;
     const userIds = [student.user.id];
     if (userIds.length) {
       const when = slotTime.toLocaleString("it-IT", {
@@ -590,18 +593,23 @@ export async function createAutoscuolaAppointment(
             type: appointment.type,
           },
         });
+        pushSummary = pushResult;
         notificationSent = pushResult.sent > 0;
       } catch (error) {
         console.error("Appointment proposal push error", error);
       }
     }
 
+    const pushMessage = notificationSent
+      ? "Proposta creata e notifica inviata all'allievo."
+      : pushSummary && pushSummary.sent === 0 && pushSummary.failed === 0
+        ? "Proposta creata. Nessun dispositivo push registrato per l'allievo."
+        : "Proposta creata. Invio push non riuscito.";
+
     return {
       success: true,
       data: appointment,
-      message: notificationSent
-        ? "Proposta creata e notifica inviata all'allievo."
-        : "Proposta creata. Notifica push non inviata.",
+      message: pushMessage,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

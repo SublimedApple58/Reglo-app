@@ -57,7 +57,6 @@ export async function sendAutoscuolaPushToUsers({
     where: {
       userId: { in: Array.from(new Set(userIds)) },
       disabledAt: null,
-      OR: [{ companyId: null }, { companyId }],
     },
     select: {
       id: true,
