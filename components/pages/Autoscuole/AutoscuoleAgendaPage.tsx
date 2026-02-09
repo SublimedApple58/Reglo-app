@@ -19,6 +19,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
   cancelAutoscuolaAppointment,
+  deleteAutoscuolaAppointment,
   getAutoscuolaAppointments,
   getAutoscuolaStudents,
   getAutoscuolaInstructors,
@@ -29,6 +30,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -71,7 +77,7 @@ export function AutoscuoleAgendaPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
-  const [selected, setSelected] = React.useState<AppointmentRow | null>(null);
+  const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState({
     studentId: "",
     day: "",
@@ -132,7 +138,7 @@ export function AutoscuoleAgendaPage() {
   const rangeEnd = viewMode === "week" ? weekEnd : addDays(dayFocus, 1);
 
   const filtered = appointments.filter((item) => {
-    if (item.status === "cancelled") return false;
+    if ((item.status ?? "").toLowerCase() === "cancelled") return false;
     const term = search.trim().toLowerCase();
     if (
       term &&
@@ -202,13 +208,16 @@ export function AutoscuoleAgendaPage() {
   };
 
   const handleCancel = async (appointmentId: string) => {
+    setPendingEventActionId(appointmentId);
     const res = await cancelAutoscuolaAppointment({ appointmentId });
+    setPendingEventActionId(null);
     if (!res.success) {
       toast.error({
-        description: res.message ?? "Impossibile cancellare l'appuntamento.",
+        description: res.message ?? "Impossibile annullare l'appuntamento.",
       });
       return;
     }
+    setAppointments((current) => current.filter((item) => item.id !== appointmentId));
     if (res.data?.rescheduled && res.data?.newStartsAt) {
       toast.success({
         description: `Slot ripianificato: ${new Date(
@@ -224,6 +233,21 @@ export function AutoscuoleAgendaPage() {
         description: "Nessuno slot disponibile, notifica staff inviata.",
       });
     }
+    load();
+  };
+
+  const handleDelete = async (appointmentId: string) => {
+    setPendingEventActionId(appointmentId);
+    const res = await deleteAutoscuolaAppointment({ appointmentId });
+    setPendingEventActionId(null);
+    if (!res.success) {
+      toast.error({
+        description: res.message ?? "Impossibile cancellare l'evento.",
+      });
+      return;
+    }
+    setAppointments((current) => current.filter((item) => item.id !== appointmentId));
+    toast.success({ description: res.message ?? "Evento cancellato." });
     load();
   };
 
@@ -500,28 +524,114 @@ export function AutoscuoleAgendaPage() {
                           const height = durationMinutes * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status);
 
+                          const isPendingAction = pendingEventActionId === item.id;
                           return (
-                            <button
-                              key={item.id}
-                              type="button"
-                              className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
-                              style={{ top, height }}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setSelected(item);
-                              }}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="font-semibold text-foreground">
-                                  {item.student.firstName} {item.student.lastName}
+                            <DropdownMenu key={item.id}>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
+                                  style={{ top, height }}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="font-semibold text-foreground">
+                                      {item.student.firstName} {item.student.lastName}
+                                    </div>
+                                    <Badge variant="secondary">{statusMeta.label}</Badge>
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {item.type} · {formatTimeRange(start, end)} ·{" "}
+                                    {Math.round(diffMinutes(end, start))}m
+                                  </div>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent
+                                align="start"
+                                side="right"
+                                sideOffset={12}
+                                className="w-72 rounded-2xl border border-white/70 bg-white/95 p-3 shadow-[0_20px_55px_-35px_rgba(50,78,122,0.45)]"
+                              >
+                                <div className="space-y-2">
+                                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                    Evento
+                                  </div>
+                                  <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+                                    <div className="text-sm font-semibold text-foreground">
+                                      {item.student.firstName} {item.student.lastName}
+                                    </div>
+                                    <div className="mt-1 text-xs text-muted-foreground">
+                                      {item.type} · {formatTimeRange(start, end)}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {start.toLocaleDateString("it-IT", {
+                                        weekday: "long",
+                                        day: "2-digit",
+                                        month: "long",
+                                      })}
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <Badge variant="secondary">{statusMeta.label}</Badge>
+                                      {!canUpdateStatus(item) ? (
+                                        <span className="text-[11px] text-muted-foreground">
+                                          Slot passato o chiuso
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
                                 </div>
-                                <Badge variant="secondary">{statusMeta.label}</Badge>
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {item.type} · {formatTimeRange(start, end)} ·{" "}
-                                {Math.round(diffMinutes(end, start))}m
-                              </div>
-                            </button>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canUpdateStatus(item) || isPendingAction}
+                                    onClick={() => handleStatusUpdate(item.id, "checked_in")}
+                                  >
+                                    Check‑in
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canUpdateStatus(item) || isPendingAction}
+                                    onClick={() => handleStatusUpdate(item.id, "no_show")}
+                                  >
+                                    No‑show
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canCompleteStatus(item) || isPendingAction}
+                                    onClick={() => handleStatusUpdate(item.id, "completed")}
+                                  >
+                                    Completa
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={!canUpdateStatus(item) || isPendingAction}
+                                    onClick={() => handleCancel(item.id)}
+                                  >
+                                    Annulla
+                                  </Button>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700"
+                                  disabled={isPendingAction}
+                                  onClick={() => handleDelete(item.id)}
+                                >
+                                  Cancella definitivamente
+                                </Button>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           );
                         })}
                       </div>
@@ -664,63 +774,6 @@ export function AutoscuoleAgendaPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(selected)} onOpenChange={() => setSelected(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Dettaglio appuntamento</DialogTitle>
-          </DialogHeader>
-          {selected ? (
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between">
-                <div className="font-semibold text-foreground">
-                  {selected.student.firstName} {selected.student.lastName}
-                </div>
-                <Badge variant="secondary">{getStatusMeta(selected.status).label}</Badge>
-              </div>
-              <div className="text-muted-foreground">
-                {selected.type} ·{" "}
-                {formatTimeRange(toDate(selected.startsAt), getAppointmentEnd(selected))}
-              </div>
-              <div className="text-muted-foreground">
-                Istruttore: {selected.instructor?.name ?? "—"}
-              </div>
-              <div className="text-muted-foreground">
-                Veicolo: {selected.vehicle?.name ?? "—"}
-              </div>
-              <div className="grid gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  disabled={!canUpdateStatus(selected)}
-                  onClick={() => handleStatusUpdate(selected.id, "checked_in")}
-                >
-                  Check‑in
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!canUpdateStatus(selected)}
-                  onClick={() => handleStatusUpdate(selected.id, "no_show")}
-                >
-                  No‑show
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!canCompleteStatus(selected)}
-                  onClick={() => handleStatusUpdate(selected.id, "completed")}
-                >
-                  Completa
-                </Button>
-                <Button
-                  variant="destructive"
-                  disabled={!canUpdateStatus(selected)}
-                  onClick={() => handleCancel(selected.id)}
-                >
-                  Cancella
-                </Button>
-              </div>
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </ClientPageWrapper>
   );
 }
@@ -779,13 +832,14 @@ function normalizeDay(date: Date) {
 function canUpdateStatus(appointment: AppointmentRow) {
   const endTime = getAppointmentEnd(appointment);
   const isPast = endTime.getTime() < Date.now();
-  return !isPast && !["cancelled", "completed", "no_show"].includes(appointment.status);
+  const normalized = (appointment.status ?? "").toLowerCase();
+  return !isPast && !["cancelled", "completed", "no_show"].includes(normalized);
 }
 
 function canCompleteStatus(appointment: AppointmentRow) {
   const endTime = getAppointmentEnd(appointment);
   const isPast = endTime.getTime() < Date.now();
-  return !isPast && appointment.status === "checked_in";
+  return !isPast && (appointment.status ?? "").toLowerCase() === "checked_in";
 }
 
 function formatTime(date: Date) {

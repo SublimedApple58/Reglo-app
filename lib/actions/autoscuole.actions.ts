@@ -51,6 +51,10 @@ const cancelAppointmentSchema = z.object({
   appointmentId: z.string().uuid(),
 });
 
+const deleteAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+});
+
 const updateAppointmentStatusSchema = z.object({
   appointmentId: z.string().uuid(),
   status: z.string().min(1),
@@ -784,6 +788,71 @@ export async function cancelAutoscuolaAppointment(
     return {
       success: true,
       data: { rescheduled: true, newStartsAt },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function deleteAutoscuolaAppointment(
+  input: z.infer<typeof deleteAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin") {
+      return {
+        success: false,
+        message: "Solo admin puo cancellare definitivamente un evento.",
+      };
+    }
+
+    const payload = deleteAppointmentSchema.parse(input);
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    if (appointment.slotId) {
+      const rangeEnd =
+        appointment.endsAt ??
+        new Date(appointment.startsAt.getTime() + 30 * 60 * 1000);
+      const ownerFilters = [
+        { ownerType: "student", ownerId: appointment.studentId },
+      ];
+      if (appointment.instructorId) {
+        ownerFilters.push({
+          ownerType: "instructor",
+          ownerId: appointment.instructorId,
+        });
+      }
+      if (appointment.vehicleId) {
+        ownerFilters.push({
+          ownerType: "vehicle",
+          ownerId: appointment.vehicleId,
+        });
+      }
+
+      await prisma.autoscuolaAvailabilitySlot.updateMany({
+        where: {
+          companyId: membership.companyId,
+          status: "booked",
+          startsAt: { gte: appointment.startsAt, lt: rangeEnd },
+          OR: ownerFilters,
+        },
+        data: { status: "open" },
+      });
+    }
+
+    await prisma.autoscuolaAppointment.delete({
+      where: { id: appointment.id },
+    });
+
+    return {
+      success: true,
+      data: { deleted: true },
+      message: "Evento cancellato definitivamente.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
