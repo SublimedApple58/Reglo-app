@@ -11,12 +11,13 @@ import { Order } from '@/types';
 import PurchaseReceiptEmail from './purchase-receipt';
 import CompanyInviteEmail from './company-invite';
 
-const apiKey = process.env.RESEND_API_KEY;
-if (!apiKey) {
-  throw new Error('RESEND_API_KEY is not configured');
-}
-
-const resend = new Resend(apiKey);
+const getResend = () => {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+  return new Resend(apiKey);
+};
 
 const escapeHtml = (value: string) =>
   value
@@ -123,6 +124,7 @@ export const sendDynamicEmail = async ({
   body: string;
   from?: string;
 }) => {
+  const resend = getResend();
   await resend.emails.send({
     from: formatSender(from),
     to,
@@ -132,6 +134,7 @@ export const sendDynamicEmail = async ({
 };
 
 export const sendPurchaseReceipt = async ({ order }: { order: Order }) => {
+  const resend = getResend();
   await resend.emails.send({
     from: formatSender(DEFAULT_EMAIL_SENDER),
     to: order.user.email,
@@ -151,6 +154,7 @@ export const sendCompanyInviteEmail = async ({
   inviteUrl: string;
   invitedByName?: string | null;
 }) => {
+  const resend = getResend();
   await resend.emails.send({
     from: formatSender(DEFAULT_EMAIL_SENDER),
     to,
