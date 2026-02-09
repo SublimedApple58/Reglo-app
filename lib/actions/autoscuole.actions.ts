@@ -671,6 +671,15 @@ export async function cancelAutoscuolaAppointment(
       };
     }
 
+    const canAutoReschedule =
+      membership.role === "admin" ||
+      membership.autoscuolaRole === "OWNER" ||
+      membership.autoscuolaRole === "INSTRUCTOR";
+
+    if (!canAutoReschedule || appointment.status === "proposal") {
+      return { success: true, data: { rescheduled: false } };
+    }
+
     const slotMinutes = 30;
     const startHour = 7;
     const endHour = 21;
