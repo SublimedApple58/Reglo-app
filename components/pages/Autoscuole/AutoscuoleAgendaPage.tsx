@@ -26,15 +26,9 @@ import {
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -52,6 +46,7 @@ type AppointmentRow = {
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 22;
 const SLOT_MINUTES = 30;
+const SLOT_OPTIONS = ["30", "60"];
 const PIXELS_PER_MINUTE = 1.6;
 const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 }, (_, index) => {
   const total = DAY_START_HOUR * 60 + index * 30;
@@ -70,8 +65,13 @@ export function AutoscuoleAgendaPage() {
   const [search, setSearch] = React.useState("");
   const [instructorFilter, setInstructorFilter] = React.useState("all");
   const [vehicleFilter, setVehicleFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [typeFilter, setTypeFilter] = React.useState("all");
+  const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
+  const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
+  const [selected, setSelected] = React.useState<AppointmentRow | null>(null);
   const [form, setForm] = React.useState({
     studentId: "",
     day: "",
@@ -79,6 +79,7 @@ export function AutoscuoleAgendaPage() {
     instructorId: "",
     vehicleId: "",
     sendProposal: false,
+    duration: "30",
   });
 
   const load = React.useCallback(async () => {
@@ -127,6 +128,8 @@ export function AutoscuoleAgendaPage() {
   }, [load]);
 
   const weekEnd = addDays(weekStart, 7);
+  const rangeStart = viewMode === "week" ? weekStart : dayFocus;
+  const rangeEnd = viewMode === "week" ? weekEnd : addDays(dayFocus, 1);
 
   const filtered = appointments.filter((item) => {
     if (item.status === "cancelled") return false;
@@ -145,9 +148,15 @@ export function AutoscuoleAgendaPage() {
     if (vehicleFilter !== "all" && item.vehicle?.id !== vehicleFilter) {
       return false;
     }
+    if (statusFilter !== "all" && item.status !== statusFilter) {
+      return false;
+    }
+    if (typeFilter !== "all" && item.type !== typeFilter) {
+      return false;
+    }
     const start = toDate(item.startsAt);
     const end = getAppointmentEnd(item);
-    return start < weekEnd && end > weekStart;
+    return start < rangeEnd && end > rangeStart;
   });
 
   const handleCreate = async (event: React.FormEvent) => {
@@ -162,10 +171,12 @@ export function AutoscuoleAgendaPage() {
       toast.error({ description: "Data o orario non validi." });
       return;
     }
+    const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
       type: "guida",
       startsAt,
+      endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
       sendProposal: form.sendProposal,
@@ -184,6 +195,7 @@ export function AutoscuoleAgendaPage() {
       instructorId: "",
       vehicleId: "",
       sendProposal: false,
+      duration: "30",
     });
     toast.success({ description: res.message ?? "Operazione completata." });
     load();
@@ -227,14 +239,14 @@ export function AutoscuoleAgendaPage() {
   };
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const visibleDays = viewMode === "week" ? days : [dayFocus];
   const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
   const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
   const hourMarks = Array.from(
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
     (_, index) => DAY_START_HOUR + index,
   );
-  const now = new Date();
-  const appointmentsByDay = days.map((day) => {
+  const appointmentsByDay = visibleDays.map((day) => {
     const dayStart = new Date(day);
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = addDays(dayStart, 1);
@@ -292,25 +304,93 @@ export function AutoscuoleAgendaPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={typeFilter} onValueChange={setTypeFilter}>
+              <SelectTrigger className="min-w-[180px]">
+                <SelectValue placeholder="Filtra tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i tipi</SelectItem>
+                <SelectItem value="guida">Guida</SelectItem>
+                <SelectItem value="esame">Esame</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="min-w-[180px]">
+                <SelectValue placeholder="Filtra stato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti gli stati</SelectItem>
+                <SelectItem value="scheduled">In programma</SelectItem>
+                <SelectItem value="proposal">Proposta</SelectItem>
+                <SelectItem value="checked_in">Check‑in</SelectItem>
+                <SelectItem value="completed">Completata</SelectItem>
+                <SelectItem value="no_show">No‑show</SelectItem>
+                <SelectItem value="cancelled">Cancellata</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setWeekStart((prev) => addDays(prev, -7))}
-            >
-              ←
-            </Button>
-            <span className="min-w-[140px] text-center">
-              {formatRangeLabel(weekStart)}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setWeekStart((prev) => addDays(prev, 7))}
-            >
-              →
-            </Button>
+          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/70 p-1">
+              <Button
+                variant={viewMode === "week" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("week")}
+              >
+                Settimana
+              </Button>
+              <Button
+                variant={viewMode === "day" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("day")}
+              >
+                Giorno
+              </Button>
+            </div>
+            {viewMode === "week" ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWeekStart((prev) => addDays(prev, -7))}
+                >
+                  ←
+                </Button>
+                <span className="min-w-[140px] text-center">
+                  {formatRangeLabel(weekStart)}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWeekStart((prev) => addDays(prev, 7))}
+                >
+                  →
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDayFocus((prev) => addDays(prev, -1))}
+                >
+                  ←
+                </Button>
+                <span className="min-w-[140px] text-center">
+                  {dayFocus.toLocaleDateString("it-IT", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDayFocus((prev) => addDays(prev, 1))}
+                >
+                  →
+                </Button>
+              </div>
+            )}
           </div>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -324,9 +404,15 @@ export function AutoscuoleAgendaPage() {
           ) : (
             <div className="overflow-x-auto">
               <div className="min-w-[980px] space-y-3">
-                <div className="grid grid-cols-[80px_repeat(7,minmax(160px,1fr))] gap-3 text-xs text-muted-foreground">
+                <div
+                  className={`grid gap-3 text-xs text-muted-foreground ${
+                    viewMode === "week"
+                      ? "grid-cols-[80px_repeat(7,minmax(160px,1fr))]"
+                      : "grid-cols-[80px_minmax(240px,1fr)]"
+                  }`}
+                >
                   <div />
-                  {days.map((day) => (
+                  {visibleDays.map((day) => (
                     <div key={day.toISOString()} className="text-center font-semibold">
                       {day.toLocaleDateString("it-IT", {
                         weekday: "short",
@@ -336,7 +422,13 @@ export function AutoscuoleAgendaPage() {
                     </div>
                   ))}
                 </div>
-                <div className="grid grid-cols-[80px_repeat(7,minmax(160px,1fr))] gap-3">
+                <div
+                  className={`grid gap-3 ${
+                    viewMode === "week"
+                      ? "grid-cols-[80px_repeat(7,minmax(160px,1fr))]"
+                      : "grid-cols-[80px_minmax(240px,1fr)]"
+                  }`}
+                >
                   <div className="relative">
                     <div style={{ height: calendarHeight }} className="relative">
                       {hourMarks.map((hour) => (
@@ -353,7 +445,7 @@ export function AutoscuoleAgendaPage() {
                       ))}
                     </div>
                   </div>
-                  {days.map((day, dayIndex) => {
+                  {visibleDays.map((day, dayIndex) => {
                     const dayStart = new Date(day);
                     dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
                     const dayEnd = new Date(day);
@@ -365,6 +457,22 @@ export function AutoscuoleAgendaPage() {
                         key={day.toISOString()}
                         className="relative overflow-hidden rounded-2xl border border-white/60 bg-[linear-gradient(transparent_29px,rgba(255,255,255,0.55)_30px)] bg-[length:100%_30px]"
                         style={{ height: calendarHeight }}
+                        onClick={(event) => {
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          const offsetY = event.clientY - rect.top;
+                          const minutes = Math.max(
+                            0,
+                            Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE),
+                          );
+                          const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+                          const slotTime = new Date(dayStart.getTime() + rounded * 60 * 1000);
+                          setForm((prev) => ({
+                            ...prev,
+                            day: slotTime.toISOString().slice(0, 10),
+                            time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
+                          }));
+                          setCreateOpen(true);
+                        }}
                       >
                         {hourMarks.map((hour) => (
                           <div
@@ -391,81 +499,29 @@ export function AutoscuoleAgendaPage() {
                           const top = offsetMinutes * PIXELS_PER_MINUTE;
                           const height = durationMinutes * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status);
-                          const endTime = getAppointmentEnd(item);
-                          const isPast = endTime.getTime() < now.getTime();
-                          const canUpdate = !isPast && !["cancelled", "completed", "no_show"].includes(item.status);
-                          const canComplete = !isPast && item.status === "checked_in";
-                          const showDetails = durationMinutes >= 60;
 
                           return (
-                            <DropdownMenu key={item.id}>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
-                                  style={{ top, height }}
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="font-semibold text-foreground">
-                                      {item.student.firstName} {item.student.lastName}
-                                    </div>
-                                    <Badge variant="secondary">{statusMeta.label}</Badge>
-                                  </div>
-                                  <div className="text-[11px] text-muted-foreground">
-                                    {item.type} · {formatTimeRange(start, end)} ·{" "}
-                                    {Math.round(diffMinutes(end, start))}m
-                                  </div>
-                                  {showDetails ? (
-                                    <>
-                                      <div className="text-[11px] text-muted-foreground">
-                                        {item.instructor?.name
-                                          ? `Istruttore: ${item.instructor.name}`
-                                          : "Istruttore: —"}
-                                      </div>
-                                      <div className="text-[11px] text-muted-foreground">
-                                        {item.vehicle?.name
-                                          ? `Veicolo: ${item.vehicle.name}`
-                                          : "Veicolo: —"}
-                                      </div>
-                                    </>
-                                  ) : null}
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="start"
-                                side="right"
-                                sideOffset={12}
-                                className="w-56 rounded-2xl border border-white/70 bg-white/90 p-2 shadow-[0_20px_55px_-35px_rgba(50,78,122,0.45)]"
-                              >
-                                <div className="px-2 pb-2 text-xs text-muted-foreground">
-                                  {isPast ? "Slot passato" : "Azioni"}
+                            <button
+                              key={item.id}
+                              type="button"
+                              className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
+                              style={{ top, height }}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setSelected(item);
+                              }}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-semibold text-foreground">
+                                  {item.student.firstName} {item.student.lastName}
                                 </div>
-                                <DropdownMenuItem
-                                  disabled={!canUpdate}
-                                  onClick={() => handleStatusUpdate(item.id, "checked_in")}
-                                >
-                                  Check‑in
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  disabled={!canUpdate}
-                                  onClick={() => handleStatusUpdate(item.id, "no_show")}
-                                >
-                                  No‑show
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  disabled={!canComplete}
-                                  onClick={() => handleStatusUpdate(item.id, "completed")}
-                                >
-                                  Completa
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  disabled={!canUpdate}
-                                  onClick={() => handleCancel(item.id)}
-                                >
-                                  Cancella
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                <Badge variant="secondary">{statusMeta.label}</Badge>
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {item.type} · {formatTimeRange(start, end)} ·{" "}
+                                {Math.round(diffMinutes(end, start))}m
+                              </div>
+                            </button>
                           );
                         })}
                       </div>
@@ -504,6 +560,26 @@ export function AutoscuoleAgendaPage() {
                   {TIME_OPTIONS.map((option) => (
                     <SelectItem key={option} value={option}>
                       {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Durata</div>
+              <Select
+                value={form.duration}
+                onValueChange={(value) =>
+                  setForm((prev) => ({ ...prev, duration: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Durata" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SLOT_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option} min
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -587,6 +663,64 @@ export function AutoscuoleAgendaPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(selected)} onOpenChange={() => setSelected(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Dettaglio appuntamento</DialogTitle>
+          </DialogHeader>
+          {selected ? (
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold text-foreground">
+                  {selected.student.firstName} {selected.student.lastName}
+                </div>
+                <Badge variant="secondary">{getStatusMeta(selected.status).label}</Badge>
+              </div>
+              <div className="text-muted-foreground">
+                {selected.type} ·{" "}
+                {formatTimeRange(toDate(selected.startsAt), getAppointmentEnd(selected))}
+              </div>
+              <div className="text-muted-foreground">
+                Istruttore: {selected.instructor?.name ?? "—"}
+              </div>
+              <div className="text-muted-foreground">
+                Veicolo: {selected.vehicle?.name ?? "—"}
+              </div>
+              <div className="grid gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  disabled={!canUpdateStatus(selected)}
+                  onClick={() => handleStatusUpdate(selected.id, "checked_in")}
+                >
+                  Check‑in
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!canUpdateStatus(selected)}
+                  onClick={() => handleStatusUpdate(selected.id, "no_show")}
+                >
+                  No‑show
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!canCompleteStatus(selected)}
+                  onClick={() => handleStatusUpdate(selected.id, "completed")}
+                >
+                  Completa
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={!canUpdateStatus(selected)}
+                  onClick={() => handleCancel(selected.id)}
+                >
+                  Cancella
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </ClientPageWrapper>
   );
 }
@@ -634,6 +768,24 @@ function getAppointmentEnd(appointment: AppointmentRow) {
   const end = appointment.endsAt ? toDate(appointment.endsAt) : null;
   if (end && !Number.isNaN(end.getTime())) return end;
   return new Date(start.getTime() + SLOT_MINUTES * 60 * 1000);
+}
+
+function normalizeDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function canUpdateStatus(appointment: AppointmentRow) {
+  const endTime = getAppointmentEnd(appointment);
+  const isPast = endTime.getTime() < Date.now();
+  return !isPast && !["cancelled", "completed", "no_show"].includes(appointment.status);
+}
+
+function canCompleteStatus(appointment: AppointmentRow) {
+  const endTime = getAppointmentEnd(appointment);
+  const isPast = endTime.getTime() < Date.now();
+  return !isPast && appointment.status === "checked_in";
 }
 
 function formatTime(date: Date) {
