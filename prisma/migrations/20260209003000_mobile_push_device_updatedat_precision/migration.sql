@@ -1,4 +1,4 @@
--- AlterTable (replay-safe for shadow DB)
+-- Ensure MobilePushDevice.updatedAt precision is consistent.
 DO $$
 BEGIN
   IF EXISTS (
