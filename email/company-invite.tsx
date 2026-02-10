@@ -15,12 +15,14 @@ import {
 type CompanyInviteEmailProps = {
   companyName: string;
   inviteUrl: string;
+  mobileInviteUrl?: string | null;
   invitedByName?: string | null;
 };
 
 export default function CompanyInviteEmail({
   companyName,
   inviteUrl,
+  mobileInviteUrl,
   invitedByName,
 }: CompanyInviteEmailProps) {
   const primary = '#324D7A';
@@ -64,7 +66,7 @@ export default function CompanyInviteEmail({
                 </Text>
                 <Section className="mt-6">
                   <Button
-                    href={inviteUrl}
+                    href={mobileInviteUrl ?? inviteUrl}
                     className="rounded-xl px-6 py-3 text-[14px] font-semibold"
                     style={{
                       backgroundColor: accent,
@@ -72,9 +74,21 @@ export default function CompanyInviteEmail({
                       border: `1px solid ${accent}`,
                     }}
                   >
-                    Accetta invito
+                    {mobileInviteUrl ? "Entra in autoscuola" : "Accetta invito"}
                   </Button>
                 </Section>
+                {mobileInviteUrl ? (
+                  <Section className="mt-3">
+                    <Text className="m-0 text-xs text-gray-500">
+                      Se non si apre l&apos;app, usa questo link web:
+                    </Text>
+                    <Text className="m-0 mt-1 text-xs">
+                      <a href={inviteUrl} style={{ color: primary }}>
+                        Apri invito su web
+                      </a>
+                    </Text>
+                  </Section>
+                ) : null}
 
                 <Section className="mt-6 pt-6 border-t" style={{ borderColor: '#D8ECE7' }}>
                   <Img

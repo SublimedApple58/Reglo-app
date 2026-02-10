@@ -41,6 +41,20 @@ type ExpoResponseEntry = {
   };
 };
 
+type ExpoErrorEntry = {
+  code?: string;
+  message?: string;
+};
+
+export type AutoscuolaPushSendResult = {
+  sent: number;
+  failed: number;
+  skipped: number;
+  invalidated: number;
+  errorCodes: string[];
+  errorMessages: string[];
+};
+
 export async function sendAutoscuolaPushToUsers({
   prisma = defaultPrisma,
   companyId,
@@ -50,7 +64,14 @@ export async function sendAutoscuolaPushToUsers({
   data,
 }: SendAutoscuolaPushOptions) {
   if (!userIds.length) {
-    return { sent: 0, failed: 0, skipped: 0, invalidated: 0 };
+    return {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      invalidated: 0,
+      errorCodes: [],
+      errorMessages: [],
+    } satisfies AutoscuolaPushSendResult;
   }
 
   const devices = await prisma.mobilePushDevice.findMany({
@@ -65,7 +86,14 @@ export async function sendAutoscuolaPushToUsers({
   });
 
   if (!devices.length) {
-    return { sent: 0, failed: 0, skipped: 0, invalidated: 0 };
+    return {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      invalidated: 0,
+      errorCodes: [],
+      errorMessages: [],
+    } satisfies AutoscuolaPushSendResult;
   }
 
   const tokenMap = new Map<string, string>();
@@ -99,13 +127,17 @@ export async function sendAutoscuolaPushToUsers({
       failed: 0,
       skipped: devices.length,
       invalidated: invalidDeviceIds.length,
-    };
+      errorCodes: [],
+      errorMessages: [],
+    } satisfies AutoscuolaPushSendResult;
   }
 
   let sent = 0;
   let failed = 0;
   const skipped = devices.length - validTokens.length;
   const tokenInvalidation: string[] = [];
+  const errorCodes = new Set<string>();
+  const errorMessages = new Set<string>();
 
   const batches = chunk(validTokens, EXPO_BATCH_SIZE);
   for (const batch of batches) {
@@ -130,8 +162,15 @@ export async function sendAutoscuolaPushToUsers({
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { data?: ExpoResponseEntry[] }
+        | { data?: ExpoResponseEntry[]; errors?: ExpoErrorEntry[] }
         | null;
+
+      if (Array.isArray(payload?.errors)) {
+        payload.errors.forEach((entry) => {
+          if (entry.code) errorCodes.add(entry.code);
+          if (entry.message) errorMessages.add(entry.message);
+        });
+      }
 
       if (!response.ok || !payload?.data || !Array.isArray(payload.data)) {
         failed += batch.length;
@@ -146,11 +185,18 @@ export async function sendAutoscuolaPushToUsers({
         }
 
         failed += 1;
+        if (entry.details?.error) {
+          errorCodes.add(entry.details.error);
+        }
+        if (entry.message) {
+          errorMessages.add(entry.message);
+        }
         if (entry.details?.error === "DeviceNotRegistered") {
           tokenInvalidation.push(token);
         }
       });
     } catch {
+      errorCodes.add("NetworkError");
       failed += batch.length;
     }
   }
@@ -171,5 +217,7 @@ export async function sendAutoscuolaPushToUsers({
     failed,
     skipped,
     invalidated: invalidDeviceIds.length + deviceIdsToDisable.length,
-  };
+    errorCodes: Array.from(errorCodes),
+    errorMessages: Array.from(errorMessages),
+  } satisfies AutoscuolaPushSendResult;
 }

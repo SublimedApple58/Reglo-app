@@ -574,7 +574,14 @@ export async function createAutoscuolaAppointment(
 
     let notificationSent = false;
     let pushSummary:
-      | { sent: number; failed: number; skipped: number; invalidated: number }
+      | {
+          sent: number;
+          failed: number;
+          skipped: number;
+          invalidated: number;
+          errorCodes?: string[];
+          errorMessages?: string[];
+        }
       | null = null;
     const userIds = [student.user.id];
     if (userIds.length) {
@@ -606,6 +613,8 @@ export async function createAutoscuolaAppointment(
 
     const pushMessage = notificationSent
       ? "Proposta creata e notifica inviata all'allievo."
+      : pushSummary?.errorCodes?.includes("InvalidCredentials")
+        ? "Proposta creata. Push non configurate: credenziali APNs mancanti o non valide su Expo."
       : pushSummary && pushSummary.sent === 0 && pushSummary.failed === 0
         ? "Proposta creata. Nessun dispositivo push registrato per l'allievo."
         : "Proposta creata. Invio push non riuscito.";

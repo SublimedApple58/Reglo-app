@@ -147,11 +147,13 @@ export const sendCompanyInviteEmail = async ({
   to,
   companyName,
   inviteUrl,
+  mobileInviteUrl,
   invitedByName,
 }: {
   to: string;
   companyName: string;
   inviteUrl: string;
+  mobileInviteUrl?: string | null;
   invitedByName?: string | null;
 }) => {
   const resend = getResend();
@@ -163,6 +165,7 @@ export const sendCompanyInviteEmail = async ({
       <CompanyInviteEmail
         companyName={companyName}
         inviteUrl={inviteUrl}
+        mobileInviteUrl={mobileInviteUrl}
         invitedByName={invitedByName}
       />
     ),

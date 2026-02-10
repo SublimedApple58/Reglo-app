@@ -21,6 +21,13 @@ import { compare, hash } from '@/lib/encrypt';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
+const MOBILE_DEEP_LINK_SCHEME =
+  process.env.MOBILE_DEEP_LINK_SCHEME ?? 'com.tiziano.developer.reglo-mobile';
+
+const buildMobileInviteUrl = (token: string) => {
+  const scheme = MOBILE_DEEP_LINK_SCHEME.replace(/:\/*$/, '');
+  return `${scheme}://invite/${token}`;
+};
 
 export async function createCompanyInvite(
   input: z.infer<typeof createCompanyInviteSchema>
@@ -90,12 +97,25 @@ export async function createCompanyInvite(
           },
         });
 
+    const autoscuolaService = await prisma.companyService.findFirst({
+      where: {
+        companyId: payload.companyId,
+        serviceKey: 'AUTOSCUOLE',
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${invite.token}`;
+    const mobileInviteUrl = autoscuolaService
+      ? buildMobileInviteUrl(invite.token)
+      : null;
 
     await sendCompanyInviteEmail({
       to: email,
       companyName: membership.company.name,
       inviteUrl,
+      mobileInviteUrl,
       invitedByName: session?.user?.name ?? null,
     });
 
@@ -152,11 +172,23 @@ export async function resendCompanyInvite(
     });
 
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${updatedInvite.token}`;
+    const autoscuolaService = await prisma.companyService.findFirst({
+      where: {
+        companyId: invite.companyId,
+        serviceKey: 'AUTOSCUOLE',
+        status: 'ACTIVE',
+      },
+      select: { id: true },
+    });
+    const mobileInviteUrl = autoscuolaService
+      ? buildMobileInviteUrl(updatedInvite.token)
+      : null;
 
     await sendCompanyInviteEmail({
       to: invite.email,
       companyName: invite.company.name,
       inviteUrl,
+      mobileInviteUrl,
       invitedByName: session?.user?.name ?? null,
     });
 
