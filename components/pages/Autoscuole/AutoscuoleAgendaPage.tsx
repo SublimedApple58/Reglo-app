@@ -562,14 +562,14 @@ export function AutoscuoleAgendaPage() {
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={`absolute left-2 right-2 flex flex-col gap-1 rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
+                                  className={`absolute left-2 right-2 flex flex-col gap-1 overflow-hidden rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
                                   style={{ top, height }}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                   }}
                                 >
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className="min-w-0 font-semibold leading-tight text-foreground">
+                                    <div className="min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground">
                                       {item.student.firstName} {item.student.lastName}
                                     </div>
                                     <Badge
@@ -579,7 +579,7 @@ export function AutoscuoleAgendaPage() {
                                       {statusMeta.shortLabel}
                                     </Badge>
                                   </div>
-                                  <div className="text-[11px] text-muted-foreground">
+                                  <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
                                     {item.type} · {formatTimeRange(start, end)} ·{" "}
                                     {Math.round(diffMinutes(end, start))}m
                                   </div>
