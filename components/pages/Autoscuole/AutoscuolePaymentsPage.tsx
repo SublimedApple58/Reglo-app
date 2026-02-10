@@ -3,7 +3,11 @@
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
 
-export function AutoscuolePaymentsPage() {
+export function AutoscuolePaymentsPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   return (
     <ClientPageWrapper
       title="Autoscuole"
@@ -11,7 +15,7 @@ export function AutoscuolePaymentsPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
         <div className="glass-panel glass-strong p-6 text-sm text-muted-foreground">
           Qui potrai gestire piani rateali e fatture elettroniche con Fatture in Cloud.
         </div>

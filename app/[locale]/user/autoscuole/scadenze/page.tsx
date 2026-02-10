@@ -1,10 +1,10 @@
-import { ServiceGate } from "@/components/ui/service-gate";
-import { AutoscuoleDeadlinesPage } from "@/components/pages/Autoscuole/AutoscuoleDeadlinesPage";
+import { redirect } from "next/navigation";
 
-export default function AutoscuoleDeadlinesRoute() {
-  return (
-    <ServiceGate service="AUTOSCUOLE">
-      <AutoscuoleDeadlinesPage />
-    </ServiceGate>
-  );
+export default async function AutoscuoleDeadlinesRoute({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  redirect(`/${locale}/user/autoscuole?tab=scadenze`);
 }

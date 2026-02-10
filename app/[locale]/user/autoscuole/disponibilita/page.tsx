@@ -1,10 +1,10 @@
-import { ServiceGate } from "@/components/ui/service-gate";
-import { AutoscuoleResourcesPage } from "@/components/pages/Autoscuole/AutoscuoleResourcesPage";
+import { redirect } from "next/navigation";
 
-export default function AutoscuoleDisponibilitaRoute() {
-  return (
-    <ServiceGate service="AUTOSCUOLE">
-      <AutoscuoleResourcesPage />
-    </ServiceGate>
-  );
+export default async function AutoscuoleDisponibilitaRoute({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  redirect(`/${locale}/user/autoscuole?tab=disponibilita`);
 }

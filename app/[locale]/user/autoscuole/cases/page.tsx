@@ -1,10 +1,10 @@
-import { ServiceGate } from "@/components/ui/service-gate";
-import { AutoscuoleCasesPage } from "@/components/pages/Autoscuole/AutoscuoleCasesPage";
+import { redirect } from "next/navigation";
 
-export default function AutoscuoleCasesRoute() {
-  return (
-    <ServiceGate service="AUTOSCUOLE">
-      <AutoscuoleCasesPage />
-    </ServiceGate>
-  );
+export default async function AutoscuoleCasesRoute({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  redirect(`/${locale}/user/autoscuole?tab=cases`);
 }

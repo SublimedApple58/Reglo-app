@@ -58,7 +58,11 @@ const emptyDraft = () => ({
   body: "",
 });
 
-export function AutoscuoleCommunicationsPage() {
+export function AutoscuoleCommunicationsPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   const toast = useFeedbackToast();
   const isMobile = useIsMobile();
   const [rules, setRules] = React.useState<Rule[]>([]);
@@ -93,7 +97,7 @@ export function AutoscuoleCommunicationsPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
 
         <section className="glass-panel glass-strong p-6">
           <div className="flex items-start justify-between gap-3">

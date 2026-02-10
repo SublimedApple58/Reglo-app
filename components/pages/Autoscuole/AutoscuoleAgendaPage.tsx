@@ -73,7 +73,11 @@ type FilterOption = {
   label: string;
 };
 
-export function AutoscuoleAgendaPage() {
+export function AutoscuoleAgendaPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   const toast = useFeedbackToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
   const [students, setStudents] = React.useState<StudentOption[]>([]);
@@ -304,6 +308,15 @@ export function AutoscuoleAgendaPage() {
     }
     setStatusFilter(value);
   }, []);
+  const handleCalendarWheel = React.useCallback(
+    (event: React.WheelEvent<HTMLDivElement>) => {
+      const verticalIntent = Math.abs(event.deltaY) > Math.abs(event.deltaX);
+      if (!verticalIntent) return;
+      event.preventDefault();
+      window.scrollBy({ top: event.deltaY, behavior: "auto" });
+    },
+    [],
+  );
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
@@ -333,7 +346,7 @@ export function AutoscuoleAgendaPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -479,7 +492,10 @@ export function AutoscuoleAgendaPage() {
           {loading ? (
             <Skeleton className="h-[420px] w-full" />
           ) : (
-            <div className="overflow-x-auto overflow-y-hidden overscroll-y-none">
+            <div
+              className="overflow-x-auto overflow-y-hidden overscroll-y-none"
+              onWheel={handleCalendarWheel}
+            >
               <div className="min-w-[980px] space-y-3">
                 <div
                   className={`grid gap-3 text-xs text-muted-foreground ${

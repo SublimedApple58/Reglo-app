@@ -3,7 +3,11 @@
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
 
-export function AutoscuoleDocumentsPage() {
+export function AutoscuoleDocumentsPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   return (
     <ClientPageWrapper
       title="Autoscuole"
@@ -11,7 +15,7 @@ export function AutoscuoleDocumentsPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
         <div className="glass-panel glass-strong p-6 text-sm text-muted-foreground">
           La gestione documenti dedicata alle autoscuole arriverà a breve. Nel frattempo
           puoi usare il Doc Manager per archiviare e precompilare moduli.

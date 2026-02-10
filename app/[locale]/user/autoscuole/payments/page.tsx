@@ -1,10 +1,10 @@
-import { ServiceGate } from "@/components/ui/service-gate";
-import { AutoscuolePaymentsPage } from "@/components/pages/Autoscuole/AutoscuolePaymentsPage";
+import { redirect } from "next/navigation";
 
-export default function AutoscuolePaymentsRoute() {
-  return (
-    <ServiceGate service="AUTOSCUOLE">
-      <AutoscuolePaymentsPage />
-    </ServiceGate>
-  );
+export default async function AutoscuolePaymentsRoute({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  redirect(`/${locale}/user/autoscuole?tab=payments`);
 }

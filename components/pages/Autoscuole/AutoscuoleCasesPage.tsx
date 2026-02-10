@@ -45,7 +45,11 @@ const STATUS_OPTIONS = [
   "esame_superato",
 ];
 
-export function AutoscuoleCasesPage() {
+export function AutoscuoleCasesPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   const toast = useFeedbackToast();
   const [cases, setCases] = React.useState<CaseRow[]>([]);
   const [students, setStudents] = React.useState<StudentOption[]>([]);
@@ -133,7 +137,7 @@ export function AutoscuoleCasesPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="min-w-[220px]">

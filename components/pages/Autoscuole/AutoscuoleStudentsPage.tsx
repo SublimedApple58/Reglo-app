@@ -25,7 +25,11 @@ type Student = {
   createdAt: string | Date;
 };
 
-export function AutoscuoleStudentsPage() {
+export function AutoscuoleStudentsPage({
+  hideNav = false,
+}: {
+  hideNav?: boolean;
+} = {}) {
   const locale = useLocale();
   const toast = useFeedbackToast();
   const [search, setSearch] = React.useState("");
@@ -57,7 +61,7 @@ export function AutoscuoleStudentsPage() {
       hideHero
     >
       <div className="space-y-5">
-        <AutoscuoleNav />
+        {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong space-y-4 p-4">
           <div className="space-y-1 text-sm text-muted-foreground">
