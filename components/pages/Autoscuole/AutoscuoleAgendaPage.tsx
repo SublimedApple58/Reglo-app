@@ -80,6 +80,7 @@ export function AutoscuoleAgendaPage() {
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [instructorFilter, setInstructorFilter] = React.useState("all");
   const [vehicleFilter, setVehicleFilter] = React.useState("all");
@@ -101,45 +102,57 @@ export function AutoscuoleAgendaPage() {
     duration: "30",
   });
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    const [appRes, studentRes, instructorRes, vehicleRes] = await Promise.all([
-      getAutoscuolaAppointments(),
-      getAutoscuolaStudents(),
-      getAutoscuolaInstructors(),
-      getAutoscuolaVehicles(),
-    ]);
-    if (!appRes.success || !appRes.data) {
-      toast.error({
-        description: appRes.message ?? "Impossibile caricare l'agenda.",
-      });
+  const load = React.useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (silent) {
+      setRefreshing(true);
     } else {
-      setAppointments(appRes.data);
+      setLoading(true);
     }
-    if (studentRes.success && studentRes.data) {
-      setStudents(
-        studentRes.data.map((student) => ({
-          id: student.id,
-          firstName: student.firstName,
-          lastName: student.lastName,
-        })),
-      );
+    try {
+      const [appRes, studentRes, instructorRes, vehicleRes] = await Promise.all([
+        getAutoscuolaAppointments(),
+        getAutoscuolaStudents(),
+        getAutoscuolaInstructors(),
+        getAutoscuolaVehicles(),
+      ]);
+      if (!appRes.success || !appRes.data) {
+        toast.error({
+          description: appRes.message ?? "Impossibile caricare l'agenda.",
+        });
+      } else {
+        setAppointments(appRes.data);
+      }
+      if (studentRes.success && studentRes.data) {
+        setStudents(
+          studentRes.data.map((student) => ({
+            id: student.id,
+            firstName: student.firstName,
+            lastName: student.lastName,
+          })),
+        );
+      }
+      if (instructorRes.success && instructorRes.data) {
+        const mapped = (instructorRes.data as ResourceOption[]).map((item) => ({
+          id: item.id,
+          name: item.name,
+        }));
+        setInstructors(mapped);
+      }
+      if (vehicleRes.success && vehicleRes.data) {
+        const mapped = (vehicleRes.data as ResourceOption[]).map((item) => ({
+          id: item.id,
+          name: item.name,
+        }));
+        setVehicles(mapped);
+      }
+    } finally {
+      if (silent) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
-    if (instructorRes.success && instructorRes.data) {
-      const mapped = (instructorRes.data as ResourceOption[]).map((item) => ({
-        id: item.id,
-        name: item.name,
-      }));
-      setInstructors(mapped);
-    }
-    if (vehicleRes.success && vehicleRes.data) {
-      const mapped = (vehicleRes.data as ResourceOption[]).map((item) => ({
-        id: item.id,
-        name: item.name,
-      }));
-      setVehicles(mapped);
-    }
-    setLoading(false);
   }, [toast]);
 
   React.useEffect(() => {
@@ -216,20 +229,19 @@ export function AutoscuoleAgendaPage() {
       duration: "30",
     });
     toast.success({ description: res.message ?? "Operazione completata." });
-    load();
+    load({ silent: true });
   };
 
   const handleCancel = async (appointmentId: string) => {
     setPendingEventActionId(appointmentId);
     const res = await cancelAutoscuolaAppointment({ appointmentId });
-    setPendingEventActionId(null);
     if (!res.success) {
       toast.error({
         description: res.message ?? "Impossibile annullare l'appuntamento.",
       });
+      setPendingEventActionId(null);
       return;
     }
-    setAppointments((current) => current.filter((item) => item.id !== appointmentId));
     if (res.data?.rescheduled && res.data?.newStartsAt) {
       toast.success({
         description: `Slot ripianificato: ${new Date(
@@ -245,33 +257,37 @@ export function AutoscuoleAgendaPage() {
         description: "Nessuno slot disponibile, notifica staff inviata.",
       });
     }
-    load();
+    await load({ silent: true });
+    setPendingEventActionId(null);
   };
 
   const handleDelete = async (appointmentId: string) => {
     setPendingEventActionId(appointmentId);
     const res = await deleteAutoscuolaAppointment({ appointmentId });
-    setPendingEventActionId(null);
     if (!res.success) {
       toast.error({
         description: res.message ?? "Impossibile cancellare l'evento.",
       });
+      setPendingEventActionId(null);
       return;
     }
-    setAppointments((current) => current.filter((item) => item.id !== appointmentId));
     toast.success({ description: res.message ?? "Evento cancellato." });
-    load();
+    await load({ silent: true });
+    setPendingEventActionId(null);
   };
 
   const handleStatusUpdate = async (appointmentId: string, status: string) => {
+    setPendingEventActionId(appointmentId);
     const res = await updateAutoscuolaAppointmentStatus({ appointmentId, status });
     if (!res.success) {
       toast.error({
         description: res.message ?? "Impossibile aggiornare lo stato.",
       });
+      setPendingEventActionId(null);
       return;
     }
-    load();
+    await load({ silent: true });
+    setPendingEventActionId(null);
   };
   const applyFilter = React.useCallback((kind: FilterKind, value: string) => {
     if (kind === "instructor") {
@@ -447,6 +463,11 @@ export function AutoscuoleAgendaPage() {
                 </Button>
               </div>
             )}
+            {refreshing ? (
+              <span className="rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+                Aggiornamento...
+              </span>
+            ) : null}
           </div>
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
@@ -566,6 +587,7 @@ export function AutoscuoleAgendaPage() {
                                   className={cn(
                                     "absolute left-2 right-2 box-border flex flex-col overflow-hidden rounded-xl border text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
                                     isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
+                                    isPendingAction ? "pointer-events-none opacity-75" : "",
                                     statusMeta.className,
                                   )}
                                   style={{ top, height }}
@@ -573,31 +595,45 @@ export function AutoscuoleAgendaPage() {
                                     event.stopPropagation();
                                   }}
                                 >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div
-                                      className={cn(
-                                        "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
-                                        isCompact ? "text-[10px]" : "text-[11px]",
-                                      )}
-                                    >
-                                      {item.student.firstName} {item.student.lastName}
-                                    </div>
-                                    <Badge
-                                      variant="secondary"
-                                      className={cn(
-                                        "shrink-0 border border-white/70 bg-white/80 font-medium text-foreground/80",
-                                        isCompact
-                                          ? "px-1.5 py-0 text-[9px]"
-                                          : "px-2 py-0.5 text-[10px]",
-                                      )}
-                                    >
-                                      {statusMeta.shortLabel}
-                                    </Badge>
-                                  </div>
-                                  <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
-                                    {item.type} · {formatTimeRange(start, end)}
-                                    {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
-                                  </div>
+                                  {isPendingAction ? (
+                                    <>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="h-3 w-24 animate-pulse rounded-full bg-white/70" />
+                                        <div className="h-3 w-14 animate-pulse rounded-full bg-white/70" />
+                                      </div>
+                                      <div className="h-3 w-20 animate-pulse rounded-full bg-white/65" />
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div
+                                          className={cn(
+                                            "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
+                                            isCompact ? "text-[10px]" : "text-[11px]",
+                                          )}
+                                        >
+                                          {item.student.firstName} {item.student.lastName}
+                                        </div>
+                                        <Badge
+                                          variant="secondary"
+                                          className={cn(
+                                            "shrink-0 border border-white/70 bg-white/80 font-medium text-foreground/80",
+                                            isCompact
+                                              ? "px-1.5 py-0 text-[9px]"
+                                              : "px-2 py-0.5 text-[10px]",
+                                          )}
+                                        >
+                                          {statusMeta.shortLabel}
+                                        </Badge>
+                                      </div>
+                                      <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
+                                        {item.type} · {formatTimeRange(start, end)}
+                                        {!isCompact
+                                          ? ` · ${Math.round(diffMinutes(end, start))}m`
+                                          : ""}
+                                      </div>
+                                    </>
+                                  )}
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
@@ -623,6 +659,20 @@ export function AutoscuoleAgendaPage() {
                                         day: "2-digit",
                                         month: "long",
                                       })}
+                                    </div>
+                                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                      <div>
+                                        Istruttore:{" "}
+                                        <span className="font-medium text-foreground/85">
+                                          {item.instructor?.name ?? "Non assegnato"}
+                                        </span>
+                                      </div>
+                                      <div>
+                                        Veicolo:{" "}
+                                        <span className="font-medium text-foreground/85">
+                                          {item.vehicle?.name ?? "Non assegnato"}
+                                        </span>
+                                      </div>
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
                                       <Badge variant="secondary">{statusMeta.label}</Badge>
