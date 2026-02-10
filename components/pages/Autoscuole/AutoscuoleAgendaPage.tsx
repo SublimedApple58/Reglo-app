@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Plus } from "lucide-react";
+import { Plus, SlidersHorizontal } from "lucide-react";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
@@ -35,6 +35,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -61,6 +62,17 @@ const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 },
   return `${pad(hours)}:${pad(minutes)}`;
 });
 
+type FilterKind = "instructor" | "vehicle" | "type" | "status";
+
+type FilterEditorState = {
+  kind: FilterKind;
+  value: string;
+};
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
 export function AutoscuoleAgendaPage() {
   const toast = useFeedbackToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
@@ -73,6 +85,7 @@ export function AutoscuoleAgendaPage() {
   const [vehicleFilter, setVehicleFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [typeFilter, setTypeFilter] = React.useState("all");
+  const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
   const [createOpen, setCreateOpen] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
@@ -171,8 +184,7 @@ export function AutoscuoleAgendaPage() {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
     }
-    const startsAt = buildLocalDateTime(form.day, form.time);
-    const startDate = toDate(startsAt);
+    const startDate = buildLocalDateTime(form.day, form.time);
     if (Number.isNaN(startDate.getTime())) {
       toast.error({ description: "Data o orario non validi." });
       return;
@@ -181,7 +193,7 @@ export function AutoscuoleAgendaPage() {
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
       type: "guida",
-      startsAt,
+      startsAt: startDate.toISOString(),
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
@@ -261,6 +273,21 @@ export function AutoscuoleAgendaPage() {
     }
     load();
   };
+  const applyFilter = React.useCallback((kind: FilterKind, value: string) => {
+    if (kind === "instructor") {
+      setInstructorFilter(value);
+      return;
+    }
+    if (kind === "vehicle") {
+      setVehicleFilter(value);
+      return;
+    }
+    if (kind === "type") {
+      setTypeFilter(value);
+      return;
+    }
+    setStatusFilter(value);
+  }, []);
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
@@ -293,7 +320,7 @@ export function AutoscuoleAgendaPage() {
         <AutoscuoleNav />
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-[220px]">
               <Input
                 placeholder="Cerca appuntamenti"
@@ -302,56 +329,61 @@ export function AutoscuoleAgendaPage() {
                 className="border-white/60 bg-white/80"
               />
             </div>
-            <Select value={instructorFilter} onValueChange={setInstructorFilter}>
-              <SelectTrigger className="min-w-[200px]">
-                <SelectValue placeholder="Filtra istruttore" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti gli istruttori</SelectItem>
-                {instructors.map((instructor) => (
-                  <SelectItem key={instructor.id} value={instructor.id}>
-                    {instructor.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
-              <SelectTrigger className="min-w-[200px]">
-                <SelectValue placeholder="Filtra veicolo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i veicoli</SelectItem>
-                {vehicles.map((vehicle) => (
-                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="min-w-[180px]">
-                <SelectValue placeholder="Filtra tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti i tipi</SelectItem>
-                <SelectItem value="guida">Guida</SelectItem>
-                <SelectItem value="esame">Esame</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="min-w-[180px]">
-                <SelectValue placeholder="Filtra stato" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tutti gli stati</SelectItem>
-                <SelectItem value="scheduled">In programma</SelectItem>
-                <SelectItem value="proposal">Proposta</SelectItem>
-                <SelectItem value="checked_in">Check‑in</SelectItem>
-                <SelectItem value="completed">Completata</SelectItem>
-                <SelectItem value="no_show">No‑show</SelectItem>
-                <SelectItem value="cancelled">Cancellata</SelectItem>
-              </SelectContent>
-            </Select>
+            <FilterTag
+              label="Istruttore"
+              value={instructorFilter}
+              allValue="all"
+              onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
+              displayValue={
+                instructorFilter === "all"
+                  ? null
+                  : instructors.find((item) => item.id === instructorFilter)?.name ??
+                    "Selezionato"
+              }
+            />
+            <FilterTag
+              label="Veicolo"
+              value={vehicleFilter}
+              allValue="all"
+              onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
+              displayValue={
+                vehicleFilter === "all"
+                  ? null
+                  : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"
+              }
+            />
+            <FilterTag
+              label="Tipo"
+              value={typeFilter}
+              allValue="all"
+              onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
+              displayValue={typeFilter === "all" ? null : typeFilter === "guida" ? "Guida" : "Esame"}
+            />
+            <FilterTag
+              label="Stato"
+              value={statusFilter}
+              allValue="all"
+              onClick={() => setFilterEditor({ kind: "status", value: statusFilter })}
+              displayValue={statusFilter === "all" ? null : getStatusMeta(statusFilter).label}
+            />
+            {(instructorFilter !== "all" ||
+              vehicleFilter !== "all" ||
+              typeFilter !== "all" ||
+              statusFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 rounded-full"
+                onClick={() => {
+                  setInstructorFilter("all");
+                  setVehicleFilter("all");
+                  setTypeFilter("all");
+                  setStatusFilter("all");
+                }}
+              >
+                Reset filtri
+              </Button>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/70 p-1">
@@ -426,7 +458,7 @@ export function AutoscuoleAgendaPage() {
           {loading ? (
             <Skeleton className="h-[420px] w-full" />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-hidden overscroll-y-none">
               <div className="min-w-[980px] space-y-3">
                 <div
                   className={`grid gap-3 text-xs text-muted-foreground ${
@@ -459,7 +491,7 @@ export function AutoscuoleAgendaPage() {
                         <div
                           key={hour}
                           className="absolute left-0 right-0 text-[11px] text-muted-foreground"
-                          style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE - 6 }}
+                          style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                         >
                           <div className="flex items-center gap-2">
                             <span className="min-w-[36px]">{`${pad(hour)}:00`}</span>
@@ -479,7 +511,7 @@ export function AutoscuoleAgendaPage() {
                     return (
                       <div
                         key={day.toISOString()}
-                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-[linear-gradient(transparent_29px,rgba(255,255,255,0.55)_30px)] bg-[length:100%_30px]"
+                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-[linear-gradient(transparent_29px,rgba(255,255,255,0.55)_30px)] bg-[length:100%_30px] shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_14px_36px_-28px_rgba(50,78,122,0.55)]"
                         style={{ height: calendarHeight }}
                         onClick={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
@@ -492,7 +524,7 @@ export function AutoscuoleAgendaPage() {
                           const slotTime = new Date(dayStart.getTime() + rounded * 60 * 1000);
                           setForm((prev) => ({
                             ...prev,
-                            day: slotTime.toISOString().slice(0, 10),
+                            day: formatYmd(slotTime),
                             time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
                           }));
                           setCreateOpen(true);
@@ -643,6 +675,58 @@ export function AutoscuoleAgendaPage() {
           )}
         </div>
       </div>
+
+      <Dialog
+        open={Boolean(filterEditor)}
+        onOpenChange={(open) => {
+          if (!open) setFilterEditor(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>
+              {getFilterTitle(filterEditor?.kind ?? "status")}
+            </DialogTitle>
+          </DialogHeader>
+          {filterEditor ? (
+            <div className="space-y-4">
+              <Select
+                value={filterEditor.value}
+                onValueChange={(value) =>
+                  setFilterEditor((current) =>
+                    current ? { ...current, value } : current,
+                  )
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona filtro" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setFilterEditor(null)}>
+                  Chiudi
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    applyFilter(filterEditor.kind, filterEditor.value);
+                    setFilterEditor(null);
+                  }}
+                >
+                  Applica
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
@@ -850,11 +934,17 @@ function formatTimeRange(start: Date, end: Date) {
   return `${formatTime(start)}-${formatTime(end)}`;
 }
 
+function formatYmd(date: Date) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
 function buildLocalDateTime(day: string, time: string) {
-  if (!day || !time) return "";
+  if (!day || !time) return new Date("");
   const [hoursRaw, minutesRaw] = time.split(":").map(Number);
-  if (Number.isNaN(hoursRaw) || Number.isNaN(minutesRaw)) return "";
-  return `${day}T${pad(hoursRaw)}:${pad(minutesRaw)}`;
+  if (Number.isNaN(hoursRaw) || Number.isNaN(minutesRaw)) return new Date("");
+  const date = new Date(day);
+  date.setHours(hoursRaw, minutesRaw, 0, 0);
+  return date;
 }
 
 function getStatusMeta(status: string) {
@@ -872,4 +962,81 @@ function getStatusMeta(status: string) {
     return { label: "Proposta", className: "border-amber-200/70 bg-amber-100/80" };
   }
   return { label: "In programma", className: "border-sky-200/70 bg-sky-100/70" };
+}
+
+function getFilterTitle(kind: FilterKind) {
+  if (kind === "instructor") return "Filtra per istruttore";
+  if (kind === "vehicle") return "Filtra per veicolo";
+  if (kind === "type") return "Filtra per tipo";
+  return "Filtra per stato";
+}
+
+function getFilterOptions(
+  kind: FilterKind,
+  instructors: ResourceOption[],
+  vehicles: ResourceOption[],
+): FilterOption[] {
+  if (kind === "instructor") {
+    return [
+      { value: "all", label: "Tutti gli istruttori" },
+      ...instructors.map((item) => ({ value: item.id, label: item.name })),
+    ];
+  }
+  if (kind === "vehicle") {
+    return [
+      { value: "all", label: "Tutti i veicoli" },
+      ...vehicles.map((item) => ({ value: item.id, label: item.name })),
+    ];
+  }
+  if (kind === "type") {
+    return [
+      { value: "all", label: "Tutti i tipi" },
+      { value: "guida", label: "Guida" },
+      { value: "esame", label: "Esame" },
+    ];
+  }
+  return [
+    { value: "all", label: "Tutti gli stati" },
+    { value: "scheduled", label: "In programma" },
+    { value: "proposal", label: "Proposta" },
+    { value: "checked_in", label: "Check‑in" },
+    { value: "completed", label: "Completata" },
+    { value: "no_show", label: "No‑show" },
+  ];
+}
+
+function FilterTag({
+  label,
+  value,
+  allValue,
+  onClick,
+  displayValue,
+}: {
+  label: string;
+  value: string;
+  allValue: string;
+  onClick: () => void;
+  displayValue?: string | null;
+}) {
+  const active = value !== allValue;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition",
+        active
+          ? "border-white/80 bg-white/85 text-foreground shadow-sm"
+          : "border-dashed border-white/70 bg-white/50 text-muted-foreground hover:bg-white/70",
+      )}
+    >
+      <SlidersHorizontal className="h-3.5 w-3.5" />
+      <span>{label}</span>
+      {displayValue ? (
+        <span className="rounded-full bg-[#AFE2D4]/35 px-2 py-0.5 text-[11px] font-medium text-foreground">
+          {displayValue}
+        </span>
+      ) : null}
+    </button>
+  );
 }
