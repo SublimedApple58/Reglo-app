@@ -365,14 +365,8 @@ export async function deleteUser(id: string) {
       throw new Error('User not found in this company');
     }
 
-    const membershipCount = await prisma.companyMember.count({
-      where: { userId: id },
-    });
-
-    if (membershipCount <= 1) {
-      await prisma.user.delete({ where: { id } });
-    } else {
-      await prisma.companyMember.delete({
+    await prisma.$transaction(async (tx) => {
+      await tx.companyMember.delete({
         where: {
           companyId_userId: {
             companyId: context.companyId,
@@ -380,13 +374,31 @@ export async function deleteUser(id: string) {
           },
         },
       });
-    }
+
+      const user = await tx.user.findUnique({
+        where: { id },
+        select: { activeCompanyId: true },
+      });
+
+      if (user?.activeCompanyId === context.companyId) {
+        const fallbackMembership = await tx.companyMember.findFirst({
+          where: { userId: id },
+          orderBy: { createdAt: 'asc' },
+          select: { companyId: true },
+        });
+
+        await tx.user.update({
+          where: { id },
+          data: { activeCompanyId: fallbackMembership?.companyId ?? null },
+        });
+      }
+    });
 
     revalidatePath('/admin/users');
 
     return {
       success: true,
-      message: 'User deleted successfully',
+      message: 'User removed from company',
     };
   } catch (error) {
     return {
