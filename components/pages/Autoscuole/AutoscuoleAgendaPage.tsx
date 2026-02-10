@@ -569,10 +569,15 @@ export function AutoscuoleAgendaPage() {
                                   }}
                                 >
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className="font-semibold text-foreground">
+                                    <div className="min-w-0 font-semibold leading-tight text-foreground">
                                       {item.student.firstName} {item.student.lastName}
                                     </div>
-                                    <Badge variant="secondary">{statusMeta.label}</Badge>
+                                    <Badge
+                                      variant="secondary"
+                                      className="shrink-0 border border-white/70 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-foreground/80"
+                                    >
+                                      {statusMeta.shortLabel}
+                                    </Badge>
                                   </div>
                                   <div className="text-[11px] text-muted-foreground">
                                     {item.type} · {formatTimeRange(start, end)} ·{" "}
@@ -950,18 +955,38 @@ function buildLocalDateTime(day: string, time: string) {
 function getStatusMeta(status: string) {
   const normalized = status.toLowerCase();
   if (normalized === "checked_in") {
-    return { label: "Check‑in", className: "border-emerald-200/70 bg-emerald-100/70" };
+    return {
+      label: "Check‑in",
+      shortLabel: "Check‑in",
+      className: "border-emerald-200/70 bg-emerald-100/70",
+    };
   }
   if (normalized === "completed") {
-    return { label: "Completa", className: "border-indigo-200/70 bg-indigo-100/70" };
+    return {
+      label: "Completa",
+      shortLabel: "Completata",
+      className: "border-indigo-200/70 bg-indigo-100/70",
+    };
   }
   if (normalized === "no_show") {
-    return { label: "No‑show", className: "border-rose-200/70 bg-rose-100/70" };
+    return {
+      label: "No‑show",
+      shortLabel: "No‑show",
+      className: "border-rose-200/70 bg-rose-100/70",
+    };
   }
   if (normalized.includes("proposal")) {
-    return { label: "Proposta", className: "border-amber-200/70 bg-amber-100/80" };
+    return {
+      label: "Proposta",
+      shortLabel: "Proposta",
+      className: "border-amber-200/70 bg-amber-100/80",
+    };
   }
-  return { label: "In programma", className: "border-sky-200/70 bg-sky-100/70" };
+  return {
+    label: "In programma",
+    shortLabel: "In agenda",
+    className: "border-sky-200/70 bg-sky-100/70",
+  };
 }
 
 function getFilterTitle(kind: FilterKind) {
