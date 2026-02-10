@@ -21,12 +21,9 @@ import { compare, hash } from '@/lib/encrypt';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
-const MOBILE_DEEP_LINK_SCHEME =
-  process.env.MOBILE_DEEP_LINK_SCHEME ?? 'com.tiziano.developer.reglo-mobile';
 
 const buildMobileInviteUrl = (token: string) => {
-  const scheme = MOBILE_DEEP_LINK_SCHEME.replace(/:\/*$/, '');
-  return `${scheme}://invite/${token}`;
+  return `${SERVER_URL}/api/mobile/invites/${token}/open`;
 };
 
 export async function createCompanyInvite(
