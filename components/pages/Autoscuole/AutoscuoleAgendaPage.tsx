@@ -555,6 +555,7 @@ export function AutoscuoleAgendaPage() {
                           const top = offsetMinutes * PIXELS_PER_MINUTE;
                           const height = durationMinutes * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status);
+                          const isCompact = height <= 56;
 
                           const isPendingAction = pendingEventActionId === item.id;
                           return (
@@ -562,26 +563,40 @@ export function AutoscuoleAgendaPage() {
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={`absolute left-2 right-2 flex flex-col gap-1 overflow-hidden rounded-xl border p-2 text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${statusMeta.className}`}
+                                  className={cn(
+                                    "absolute left-2 right-2 box-border flex flex-col overflow-hidden rounded-xl border text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                                    isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
+                                    statusMeta.className,
+                                  )}
                                   style={{ top, height }}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                   }}
                                 >
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className="min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground">
+                                    <div
+                                      className={cn(
+                                        "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
+                                        isCompact ? "text-[10px]" : "text-[11px]",
+                                      )}
+                                    >
                                       {item.student.firstName} {item.student.lastName}
                                     </div>
                                     <Badge
                                       variant="secondary"
-                                      className="shrink-0 border border-white/70 bg-white/80 px-2 py-0.5 text-[10px] font-medium text-foreground/80"
+                                      className={cn(
+                                        "shrink-0 border border-white/70 bg-white/80 font-medium text-foreground/80",
+                                        isCompact
+                                          ? "px-1.5 py-0 text-[9px]"
+                                          : "px-2 py-0.5 text-[10px]",
+                                      )}
                                     >
                                       {statusMeta.shortLabel}
                                     </Badge>
                                   </div>
                                   <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
-                                    {item.type} · {formatTimeRange(start, end)} ·{" "}
-                                    {Math.round(diffMinutes(end, start))}m
+                                    {item.type} · {formatTimeRange(start, end)}
+                                    {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
