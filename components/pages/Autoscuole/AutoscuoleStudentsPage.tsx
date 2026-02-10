@@ -27,8 +27,10 @@ type Student = {
 
 export function AutoscuoleStudentsPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const locale = useLocale();
   const toast = useFeedbackToast();
@@ -61,6 +63,7 @@ export function AutoscuoleStudentsPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong space-y-4 p-4">

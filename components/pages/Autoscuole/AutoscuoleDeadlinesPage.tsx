@@ -35,8 +35,10 @@ const statusBadge = (status: DeadlineItem["status"]) => {
 
 export function AutoscuoleDeadlinesPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const [loading, setLoading] = React.useState(true);
@@ -71,6 +73,7 @@ export function AutoscuoleDeadlinesPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <section className="glass-panel glass-strong p-6">

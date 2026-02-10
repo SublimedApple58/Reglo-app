@@ -75,8 +75,10 @@ type FilterOption = {
 
 export function AutoscuoleAgendaPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
@@ -346,6 +348,7 @@ export function AutoscuoleAgendaPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">

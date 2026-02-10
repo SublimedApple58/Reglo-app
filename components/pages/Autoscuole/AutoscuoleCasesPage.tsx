@@ -47,8 +47,10 @@ const STATUS_OPTIONS = [
 
 export function AutoscuoleCasesPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const [cases, setCases] = React.useState<CaseRow[]>([]);
@@ -137,6 +139,7 @@ export function AutoscuoleCasesPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">

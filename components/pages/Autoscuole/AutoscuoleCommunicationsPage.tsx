@@ -60,8 +60,10 @@ const emptyDraft = () => ({
 
 export function AutoscuoleCommunicationsPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const isMobile = useIsMobile();
@@ -97,6 +99,7 @@ export function AutoscuoleCommunicationsPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <section className="glass-panel glass-strong p-6">

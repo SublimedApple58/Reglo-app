@@ -2,8 +2,8 @@
 
 import React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { RegloTabs } from "@/components/ui/reglo-tabs";
 
-import { cn } from "@/lib/utils";
 import { AutoscuoleAgendaPage } from "./AutoscuoleAgendaPage";
 import { AutoscuoleCasesPage } from "./AutoscuoleCasesPage";
 import { AutoscuoleCommunicationsPage } from "./AutoscuoleCommunicationsPage";
@@ -48,13 +48,6 @@ function normalizeTab(value: string | null): AutoscuoleTabKey {
   return found?.key ?? "dashboard";
 }
 
-function createMountedState(initial: AutoscuoleTabKey) {
-  return TAB_ITEMS.reduce(
-    (acc, item) => ({ ...acc, [item.key]: item.key === initial }),
-    {} as Record<AutoscuoleTabKey, boolean>,
-  );
-}
-
 export function AutoscuoleTabsPage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -65,20 +58,15 @@ export function AutoscuoleTabsPage() {
     [searchParams],
   );
   const [activeTab, setActiveTab] = React.useState<AutoscuoleTabKey>(initialTab);
-  const [mountedTabs, setMountedTabs] = React.useState<Record<AutoscuoleTabKey, boolean>>(
-    () => createMountedState(initialTab),
-  );
 
   React.useEffect(() => {
     const tab = normalizeTab(searchParams.get("tab"));
     setActiveTab(tab);
-    setMountedTabs((prev) => ({ ...prev, [tab]: true }));
   }, [searchParams]);
 
   const selectTab = React.useCallback(
     (tab: AutoscuoleTabKey) => {
       setActiveTab(tab);
-      setMountedTabs((prev) => ({ ...prev, [tab]: true }));
       const next = new URLSearchParams(searchParams.toString());
       if (tab === "dashboard") {
         next.delete("tab");
@@ -90,78 +78,44 @@ export function AutoscuoleTabsPage() {
     },
     [pathname, router, searchParams],
   );
+  const tabsNode = (
+    <RegloTabs
+      items={TAB_ITEMS}
+      activeKey={activeTab}
+      onChange={selectTab}
+      ariaLabel="Sezioni autoscuole"
+    />
+  );
 
   return (
-    <div className="space-y-4">
-      <div className="glass-panel glass-strong p-2 shadow-[0_12px_30px_-24px_rgba(50,77,122,0.45)]">
-        <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
-          {TAB_ITEMS.map((item) => {
-            const isActive = activeTab === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => selectTab(item.key)}
-                className={cn(
-                  "shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "border-[#324D7A] bg-[#324D7A] text-white shadow-[0_8px_18px_-10px_rgba(50,77,122,0.65)]"
-                    : "border-white/70 bg-white/70 text-[#324D7A] hover:border-[#AFE2D4] hover:bg-[#AFE2D4]/45",
-                )}
-              >
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {mountedTabs.dashboard ? (
-        <div className={activeTab === "dashboard" ? "block" : "hidden"}>
-          <AutoscuoleDashboardPage hideNav />
-        </div>
+    <div>
+      {activeTab === "dashboard" ? (
+        <AutoscuoleDashboardPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.students ? (
-        <div className={activeTab === "students" ? "block" : "hidden"}>
-          <AutoscuoleStudentsPage hideNav />
-        </div>
+      {activeTab === "students" ? (
+        <AutoscuoleStudentsPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.cases ? (
-        <div className={activeTab === "cases" ? "block" : "hidden"}>
-          <AutoscuoleCasesPage hideNav />
-        </div>
+      {activeTab === "cases" ? (
+        <AutoscuoleCasesPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.agenda ? (
-        <div className={activeTab === "agenda" ? "block" : "hidden"}>
-          <AutoscuoleAgendaPage hideNav />
-        </div>
+      {activeTab === "agenda" ? (
+        <AutoscuoleAgendaPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.disponibilita ? (
-        <div className={activeTab === "disponibilita" ? "block" : "hidden"}>
-          <AutoscuoleResourcesPage hideNav />
-        </div>
+      {activeTab === "disponibilita" ? (
+        <AutoscuoleResourcesPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.scadenze ? (
-        <div className={activeTab === "scadenze" ? "block" : "hidden"}>
-          <AutoscuoleDeadlinesPage hideNav />
-        </div>
+      {activeTab === "scadenze" ? (
+        <AutoscuoleDeadlinesPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.documents ? (
-        <div className={activeTab === "documents" ? "block" : "hidden"}>
-          <AutoscuoleDocumentsPage hideNav />
-        </div>
+      {activeTab === "documents" ? (
+        <AutoscuoleDocumentsPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.payments ? (
-        <div className={activeTab === "payments" ? "block" : "hidden"}>
-          <AutoscuolePaymentsPage hideNav />
-        </div>
+      {activeTab === "payments" ? (
+        <AutoscuolePaymentsPage hideNav tabs={tabsNode} />
       ) : null}
-      {mountedTabs.comunicazioni ? (
-        <div className={activeTab === "comunicazioni" ? "block" : "hidden"}>
-          <AutoscuoleCommunicationsPage hideNav />
-        </div>
+      {activeTab === "comunicazioni" ? (
+        <AutoscuoleCommunicationsPage hideNav tabs={tabsNode} />
       ) : null}
     </div>
   );
 }
-

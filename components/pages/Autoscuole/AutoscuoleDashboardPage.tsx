@@ -18,8 +18,10 @@ type Overview = {
 
 export function AutoscuoleDashboardPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const [overview, setOverview] = React.useState<Overview | null>(null);
@@ -54,6 +56,7 @@ export function AutoscuoleDashboardPage({
       hideHero
     >
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <section className="glass-panel glass-strong p-6">

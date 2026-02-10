@@ -52,8 +52,10 @@ type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
 
 export function AutoscuoleResourcesPage({
   hideNav = false,
+  tabs,
 }: {
   hideNav?: boolean;
+  tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
   const [date, setDate] = React.useState(() => formatDateLocal(new Date()));
@@ -242,6 +244,7 @@ export function AutoscuoleResourcesPage({
   return (
     <ClientPageWrapper title="Autoscuole" subTitle="Disponibilità istruttori e veicoli" hideHero>
       <div className="space-y-5">
+        {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-4 p-4">

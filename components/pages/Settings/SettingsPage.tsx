@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { cn } from "@/lib/utils";
+import { RegloTabs } from "@/components/ui/reglo-tabs";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { useSession } from "next-auth/react";
 import { useAtomValue, useSetAtom } from "jotai";
@@ -515,10 +516,15 @@ export function SettingsPage(): React.ReactElement {
           <div className="absolute bottom-12 left-8 h-44 w-44 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
         </div>
         <div className="flex flex-col gap-3">
-          <TabsSwitcher
-            items={tabItems}
-            activeIndex={activeTabIndex}
-            onChange={(index) => setActiveTabIndex(index)}
+          <RegloTabs
+            items={tabItems.map((item) => ({ key: item.value, label: item.label }))}
+            activeKey={activeTab}
+            onChange={(value) => {
+              const index = tabItems.findIndex((item) => item.value === value);
+              if (index >= 0) setActiveTabIndex(index);
+            }}
+            ariaLabel="Impostazioni"
+            className="w-full max-w-lg"
           />
         </div>
 
@@ -1215,51 +1221,6 @@ function SelectField({
           ))}
         </SelectContent>
       </Select>
-    </div>
-  );
-}
-
-function TabsSwitcher({
-  items,
-  activeIndex,
-  onChange,
-}: {
-  items: TabItem[];
-  activeIndex: number;
-  onChange: (index: number) => void;
-}) {
-  const width = 100 / items.length;
-
-  return (
-    <div className="w-full max-w-lg">
-      <div
-        role="tablist"
-        aria-label="Impostazioni"
-        className="glass-panel relative flex items-center p-1"
-      >
-        <motion.div
-          className="absolute bottom-1 top-1 rounded-lg border border-white/70 bg-white/80 shadow-sm"
-          style={{ width: `${width}%`, left: 0 }}
-          animate={{ left: `${activeIndex * width}%` }}
-          transition={{ type: "spring", stiffness: 260, damping: 26, mass: 0.7 }}
-        />
-        {items.map((item, index) => (
-          <button
-            key={`${item.value}-${index}`}
-            role="tab"
-            aria-selected={activeIndex === index}
-            className={cn(
-              "relative z-10 flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 focus:outline-none hover:-translate-y-0.5 hover:text-foreground",
-              activeIndex === index
-                ? "text-foreground"
-                : "text-muted-foreground",
-            )}
-            onClick={() => onChange(index)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
