@@ -15,6 +15,7 @@ export function AutoscuolePaymentsPage({
       title="Autoscuole"
       subTitle="Pagamenti e rateizzazioni."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

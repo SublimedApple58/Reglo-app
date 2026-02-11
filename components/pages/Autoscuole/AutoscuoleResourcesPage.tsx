@@ -242,7 +242,12 @@ export function AutoscuoleResourcesPage({
   };
 
   return (
-    <ClientPageWrapper title="Autoscuole" subTitle="Disponibilità istruttori e veicoli" hideHero>
+    <ClientPageWrapper
+      title="Autoscuole"
+      subTitle="Disponibilità istruttori e veicoli"
+      hideHero
+      contentWidthClassName="max-w-[1600px]"
+    >
       <div className="space-y-5">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}

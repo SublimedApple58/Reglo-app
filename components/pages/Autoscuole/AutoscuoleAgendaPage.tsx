@@ -346,6 +346,7 @@ export function AutoscuoleAgendaPage({
       title="Autoscuole"
       subTitle="Agenda guide ed esami."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

@@ -137,6 +137,7 @@ export function AutoscuoleCasesPage({
       title="Autoscuole"
       subTitle="Gestisci le pratiche e gli stati degli allievi."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

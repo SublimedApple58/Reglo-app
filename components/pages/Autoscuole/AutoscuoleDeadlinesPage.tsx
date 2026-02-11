@@ -71,6 +71,7 @@ export function AutoscuoleDeadlinesPage({
       title="Autoscuole"
       subTitle="Scadenze critiche e promemoria automatici."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

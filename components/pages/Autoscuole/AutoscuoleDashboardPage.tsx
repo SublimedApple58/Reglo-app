@@ -54,6 +54,7 @@ export function AutoscuoleDashboardPage({
       title="Autoscuole"
       subTitle="Dashboard operativa per gestione allievi, pratiche e appuntamenti."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

@@ -97,6 +97,7 @@ export function AutoscuoleCommunicationsPage({
       title="Autoscuole"
       subTitle="Comunicazioni automatiche con allievi e staff."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

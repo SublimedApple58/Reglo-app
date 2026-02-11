@@ -197,6 +197,7 @@ export function AutoscuoleStudentsPage({
       title="Autoscuole"
       subTitle="Allievi sincronizzati dalla Directory utenti."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}

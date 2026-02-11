@@ -15,6 +15,7 @@ export function AutoscuoleDocumentsPage({
       title="Autoscuole"
       subTitle="Documenti e modulistica digitale."
       hideHero
+      contentWidthClassName="max-w-[1600px]"
     >
       <div className="space-y-5">
         {tabs}
