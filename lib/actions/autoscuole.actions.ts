@@ -58,6 +58,7 @@ const deleteAppointmentSchema = z.object({
 const updateAppointmentStatusSchema = z.object({
   appointmentId: z.string().uuid(),
   status: z.string().min(1),
+  lessonType: z.string().min(1).optional(),
 });
 
 const createInstructorSchema = z.object({
@@ -108,6 +109,67 @@ const ensureAutoscuolaRole = (
     throw new Error("Operazione non consentita.");
   }
 };
+
+const REQUIRED_LESSONS_COUNT = 10;
+const LESSON_TYPE_OPTIONS = [
+  "manovre",
+  "urbano",
+  "extraurbano",
+  "notturna",
+  "autostrada",
+  "parcheggio",
+  "altro",
+  "guida",
+] as const;
+const LESSON_TYPE_SET = new Set<string>(LESSON_TYPE_OPTIONS);
+const INSTRUCTOR_ALLOWED_STATUSES = new Set(["checked_in", "no_show"]);
+const DRIVING_LESSON_EXCLUDED_TYPES = new Set(["esame"]);
+
+const normalizeStatus = (value: string) => value.trim().toLowerCase();
+const normalizeLessonType = (value: string | null | undefined) =>
+  (value ?? "").trim().toLowerCase();
+const isDrivingLessonType = (value: string | null | undefined) => {
+  const normalized = normalizeLessonType(value);
+  if (!normalized) return false;
+  return !DRIVING_LESSON_EXCLUDED_TYPES.has(normalized);
+};
+
+const isActiveCaseStatus = (status: string | null | undefined) => {
+  const normalized = normalizeStatus(status ?? "");
+  return ![
+    "archived",
+    "closed",
+    "chiusa",
+    "completed",
+    "completata",
+    "cancelled",
+    "annullata",
+  ].includes(normalized);
+};
+
+const computeAppointmentEnd = (appointment: {
+  startsAt: Date;
+  endsAt: Date | null;
+}) => appointment.endsAt ?? new Date(appointment.startsAt.getTime() + 30 * 60 * 1000);
+
+const isWithinInstructorStatusWindow = (
+  appointment: { startsAt: Date; endsAt: Date | null },
+  now: Date,
+) => {
+  const startsAt = appointment.startsAt;
+  const startsWindow = new Date(startsAt.getTime() - 10 * 60 * 1000);
+  const dayEnd = new Date(startsAt);
+  dayEnd.setHours(23, 59, 59, 999);
+  if (now < startsWindow) return false;
+  if (now > dayEnd) return false;
+  return true;
+};
+
+const getInstructorWindowOpenTimeLabel = (startsAt: Date) =>
+  new Date(startsAt.getTime() - 10 * 60 * 1000).toLocaleTimeString("it-IT", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
@@ -330,6 +392,253 @@ export async function getAutoscuolaStudents(search?: string) {
       matchesStudentQuery(student, search),
     );
     return { success: true, data: students };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+type DrivingRegisterCaseRow = {
+  id: string;
+  studentId: string;
+  status: string;
+  category: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type DrivingRegisterLessonRow = {
+  id: string;
+  studentId: string;
+  caseId: string | null;
+  type: string;
+  status: string;
+  startsAt: Date;
+  endsAt: Date | null;
+  instructor?: { name: string } | null;
+  vehicle?: { name: string } | null;
+};
+
+const buildDrivingRegisterData = ({
+  cases,
+  lessons,
+}: {
+  cases: DrivingRegisterCaseRow[];
+  lessons: DrivingRegisterLessonRow[];
+}) => {
+  const activeCase =
+    [...cases]
+      .filter((item) => isActiveCaseStatus(item.status))
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0] ?? null;
+
+  const drivingLessons = [...lessons]
+    .filter((lesson) => isDrivingLessonType(lesson.type))
+    .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+
+  const scopedDrivingLessons = activeCase
+    ? drivingLessons.filter((lesson) => lesson.caseId === activeCase.id)
+    : drivingLessons;
+
+  const completedLessons = scopedDrivingLessons.filter(
+    (lesson) => normalizeStatus(lesson.status) === "completed",
+  );
+
+  const byLessonTypeMap = new Map<string, number>();
+  for (const lesson of completedLessons) {
+    const normalizedType = normalizeLessonType(lesson.type) || "altro";
+    byLessonTypeMap.set(
+      normalizedType,
+      (byLessonTypeMap.get(normalizedType) ?? 0) + 1,
+    );
+  }
+
+  const byLessonType = Array.from(byLessonTypeMap.entries())
+    .map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type));
+
+  const summaryCount = completedLessons.length;
+
+  return {
+    activeCase: activeCase
+      ? {
+          id: activeCase.id,
+          status: activeCase.status,
+          category: activeCase.category,
+        }
+      : null,
+    summary: {
+      completedLessons: summaryCount,
+      requiredLessons: REQUIRED_LESSONS_COUNT,
+      remaining: Math.max(0, REQUIRED_LESSONS_COUNT - summaryCount),
+      isCompleted: summaryCount >= REQUIRED_LESSONS_COUNT,
+    },
+    byLessonType,
+    lessons: drivingLessons.map((lesson) => {
+      const end = computeAppointmentEnd({
+        startsAt: lesson.startsAt,
+        endsAt: lesson.endsAt,
+      });
+      return {
+        id: lesson.id,
+        caseId: lesson.caseId,
+        type: normalizeLessonType(lesson.type) || "altro",
+        status: normalizeStatus(lesson.status),
+        startsAt: lesson.startsAt,
+        endsAt: end,
+        durationMinutes: Math.max(
+          30,
+          Math.round((end.getTime() - lesson.startsAt.getTime()) / 60000),
+        ),
+        instructorName: lesson.instructor?.name ?? null,
+        vehicleName: lesson.vehicle?.name ?? null,
+      };
+    }),
+  };
+};
+
+export async function getAutoscuolaStudentsWithProgress(search?: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const students = (await listDirectoryStudents(companyId)).filter((student) =>
+      matchesStudentQuery(student, search),
+    );
+    if (!students.length) return { success: true, data: [] };
+
+    const studentIds = students.map((student) => student.id);
+
+    const [cases, lessons] = await Promise.all([
+      prisma.autoscuolaCase.findMany({
+        where: {
+          companyId,
+          studentId: { in: studentIds },
+        },
+        select: {
+          id: true,
+          studentId: true,
+          status: true,
+          category: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: { in: studentIds },
+        },
+        select: {
+          id: true,
+          studentId: true,
+          caseId: true,
+          type: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      }),
+    ]);
+
+    const casesByStudent = new Map<string, DrivingRegisterCaseRow[]>();
+    for (const item of cases) {
+      const current = casesByStudent.get(item.studentId) ?? [];
+      current.push(item);
+      casesByStudent.set(item.studentId, current);
+    }
+
+    const lessonsByStudent = new Map<string, DrivingRegisterLessonRow[]>();
+    for (const item of lessons) {
+      const current = lessonsByStudent.get(item.studentId) ?? [];
+      current.push(item);
+      lessonsByStudent.set(item.studentId, current);
+    }
+
+    const rows = students.map((student) => {
+      const register = buildDrivingRegisterData({
+        cases: casesByStudent.get(student.id) ?? [],
+        lessons: lessonsByStudent.get(student.id) ?? [],
+      });
+      return {
+        ...student,
+        activeCase: register.activeCase,
+        summary: register.summary,
+      };
+    });
+
+    return { success: true, data: rows };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const studentMembership = await prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        userId: studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    if (!studentMembership) {
+      return { success: false, message: "Allievo non trovato." };
+    }
+
+    const [cases, lessons] = await Promise.all([
+      prisma.autoscuolaCase.findMany({
+        where: { companyId, studentId },
+        select: {
+          id: true,
+          studentId: true,
+          status: true,
+          category: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: { companyId, studentId },
+        select: {
+          id: true,
+          studentId: true,
+          caseId: true,
+          type: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          instructor: { select: { name: true } },
+          vehicle: { select: { name: true } },
+        },
+        orderBy: { startsAt: "desc" },
+      }),
+    ]);
+
+    const register = buildDrivingRegisterData({ cases, lessons });
+    const student = toStudentProfile(studentMembership.user, studentMembership.createdAt);
+
+    return {
+      success: true,
+      data: {
+        student,
+        activeCase: register.activeCase,
+        summary: register.summary,
+        byLessonType: register.byLessonType,
+        lessons: register.lessons,
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -874,10 +1183,98 @@ export async function updateAutoscuolaAppointmentStatus(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = updateAppointmentStatusSchema.parse(input);
+    const nextStatus = normalizeStatus(payload.status);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+      include: {
+        instructor: { select: { id: true, userId: true } },
+      },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+      const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: membership.userId,
+          status: { not: "inactive" },
+        },
+        select: { id: true },
+      });
+
+      if (!ownInstructor) {
+        return {
+          success: false,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+
+      if (appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi aggiornare solo le tue guide.",
+        };
+      }
+
+      if (!INSTRUCTOR_ALLOWED_STATUSES.has(nextStatus)) {
+        return {
+          success: false,
+          message: "Come istruttore puoi segnare solo check-in o no-show.",
+        };
+      }
+
+      const now = new Date();
+      if (!isWithinInstructorStatusWindow(appointment, now)) {
+        if (now < new Date(appointment.startsAt.getTime() - 10 * 60 * 1000)) {
+          return {
+            success: false,
+            message: `Azione disponibile dalle ${getInstructorWindowOpenTimeLabel(
+              appointment.startsAt,
+            )}.`,
+          };
+        }
+        return {
+          success: false,
+          message: "Azione non disponibile oltre la fine della giornata guida.",
+        };
+      }
+    }
+
+    const requestedLessonType = normalizeLessonType(payload.lessonType);
+    const appointmentLessonType = normalizeLessonType(appointment.type);
+    const updateData: { status: string; type?: string } = { status: nextStatus };
+
+    if (nextStatus === "checked_in") {
+      const resolvedLessonType = requestedLessonType || appointmentLessonType;
+      if (!resolvedLessonType || !LESSON_TYPE_SET.has(resolvedLessonType)) {
+        return {
+          success: false,
+          message: "Seleziona un tipo guida valido.",
+        };
+      }
+      updateData.type = resolvedLessonType;
+    } else if (nextStatus === "no_show" && requestedLessonType) {
+      if (!LESSON_TYPE_SET.has(requestedLessonType)) {
+        return {
+          success: false,
+          message: "Tipo guida non valido.",
+        };
+      }
+      updateData.type = requestedLessonType;
+    } else if (
+      payload.lessonType &&
+      requestedLessonType &&
+      LESSON_TYPE_SET.has(requestedLessonType)
+    ) {
+      updateData.type = requestedLessonType;
+    }
 
     const updated = await prisma.autoscuolaAppointment.update({
       where: { id: payload.appointmentId, companyId: membership.companyId },
-      data: { status: payload.status },
+      data: updateData,
     });
 
     return { success: true, data: updated };

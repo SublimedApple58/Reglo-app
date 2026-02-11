@@ -5,11 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RegloTabs } from "@/components/ui/reglo-tabs";
 
 import { AutoscuoleAgendaPage } from "./AutoscuoleAgendaPage";
-import { AutoscuoleCasesPage } from "./AutoscuoleCasesPage";
 import { AutoscuoleCommunicationsPage } from "./AutoscuoleCommunicationsPage";
 import { AutoscuoleDashboardPage } from "./AutoscuoleDashboardPage";
-import { AutoscuoleDeadlinesPage } from "./AutoscuoleDeadlinesPage";
-import { AutoscuoleDocumentsPage } from "./AutoscuoleDocumentsPage";
 import { AutoscuolePaymentsPage } from "./AutoscuolePaymentsPage";
 import { AutoscuoleResourcesPage } from "./AutoscuoleResourcesPage";
 import { AutoscuoleStudentsPage } from "./AutoscuoleStudentsPage";
@@ -17,11 +14,8 @@ import { AutoscuoleStudentsPage } from "./AutoscuoleStudentsPage";
 type AutoscuoleTabKey =
   | "dashboard"
   | "students"
-  | "cases"
   | "agenda"
   | "disponibilita"
-  | "scadenze"
-  | "documents"
   | "payments"
   | "comunicazioni";
 
@@ -33,11 +27,8 @@ type TabItem = {
 const TAB_ITEMS: TabItem[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "students", label: "Allievi" },
-  { key: "cases", label: "Pratiche" },
   { key: "agenda", label: "Agenda" },
   { key: "disponibilita", label: "Disponibilita" },
-  { key: "scadenze", label: "Scadenze" },
-  { key: "documents", label: "Documenti" },
   { key: "payments", label: "Pagamenti" },
   { key: "comunicazioni", label: "Comunicazioni" },
 ];
@@ -95,20 +86,11 @@ export function AutoscuoleTabsPage() {
       {activeTab === "students" ? (
         <AutoscuoleStudentsPage hideNav tabs={tabsNode} />
       ) : null}
-      {activeTab === "cases" ? (
-        <AutoscuoleCasesPage hideNav tabs={tabsNode} />
-      ) : null}
       {activeTab === "agenda" ? (
         <AutoscuoleAgendaPage hideNav tabs={tabsNode} />
       ) : null}
       {activeTab === "disponibilita" ? (
         <AutoscuoleResourcesPage hideNav tabs={tabsNode} />
-      ) : null}
-      {activeTab === "scadenze" ? (
-        <AutoscuoleDeadlinesPage hideNav tabs={tabsNode} />
-      ) : null}
-      {activeTab === "documents" ? (
-        <AutoscuoleDocumentsPage hideNav tabs={tabsNode} />
       ) : null}
       {activeTab === "payments" ? (
         <AutoscuolePaymentsPage hideNav tabs={tabsNode} />

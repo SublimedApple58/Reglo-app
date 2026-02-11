@@ -487,6 +487,32 @@ export const processAutoscuolaCaseDeadlines = async ({
   }
 };
 
+export const processAutoscuolaAutoCompleteCheckedIn = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => {
+  const fallbackEnd = new Date(now.getTime() - 30 * 60 * 1000);
+
+  const result = await prisma.autoscuolaAppointment.updateMany({
+    where: {
+      status: "checked_in",
+      OR: [
+        { endsAt: { lte: now } },
+        {
+          endsAt: null,
+          startsAt: { lte: fallbackEnd },
+        },
+      ],
+    },
+    data: { status: "completed" },
+  });
+
+  return { completedCount: result.count };
+};
+
 export const processAutoscuolaConfiguredAppointmentReminders = async ({
   prisma = defaultPrisma,
   now = new Date(),
