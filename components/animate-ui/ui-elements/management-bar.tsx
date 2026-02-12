@@ -6,6 +6,7 @@ import { SlidingNumber } from "@/components/animate-ui/text/sliding-number";
 import { useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 const PAGE_DIMENSION = 20;
 
@@ -22,10 +23,12 @@ function ManagementBar({
   totalRows,
   pageSize = PAGE_DIMENSION,
   actions = [],
+  className,
 }: {
   totalRows: number;
   pageSize?: number;
   actions?: ManagementAction[];
+  className?: string;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -67,12 +70,10 @@ function ManagementBar({
 
   return (
     <div
-      className="flex w-fit flex-wrap items-center gap-y-2 rounded-2xl border border-border bg-background p-2 shadow-lg"
-      style={{
-        transform: "scale(.8)",
-        transformOrigin: "right",
-        background: "white",
-      }}
+      className={cn(
+        "glass-panel glass-strong flex w-full max-w-full flex-wrap items-center gap-y-2 p-2 md:w-fit",
+        className,
+      )}
     >
       <div className="mx-auto flex shrink-0 items-center">
         <Button

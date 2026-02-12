@@ -46,18 +46,10 @@ export function DocumentRequestsPage(): React.ReactElement {
       title="Compilazioni"
       subTitle="Documenti in fase di compilazione o completati."
     >
-      <div
-        style={{
-          position: "fixed",
-          display: "flex",
-          justifyContent: "center",
-          zIndex: 1000,
-          right: 24,
-        }}
-      >
-        <ManagementBar totalRows={totalRows} />
-      </div>
       <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
+        <div className="flex w-full justify-end">
+          <ManagementBar totalRows={totalRows} />
+        </div>
         <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
           <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
             <InputButton className="w-full">

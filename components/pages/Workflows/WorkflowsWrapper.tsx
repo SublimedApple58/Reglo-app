@@ -80,46 +80,37 @@ export function WorkflowsWrapper(): React.ReactElement {
       title="Workflows"
       subTitle="Crea, organizza e monitora le automazioni della tua company."
     >
-      <div
-        style={{
-          position: "fixed",
-          display: "flex",
-          justifyContent: "center",
-          zIndex: 1000,
-          right: 24,
-        }}
-      >
-        <ManagementBar
-          totalRows={totalRows ?? 0}
-          actions={[
-            {
-              id: "delete",
-              label: "Elimina",
-              icon: Trash2,
-              variant: "destructive",
-              disabled: !totalSelected,
-              onClick: () => triggerDelete((prev) => prev + 1),
-            },
-            {
-              id: "disable",
-              label: "Disattiva",
-              icon: Ban,
-              variant: "outline",
-              disabled: !totalSelected,
-              onClick: () => triggerDisable((prev) => prev + 1),
-            },
-            {
-              id: "create",
-              label: "Crea workflow",
-              icon: Plus,
-              variant: "default",
-              onClick: () => setCreateOpen(true),
-            },
-          ]}
-        />
-      </div>
-
       <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
+        <div className="flex w-full justify-end">
+          <ManagementBar
+            totalRows={totalRows ?? 0}
+            actions={[
+              {
+                id: "delete",
+                label: "Elimina",
+                icon: Trash2,
+                variant: "destructive",
+                disabled: !totalSelected,
+                onClick: () => triggerDelete((prev) => prev + 1),
+              },
+              {
+                id: "disable",
+                label: "Disattiva",
+                icon: Ban,
+                variant: "outline",
+                disabled: !totalSelected,
+                onClick: () => triggerDisable((prev) => prev + 1),
+              },
+              {
+                id: "create",
+                label: "Crea workflow",
+                icon: Plus,
+                variant: "default",
+                onClick: () => setCreateOpen(true),
+              },
+            ]}
+          />
+        </div>
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
             <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">

@@ -59,25 +59,25 @@ export function AdminUsersToolbar({
 
   return (
     <>
-      <div className="fixed right-6 z-[1000] flex justify-center">
-        <ManagementBar
-          totalRows={totalRows}
-          actions={
-            isAdmin
-              ? [
-                  {
-                    id: "invite-member",
-                    label: "Invita utente",
-                    icon: MailPlus,
-                    variant: "default",
-                    onClick: () => setInviteOpen(true),
-                  },
-                ]
-              : []
-          }
-        />
-      </div>
       <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
+        <div className="flex w-full justify-end">
+          <ManagementBar
+            totalRows={totalRows}
+            actions={
+              isAdmin
+                ? [
+                    {
+                      id: "invite-member",
+                      label: "Invita utente",
+                      icon: MailPlus,
+                      variant: "default",
+                      onClick: () => setInviteOpen(true),
+                    },
+                  ]
+                : []
+            }
+          />
+        </div>
         <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
           <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
             <InputButton className="w-full">
