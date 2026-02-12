@@ -29,11 +29,27 @@ type AutoscuolaContext = {
   };
 };
 
+const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
+
 const formatDate = (value?: Date | string | null) => {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("it-IT");
+  return date.toLocaleDateString("it-IT", { timeZone: AUTOSCUOLA_TIMEZONE });
+};
+
+const formatAutoscuolaDateTime = (value?: Date | string | null) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const DEADLINE_LABELS: Record<string, string> = {
@@ -355,7 +371,7 @@ export const processAutoscuolaAppointmentReminders = async ({
           phone: studentProfile.phone,
         },
         appointment: {
-          date: appointment.startsAt.toLocaleString("it-IT"),
+          date: formatAutoscuolaDateTime(appointment.startsAt),
           type: appointment.type,
         },
         caseData: appointment.case
@@ -585,13 +601,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
 
     for (const appointment of studentAppointments) {
       const studentProfile = mapStudentFromUser(appointment.student);
-      const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
         30,
         Math.round(
@@ -644,13 +654,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
       const instructor = appointment.instructor;
       if (!instructor) continue;
       const studentProfile = mapStudentFromUser(appointment.student);
-      const startsAtLabel = appointment.startsAt.toLocaleString("it-IT", {
-        weekday: "short",
-        day: "2-digit",
-        month: "short",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
         30,
         Math.round(
