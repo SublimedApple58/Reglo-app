@@ -27,11 +27,11 @@ export function RegloTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "glass-panel glass-strong p-2",
+        "glass-panel glass-strong overflow-visible p-2",
         className,
       )}
     >
-      <div className="no-scrollbar flex items-center gap-2 overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-2 overflow-visible">
         {items.map((item) => {
           const isActive = activeKey === item.key;
           return (

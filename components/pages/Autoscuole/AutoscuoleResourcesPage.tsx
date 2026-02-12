@@ -7,7 +7,7 @@ import { AutoscuoleNav } from "./AutoscuoleNav";
 import { DatePicker } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Select,
   SelectContent,
