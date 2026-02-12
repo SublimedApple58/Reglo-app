@@ -49,7 +49,7 @@ const SignInPage = async (props: {
     if (!memberships.length) {
       return (
         <div className="flex min-h-[60vh] items-center justify-center">
-          <Card className="max-w-lg border-border/70 bg-white/90 shadow-xl">
+          <Card className="glass-panel glass-strong max-w-lg">
             <CardHeader className="space-y-2">
               <CardTitle className="text-center text-2xl text-[#324e7a]">
                 Accesso non disponibile
@@ -142,7 +142,7 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='rounded-2xl border bg-white/80 px-4 py-3 shadow-sm'
+              className='glass-card px-4 py-3'
             >
               <p className='text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground'>
                 {item.label}
@@ -162,7 +162,7 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='flex items-center gap-3 rounded-xl border bg-white/70 px-3 py-2 text-sm text-muted-foreground'
+              className='glass-card flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
             >
               <item.icon className='h-4 w-4 text-[#324e7a]' />
               <span>{item.label}</span>
@@ -171,13 +171,13 @@ const SignInPage = async (props: {
         </div>
       </div>
 
-      <Card className='border-border/70 bg-white/90 shadow-xl'>
+      <Card className='glass-panel glass-strong'>
         <CardHeader className='space-y-2'>
           <CardTitle className='text-center text-2xl text-[#324e7a]'>
             {translation('title')}
           </CardTitle>
           <CardDescription className='text-center'>
-            Sign in to continue to your workspace
+            Accedi per entrare nel tuo workspace
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>

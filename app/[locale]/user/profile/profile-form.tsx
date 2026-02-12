@@ -64,7 +64,7 @@ const ProfileForm = () => {
   return (
     <Form {...form}>
       <form
-        className='flex flex-col gap-5'
+        className='glass-panel glass-strong flex flex-col gap-5 p-5'
         onSubmit={form.handleSubmit(onSubmit)}
       >
         <div className='flex flex-col gap-5'>
@@ -77,7 +77,6 @@ const ProfileForm = () => {
                   <Input
                     disabled
                     placeholder='Email'
-                    className='input-field'
                     {...field}
                   />
                 </FormControl>
@@ -92,8 +91,7 @@ const ProfileForm = () => {
               <FormItem className='w-full'>
                 <FormControl>
                   <Input
-                    placeholder='Name'
-                    className='input-field'
+                    placeholder='Nome'
                     {...field}
                   />
                 </FormControl>
@@ -105,10 +103,10 @@ const ProfileForm = () => {
         <Button
           type='submit'
           size='lg'
-          className='button col-span-2 w-full'
+          className='col-span-2 w-full'
           disabled={form.formState.isSubmitting}
         >
-          {form.formState.isSubmitting ? 'Submitting...' : 'Update Profile'}
+          {form.formState.isSubmitting ? 'Salvataggio...' : 'Aggiorna profilo'}
         </Button>
       </form>
     </Form>

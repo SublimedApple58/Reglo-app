@@ -76,7 +76,10 @@ export function WorkflowsWrapper(): React.ReactElement {
   ];
 
   return (
-    <ClientPageWrapper title="Workflows">
+    <ClientPageWrapper
+      title="Workflows"
+      subTitle="Crea, organizza e monitora le automazioni della tua company."
+    >
       <div
         style={{
           position: "fixed",
@@ -116,7 +119,7 @@ export function WorkflowsWrapper(): React.ReactElement {
         />
       </div>
 
-      <div className="glass-panel flex flex-col gap-4 p-4">
+      <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
             <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
@@ -165,12 +168,12 @@ export function WorkflowsWrapper(): React.ReactElement {
         </div>
       </div>
 
-      <div className="glass-panel p-4">
+      <div className="glass-panel glass-strong p-4">
         <WorkflowsTable selectable />
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md glass-panel glass-strong">
           <DialogHeader>
             <DialogTitle>Nuovo workflow</DialogTitle>
           </DialogHeader>

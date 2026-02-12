@@ -28,8 +28,8 @@ type Message = {
 };
 
 const frequentQuestions = [
-  "Mostrami i workflow più usati questa settimana",
-  "Come posso collegare il mio storage?",
+  "Mostrami i workflow più usati questo mese",
+  "Come posso collegare una nuova integrazione?",
   "Crea una checklist per l'onboarding",
   "Quali documenti sono in attesa di firma?",
 ];
@@ -98,9 +98,12 @@ export function AssistantPage(): React.ReactElement {
   };
 
   return (
-    <ClientPageWrapper title="Assistant">
+    <ClientPageWrapper
+      title="Assistant"
+      subTitle="Prompt rapidi, comandi smart e suggerimenti contestuali."
+    >
       <div className="grid gap-4 xl:grid-cols-[2.1fr_1fr]">
-        <Card className="glass-panel relative overflow-hidden">
+        <Card className="glass-panel glass-strong relative overflow-hidden">
           <CardHeader className="relative flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -223,7 +226,7 @@ export function AssistantPage(): React.ReactElement {
         </Card>
 
         <div className="space-y-4">
-          <Card className="glass-panel">
+          <Card className="glass-panel glass-strong">
             <CardHeader>
               <CardTitle className="text-base">Comandi disponibili</CardTitle>
               <CardDescription>Gli stessi mostrati con &ldquo;/&rdquo;.</CardDescription>
@@ -251,7 +254,7 @@ export function AssistantPage(): React.ReactElement {
             </CardContent>
           </Card>
 
-          <Card className="glass-panel">
+          <Card className="glass-panel glass-strong">
             <CardHeader>
               <CardTitle className="text-base">Note conversazione</CardTitle>
               <CardDescription>

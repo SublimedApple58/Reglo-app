@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PageEmptyState } from "@/components/ui/page-states";
 
 export function DocManagerWrapper(): React.ReactElement {
   const toast = useFeedbackToast();
@@ -228,7 +229,7 @@ export function DocManagerWrapper(): React.ReactElement {
       subTitle="Gestisci e rivedi i documenti caricati. Anteprime rapide, pronto per l'editing."
     >
       <div className="flex flex-1 flex-col gap-5">
-        <div className="glass-panel flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+        <div className="glass-panel glass-strong flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
           <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
             <InputButtonProvider
               showInput={showInput}
@@ -323,9 +324,10 @@ export function DocManagerWrapper(): React.ReactElement {
                 ))
               : (
                   <div className="md:col-span-2 xl:col-span-3">
-                    <div className="rounded-2xl border border-dashed border-white/60 bg-white/50 p-10 text-center text-sm text-muted-foreground shadow-inner">
-                      Nessun documento trovato.
-                    </div>
+                    <PageEmptyState
+                      title="Nessun documento trovato"
+                      description="Carica un file PDF o crea un documento vuoto per iniziare."
+                    />
                   </div>
                 )}
         </div>

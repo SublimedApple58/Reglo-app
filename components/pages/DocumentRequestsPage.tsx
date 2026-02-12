@@ -57,7 +57,7 @@ export function DocumentRequestsPage(): React.ReactElement {
       >
         <ManagementBar totalRows={totalRows} />
       </div>
-      <div className="glass-panel flex flex-col gap-4 p-4">
+      <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
         <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
           <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
             <InputButton className="w-full">
@@ -79,7 +79,7 @@ export function DocumentRequestsPage(): React.ReactElement {
           </InputButtonProvider>
         </form>
       </div>
-      <div className="glass-panel p-4">
+      <div className="glass-panel glass-strong p-4">
         <TableDocumentRequests onRowsChange={setTotalRows} />
       </div>
     </ClientPageWrapper>

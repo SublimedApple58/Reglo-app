@@ -509,7 +509,10 @@ export function SettingsPage(): React.ReactElement {
 
 
   return (
-    <ClientPageWrapper title="Settings">
+    <ClientPageWrapper
+      title="Settings"
+      subTitle="Gestisci account, company e integrazioni della tua area di lavoro."
+    >
       <div className="relative space-y-6">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
           <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
@@ -539,7 +542,7 @@ export function SettingsPage(): React.ReactElement {
               className="space-y-4"
             >
               <form onSubmit={handleAccountSave} className="space-y-4">
-                <Card className="glass-panel">
+                <Card className="glass-panel glass-strong">
                   <CardHeader>
                     <CardTitle>Profile photo</CardTitle>
                     <CardDescription>
@@ -580,7 +583,7 @@ export function SettingsPage(): React.ReactElement {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel">
+                <Card className="glass-panel glass-strong">
                   <CardHeader>
                     <CardTitle>Account</CardTitle>
                     <CardDescription>
@@ -650,7 +653,7 @@ export function SettingsPage(): React.ReactElement {
                   </CardContent>
                 </Card>
 
-                <Card className="glass-panel">
+                <Card className="glass-panel glass-strong">
                   <CardHeader>
                     <CardTitle>Notifiche personali</CardTitle>
                     <CardDescription>
@@ -715,7 +718,7 @@ export function SettingsPage(): React.ReactElement {
             >
               {activeTab === "company" ? (
                 <div className="space-y-4">
-                  <Card className="glass-panel">
+                  <Card className="glass-panel glass-strong">
                     <CardHeader>
                       <CardTitle>Company logo</CardTitle>
                       <CardDescription>
@@ -769,7 +772,7 @@ export function SettingsPage(): React.ReactElement {
                   </Card>
 
                   <form onSubmit={handleCompanySave} className="space-y-4">
-                    <Card className="glass-panel">
+                    <Card className="glass-panel glass-strong">
                       <CardHeader>
                         <CardTitle>Company</CardTitle>
                         <CardDescription>
@@ -802,7 +805,7 @@ export function SettingsPage(): React.ReactElement {
                       </CardContent>
                     </Card>
 
-                    <Card className="glass-panel">
+                    <Card className="glass-panel glass-strong">
                       <CardHeader>
                         <CardTitle>Sessioni &amp; Accessi</CardTitle>
                         <CardDescription>
@@ -857,7 +860,7 @@ export function SettingsPage(): React.ReactElement {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <Card className="glass-panel">
+                  <Card className="glass-panel glass-strong">
                     <CardHeader>
                       <CardTitle>Integrazioni</CardTitle>
                       <CardDescription>

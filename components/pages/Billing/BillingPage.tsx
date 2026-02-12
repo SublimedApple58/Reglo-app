@@ -32,7 +32,7 @@ export function BillingPage(): React.ReactElement {
       subTitle="Anteprima del prossimo addebito mensile."
     >
       <div className="space-y-4">
-        <section className="rounded-2xl border bg-card p-6 shadow-sm">
+        <section className="glass-panel glass-strong p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -51,7 +51,7 @@ export function BillingPage(): React.ReactElement {
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm">
+            <div className="glass-card p-4 text-sm">
               <p className="font-semibold text-foreground">Documenti</p>
               <p className="text-muted-foreground">
                 Usati {summary.docs.used} su {summary.docs.currentLimit}
@@ -61,7 +61,7 @@ export function BillingPage(): React.ReactElement {
                 {extraDocs ? formatCurrency(extraDocs) : "Nessun extra"}
               </p>
             </div>
-            <div className="rounded-xl border bg-muted/30 p-4 text-sm">
+            <div className="glass-card p-4 text-sm">
               <p className="font-semibold text-foreground">Workflow</p>
               <p className="text-muted-foreground">
                 Usati {summary.workflows.used} su {summary.workflows.currentLimit}
@@ -76,7 +76,7 @@ export function BillingPage(): React.ReactElement {
           </div>
         </section>
 
-        <section className="rounded-2xl border bg-white p-6 shadow-sm">
+        <section className="glass-panel glass-strong p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Prossimo addebito stimato
           </p>
@@ -89,7 +89,7 @@ export function BillingPage(): React.ReactElement {
                 Include base + extra attivi del periodo.
               </p>
             </div>
-            <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+            <div className="glass-chip text-xs text-muted-foreground">
               Extra totali:{" "}
               {summary.extrasTotal
                 ? formatCurrency(summary.extrasTotal)

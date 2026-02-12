@@ -28,7 +28,7 @@ const SignUpForm = () => {
 
     return (
       <Button disabled={pending} className='w-full' variant='default'>
-        {pending ? 'Submitting...' : 'Sign Up'}
+        {pending ? 'Invio...' : 'Registrati'}
       </Button>
     );
   };
@@ -38,7 +38,7 @@ const SignUpForm = () => {
       <input type='hidden' name='callbackUrl' value={callbackUrl} />
       <div className='space-y-6'>
         <div>
-          <Label htmlFor='companyName' style={{marginBottom: 8}}>Company name</Label>
+          <Label htmlFor='companyName' style={{marginBottom: 8}}>Nome company</Label>
           <Input
             id='companyName'
             name='companyName'
@@ -50,7 +50,7 @@ const SignUpForm = () => {
           />
         </div>
         <div>
-          <Label htmlFor='name' style={{marginBottom: 8}}>Name</Label>
+          <Label htmlFor='name' style={{marginBottom: 8}}>Nome</Label>
           <Input
             id='name'
             name='name'
@@ -86,7 +86,7 @@ const SignUpForm = () => {
         />
         </div>
         <div>
-          <Label htmlFor='confirmPassword' style={{marginBottom: 8}}>Confirm Password</Label>
+          <Label htmlFor='confirmPassword' style={{marginBottom: 8}}>Conferma password</Label>
         <Input
           id='confirmPassword'
           name='confirmPassword'
@@ -108,13 +108,13 @@ const SignUpForm = () => {
         )}
 
         <div className='text-sm text-center text-muted-foreground'>
-          Already have an account?{' '}
+          Hai già un account?{' '}
           <Link
             href={`/sign-in?callbackUrl=${encodeURIComponent(callbackUrl)}`}
             target='_self'
             className='link'
           >
-            Sign In
+            Accedi
           </Link>
         </div>
       </div>

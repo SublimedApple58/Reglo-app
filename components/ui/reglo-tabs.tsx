@@ -27,7 +27,7 @@ export function RegloTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "glass-panel glass-strong p-2 shadow-[0_12px_30px_-24px_rgba(50,77,122,0.45)]",
+        "glass-panel glass-strong p-2",
         className,
       )}
     >
@@ -42,10 +42,10 @@ export function RegloTabs<T extends string>({
               aria-selected={isActive}
               onClick={() => onChange(item.key)}
               className={cn(
-                "shrink-0 rounded-full border px-4 py-2 text-sm font-medium transition-all duration-200",
+                "reglo-focus-ring reglo-interactive shrink-0 rounded-full border px-4 py-2 text-sm font-semibold",
                 isActive
-                  ? "border-[#324D7A] bg-[#324D7A] text-white shadow-[0_8px_18px_-10px_rgba(50,77,122,0.65)]"
-                  : "border-white/70 bg-white/70 text-[#324D7A] hover:border-[#AFE2D4] hover:bg-[#AFE2D4]/45",
+                  ? "border-[#324D7A] bg-[#324D7A] text-white shadow-[0_12px_24px_-14px_rgba(50,77,122,0.72)]"
+                  : "border-white/80 bg-white/78 text-[#324D7A] hover:-translate-y-0.5 hover:border-[#AFE2D4] hover:bg-[#AFE2D4]/45 hover:shadow-[0_10px_18px_-14px_rgba(50,77,122,0.42)]",
               )}
             >
               {item.label}
@@ -56,4 +56,3 @@ export function RegloTabs<T extends string>({
     </div>
   );
 }
-

@@ -142,10 +142,10 @@ export default function InviteAcceptWrapper({
   if (loading) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center px-6">
-        <Card className="w-full">
+        <Card className="glass-panel glass-strong w-full">
           <CardHeader>
-            <CardTitle>Loading invite</CardTitle>
-            <CardDescription>Checking your invitation.</CardDescription>
+            <CardTitle>Caricamento invito</CardTitle>
+            <CardDescription>Verifica in corso.</CardDescription>
           </CardHeader>
         </Card>
       </div>
@@ -155,14 +155,14 @@ export default function InviteAcceptWrapper({
   if (error || !invite) {
     return (
       <div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center px-6">
-        <Card className="w-full">
+        <Card className="glass-panel glass-strong w-full">
           <CardHeader>
-            <CardTitle>Invite not available</CardTitle>
-            <CardDescription>{error ?? "Invite not found."}</CardDescription>
+            <CardTitle>Invito non disponibile</CardTitle>
+            <CardDescription>{error ?? "Invito non trovato."}</CardDescription>
           </CardHeader>
           <CardContent>
             <Button variant="outline" onClick={() => router.back()}>
-              Go back
+              Torna indietro
             </Button>
           </CardContent>
         </Card>
@@ -172,20 +172,20 @@ export default function InviteAcceptWrapper({
 
   return (
     <div className="mx-auto flex min-h-[60vh] w-full max-w-xl items-center px-6">
-      <Card className="w-full">
+      <Card className="glass-panel glass-strong w-full">
         <CardHeader>
-          <CardTitle>Join {invite.companyName}</CardTitle>
+          <CardTitle>Invito a {invite.companyName}</CardTitle>
           <CardDescription>
-            You are invited as {invite.role === "admin" ? "Admin" : "Member"}.
+            Sei stato invitato come {invite.role === "admin" ? "Admin" : "Member"}.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm">
-            <p className="font-medium text-foreground">{invite.email}</p>
-            <p className="text-xs text-muted-foreground">
-              Accept the invite to access the company workspace.
-            </p>
-          </div>
+              <p className="font-medium text-foreground">{invite.email}</p>
+              <p className="text-xs text-muted-foreground">
+                Accetta l&apos;invito per accedere al workspace della company.
+              </p>
+            </div>
           {isWrongAccount ? (
             <div className="space-y-3">
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -230,10 +230,10 @@ export default function InviteAcceptWrapper({
           ) : invite.isAuthenticated ? (
             <div className="flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => router.back()}>
-                Cancel
+                Annulla
               </Button>
               <Button onClick={handleAccept} disabled={accepting}>
-                {accepting ? "Accepting..." : "Accept invite"}
+                {accepting ? "Accettazione..." : "Accetta invito"}
               </Button>
             </div>
           ) : invite.hasAccount ? (
@@ -252,7 +252,7 @@ export default function InviteAcceptWrapper({
                 disabled={accepting || !password}
                 className="w-full"
               >
-                {accepting ? "Accepting..." : "Accept invite"}
+                {accepting ? "Accettazione..." : "Accetta invito"}
               </Button>
             </div>
           ) : (

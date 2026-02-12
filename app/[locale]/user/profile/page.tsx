@@ -12,7 +12,7 @@ const Profile = async () => {
   const session = await auth();
 
   return (
-    <ClientPageWrapper title='Profile'>
+    <ClientPageWrapper title='Profile' subTitle='Aggiorna i tuoi dati principali.'>
       <SessionProvider session={session}>
         <div className='max-w-md mx-auto space-y-4'>
           <ProfileForm />

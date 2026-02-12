@@ -31,7 +31,9 @@ export default function BackofficeSignInPage() {
   };
 
   return (
-    <div className="min-h-svh bg-background flex items-center justify-center px-6 py-10">
+    <div className="relative flex min-h-svh items-center justify-center bg-background px-6 py-10">
+      <div className="pointer-events-none absolute -left-16 top-8 h-56 w-56 rounded-full bg-secondary/35 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 bottom-0 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
       <Card className="glass-panel glass-strong w-full max-w-md p-6">
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">

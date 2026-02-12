@@ -44,21 +44,20 @@ export default function ClientPageWrapper({
         parentTitle={parentTitle}
       />
       <div className="relative flex flex-1">
-        {/* <div className="pointer-events-none absolute inset-0 opacity-80 [background-image:linear-gradient(120deg,rgba(59,130,246,0.06),transparent_35%),radial-gradient(circle_at_80%_20%,rgba(16,185,129,0.05),transparent_30%),linear-gradient(to_bottom,transparent_70%,rgba(0,0,0,0.02))]" /> */}
-        <main className="relative flex-1 px-3 pb-10 pt-4 lg:px-6 lg:pt-6">
+        <main className="relative flex-1 px-3 pb-10 pt-4 lg:px-5 lg:pt-5">
           <div
             className={cn(
-              "flex h-full w-full flex-col gap-5 lg:gap-6",
+              "flex h-full w-full flex-col gap-4 lg:gap-5",
               contentWidthClassName ?? "max-w-7xl",
             )}
           >
             {!hideHero && (
-              <header className="space-y-2">
+              <header className="space-y-1.5">
                 {enableBackNavigation && label ? (
                   <button
                     type="button"
                     onClick={handleBack}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary transition hover:text-primary/70 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background"
+                    className="reglo-focus-ring inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-primary transition hover:text-primary/70"
                   >
                     <span className="text-[13px] leading-none">←</span>
                     {label}
@@ -68,7 +67,7 @@ export default function ClientPageWrapper({
                     {label || "Reglo"}
                   </p>
                 )}
-                <h1 className="text-xl font-semibold text-foreground lg:text-2xl">
+                <h1 className="text-lg font-semibold text-foreground lg:text-xl">
                   {heading}
                 </h1>
                 {subTitle ? (
@@ -79,13 +78,9 @@ export default function ClientPageWrapper({
               </header>
             )}
 
-            {!hideHero && <div className="h-px w-full bg-border" />}
+            {!hideHero && <div className="glass-divider" />}
 
-            <section className="flex flex-1 flex-col rounded-2xl bg-background/90 backdrop-blur">
-              <div className="flex-1 rounded-xl bg-card ">
-                {children}
-              </div>
-            </section>
+            <section className="flex flex-1 flex-col">{children}</section>
           </div>
         </main>
       </div>

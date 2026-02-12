@@ -64,7 +64,7 @@ export function DocumentsPage(): React.ReactElement {
   ];
 
   return (
-    <ClientPageWrapper title={"Documents"}>
+    <ClientPageWrapper title={"Documents"} subTitle="Archivio template e documenti pronti alla compilazione.">
       <div className="fixed right-6 z-[1000] flex w-auto justify-center">
         <ManagementBar
           totalRows={totalRows ?? 0}
@@ -92,7 +92,7 @@ export function DocumentsPage(): React.ReactElement {
           ]}
         />
       </div>
-      <div className="glass-panel flex flex-col gap-4 p-4">
+      <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
             <InputButtonProvider
@@ -148,12 +148,8 @@ export function DocumentsPage(): React.ReactElement {
         </div>
       </div>
 
-      <div className="glass-panel p-4">
+      <div className="glass-panel glass-strong p-4">
         <TableDocuments />
-      </div>
-
-      <div>
-
       </div>
     </ClientPageWrapper>
   );

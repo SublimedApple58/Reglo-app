@@ -55,7 +55,7 @@ export function ServiceGate({
           </p>
           <div className="pt-2">
             <Button
-              variant="outline"
+              variant="default"
               onClick={() => {
                 router.push(
                   `/${locale}/user/support?topic=service-activation&service=${service}`,

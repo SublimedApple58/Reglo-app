@@ -200,7 +200,7 @@ export default function BackofficeCompaniesPage({
           </div>
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-2xl border border-white/60 bg-white/70 shadow-[0_12px_40px_-30px_rgba(50,78,122,0.35)]">
+        <div className="mt-4">
           <Table>
             <TableHeader>
               <TableRow>

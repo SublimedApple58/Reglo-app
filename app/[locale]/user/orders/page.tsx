@@ -11,6 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import Pagination from '@/components/shared/pagination';
+import ClientPageWrapper from '@/components/Layout/ClientPageWrapper';
 
 export const metadata: Metadata = {
   title: 'My Orders',
@@ -26,18 +27,20 @@ const OrdersPage = async (props: {
   });
 
   return (
-    <div className='space-y-2'>
-      <h2 className='h2-bold'>Orders</h2>
-      <div className='overflow-x-auto'>
+    <ClientPageWrapper
+      title='Ordini'
+      subTitle='Storico ordini e stato pagamenti/consegne.'
+    >
+      <div className='glass-panel glass-strong p-4'>
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
-              <TableHead>DATE</TableHead>
-              <TableHead>TOTAL</TableHead>
-              <TableHead>PAID</TableHead>
-              <TableHead>DELIVERED</TableHead>
-              <TableHead>ACTIONS</TableHead>
+              <TableHead>Data</TableHead>
+              <TableHead>Totale</TableHead>
+              <TableHead>Pagato</TableHead>
+              <TableHead>Consegnato</TableHead>
+              <TableHead>Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -51,30 +54,33 @@ const OrdersPage = async (props: {
                 <TableCell>
                   {order.isPaid && order.paidAt
                     ? formatDateTime(order.paidAt).dateTime
-                    : 'Not Paid'}
+                    : 'Non pagato'}
                 </TableCell>
                 <TableCell>
                   {order.isDelivered && order.deliveredAt
                     ? formatDateTime(order.deliveredAt).dateTime
-                    : 'Not Delivered'}
+                    : 'Non consegnato'}
                 </TableCell>
                 <TableCell>
-                  <Link href={`/order/${order.id}`}>
-                    <span className='px-2'>Details</span>
+                  <Link
+                    href={`/order/${order.id}`}
+                    className='text-sm font-semibold text-primary hover:underline'
+                  >
+                    Dettagli
                   </Link>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
-        {orders.totalPages > 1 && (
-          <Pagination
-            page={Number(page) || 1}
-            totalPages={orders?.totalPages}
-          />
-        )}
       </div>
-    </div>
+      {orders.totalPages > 1 && (
+        <Pagination
+          page={Number(page) || 1}
+          totalPages={orders?.totalPages}
+        />
+      )}
+    </ClientPageWrapper>
   );
 };
 

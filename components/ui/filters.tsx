@@ -109,8 +109,9 @@ export default function Filters({
                 <Badge
                   variant="outline"
                   className={cn(
-                    "cursor-pointer border-border",
-                    isActive && "border-primary/40 bg-primary/10 text-primary",
+                    "reglo-focus-ring cursor-pointer border-2 border-dashed border-primary/35 bg-white/72 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+                    isActive &&
+                      "border-solid border-primary/50 bg-primary/12 text-primary",
                   )}
                   role="button"
                   onClick={() => handleOpen(f)}

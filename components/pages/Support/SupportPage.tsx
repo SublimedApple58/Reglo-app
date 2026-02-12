@@ -44,28 +44,28 @@ export function SupportPage(): React.ReactElement {
   };
 
   return (
-    <ClientPageWrapper title="Ask support" subTitle="Send a message to Reglo support.">
+    <ClientPageWrapper title="Supporto" subTitle="Invia una richiesta al team Reglo.">
       <div className="w-full pb-8 pt-2">
         <div className="max-w-3xl">
           <form
             onSubmit={handleSubmit}
-            className="glass-panel rounded-3xl border border-white/40 p-6 shadow-sm"
+            className="glass-panel glass-strong rounded-3xl p-6"
           >
             <div className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Your message
+                Messaggio
               </p>
               <Textarea
-                placeholder="Describe your issue or request..."
+                placeholder="Descrivi la tua richiesta o il problema riscontrato..."
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
                 className="min-h-[200px] resize-none border-white/50 bg-white/80 shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
               />
             </div>
             <div className="mt-5 flex flex-col gap-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-              <span>We reply by email in 1-2 business days.</span>
+              <span>Ti rispondiamo via email entro 1-2 giorni lavorativi.</span>
               <Button type="submit" disabled={isSending} className="rounded-full px-5">
-                {isSending ? "Sending..." : "Send message"}
+                {isSending ? "Invio..." : "Invia messaggio"}
               </Button>
             </div>
           </form>

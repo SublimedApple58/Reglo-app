@@ -98,7 +98,7 @@ export function CompanySelectPage({
 
       <div className="grid gap-4 md:grid-cols-2">
         {companies.map((company) => (
-          <Card key={company.id} className="border-border/70 bg-white/90 shadow-sm">
+          <Card key={company.id} className="glass-panel glass-strong">
             <CardHeader className="space-y-1">
               <CardTitle className="text-lg">{company.name}</CardTitle>
               <CardDescription className="text-xs">
@@ -117,7 +117,7 @@ export function CompanySelectPage({
         ))}
       </div>
 
-      <Card className="border-dashed border-border/70 bg-muted/20">
+      <Card className="glass-panel glass-strong border-dashed border-primary/25">
         <CardContent className="flex flex-col items-start gap-3 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-white shadow-sm">

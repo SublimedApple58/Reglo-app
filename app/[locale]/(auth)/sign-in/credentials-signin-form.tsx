@@ -25,7 +25,7 @@ const CredentialsSignInForm = () => {
 
     return (
       <Button disabled={pending} className='w-full' variant='default'>
-        {pending ? 'Signing In...' : 'Sign In'}
+        {pending ? 'Accesso...' : 'Accedi'}
       </Button>
     );
   };
@@ -69,13 +69,13 @@ const CredentialsSignInForm = () => {
       )}
 
       <div className='text-sm text-center text-muted-foreground'>
-        Don&apos;t have an account?{' '}
+        Non hai ancora un account?{' '}
         <Link
           href={`/sign-up?callbackUrl=${encodeURIComponent(callbackUrl)}`}
           target='_self'
           className='link'
         >
-          Sign Up
+          Registrati
         </Link>
       </div>
     </form>

@@ -115,7 +115,7 @@ export function AdminUsersTable({
 
   return (
     <>
-      <div className="mt-4">
+      <div className="glass-panel glass-strong mt-4 p-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -135,106 +135,117 @@ export function AdminUsersTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => {
-              const initials = user.name
-                ? user.name
-                    .split(" ")
-                    .slice(0, 2)
-                    .map((part) => part[0])
-                    .join("")
-                    .toUpperCase()
-                : "U";
-              const isAdmin = user.role === "admin";
-              const isInvited = user.status === "invited";
-              return (
-                <TableRow key={user.id}>
-                  <TableCell className="text-center">
-                    <Checkbox
-                      checked={selectedItems[user.id] || false}
-                      onCheckedChange={() => toggleSelect(user.id)}
-                      aria-label={`Select user ${user.email}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs font-semibold">
-                          {initials}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-foreground">
-                          {user.name}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {isAdmin ? "Admin" : "Member"}
-                        </span>
+            {users.length ? (
+              users.map((user) => {
+                const initials = user.name
+                  ? user.name
+                      .split(" ")
+                      .slice(0, 2)
+                      .map((part) => part[0])
+                      .join("")
+                      .toUpperCase()
+                  : "U";
+                const isAdmin = user.role === "admin";
+                const isInvited = user.status === "invited";
+                return (
+                  <TableRow key={user.id}>
+                    <TableCell className="text-center">
+                      <Checkbox
+                        checked={selectedItems[user.id] || false}
+                        onCheckedChange={() => toggleSelect(user.id)}
+                        aria-label={`Select user ${user.email}`}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs font-semibold">
+                            {initials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <span className="font-medium text-foreground">
+                            {user.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {isAdmin ? "Admin" : "Member"}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {user.email}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
-                        isAdmin ? "text-emerald-700" : "text-slate-600",
-                      )}
-                    >
-                      {isAdmin ? "Admin" : "Member"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
-                        user.autoscuolaRole === "OWNER"
-                          ? "text-sky-700"
-                          : user.autoscuolaRole === "INSTRUCTOR"
-                            ? "text-indigo-700"
-                            : "text-emerald-700",
-                      )}
-                    >
-                      {user.autoscuolaRole === "OWNER"
-                        ? "Titolare"
-                        : user.autoscuolaRole === "INSTRUCTOR"
-                          ? "Istruttore"
-                          : "Allievo"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
-                        isInvited ? "text-amber-700" : "text-emerald-700",
-                      )}
-                    >
-                      {isInvited ? "Invited" : "Active"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        onClick={() => handleOpen(user)}
-                        className="rounded-full px-3 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {user.email}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          isAdmin ? "text-emerald-700" : "text-slate-600",
+                        )}
                       >
-                        Edit
-                      </Button>
-                      {isInvited ? null : (
-                        <DeleteDialog id={user.id} action={deleteUser} />
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                        {isAdmin ? "Admin" : "Member"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="secondary"
+                        className={cn(
+                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          user.autoscuolaRole === "OWNER"
+                            ? "text-sky-700"
+                            : user.autoscuolaRole === "INSTRUCTOR"
+                              ? "text-indigo-700"
+                              : "text-emerald-700",
+                        )}
+                      >
+                        {user.autoscuolaRole === "OWNER"
+                          ? "Titolare"
+                          : user.autoscuolaRole === "INSTRUCTOR"
+                            ? "Istruttore"
+                            : "Allievo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          isInvited ? "text-amber-700" : "text-emerald-700",
+                        )}
+                      >
+                        {isInvited ? "Invited" : "Active"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          onClick={() => handleOpen(user)}
+                          className="rounded-full px-3 text-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                        >
+                          Edit
+                        </Button>
+                        {isInvited ? null : (
+                          <DeleteDialog id={user.id} action={deleteUser} />
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={7}
+                  className="py-10 text-center text-sm text-muted-foreground"
+                >
+                  Nessun utente disponibile.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>

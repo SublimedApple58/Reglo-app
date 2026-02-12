@@ -6,8 +6,10 @@ export default async function BackofficePage() {
   const companies = res.success && res.data ? res.data : [];
 
   return (
-    <div className="min-h-svh px-6 pb-10 pt-6">
-      <BackofficeCompaniesPage companies={companies} />
+    <div className="min-h-svh bg-background px-4 pb-10 pt-6 lg:px-6">
+      <div className="mx-auto max-w-7xl">
+        <BackofficeCompaniesPage companies={companies} />
+      </div>
     </div>
   );
 }
