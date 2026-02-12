@@ -61,6 +61,12 @@ const updateAppointmentStatusSchema = z.object({
   lessonType: z.string().min(1).optional(),
 });
 
+const updateAppointmentDetailsSchema = z.object({
+  appointmentId: z.string().uuid(),
+  lessonType: z.string().optional(),
+  notes: z.string().nullable().optional(),
+});
+
 const createInstructorSchema = z.object({
   userId: z.string().uuid(),
   name: z.string().min(1).optional(),
@@ -1270,6 +1276,80 @@ export async function updateAutoscuolaAppointmentStatus(
       LESSON_TYPE_SET.has(requestedLessonType)
     ) {
       updateData.type = requestedLessonType;
+    }
+
+    const updated = await prisma.autoscuolaAppointment.update({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+      data: updateData,
+    });
+
+    return { success: true, data: updated };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function updateAutoscuolaAppointmentDetails(
+  input: z.infer<typeof updateAppointmentDetailsSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = updateAppointmentDetailsSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+      const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: membership.userId,
+          status: { not: "inactive" },
+        },
+        select: { id: true },
+      });
+
+      if (!ownInstructor) {
+        return {
+          success: false,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+
+      if (appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi modificare solo le tue guide.",
+        };
+      }
+
+      const appointmentStatus = normalizeStatus(appointment.status);
+      if (["cancelled", "completed", "no_show"].includes(appointmentStatus)) {
+        return { success: false, message: "Guida non modificabile." };
+      }
+    }
+
+    const updateData: { type?: string; notes?: string | null } = {};
+
+    if (payload.lessonType !== undefined) {
+      const normalizedLessonType = normalizeLessonType(payload.lessonType);
+      if (!normalizedLessonType || !LESSON_TYPE_SET.has(normalizedLessonType)) {
+        return { success: false, message: "Tipo guida non valido." };
+      }
+      updateData.type = normalizedLessonType;
+    }
+
+    if (payload.notes !== undefined) {
+      const normalizedNotes = normalizeText(payload.notes);
+      updateData.notes = normalizedNotes || null;
+    }
+
+    if (!Object.keys(updateData).length) {
+      return { success: false, message: "Nessuna modifica da salvare." };
     }
 
     const updated = await prisma.autoscuolaAppointment.update({
