@@ -30,9 +30,12 @@ export async function GET() {
 
     const { membership } = await getActiveCompanyContext();
 
-    if (membership.role !== "admin") {
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
       return NextResponse.json(
-        { success: false, message: "Solo gli admin possono vedere le aliquote FIC" },
+        {
+          success: false,
+          message: "Solo admin o titolare autoscuola possono vedere le aliquote FIC",
+        },
         { status: 403 },
       );
     }

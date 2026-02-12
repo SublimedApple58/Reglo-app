@@ -8,6 +8,7 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -744,6 +745,13 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         return { success: false, message: "Slot non disponibile." };
       }
 
+      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        startsAt: candidate.start,
+        endsAt: candidate.end,
+      });
+
       const appointment = await prisma.$transaction(async (tx) => {
         const studentSlot = await tx.autoscuolaAvailabilitySlot.upsert({
           where: {
@@ -837,6 +845,13 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
             slotId: studentSlot.id,
+            paymentRequired: paymentSnapshot.paymentRequired,
+            paymentStatus: paymentSnapshot.paymentStatus,
+            priceAmount: paymentSnapshot.priceAmount,
+            penaltyAmount: paymentSnapshot.penaltyAmount,
+            penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
+            paidAmount: paymentSnapshot.paidAmount,
+            invoiceStatus: paymentSnapshot.invoiceStatus,
           },
         });
       });
@@ -1067,6 +1082,13 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           instructorId: instructorSlot.ownerId,
           vehicleId: vehicleSlot.ownerId,
           slotId: offer.slotId,
+          ...(await prepareAppointmentPaymentSnapshot({
+            prisma: tx as never,
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            startsAt: offer.slot.startsAt,
+            endsAt: offer.slot.endsAt,
+          })),
         },
       });
 

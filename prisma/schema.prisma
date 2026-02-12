@@ -63,6 +63,8 @@ model User {
   autoscuolaWaitlistResponses AutoscuolaWaitlistResponse[]
   autoscuolaDocuments AutoscuolaDocument[]
   autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
+  autoscuolaPaymentProfiles AutoscuolaStudentPaymentProfile[]
+  autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
 }
 
@@ -200,6 +202,8 @@ model Company {
   autoscuolaWaitlistOffers AutoscuolaWaitlistOffer[]
   autoscuolaDocuments AutoscuolaDocument[]
   autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
+  autoscuolaPaymentProfiles AutoscuolaStudentPaymentProfile[]
+  autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
   autoscuolaMessageRules AutoscuolaMessageRule[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
@@ -432,6 +436,15 @@ model AutoscuolaAppointment {
   instructorId String? @db.Uuid
   vehicleId String? @db.Uuid
   notes     String?
+  paymentRequired Boolean @default(false)
+  paymentStatus String @default("not_required")
+  priceAmount Decimal @default(0) @db.Decimal(12, 2)
+  penaltyAmount Decimal @default(0) @db.Decimal(12, 2)
+  penaltyCutoffAt DateTime? @db.Timestamp(6)
+  paidAmount Decimal @default(0) @db.Decimal(12, 2)
+  cancelledAt DateTime? @db.Timestamp(6)
+  invoiceId String?
+  invoiceStatus String?
   createdAt DateTime @default(now()) @db.Timestamp(6)
   updatedAt DateTime @updatedAt
 
@@ -441,6 +454,7 @@ model AutoscuolaAppointment {
   slot      AutoscuolaAvailabilitySlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor AutoscuolaInstructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle    AutoscuolaVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  payments   AutoscuolaAppointmentPayment[]
   messageLogs AutoscuolaMessageLog[]
 
   @@index([companyId])
@@ -449,6 +463,8 @@ model AutoscuolaAppointment {
   @@index([instructorId])
   @@index([vehicleId])
   @@index([slotId])
+  @@index([paymentRequired, paymentStatus])
+  @@index([penaltyCutoffAt])
 }
 
 model AutoscuolaInstructor {
@@ -628,6 +644,58 @@ model AutoscuolaPaymentInstallment {
 
   @@index([planId])
   @@index([dueDate])
+}
+
+model AutoscuolaStudentPaymentProfile {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  stripeCustomerId String
+  stripeDefaultPaymentMethodId String?
+  ficClientId String?
+  status    String   @default("active")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  payments  AutoscuolaAppointmentPayment[]
+
+  @@unique([companyId, studentId])
+  @@index([companyId])
+  @@index([studentId])
+}
+
+model AutoscuolaAppointmentPayment {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  appointmentId String @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  profileId String? @db.Uuid
+  phase    String
+  amount   Decimal  @db.Decimal(12, 2)
+  currency String   @default("EUR")
+  status   String   @default("pending")
+  attemptCount Int  @default(0)
+  nextAttemptAt DateTime? @db.Timestamp(6)
+  stripePaymentIntentId String?
+  stripeChargeId String?
+  failureCode String?
+  failureMessage String?
+  paidAt    DateTime? @db.Timestamp(6)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  profile   AutoscuolaStudentPaymentProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+
+  @@index([appointmentId])
+  @@index([companyId, studentId])
+  @@index([status, nextAttemptAt])
+  @@index([phase])
+  @@unique([stripePaymentIntentId])
 }
 
 model AutoscuolaMessageTemplate {

@@ -13,6 +13,15 @@ const CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_STUDENT_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
 const DEFAULT_INSTRUCTOR_REMINDER_CHANNELS = ["push", "whatsapp", "email"] as const;
+const PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
+const PAYMENT_PENALTY_PRESETS = [25, 50, 75, 100] as const;
+const PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
+const DEFAULT_AUTO_PAYMENTS_ENABLED = false;
+const DEFAULT_LESSON_PRICE_30 = 25;
+const DEFAULT_LESSON_PRICE_60 = 50;
+const DEFAULT_PENALTY_CUTOFF_HOURS = 24;
+const DEFAULT_PENALTY_PERCENT = 50;
+const DEFAULT_PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 
 const reminderMinutesSchema = z
   .number()
@@ -27,6 +36,12 @@ const channelListSchema = z
   .min(1, "Seleziona almeno un canale.")
   .max(CHANNELS.length)
   .transform((channels) => Array.from(new Set(channels)));
+const paymentChannelSchema = z.enum(PAYMENT_NOTIFICATION_CHANNELS);
+const paymentChannelListSchema = z
+  .array(paymentChannelSchema)
+  .min(1, "Seleziona almeno un canale.")
+  .max(PAYMENT_NOTIFICATION_CHANNELS.length)
+  .transform((channels) => Array.from(new Set(channels)));
 
 const autoscuolaSettingsPatchSchema = z
   .object({
@@ -36,6 +51,38 @@ const autoscuolaSettingsPatchSchema = z
     slotFillChannels: channelListSchema.optional(),
     studentReminderChannels: channelListSchema.optional(),
     instructorReminderChannels: channelListSchema.optional(),
+    autoPaymentsEnabled: z.boolean().optional(),
+    lessonPrice30: z.number().positive().max(999).optional(),
+    lessonPrice60: z.number().positive().max(999).optional(),
+    penaltyCutoffHoursPreset: z
+      .number()
+      .int()
+      .refine(
+        (value) =>
+          PAYMENT_CUTOFF_PRESETS.includes(
+            value as (typeof PAYMENT_CUTOFF_PRESETS)[number],
+          ),
+        {
+          message: "Preset cutoff non valido.",
+        },
+      )
+      .optional(),
+    penaltyPercentPreset: z
+      .number()
+      .int()
+      .refine(
+        (value) =>
+          PAYMENT_PENALTY_PRESETS.includes(
+            value as (typeof PAYMENT_PENALTY_PRESETS)[number],
+          ),
+        {
+          message: "Preset penale non valido.",
+        },
+      )
+      .optional(),
+    paymentNotificationChannels: paymentChannelListSchema.optional(),
+    ficVatTypeId: z.string().trim().min(1).optional().nullable(),
+    ficPaymentMethodId: z.string().trim().min(1).optional().nullable(),
   })
   .refine(
     (value) =>
@@ -44,9 +91,36 @@ const autoscuolaSettingsPatchSchema = z
       value.instructorReminderMinutes !== undefined ||
       value.slotFillChannels !== undefined ||
       value.studentReminderChannels !== undefined ||
-      value.instructorReminderChannels !== undefined,
+      value.instructorReminderChannels !== undefined ||
+      value.autoPaymentsEnabled !== undefined ||
+      value.lessonPrice30 !== undefined ||
+      value.lessonPrice60 !== undefined ||
+      value.penaltyCutoffHoursPreset !== undefined ||
+      value.penaltyPercentPreset !== undefined ||
+      value.paymentNotificationChannels !== undefined ||
+      value.ficVatTypeId !== undefined ||
+      value.ficPaymentMethodId !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
-  );
+  )
+  .superRefine((value, ctx) => {
+    const willEnable = value.autoPaymentsEnabled === true;
+    const hasFicVat = (value.ficVatTypeId ?? "").trim().length > 0;
+    const hasFicPaymentMethod = (value.ficPaymentMethodId ?? "").trim().length > 0;
+    if (willEnable && !hasFicVat) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ficVatTypeId"],
+        message: "Se abiliti i pagamenti automatici devi selezionare una aliquota IVA FIC.",
+      });
+    }
+    if (willEnable && !hasFicPaymentMethod) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ficPaymentMethodId"],
+        message: "Se abiliti i pagamenti automatici devi selezionare un metodo pagamento FIC.",
+      });
+    }
+  });
 
 const canManageSettings = (role: string, autoscuolaRole: string | null) =>
   role === "admin" || autoscuolaRole === "OWNER";
@@ -61,6 +135,32 @@ const asChannelList = (
   );
   const unique = Array.from(new Set(normalized));
   return unique.length ? unique : [...fallback];
+};
+
+const asPaymentChannelList = (
+  value: unknown,
+  fallback: readonly (typeof PAYMENT_NOTIFICATION_CHANNELS)[number][],
+) => {
+  if (!Array.isArray(value)) return [...fallback];
+  const normalized = value.filter(
+    (item): item is (typeof PAYMENT_NOTIFICATION_CHANNELS)[number] =>
+      typeof item === "string" &&
+      (PAYMENT_NOTIFICATION_CHANNELS as readonly string[]).includes(item),
+  );
+  const unique = Array.from(new Set(normalized));
+  return unique.length ? unique : [...fallback];
+};
+
+const asPreset = <T extends readonly number[]>(
+  value: unknown,
+  allowed: T,
+  fallback: T[number],
+) => {
+  if (typeof value !== "number") return fallback;
+  const normalized = Math.trunc(value);
+  return allowed.includes(normalized as T[number])
+    ? (normalized as T[number])
+    : fallback;
 };
 
 export async function getAutoscuolaSettings() {
@@ -96,6 +196,41 @@ export async function getAutoscuolaSettings() {
       limits.instructorReminderChannels,
       DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
     );
+    const autoPaymentsEnabled =
+      typeof limits.autoPaymentsEnabled === "boolean"
+        ? limits.autoPaymentsEnabled
+        : DEFAULT_AUTO_PAYMENTS_ENABLED;
+    const lessonPrice30 =
+      typeof limits.lessonPrice30 === "number"
+        ? limits.lessonPrice30
+        : DEFAULT_LESSON_PRICE_30;
+    const lessonPrice60 =
+      typeof limits.lessonPrice60 === "number"
+        ? limits.lessonPrice60
+        : DEFAULT_LESSON_PRICE_60;
+    const penaltyCutoffHoursPreset = asPreset(
+      limits.penaltyCutoffHoursPreset,
+      PAYMENT_CUTOFF_PRESETS,
+      DEFAULT_PENALTY_CUTOFF_HOURS,
+    );
+    const penaltyPercentPreset = asPreset(
+      limits.penaltyPercentPreset,
+      PAYMENT_PENALTY_PRESETS,
+      DEFAULT_PENALTY_PERCENT,
+    );
+    const paymentNotificationChannels = asPaymentChannelList(
+      limits.paymentNotificationChannels,
+      DEFAULT_PAYMENT_NOTIFICATION_CHANNELS,
+    );
+    const ficVatTypeId =
+      typeof limits.ficVatTypeId === "string" && limits.ficVatTypeId.trim().length
+        ? limits.ficVatTypeId.trim()
+        : null;
+    const ficPaymentMethodId =
+      typeof limits.ficPaymentMethodId === "string" &&
+      limits.ficPaymentMethodId.trim().length
+        ? limits.ficPaymentMethodId.trim()
+        : null;
 
     return {
       success: true,
@@ -106,6 +241,14 @@ export async function getAutoscuolaSettings() {
         slotFillChannels,
         studentReminderChannels,
         instructorReminderChannels,
+        autoPaymentsEnabled,
+        lessonPrice30,
+        lessonPrice60,
+        penaltyCutoffHoursPreset,
+        penaltyPercentPreset,
+        paymentNotificationChannels,
+        ficVatTypeId,
+        ficPaymentMethodId,
       },
     };
   } catch (error) {
@@ -153,6 +296,69 @@ export async function updateAutoscuolaSettings(
       limits.instructorReminderChannels,
       DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
     );
+    const previousAutoPaymentsEnabled =
+      typeof limits.autoPaymentsEnabled === "boolean"
+        ? limits.autoPaymentsEnabled
+        : DEFAULT_AUTO_PAYMENTS_ENABLED;
+    const previousLessonPrice30 =
+      typeof limits.lessonPrice30 === "number"
+        ? limits.lessonPrice30
+        : DEFAULT_LESSON_PRICE_30;
+    const previousLessonPrice60 =
+      typeof limits.lessonPrice60 === "number"
+        ? limits.lessonPrice60
+        : DEFAULT_LESSON_PRICE_60;
+    const previousPenaltyCutoffHoursPreset = asPreset(
+      limits.penaltyCutoffHoursPreset,
+      PAYMENT_CUTOFF_PRESETS,
+      DEFAULT_PENALTY_CUTOFF_HOURS,
+    );
+    const previousPenaltyPercentPreset = asPreset(
+      limits.penaltyPercentPreset,
+      PAYMENT_PENALTY_PRESETS,
+      DEFAULT_PENALTY_PERCENT,
+    );
+    const previousPaymentNotificationChannels = asPaymentChannelList(
+      limits.paymentNotificationChannels,
+      DEFAULT_PAYMENT_NOTIFICATION_CHANNELS,
+    );
+    const previousFicVatTypeId =
+      typeof limits.ficVatTypeId === "string" && limits.ficVatTypeId.trim().length
+        ? limits.ficVatTypeId.trim()
+        : null;
+    const previousFicPaymentMethodId =
+      typeof limits.ficPaymentMethodId === "string" &&
+      limits.ficPaymentMethodId.trim().length
+        ? limits.ficPaymentMethodId.trim()
+        : null;
+
+    const nextAutoPaymentsEnabled =
+      payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
+    const nextLessonPrice30 = payload.lessonPrice30 ?? previousLessonPrice30;
+    const nextLessonPrice60 = payload.lessonPrice60 ?? previousLessonPrice60;
+    const nextPenaltyCutoffHoursPreset =
+      payload.penaltyCutoffHoursPreset ?? previousPenaltyCutoffHoursPreset;
+    const nextPenaltyPercentPreset =
+      payload.penaltyPercentPreset ?? previousPenaltyPercentPreset;
+    const nextPaymentNotificationChannels =
+      payload.paymentNotificationChannels ?? previousPaymentNotificationChannels;
+    const nextFicVatTypeId =
+      payload.ficVatTypeId !== undefined
+        ? payload.ficVatTypeId
+        : previousFicVatTypeId;
+    const nextFicPaymentMethodId =
+      payload.ficPaymentMethodId !== undefined
+        ? payload.ficPaymentMethodId
+        : previousFicPaymentMethodId;
+
+    if (nextAutoPaymentsEnabled && !nextFicVatTypeId) {
+      throw new Error("Se abiliti i pagamenti automatici devi selezionare aliquota IVA FIC.");
+    }
+    if (nextAutoPaymentsEnabled && !nextFicPaymentMethodId) {
+      throw new Error(
+        "Se abiliti i pagamenti automatici devi selezionare metodo pagamento FIC.",
+      );
+    }
 
     const nextLimits = {
       ...limits,
@@ -166,6 +372,14 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderChannels ?? previousStudentReminderChannels,
       instructorReminderChannels:
         payload.instructorReminderChannels ?? previousInstructorReminderChannels,
+      autoPaymentsEnabled: nextAutoPaymentsEnabled,
+      lessonPrice30: nextLessonPrice30,
+      lessonPrice60: nextLessonPrice60,
+      penaltyCutoffHoursPreset: nextPenaltyCutoffHoursPreset,
+      penaltyPercentPreset: nextPenaltyPercentPreset,
+      paymentNotificationChannels: nextPaymentNotificationChannels,
+      ficVatTypeId: nextFicVatTypeId,
+      ficPaymentMethodId: nextFicPaymentMethodId,
     };
 
     if (service) {
@@ -193,6 +407,14 @@ export async function updateAutoscuolaSettings(
         slotFillChannels: nextLimits.slotFillChannels,
         studentReminderChannels: nextLimits.studentReminderChannels,
         instructorReminderChannels: nextLimits.instructorReminderChannels,
+        autoPaymentsEnabled: nextLimits.autoPaymentsEnabled,
+        lessonPrice30: nextLimits.lessonPrice30,
+        lessonPrice60: nextLimits.lessonPrice60,
+        penaltyCutoffHoursPreset: nextLimits.penaltyCutoffHoursPreset,
+        penaltyPercentPreset: nextLimits.penaltyPercentPreset,
+        paymentNotificationChannels: nextLimits.paymentNotificationChannels,
+        ficVatTypeId: nextLimits.ficVatTypeId,
+        ficPaymentMethodId: nextLimits.ficPaymentMethodId,
       },
     };
   } catch (error) {

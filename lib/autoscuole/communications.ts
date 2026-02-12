@@ -5,6 +5,12 @@ import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import {
+  processAutoscuolaInvoiceFinalization as processAutoscuolaInvoiceFinalizationJob,
+  processAutoscuolaLessonSettlement as processAutoscuolaLessonSettlementJob,
+  processAutoscuolaPaymentRetries as processAutoscuolaPaymentRetriesJob,
+  processAutoscuolaPenaltyCharges as processAutoscuolaPenaltyChargesJob,
+} from "@/lib/autoscuole/payments";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -704,3 +710,35 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     }
   }
 };
+
+export const processAutoscuolaPenaltyCharges = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => processAutoscuolaPenaltyChargesJob({ prisma, now });
+
+export const processAutoscuolaLessonSettlement = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => processAutoscuolaLessonSettlementJob({ prisma, now });
+
+export const processAutoscuolaPaymentRetries = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => processAutoscuolaPaymentRetriesJob({ prisma, now });
+
+export const processAutoscuolaInvoiceFinalization = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => processAutoscuolaInvoiceFinalizationJob({ prisma, now });

@@ -5,6 +5,10 @@ import {
   processAutoscuolaConfiguredAppointmentReminders,
   processAutoscuolaAppointmentReminders,
   processAutoscuolaCaseDeadlines,
+  processAutoscuolaPenaltyCharges,
+  processAutoscuolaLessonSettlement,
+  processAutoscuolaPaymentRetries,
+  processAutoscuolaInvoiceFinalization,
 } from "@/lib/autoscuole/communications";
 
 export const autoscuoleReminders = schedules.task({
@@ -13,6 +17,10 @@ export const autoscuoleReminders = schedules.task({
   run: async () => {
     const prisma = await getPrisma();
     await processAutoscuolaAutoCompleteCheckedIn({ prisma });
+    await processAutoscuolaPenaltyCharges({ prisma });
+    await processAutoscuolaLessonSettlement({ prisma });
+    await processAutoscuolaPaymentRetries({ prisma });
+    await processAutoscuolaInvoiceFinalization({ prisma });
     await processAutoscuolaConfiguredAppointmentReminders({ prisma });
     await processAutoscuolaAppointmentReminders({ prisma });
     await processAutoscuolaCaseDeadlines({ prisma });
