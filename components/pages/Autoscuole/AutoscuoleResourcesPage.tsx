@@ -248,7 +248,7 @@ export function AutoscuoleResourcesPage({
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
-      <div className="space-y-5">
+      <div className="w-full space-y-5">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
@@ -359,7 +359,7 @@ export function AutoscuoleResourcesPage({
               <span className="text-xs text-muted-foreground">Aggiornamento...</span>
             ) : null}
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             {instructors.map((instructor) => (
               <AvailabilityCard
                 key={instructor.id}
@@ -380,7 +380,7 @@ export function AutoscuoleResourcesPage({
               <span className="text-xs text-muted-foreground">Aggiornamento...</span>
             ) : null}
           </div>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             {vehicles.map((vehicle) => (
               <AvailabilityCard
                 key={vehicle.id}

@@ -99,7 +99,7 @@ export function AutoscuoleCommunicationsPage({
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
-      <div className="space-y-5">
+      <div className="w-full space-y-5">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
@@ -126,7 +126,7 @@ export function AutoscuoleCommunicationsPage({
             </Button>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
             {rules.map((rule) => (
               <div key={rule.id} className="glass-card glass-strong flex flex-col gap-3 p-4">
                 <div className="flex items-start justify-between gap-3">

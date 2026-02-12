@@ -356,7 +356,7 @@ export function AutoscuoleAgendaPage({
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
-      <div className="space-y-5">
+      <div className="w-full space-y-5">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 

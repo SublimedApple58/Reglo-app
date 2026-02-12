@@ -79,7 +79,7 @@ export function AutoscuoleTabsPage() {
   );
 
   return (
-    <div>
+    <div className="w-full">
       {activeTab === "dashboard" ? (
         <AutoscuoleDashboardPage hideNav tabs={tabsNode} />
       ) : null}

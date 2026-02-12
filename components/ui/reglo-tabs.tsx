@@ -27,7 +27,7 @@ export function RegloTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "glass-panel glass-strong overflow-visible p-2",
+        "glass-panel glass-strong w-full overflow-visible p-2",
         className,
       )}
     >
