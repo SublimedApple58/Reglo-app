@@ -148,7 +148,6 @@ export default function HomePage(): React.ReactElement {
         </div>
 
         <section className="glass-surface glass-strong relative overflow-hidden p-6 lg:p-7">
-          <div className="pointer-events-none absolute right-0 top-0 h-full w-[44%] bg-[radial-gradient(circle_at_20%_20%,rgba(50,77,122,0.14),transparent_55%)]" />
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
             <div className="space-y-4">
               <span className="glass-chip">Workspace overview</span>
