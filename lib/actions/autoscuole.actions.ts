@@ -177,6 +177,15 @@ const getInstructorWindowOpenTimeLabel = (startsAt: Date) =>
     minute: "2-digit",
   });
 
+const isWithinInstructorDetailsWindow = (
+  appointment: { startsAt: Date },
+  now: Date,
+) => {
+  const dayEnd = new Date(appointment.startsAt);
+  dayEnd.setHours(23, 59, 59, 999);
+  return now <= dayEnd;
+};
+
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
   normalizeText(value).toLowerCase();
@@ -1328,8 +1337,18 @@ export async function updateAutoscuolaAppointmentDetails(
       }
 
       const appointmentStatus = normalizeStatus(appointment.status);
-      if (["cancelled", "completed", "no_show"].includes(appointmentStatus)) {
+      if (appointmentStatus === "cancelled") {
         return { success: false, message: "Guida non modificabile." };
+      }
+
+      if (
+        ["completed", "no_show", "checked_in"].includes(appointmentStatus) &&
+        !isWithinInstructorDetailsWindow(appointment, new Date())
+      ) {
+        return {
+          success: false,
+          message: "Puoi modificare questa guida solo fino a fine giornata.",
+        };
       }
     }
 

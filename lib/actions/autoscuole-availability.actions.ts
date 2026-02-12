@@ -814,6 +814,18 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           },
         });
 
+        const existingOnSlot = await tx.autoscuolaAppointment.findFirst({
+          where: {
+            companyId: membership.companyId,
+            slotId: studentSlot.id,
+            status: { notIn: ["cancelled"] },
+          },
+          select: { id: true },
+        });
+        if (existingOnSlot) {
+          throw new Error("Slot non disponibile.");
+        }
+
         return tx.autoscuolaAppointment.create({
           data: {
             companyId: membership.companyId,
@@ -1014,7 +1026,10 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       });
 
       const bookedSlots = await tx.autoscuolaAvailabilitySlot.updateMany({
-        where: { id: { in: [offer.slotId, instructorSlot.id, vehicleSlot.id] } },
+        where: {
+          id: { in: [offer.slotId, instructorSlot.id, vehicleSlot.id] },
+          status: "open",
+        },
         data: { status: "booked" },
       });
       if (bookedSlots.count < 3) {
@@ -1027,6 +1042,18 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       });
       if (!updatedOffer.count) {
         throw new Error("Offerta non più valida.");
+      }
+
+      const existingOnSlot = await tx.autoscuolaAppointment.findFirst({
+        where: {
+          companyId: membership.companyId,
+          slotId: offer.slotId,
+          status: { notIn: ["cancelled"] },
+        },
+        select: { id: true },
+      });
+      if (existingOnSlot) {
+        throw new Error("Slot non disponibile.");
       }
 
       const appointment = await tx.autoscuolaAppointment.create({
