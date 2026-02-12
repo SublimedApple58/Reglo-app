@@ -50,8 +50,8 @@ type AppointmentRow = {
   vehicle?: ResourceOption | null;
 };
 
-const DAY_START_HOUR = 7;
-const DAY_END_HOUR = 22;
+const DAY_START_HOUR = 0;
+const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "60"];
 const PIXELS_PER_MINUTE = 1.6;
