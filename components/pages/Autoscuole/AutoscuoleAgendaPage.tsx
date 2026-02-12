@@ -107,6 +107,7 @@ export function AutoscuoleAgendaPage({
     sendProposal: false,
     duration: "30",
   });
+  const [nowTick, setNowTick] = React.useState(() => Date.now());
 
   const load = React.useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -164,6 +165,13 @@ export function AutoscuoleAgendaPage({
   React.useEffect(() => {
     load();
   }, [load]);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setNowTick(Date.now());
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const weekEnd = addDays(weekStart, 7);
   const rangeStart = viewMode === "week" ? weekStart : dayFocus;
@@ -595,7 +603,7 @@ export function AutoscuoleAgendaPage({
                           );
                           const top = offsetMinutes * PIXELS_PER_MINUTE;
                           const height = durationMinutes * PIXELS_PER_MINUTE;
-                          const statusMeta = getStatusMeta(item.status);
+                          const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                           const isCompact = height <= 56;
 
                           const isPendingAction = pendingEventActionId === item.id;
@@ -1037,13 +1045,42 @@ function buildLocalDateTime(day: string, time: string) {
   return date;
 }
 
-function getStatusMeta(status: string) {
+function getStatusMeta(
+  status: string,
+  appointment?: AppointmentRow,
+  now: Date = new Date(),
+) {
   const normalized = status.toLowerCase();
   if (normalized === "checked_in") {
+    if (appointment) {
+      const start = toDate(appointment.startsAt);
+      const end = getAppointmentEnd(appointment);
+      if (now >= start && now < end) {
+        return {
+          label: "In corso",
+          shortLabel: "In corso",
+          className: "border-emerald-300/80 bg-emerald-200/85",
+        };
+      }
+      if (now < start) {
+        return {
+          label: "Confermata",
+          shortLabel: "Confermata",
+          className: "border-emerald-200/80 bg-emerald-100/85",
+        };
+      }
+    }
     return {
       label: "Check‑in",
       shortLabel: "Check‑in",
       className: "border-emerald-200/70 bg-emerald-100/70",
+    };
+  }
+  if (normalized === "confirmed" || normalized === "scheduled") {
+    return {
+      label: "Confermata",
+      shortLabel: "Confermata",
+      className: "border-sky-200/70 bg-sky-100/75",
     };
   }
   if (normalized === "completed") {
