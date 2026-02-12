@@ -59,6 +59,79 @@ const getWaitlistOffersSchema = z.object({
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
+const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+type CalendarDateParts = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+const zonedFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: AUTOSCUOLA_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+const getZonedParts = (date: Date) => {
+  const parts = zonedFormatter.formatToParts(date);
+  const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    year: Number(readPart("year")),
+    month: Number(readPart("month")),
+    day: Number(readPart("day")),
+    weekday: readPart("weekday"),
+    hour: Number(readPart("hour")),
+    minute: Number(readPart("minute")),
+    second: Number(readPart("second")),
+  };
+};
+
+const getTimeZoneOffsetMinutes = (date: Date) => {
+  const parts = getZonedParts(date);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return (asUtc - date.getTime()) / 60000;
+};
+
+const toTimeZoneDate = (
+  parts: CalendarDateParts,
+  hours: number,
+  minutes: number,
+) => {
+  const baseUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes, 0, 0);
+  const firstPass = new Date(baseUtc);
+  const firstOffset = getTimeZoneOffsetMinutes(firstPass);
+  let timestamp = baseUtc - firstOffset * 60000;
+  const secondPass = new Date(timestamp);
+  const secondOffset = getTimeZoneOffsetMinutes(secondPass);
+  if (secondOffset !== firstOffset) {
+    timestamp = baseUtc - secondOffset * 60000;
+  }
+  return new Date(timestamp);
+};
 
 const normalizeChannels = (
   value: unknown,
@@ -73,7 +146,15 @@ const normalizeChannels = (
   return unique.length ? unique : [...fallback];
 };
 
-const minutesFromDate = (date: Date) => date.getHours() * 60 + date.getMinutes();
+const minutesFromDate = (date: Date) => {
+  const parts = getZonedParts(date);
+  return parts.hour * 60 + parts.minute;
+};
+
+const dayOfWeekFromDate = (date: Date) => {
+  const weekday = getZonedParts(date).weekday;
+  return WEEKDAY_TO_INDEX[weekday] ?? date.getUTCDay();
+};
 
 const normalizeDays = (days: number[] | undefined) =>
   Array.from(new Set((days ?? []).filter((day) => day >= 0 && day <= 6))).sort();
@@ -94,10 +175,49 @@ const parseDateOnly = (value: string) => {
     const month = Number(parts[1]);
     const day = Number(parts[2]);
     if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
-      return new Date(year, month - 1, day);
+      return {
+        year,
+        month,
+        day,
+      };
     }
   }
-  return new Date(value);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const zoned = getZonedParts(parsed);
+  return {
+    year: zoned.year,
+    month: zoned.month,
+    day: zoned.day,
+  };
+};
+
+const addDaysToDateParts = (parts: CalendarDateParts, days: number) => {
+  const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+};
+
+const getDayOfWeekFromDateParts = (parts: CalendarDateParts) =>
+  new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+
+const getDayBoundsForDate = (date: Date) => {
+  const zoned = getZonedParts(date);
+  const start = toTimeZoneDate(
+    { year: zoned.year, month: zoned.month, day: zoned.day },
+    0,
+    0,
+  );
+  const nextDay = addDaysToDateParts(
+    { year: zoned.year, month: zoned.month, day: zoned.day },
+    1,
+  );
+  const end = toTimeZoneDate(nextDay, 0, 0);
+  return { start, end };
 };
 
 
@@ -116,7 +236,7 @@ const isWeeklyAvailabilityCovering = (
   endsAt: Date,
 ) => {
   if (!availability) return false;
-  const dayOfWeek = startsAt.getDay();
+  const dayOfWeek = dayOfWeekFromDate(startsAt);
   if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
   if (availability.endMinutes <= availability.startMinutes) return false;
   const startMinutes = minutesFromDate(startsAt);
@@ -226,9 +346,11 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       return { success: true, data: [] };
     }
 
-    const dayStart = parseDateOnly(payload.date);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayOfWeek = dayStart.getDay();
+    const dayParts = parseDateOnly(payload.date);
+    if (!dayParts) {
+      return { success: false, message: "Data non valida." };
+    }
+    const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
 
     const availabilityWhere: Record<string, unknown> = {
       companyId: membership.companyId,
@@ -257,8 +379,11 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
         updatedAt: Date;
       }> = [];
       for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
-        const startsAt = new Date(dayStart);
-        startsAt.setMinutes(minutes, 0, 0);
+        const startsAt = toTimeZoneDate(
+          dayParts,
+          Math.floor(minutes / 60),
+          minutes % 60,
+        );
         const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
         ownerSlots.push({
           id: randomUUID(),
@@ -292,8 +417,11 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return { success: false, message: "Durata non valida." };
     }
 
-    const preferredDate = parseDateOnly(payload.preferredDate);
-    preferredDate.setHours(0, 0, 0, 0);
+    const preferredDateParts = parseDateOnly(payload.preferredDate);
+    if (!preferredDateParts) {
+      return { success: false, message: "Data preferita non valida." };
+    }
+    const preferredDate = toTimeZoneDate(preferredDateParts, 0, 0);
 
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     const [activeInstructors, activeVehicles, studentAvailability] = await Promise.all([
@@ -447,7 +575,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     };
 
     const buildCandidateStarts = (
-      dayStart: Date,
+      dayParts: CalendarDateParts,
       window: { startMinutes: number; endMinutes: number },
     ) => {
       const first = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
@@ -455,23 +583,22 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       if (lastStart < first) return [];
       const candidates: Date[] = [];
       for (let minutes = first; minutes <= lastStart; minutes += SLOT_MINUTES) {
-        const start = new Date(dayStart);
-        start.setHours(0, 0, 0, 0);
-        start.setMinutes(minutes, 0, 0);
-        candidates.push(start);
+        candidates.push(
+          toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60),
+        );
       }
       return candidates;
     };
 
     const findCandidateForDay = async (
-      dayStart: Date,
+      dayParts: CalendarDateParts,
       preferredWindow?: { startMinutes: number; endMinutes: number },
       forcedStart?: Date,
     ) => {
       if (!studentAvailability) return null;
       if (!activeInstructorIds.length || !activeVehicleIds.length) return null;
 
-      const dayOfWeek = dayStart.getDay();
+      const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
       if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) {
         return null;
       }
@@ -487,7 +614,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
 
       const window = { startMinutes, endMinutes };
-      let candidateStarts = buildCandidateStarts(dayStart, window);
+      let candidateStarts = buildCandidateStarts(dayParts, window);
       if (forcedStart) {
         const forcedMinutes = minutesFromDate(forcedStart);
         if (forcedMinutes % SLOT_MINUTES !== 0) return null;
@@ -497,10 +624,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
       if (!candidateStarts.length) return null;
 
-      const rangeStart = new Date(dayStart);
-      rangeStart.setHours(0, 0, 0, 0);
-      const rangeEnd = new Date(rangeStart);
-      rangeEnd.setDate(rangeEnd.getDate() + 1);
+      const rangeStart = toTimeZoneDate(dayParts, 0, 0);
+      const rangeEnd = toTimeZoneDate(addDaysToDateParts(dayParts, 1), 0, 0);
       const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
       const appointments = await prisma.autoscuolaAppointment.findMany({
         where: {
@@ -605,9 +730,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       if (Number.isNaN(selectedStart.getTime())) {
         return { success: false, message: "Slot selezionato non valido." };
       }
-      const rangeStart = new Date(selectedStart);
-      rangeStart.setHours(0, 0, 0, 0);
-      const candidate = await findCandidateForDay(rangeStart, undefined, selectedStart);
+      const selectedStartParts = getZonedParts(selectedStart);
+      const candidate = await findCandidateForDay(
+        {
+          year: selectedStartParts.year,
+          month: selectedStartParts.month,
+          day: selectedStartParts.day,
+        },
+        undefined,
+        selectedStart,
+      );
       if (!candidate) {
         return { success: false, message: "Slot non disponibile." };
       }
@@ -707,7 +839,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       const parsedStart = parseTime(payload.preferredStartTime);
       const parsedEnd = parseTime(payload.preferredEndTime);
       if (parsedStart && parsedEnd) {
-        candidate = await findCandidateForDay(preferredDate, {
+        candidate = await findCandidateForDay(preferredDateParts, {
           startMinutes: parsedStart.hours * 60 + parsedStart.minutes,
           endMinutes: parsedEnd.hours * 60 + parsedEnd.minutes,
         });
@@ -715,7 +847,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     if (!candidate) {
-      candidate = await findCandidateForDay(preferredDate);
+      candidate = await findCandidateForDay(preferredDateParts);
     }
 
     if (candidate) {
@@ -733,9 +865,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
     let suggestion: { startsAt: Date; endsAt: Date } | null = null;
     for (let offset = 1; offset <= maxDays; offset += 1) {
-      const altDay = new Date(preferredDate);
-      altDay.setDate(altDay.getDate() + offset);
-      const altCandidate = await findCandidateForDay(altDay);
+      const altDateParts = addDaysToDateParts(preferredDateParts, offset);
+      const altCandidate = await findCandidateForDay(altDateParts);
       if (altCandidate) {
         suggestion = { startsAt: altCandidate.start, endsAt: altCandidate.end };
         break;
@@ -801,16 +932,13 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       return { success: false, message: "Hai già risposto a questa offerta." };
     }
 
-    const today = new Date(offer.slot.startsAt);
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const dayBounds = getDayBoundsForDate(offer.slot.startsAt);
     const studentAppointments = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId: membership.companyId,
         studentId: payload.studentId,
         status: { not: "cancelled" },
-        startsAt: { gte: today, lt: tomorrow },
+        startsAt: { gte: dayBounds.start, lt: dayBounds.end },
       },
       select: { startsAt: true, endsAt: true },
     });
@@ -1046,10 +1174,7 @@ export async function broadcastWaitlistOffer({
   });
   if (!slot) return offer;
 
-  const dayStart = new Date(slot.startsAt);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart);
-  dayEnd.setDate(dayEnd.getDate() + 1);
+  const dayBounds = getDayBoundsForDate(slot.startsAt);
 
   const students = await prisma.companyMember.findMany({
     where: {
@@ -1083,7 +1208,7 @@ export async function broadcastWaitlistOffer({
         companyId,
         studentId: { in: studentIds },
         status: { not: "cancelled" },
-        startsAt: { gte: dayStart, lt: dayEnd },
+        startsAt: { gte: dayBounds.start, lt: dayBounds.end },
       },
       select: {
         studentId: true,
@@ -1125,8 +1250,11 @@ export async function broadcastWaitlistOffer({
     DEFAULT_SLOT_FILL_CHANNELS,
   );
 
-  const formattedDate = slot.startsAt.toLocaleDateString("it-IT");
+  const formattedDate = slot.startsAt.toLocaleDateString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+  });
   const formattedTime = slot.startsAt.toLocaleTimeString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
     hour: "2-digit",
     minute: "2-digit",
   });
