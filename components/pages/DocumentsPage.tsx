@@ -66,59 +66,32 @@ export function DocumentsPage(): React.ReactElement {
   return (
     <ClientPageWrapper title={"Documents"} subTitle="Archivio template e documenti pronti alla compilazione.">
       <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
-        <div className="flex w-full justify-end">
-          <ManagementBar
-            totalRows={totalRows ?? 0}
-            actions={[
-              {
-                id: "delete",
-                label: "Elimina",
-                icon: Trash2,
-                variant: "destructive",
-                disabled: !totalSelected,
-                onClick: () => triggerDelete((prev) => prev + 1),
-              },
-              {
-                id: "create",
-                label: "Crea documento",
-                icon: FilePlus2,
-                variant: "default",
-              },
-              {
-                id: "upload",
-                label: "Upload",
-                icon: ArrowUpFromLine,
-                variant: "outline",
-              },
-            ]}
-          />
-        </div>
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
-            <InputButtonProvider
-              showInput={showInput}
-              setShowInput={setShowInput}
-              className="w-full"
-            >
-              <InputButton className="w-full">
-                <InputButtonAction className="hidden" />
-                <InputButtonSubmit
-                  onClick={() => {}}
-                  type="submit"
-                  className="bg-foreground text-background hover:bg-foreground/90"
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-3">
+            <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+              <InputButtonProvider
+                showInput={showInput}
+                setShowInput={setShowInput}
+                className="w-full"
+              >
+                <InputButton className="w-full">
+                  <InputButtonAction className="hidden" />
+                  <InputButtonSubmit
+                    onClick={() => {}}
+                    type="submit"
+                    className="bg-foreground text-background hover:bg-foreground/90"
+                  />
+                </InputButton>
+                <InputButtonInput
+                  type="text"
+                  placeholder="Cerca documenti"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
+                  autoFocus
                 />
-              </InputButton>
-              <InputButtonInput
-                type="text"
-                placeholder="Cerca documenti"
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
-                autoFocus
-              />
-            </InputButtonProvider>
-          </form>
-          <div className="flex items-center justify-between gap-4">
+              </InputButtonProvider>
+            </form>
             <Filters filtersParams={filtersParamters} />
             <div
               className={cn(
@@ -144,6 +117,33 @@ export function DocumentsPage(): React.ReactElement {
               )}{" "}
               rows.
             </div>
+          </div>
+          <div className="flex w-full justify-start xl:w-auto xl:justify-end">
+            <ManagementBar
+              totalRows={totalRows ?? 0}
+              actions={[
+                {
+                  id: "delete",
+                  label: "Elimina",
+                  icon: Trash2,
+                  variant: "destructive",
+                  disabled: !totalSelected,
+                  onClick: () => triggerDelete((prev) => prev + 1),
+                },
+                {
+                  id: "create",
+                  label: "Crea documento",
+                  icon: FilePlus2,
+                  variant: "default",
+                },
+                {
+                  id: "upload",
+                  label: "Upload",
+                  icon: ArrowUpFromLine,
+                  variant: "outline",
+                },
+              ]}
+            />
           </div>
         </div>
       </div>

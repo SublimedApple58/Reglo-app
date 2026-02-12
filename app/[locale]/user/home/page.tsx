@@ -142,13 +142,13 @@ export default function HomePage(): React.ReactElement {
     <ClientPageWrapper title="Home" hideHero>
       <div className="relative space-y-5">
         <div className="pointer-events-none absolute inset-0 overflow-visible">
-          <div className="absolute -top-20 right-4 h-60 w-60 rounded-full bg-[#AFE2D4]/52 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
           <div className="absolute -left-4 top-24 h-72 w-72 rounded-full bg-[#324D7A]/14 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
           <div className="absolute right-1/3 top-40 h-44 w-44 rounded-full bg-[#DCE8F9]/70 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
+          <div className="absolute -top-16 right-10 h-52 w-52 rounded-full bg-[#324D7A]/10 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
         </div>
 
         <section className="glass-surface glass-strong relative overflow-hidden p-6 lg:p-7">
-          <div className="pointer-events-none absolute right-0 top-0 h-full w-[44%] bg-[radial-gradient(circle_at_20%_20%,rgba(175,226,212,0.3),transparent_55%)]" />
+          <div className="pointer-events-none absolute right-0 top-0 h-full w-[44%] bg-[radial-gradient(circle_at_20%_20%,rgba(50,77,122,0.14),transparent_55%)]" />
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
             <div className="space-y-4">
               <span className="glass-chip">Workspace overview</span>
