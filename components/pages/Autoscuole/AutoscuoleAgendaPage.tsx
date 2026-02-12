@@ -1078,8 +1078,8 @@ function getStatusMeta(
   }
   if (normalized === "confirmed" || normalized === "scheduled") {
     return {
-      label: "Confermata",
-      shortLabel: "Confermata",
+      label: "Programmata",
+      shortLabel: "Programmata",
       className: "border-sky-200/70 bg-sky-100/75",
     };
   }

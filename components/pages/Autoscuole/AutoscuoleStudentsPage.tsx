@@ -97,7 +97,7 @@ const STATUS_LABELS: Record<string, string> = {
   checked_in: "Check-in",
   no_show: "No-show",
   scheduled: "Programmato",
-  confirmed: "Confermato",
+  confirmed: "Programmato",
   cancelled: "Annullata",
   proposal: "Proposta",
 };
