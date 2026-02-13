@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { updateOrderToPaid } from '@/lib/actions/order.actions';
 import { prisma } from '@/db/prisma';
+import { persistAutoscuolaStripeConnectAccountStatus } from '@/lib/autoscuole/stripe-connect';
 
 export async function POST(req: NextRequest) {
   try {
@@ -165,6 +166,28 @@ export async function POST(req: NextRequest) {
         }
       }
       return NextResponse.json({ success: true, handled: 'payment_intent.payment_failed' });
+    }
+
+    if (event.type === 'account.updated') {
+      const account = event.data.object as Stripe.Account;
+      const connection = await prisma.integrationConnection.findFirst({
+        where: {
+          provider: 'STRIPE_CONNECT',
+          externalAccountId: account.id,
+        },
+        select: {
+          companyId: true,
+        },
+      });
+
+      if (connection) {
+        await persistAutoscuolaStripeConnectAccountStatus({
+          companyId: connection.companyId,
+          account,
+        });
+      }
+
+      return NextResponse.json({ success: true, handled: 'account.updated' });
     }
 
     return NextResponse.json({ success: true, handled: event.type });

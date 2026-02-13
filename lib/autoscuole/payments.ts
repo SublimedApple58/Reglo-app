@@ -5,6 +5,7 @@ import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 import { decryptSecret } from "@/lib/integrations/secrets";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { getAutoscuolaStripeDestinationAccountId } from "@/lib/autoscuole/stripe-connect";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
 
@@ -600,6 +601,7 @@ export async function prepareAppointmentPaymentSnapshot({
       invoiceStatus: null,
     };
   }
+  await getAutoscuolaStripeDestinationAccountId({ prisma, companyId });
 
   const insoluti = await prisma.autoscuolaAppointment.count({
     where: {
@@ -754,6 +756,14 @@ const attemptAutomaticPaymentRecord = async ({
       companyId: payment.companyId,
       studentId: payment.studentId,
     }));
+  const config = await getAutoscuolaPaymentConfig({
+    prisma,
+    companyId: payment.companyId,
+  });
+  const destinationAccountId = await getAutoscuolaStripeDestinationAccountId({
+    prisma,
+    companyId: payment.companyId,
+  });
 
   const paymentMethodId = await resolveStudentPaymentMethod({
     prisma,
@@ -801,6 +811,10 @@ const attemptAutomaticPaymentRecord = async ({
         payment_method: paymentMethodId,
         confirm: true,
         off_session: true,
+        on_behalf_of: destinationAccountId,
+        transfer_data: {
+          destination: destinationAccountId,
+        },
         metadata: {
           kind: "autoscuola_appointment_payment",
           appointmentId: payment.appointment.id,
@@ -848,10 +862,6 @@ const attemptAutomaticPaymentRecord = async ({
       appointmentId: payment.appointment.id,
     });
 
-    const config = await getAutoscuolaPaymentConfig({
-      prisma,
-      companyId: payment.companyId,
-    });
     await sendPaymentNotification({
       prisma,
       companyId: payment.companyId,
@@ -866,8 +876,12 @@ const attemptAutomaticPaymentRecord = async ({
     return { success: true, paymentIntentId: paymentIntent.id };
   } catch (error) {
     const stripeError = error as Stripe.errors.StripeError;
-    const code = stripeError.code ?? "payment_failed";
-    const message = stripeError.message ?? "Addebito non riuscito.";
+    const code =
+      stripeError.code ??
+      (error instanceof Error ? "autoscuola_connect_not_configured" : "payment_failed");
+    const message =
+      stripeError.message ??
+      (error instanceof Error ? error.message : "Addebito non riuscito.");
     const nextAttemptAt = getAttemptBackoffDate(attemptNumber);
     const exhausted = attemptNumber >= MAX_PAYMENT_ATTEMPTS;
 
@@ -889,10 +903,6 @@ const attemptAutomaticPaymentRecord = async ({
       });
     }
 
-    const config = await getAutoscuolaPaymentConfig({
-      prisma,
-      companyId: payment.companyId,
-    });
     await sendPaymentNotification({
       prisma,
       companyId: payment.companyId,
@@ -1144,6 +1154,16 @@ export async function processAutoscuolaPaymentRetries({
   return { retried: retryable.length };
 }
 
+const isFicNotReadyError = (error: unknown) => {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("fatture in cloud non connesso") ||
+    message.includes("seleziona l'azienda fic") ||
+    message.includes("configura iva e metodo pagamento fic")
+  );
+};
+
 const createFicInvoiceForAppointment = async ({
   prisma,
   appointment,
@@ -1263,7 +1283,7 @@ export async function processAutoscuolaInvoiceFinalization({
       paymentRequired: true,
       OR: [
         { invoiceId: null },
-        { invoiceStatus: { in: ["pending", "failed"] } },
+        { invoiceStatus: { in: ["pending", "failed", "pending_fic"] } },
       ],
       status: {
         in: ["scheduled", "confirmed", "checked_in", "completed", "no_show", "cancelled"],
@@ -1335,13 +1355,16 @@ export async function processAutoscuolaInvoiceFinalization({
       });
       issued += 1;
     } catch (error) {
+      const pendingFic = isFicNotReadyError(error);
       await prisma.autoscuolaAppointment.update({
         where: { id: appointment.id },
         data: {
-          invoiceStatus: "failed",
+          invoiceStatus: pendingFic ? "pending_fic" : "failed",
         },
       });
-      console.error("Autoscuola FIC invoice error", error);
+      if (!pendingFic) {
+        console.error("Autoscuola FIC invoice error", error);
+      }
     }
   }
 
@@ -1616,6 +1639,10 @@ export async function createManualRecoveryIntent({
     companyId,
     studentId,
   });
+  const destinationAccountId = await getAutoscuolaStripeDestinationAccountId({
+    prisma,
+    companyId,
+  });
 
   const payment = await prisma.autoscuolaAppointmentPayment.create({
     data: {
@@ -1641,6 +1668,10 @@ export async function createManualRecoveryIntent({
         enabled: true,
       },
       setup_future_usage: "off_session",
+      on_behalf_of: destinationAccountId,
+      transfer_data: {
+        destination: destinationAccountId,
+      },
       metadata: {
         kind: "autoscuola_appointment_payment",
         appointmentId,

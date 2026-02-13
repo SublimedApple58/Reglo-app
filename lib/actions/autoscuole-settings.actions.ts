@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
+import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
 
 const DEFAULT_AVAILABILITY_WEEKS = 4;
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
@@ -22,6 +23,7 @@ const DEFAULT_LESSON_PRICE_60 = 50;
 const DEFAULT_PENALTY_CUTOFF_HOURS = 24;
 const DEFAULT_PENALTY_PERCENT = 50;
 const DEFAULT_PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
+const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
 
 const reminderMinutesSchema = z
   .number()
@@ -83,6 +85,7 @@ const autoscuolaSettingsPatchSchema = z
     paymentNotificationChannels: paymentChannelListSchema.optional(),
     ficVatTypeId: z.string().trim().min(1).optional().nullable(),
     ficPaymentMethodId: z.string().trim().min(1).optional().nullable(),
+    stripeConnectedAccountId: z.string().trim().min(1).optional().nullable(),
   })
   .refine(
     (value) =>
@@ -99,25 +102,17 @@ const autoscuolaSettingsPatchSchema = z
       value.penaltyPercentPreset !== undefined ||
       value.paymentNotificationChannels !== undefined ||
       value.ficVatTypeId !== undefined ||
-      value.ficPaymentMethodId !== undefined,
+      value.ficPaymentMethodId !== undefined ||
+      value.stripeConnectedAccountId !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
-    const willEnable = value.autoPaymentsEnabled === true;
-    const hasFicVat = (value.ficVatTypeId ?? "").trim().length > 0;
-    const hasFicPaymentMethod = (value.ficPaymentMethodId ?? "").trim().length > 0;
-    if (willEnable && !hasFicVat) {
+    const stripeConnectedAccountId = (value.stripeConnectedAccountId ?? "").trim();
+    if (stripeConnectedAccountId && !STRIPE_CONNECTED_ACCOUNT_ID_REGEX.test(stripeConnectedAccountId)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["ficVatTypeId"],
-        message: "Se abiliti i pagamenti automatici devi selezionare una aliquota IVA FIC.",
-      });
-    }
-    if (willEnable && !hasFicPaymentMethod) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["ficPaymentMethodId"],
-        message: "Se abiliti i pagamenti automatici devi selezionare un metodo pagamento FIC.",
+        path: ["stripeConnectedAccountId"],
+        message: "Stripe Connected Account non valido (atteso formato acct_xxx).",
       });
     }
   });
@@ -231,6 +226,11 @@ export async function getAutoscuolaSettings() {
       limits.ficPaymentMethodId.trim().length
         ? limits.ficPaymentMethodId.trim()
         : null;
+    const stripeConnectedAccountId =
+      typeof limits.stripeConnectedAccountId === "string" &&
+      limits.stripeConnectedAccountId.trim().length
+        ? limits.stripeConnectedAccountId.trim()
+        : null;
 
     return {
       success: true,
@@ -249,6 +249,7 @@ export async function getAutoscuolaSettings() {
         paymentNotificationChannels,
         ficVatTypeId,
         ficPaymentMethodId,
+        stripeConnectedAccountId,
       },
     };
   } catch (error) {
@@ -351,13 +352,15 @@ export async function updateAutoscuolaSettings(
         ? payload.ficPaymentMethodId
         : previousFicPaymentMethodId;
 
-    if (nextAutoPaymentsEnabled && !nextFicVatTypeId) {
-      throw new Error("Se abiliti i pagamenti automatici devi selezionare aliquota IVA FIC.");
-    }
-    if (nextAutoPaymentsEnabled && !nextFicPaymentMethodId) {
-      throw new Error(
-        "Se abiliti i pagamenti automatici devi selezionare metodo pagamento FIC.",
-      );
+    if (nextAutoPaymentsEnabled) {
+      const stripe = await isAutoscuolaStripeConnectReady({
+        companyId: membership.companyId,
+      });
+      if (!stripe.ready) {
+        throw new Error(
+          "Completa onboarding Stripe (termini, IBAN, P.IVA e documenti) prima di attivare i pagamenti automatici.",
+        );
+      }
     }
 
     const nextLimits = {

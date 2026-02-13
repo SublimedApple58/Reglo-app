@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { useSearchParams } from "next/navigation";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
@@ -70,6 +71,21 @@ type SelectOption = {
 const cutoffPresets = [1, 2, 4, 6, 12, 24, 48] as const;
 const penaltyPresets = [25, 50, 75, 100] as const;
 
+type StripeConnectStatus = {
+  connected: boolean;
+  accountId: string | null;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted: boolean;
+  onboardingComplete: boolean;
+  requirementsCurrentlyDue: string[];
+  requirementsEventuallyDue: string[];
+  requirementsPastDue: string[];
+  status: "not_connected" | "pending" | "restricted" | "active";
+  ready: boolean;
+  syncError?: string | null;
+};
+
 const formatDateTime = (value: string | Date) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
@@ -101,11 +117,16 @@ export function AutoscuolePaymentsPage({
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
+  const searchParams = useSearchParams();
+  const hasHandledStripeReturn = React.useRef(false);
 
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
+  const [stripeLoading, setStripeLoading] = React.useState(false);
+  const [stripeOnboardingLoading, setStripeOnboardingLoading] = React.useState(false);
   const [overview, setOverview] = React.useState<PaymentOverview | null>(null);
   const [appointments, setAppointments] = React.useState<PaymentAppointment[]>([]);
+  const [stripeStatus, setStripeStatus] = React.useState<StripeConnectStatus | null>(null);
   const [vatOptions, setVatOptions] = React.useState<SelectOption[]>([]);
   const [methodOptions, setMethodOptions] = React.useState<SelectOption[]>([]);
   const [vatLoading, setVatLoading] = React.useState(false);
@@ -157,6 +178,34 @@ export function AutoscuolePaymentsPage({
     }
   }, []);
 
+  const loadStripeStatus = React.useCallback(async () => {
+    setStripeLoading(true);
+    try {
+      const response = await fetch("/api/autoscuole/payments/stripe-connect/status", {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; data?: StripeConnectStatus; message?: string }
+        | null;
+
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message ?? "Impossibile leggere stato Stripe Connect.");
+      }
+
+      setStripeStatus(payload.data);
+    } catch (error) {
+      setStripeStatus(null);
+      toast.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Errore caricamento stato Stripe Connect.",
+      });
+    } finally {
+      setStripeLoading(false);
+    }
+  }, [toast]);
+
   const loadPage = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -194,7 +243,7 @@ export function AutoscuolePaymentsPage({
         setAppointments([]);
       }
 
-      await loadFicOptions();
+      await Promise.all([loadFicOptions(), loadStripeStatus()]);
     } catch (error) {
       toast.error({
         description:
@@ -205,11 +254,82 @@ export function AutoscuolePaymentsPage({
     } finally {
       setLoading(false);
     }
-  }, [loadFicOptions, toast]);
+  }, [loadFicOptions, loadStripeStatus, toast]);
 
   React.useEffect(() => {
     loadPage();
   }, [loadPage]);
+
+  React.useEffect(() => {
+    const stripeReturn = searchParams.get("stripe_return");
+    const stripeRefresh = searchParams.get("stripe_refresh");
+
+    if (!stripeReturn && !stripeRefresh) {
+      hasHandledStripeReturn.current = false;
+      return;
+    }
+
+    if (hasHandledStripeReturn.current) return;
+    hasHandledStripeReturn.current = true;
+
+    if (stripeReturn) {
+      toast.success({
+        description: "Rientro da Stripe completato. Verifico lo stato onboarding.",
+      });
+    }
+    if (stripeRefresh) {
+      toast.info({
+        description: "Sessione Stripe scaduta o interrotta. Completa nuovamente l'onboarding.",
+      });
+    }
+
+    loadStripeStatus().catch(() => undefined);
+    if (typeof window !== "undefined") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [loadStripeStatus, searchParams, toast]);
+
+  const handleOpenStripeOnboarding = async () => {
+    setStripeOnboardingLoading(true);
+    try {
+      const currentPath =
+        typeof window !== "undefined" ? window.location.pathname : "/en/user/autoscuole/payments";
+      const returnPath = `${currentPath}?stripe_return=1`;
+      const refreshPath = `${currentPath}?stripe_refresh=1`;
+
+      const response = await fetch("/api/autoscuole/payments/stripe-connect/onboarding-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          returnPath,
+          refreshPath,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; data?: { onboardingUrl?: string }; message?: string }
+        | null;
+
+      if (!response.ok || !payload?.success || !payload.data?.onboardingUrl) {
+        throw new Error(payload?.message ?? "Impossibile avviare onboarding Stripe.");
+      }
+
+      if (typeof window !== "undefined") {
+        window.location.assign(payload.data.onboardingUrl);
+      }
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Errore durante l'apertura onboarding Stripe.",
+      });
+    } finally {
+      setStripeOnboardingLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     const parsedPrice30 = Number(lessonPrice30);
@@ -243,12 +363,11 @@ export function AutoscuolePaymentsPage({
     }
 
     if (autoPaymentsEnabled) {
-      if (!ficVatTypeId) {
-        toast.error({ description: "Seleziona aliquota IVA FIC." });
-        return;
-      }
-      if (!ficPaymentMethodId) {
-        toast.error({ description: "Seleziona metodo pagamento FIC." });
+      if (!stripeStatus?.ready) {
+        toast.error({
+          description:
+            "Completa onboarding Stripe (termini, IBAN, P.IVA e documenti) prima di attivare i pagamenti automatici.",
+        });
         return;
       }
     }
@@ -284,6 +403,18 @@ export function AutoscuolePaymentsPage({
     }
   };
 
+  const stripeReady = stripeStatus?.ready === true;
+  const stripeStatusLabel = stripeReady
+    ? "Attivo"
+    : stripeStatus?.connected
+      ? "In verifica"
+      : "Non connesso";
+  const stripeStatusClassName = stripeReady
+    ? "text-emerald-700"
+    : stripeStatus?.connected
+      ? "text-amber-700"
+      : "text-muted-foreground";
+
   return (
     <ClientPageWrapper
       title="Autoscuole"
@@ -294,6 +425,70 @@ export function AutoscuolePaymentsPage({
       <div className="w-full space-y-5">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
+
+        <div className="glass-panel glass-strong space-y-4 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Stripe incassi autoscuola</h3>
+              <p className="text-xs text-muted-foreground">
+                Reglo ti guida nella procedura Stripe: termini, IBAN, P.IVA e documenti.
+              </p>
+            </div>
+            <Button
+              onClick={handleOpenStripeOnboarding}
+              disabled={stripeOnboardingLoading || stripeLoading}
+            >
+              {stripeOnboardingLoading
+                ? "Apertura..."
+                : stripeStatus?.connected
+                  ? "Completa onboarding Stripe"
+                  : "Configura Stripe"}
+            </Button>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Stato</div>
+              <div className={`mt-1 text-sm font-semibold ${stripeStatusClassName}`}>
+                {stripeLoading ? "Caricamento..." : stripeStatusLabel}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Account
+              </div>
+              <div className="mt-1 text-sm font-medium text-foreground">
+                {stripeStatus?.accountId ?? "-"}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+                Capacita
+              </div>
+              <div className="mt-1 text-sm text-foreground">
+                Pagamenti: {stripeStatus?.chargesEnabled ? "OK" : "NO"} · Payout:{" "}
+                {stripeStatus?.payoutsEnabled ? "OK" : "NO"}
+              </div>
+            </div>
+          </div>
+
+          {stripeStatus?.requirementsCurrentlyDue?.length ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3">
+              <div className="text-xs font-semibold text-amber-800">
+                Dati/documenti richiesti da Stripe
+              </div>
+              <div className="mt-1 text-xs text-amber-700">
+                {stripeStatus.requirementsCurrentlyDue.slice(0, 6).join(" · ")}
+              </div>
+            </div>
+          ) : null}
+
+          {stripeStatus?.syncError ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-xs text-rose-700">
+              Ultimo sync Stripe: {stripeStatus.syncError}
+            </div>
+          ) : null}
+        </div>
 
         <div className="glass-panel glass-strong space-y-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -412,6 +607,10 @@ export function AutoscuolePaymentsPage({
               </label>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            Fatture in Cloud resta opzionale all&apos;attivazione: se non configurato, le fatture
+            vengono marcate in attesa e completate appena disponibile.
+          </p>
 
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving || loading}>
@@ -511,10 +710,14 @@ function Field({
   label,
   value,
   onChange,
+  placeholder,
+  inputMode = "decimal",
 }: {
   label: string;
   value: string;
   onChange: (next: string) => void;
+  placeholder?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   return (
     <label className="space-y-1 text-xs font-medium text-muted-foreground">
@@ -523,7 +726,8 @@ function Field({
         className="h-10 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-foreground outline-none focus:border-foreground/25"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        inputMode="decimal"
+        placeholder={placeholder}
+        inputMode={inputMode}
       />
     </label>
   );

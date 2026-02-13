@@ -13,6 +13,7 @@ datasource db {
 enum IntegrationProvider {
   SLACK
   FATTURE_IN_CLOUD
+  STRIPE_CONNECT
 }
 
 enum ServiceKey {
