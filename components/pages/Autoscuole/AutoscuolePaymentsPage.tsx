@@ -440,7 +440,9 @@ export function AutoscuolePaymentsPage({
             >
               {stripeOnboardingLoading
                 ? "Apertura..."
-                : stripeStatus?.connected
+                : stripeStatus?.ready
+                  ? "Gestisci Stripe"
+                  : stripeStatus?.connected
                   ? "Completa onboarding Stripe"
                   : "Configura Stripe"}
             </Button>
