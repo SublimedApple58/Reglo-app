@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
-import { decryptSecret } from "@/lib/integrations/secrets";
-import { providerEnumMap } from "@/lib/integrations/oauth";
+import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { formatError } from "@/lib/utils";
 import { getActiveCompanyContext } from "@/lib/company-context";
 
@@ -40,50 +39,16 @@ export async function GET() {
       );
     }
 
-    const connection = await prisma.integrationConnection.findUnique({
-      where: {
-        companyId_provider: {
-          companyId: membership.companyId,
-          provider: providerEnumMap["fatture-in-cloud"],
-        },
-      },
-    });
-
-    if (
-      !connection ||
-      !connection.accessTokenCiphertext ||
-      !connection.accessTokenIv ||
-      !connection.accessTokenTag
-    ) {
-      return NextResponse.json(
-        { success: false, message: "Fatture in Cloud non è connesso" },
-        { status: 400 },
-      );
-    }
-
-    const metadata =
-      connection.metadata && typeof connection.metadata === "object"
-        ? (connection.metadata as { entityId?: string })
-        : {};
-
-    if (!metadata.entityId) {
-      return NextResponse.json(
-        { success: false, message: "Seleziona l'azienda FIC in Settings" },
-        { status: 400 },
-      );
-    }
-
-    const token = decryptSecret({
-      ciphertext: connection.accessTokenCiphertext,
-      iv: connection.accessTokenIv,
-      tag: connection.accessTokenTag,
+    const connection = await getFicConnection({
+      prisma,
+      companyId: membership.companyId,
     });
 
     const response = await fetch(
-      `https://api-v2.fattureincloud.it/c/${metadata.entityId}/info/vat_types`,
+      `https://api-v2.fattureincloud.it/c/${connection.entityId}/info/vat_types`,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${connection.token}`,
           Accept: "application/json",
         },
         cache: "no-store",
@@ -112,9 +77,17 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: options });
   } catch (error) {
+    const message = formatError(error);
+    const normalized = message.toLowerCase();
     return NextResponse.json(
-      { success: false, message: formatError(error) },
-      { status: 500 },
+      { success: false, message },
+      {
+        status:
+          normalized.includes("fatture in cloud non connesso") ||
+          normalized.includes("seleziona l'azienda fic")
+            ? 400
+            : 500,
+      },
     );
   }
 }

@@ -182,6 +182,25 @@ export async function GET(
     const expiresAt = payload.expires_in
       ? new Date(Date.now() + payload.expires_in * 1000)
       : null;
+    const existingConnection = await prisma.integrationConnection.findUnique({
+      where: {
+        companyId_provider: {
+          companyId: membership.companyId,
+          provider: providerEnumMap[providerKey],
+        },
+      },
+      select: {
+        metadata: true,
+      },
+    });
+    const existingMetadata =
+      existingConnection?.metadata && typeof existingConnection.metadata === "object"
+        ? (existingConnection.metadata as Record<string, unknown>)
+        : {};
+    const mergedMetadata = {
+      ...existingMetadata,
+      ...(payload as Record<string, unknown>),
+    };
 
     await prisma.integrationConnection.upsert({
       where: {
@@ -200,7 +219,7 @@ export async function GET(
         refreshTokenIv: refreshEncrypted?.iv ?? null,
         refreshTokenTag: refreshEncrypted?.tag ?? null,
         expiresAt,
-        metadata: payload,
+        metadata: mergedMetadata,
       },
       create: {
         companyId: membership.companyId,
@@ -214,7 +233,7 @@ export async function GET(
         refreshTokenIv: refreshEncrypted?.iv ?? null,
         refreshTokenTag: refreshEncrypted?.tag ?? null,
         expiresAt,
-        metadata: payload,
+        metadata: mergedMetadata,
       },
     });
   }

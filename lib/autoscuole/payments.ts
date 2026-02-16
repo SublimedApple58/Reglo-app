@@ -3,7 +3,7 @@ import Stripe from "stripe";
 
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
-import { decryptSecret } from "@/lib/integrations/secrets";
+import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { getAutoscuolaStripeDestinationAccountId } from "@/lib/autoscuole/stripe-connect";
 
@@ -268,52 +268,6 @@ const sendPaymentNotification = async ({
       console.error("Autoscuola payment push error", error);
     }
   }
-};
-
-const getFicConnection = async ({
-  prisma,
-  companyId,
-}: {
-  prisma: PrismaClientLike;
-  companyId: string;
-}) => {
-  const connection = await prisma.integrationConnection.findUnique({
-    where: {
-      companyId_provider: {
-        companyId,
-        provider: "FATTURE_IN_CLOUD",
-      },
-    },
-  });
-
-  if (
-    !connection?.accessTokenCiphertext ||
-    !connection.accessTokenIv ||
-    !connection.accessTokenTag
-  ) {
-    throw new Error("Fatture in Cloud non connesso.");
-  }
-
-  const metadata =
-    connection.metadata && typeof connection.metadata === "object"
-      ? (connection.metadata as Record<string, unknown>)
-      : {};
-
-  const entityId = asStringOrNull(metadata.entityId);
-  if (!entityId) {
-    throw new Error("Seleziona l'azienda FIC in Settings.");
-  }
-
-  const token = decryptSecret({
-    ciphertext: connection.accessTokenCiphertext,
-    iv: connection.accessTokenIv,
-    tag: connection.accessTokenTag,
-  });
-
-  return {
-    token,
-    entityId,
-  };
 };
 
 const ficFetch = async (

@@ -1,39 +1,15 @@
-import { decryptSecret } from "@/lib/integrations/secrets";
+import { getFicConnection as getSharedFicConnection } from "@/lib/integrations/fatture-in-cloud";
 
 export const getFicConnection = async (prisma: any, companyId: string) => {
-  const connection = await prisma.integrationConnection.findUnique({
-    where: {
-      companyId_provider: {
-        companyId,
-        provider: "FATTURE_IN_CLOUD",
-      },
-    },
+  const connection = await getSharedFicConnection({
+    prisma,
+    companyId,
   });
-
-  if (
-    !connection?.accessTokenCiphertext ||
-    !connection.accessTokenIv ||
-    !connection.accessTokenTag
-  ) {
-    throw new Error("Fatture in Cloud non connesso");
-  }
-
-  const metadata =
-    connection.metadata && typeof connection.metadata === "object"
-      ? (connection.metadata as { entityId?: string; entityName?: string })
-      : {};
-
-  if (!metadata.entityId) {
-    throw new Error("Seleziona l'azienda FIC in Settings");
-  }
-
-  const token = decryptSecret({
-    ciphertext: connection.accessTokenCiphertext,
-    iv: connection.accessTokenIv,
-    tag: connection.accessTokenTag,
-  });
-
-  return { token, entityId: metadata.entityId, entityName: metadata.entityName };
+  return {
+    token: connection.token,
+    entityId: connection.entityId,
+    entityName: connection.entityName,
+  };
 };
 
 export const ficFetch = async (
