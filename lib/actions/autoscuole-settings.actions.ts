@@ -44,6 +44,17 @@ const paymentChannelListSchema = z
   .min(1, "Seleziona almeno un canale.")
   .max(PAYMENT_NOTIFICATION_CHANNELS.length)
   .transform((channels) => Array.from(new Set(channels)));
+const optionalNullableIdSchema = z.preprocess(
+  (value) => {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(value);
+    }
+    return value;
+  },
+  z.string().trim().min(1).optional().nullable(),
+);
 
 const autoscuolaSettingsPatchSchema = z
   .object({
@@ -83,8 +94,8 @@ const autoscuolaSettingsPatchSchema = z
       )
       .optional(),
     paymentNotificationChannels: paymentChannelListSchema.optional(),
-    ficVatTypeId: z.string().trim().min(1).optional().nullable(),
-    ficPaymentMethodId: z.string().trim().min(1).optional().nullable(),
+    ficVatTypeId: optionalNullableIdSchema,
+    ficPaymentMethodId: optionalNullableIdSchema,
     stripeConnectedAccountId: z.string().trim().min(1).optional().nullable(),
   })
   .refine(

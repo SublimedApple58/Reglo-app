@@ -164,13 +164,33 @@ export function AutoscuolePaymentsPage({
       if (!vatRes.ok || !vatPayload?.success) {
         setVatOptions([]);
       } else {
-        setVatOptions(vatPayload.data ?? []);
+        setVatOptions(
+          (vatPayload.data ?? [])
+            .map((option) => {
+              if (!option || option.value == null) return null;
+              return {
+                value: String(option.value),
+                label: option.label ?? String(option.value),
+              };
+            })
+            .filter(Boolean) as SelectOption[],
+        );
       }
 
       if (!methodRes.ok || !methodPayload?.success) {
         setMethodOptions([]);
       } else {
-        setMethodOptions(methodPayload.data ?? []);
+        setMethodOptions(
+          (methodPayload.data ?? [])
+            .map((option) => {
+              if (!option || option.value == null) return null;
+              return {
+                value: String(option.value),
+                label: option.label ?? String(option.value),
+              };
+            })
+            .filter(Boolean) as SelectOption[],
+        );
       }
     } finally {
       setVatLoading(false);

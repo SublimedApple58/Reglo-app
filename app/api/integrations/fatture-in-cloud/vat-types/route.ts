@@ -63,7 +63,7 @@ export async function GET() {
     const list = Array.isArray(payload) ? payload : payload.data ?? [];
     const options = list
       .map((vat) => {
-        if (!vat.id) return null;
+        if (vat.id == null) return null;
         const label = vat.description
           ? vat.value != null
             ? `${vat.description} (${vat.value}%)`
@@ -71,7 +71,7 @@ export async function GET() {
           : vat.value != null
             ? `IVA ${vat.value}%`
             : "Aliquota IVA";
-        return { value: vat.id, label, rate: vat.value };
+        return { value: String(vat.id), label, rate: vat.value };
       })
       .filter(Boolean) as Array<{ value: string; label: string; rate?: number }>;
 
