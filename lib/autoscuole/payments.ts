@@ -1310,12 +1310,52 @@ export async function processAutoscuolaInvoiceFinalization({
       issued += 1;
     } catch (error) {
       const pendingFic = isFicNotReadyError(error);
+      const failureMessage =
+        error instanceof Error ? error.message : "Errore sconosciuto durante emissione fattura.";
       await prisma.autoscuolaAppointment.update({
         where: { id: appointment.id },
         data: {
           invoiceStatus: pendingFic ? "pending_fic" : "failed",
         },
       });
+
+      if (!pendingFic) {
+        const recentLog = await prisma.autoscuolaAppointmentPayment.findFirst({
+          where: {
+            appointmentId: appointment.id,
+            phase: "invoice",
+            status: "failed",
+          },
+          orderBy: { createdAt: "desc" },
+          select: {
+            createdAt: true,
+            failureMessage: true,
+          },
+        });
+
+        const isDuplicateRecentLog =
+          Boolean(recentLog) &&
+          recentLog?.failureMessage === failureMessage &&
+          Date.now() - recentLog.createdAt.getTime() < 30 * 60 * 1000;
+
+        if (!isDuplicateRecentLog) {
+          await prisma.autoscuolaAppointmentPayment.create({
+            data: {
+              appointmentId: appointment.id,
+              companyId: appointment.companyId,
+              studentId: appointment.studentId,
+              phase: "invoice",
+              amount: toDecimal(0),
+              currency: "EUR",
+              status: "failed",
+              attemptCount: 1,
+              nextAttemptAt: null,
+              failureCode: "fic_invoice_error",
+              failureMessage,
+            },
+          });
+        }
+      }
       if (!pendingFic) {
         console.error("Autoscuola FIC invoice error", error);
       }
