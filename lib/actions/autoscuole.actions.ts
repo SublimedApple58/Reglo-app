@@ -10,6 +10,7 @@ import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.ac
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
+  processAutoscuolaAppointmentSettlementNow,
   getAutoscuolaPaymentsAppointments,
   getAutoscuolaPaymentsOverview,
   prepareAppointmentPaymentSnapshot,
@@ -1362,6 +1363,16 @@ export async function updateAutoscuolaAppointmentStatus(
       where: { id: payload.appointmentId, companyId: membership.companyId },
       data: updateData,
     });
+
+    if (nextStatus === "checked_in") {
+      try {
+        await processAutoscuolaAppointmentSettlementNow({
+          appointmentId: updated.id,
+        });
+      } catch (error) {
+        console.error("Autoscuola immediate settlement error", error);
+      }
+    }
 
     return { success: true, data: updated };
   } catch (error) {

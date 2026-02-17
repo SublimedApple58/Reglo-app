@@ -197,6 +197,80 @@ const getTodayIsoDate = () => {
   }).format(new Date());
 };
 
+type CalendarDateParts = {
+  year: number;
+  month: number;
+  day: number;
+};
+
+const zonedDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: AUTOSCUOLA_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+const getZonedDateParts = (date: Date) => {
+  const parts = zonedDateTimeFormatter.formatToParts(date);
+  const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+
+  return {
+    year: Number(readPart("year")),
+    month: Number(readPart("month")),
+    day: Number(readPart("day")),
+    hour: Number(readPart("hour")),
+    minute: Number(readPart("minute")),
+    second: Number(readPart("second")),
+  };
+};
+
+const getTimeZoneOffsetMinutes = (date: Date) => {
+  const parts = getZonedDateParts(date);
+  const asUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return (asUtc - date.getTime()) / 60000;
+};
+
+const toTimeZoneDate = (
+  parts: CalendarDateParts,
+  hours: number,
+  minutes: number,
+) => {
+  const baseUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes, 0, 0);
+  const firstPass = new Date(baseUtc);
+  const firstOffset = getTimeZoneOffsetMinutes(firstPass);
+  let timestamp = baseUtc - firstOffset * 60000;
+  const secondPass = new Date(timestamp);
+  const secondOffset = getTimeZoneOffsetMinutes(secondPass);
+  if (secondOffset !== firstOffset) {
+    timestamp = baseUtc - secondOffset * 60000;
+  }
+  return new Date(timestamp);
+};
+
+const getEndOfZonedDay = (date: Date) => {
+  const zoned = getZonedDateParts(date);
+  const nextDayUtc = new Date(Date.UTC(zoned.year, zoned.month - 1, zoned.day + 1));
+  const nextDayParts: CalendarDateParts = {
+    year: nextDayUtc.getUTCFullYear(),
+    month: nextDayUtc.getUTCMonth() + 1,
+    day: nextDayUtc.getUTCDate(),
+  };
+  const nextDayStart = toTimeZoneDate(nextDayParts, 0, 0);
+  return new Date(nextDayStart.getTime() - 1);
+};
+
 const getAttemptBackoffDate = (attemptCount: number, from = new Date()) => {
   if (attemptCount >= MAX_PAYMENT_ATTEMPTS) return null;
   const delayMinutes = PAYMENT_RETRY_DELAYS_MINUTES[Math.max(0, attemptCount - 1)] ?? 8 * 60;
@@ -1002,8 +1076,9 @@ const isFinalizable = (
 ) => {
   const status = normalizeStatus(appointment.status);
   if (status === "no_show" || status === "cancelled") return true;
-  const end = getAppointmentEnd(appointment);
-  return end.getTime() <= now.getTime();
+  if (status === "checked_in" || status === "completed") return true;
+  const dayEnd = getEndOfZonedDay(appointment.startsAt);
+  return dayEnd.getTime() <= now.getTime();
 };
 
 export async function processAutoscuolaPenaltyCharges({
@@ -1139,6 +1214,77 @@ export async function processAutoscuolaLessonSettlement({
   }
 
   return { attempted };
+}
+
+export async function processAutoscuolaAppointmentSettlementNow({
+  prisma = defaultPrisma,
+  appointmentId,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  appointmentId: string;
+  now?: Date;
+}) {
+  const appointment = await prisma.autoscuolaAppointment.findUnique({
+    where: { id: appointmentId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      paymentRequired: true,
+      paymentStatus: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      priceAmount: true,
+      penaltyAmount: true,
+      paidAmount: true,
+      penaltyCutoffAt: true,
+      cancelledAt: true,
+    },
+  });
+
+  if (!appointment || !appointment.paymentRequired) {
+    return { attempted: false, skipped: true };
+  }
+
+  if (!isFinalizable(appointment, now)) {
+    return { attempted: false, skipped: true };
+  }
+
+  const finalAmountCents = computeFinalAmountCents(appointment);
+
+  if (!finalAmountCents) {
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        paymentStatus: "waived",
+        invoiceStatus: "not_required",
+      },
+    });
+    return { attempted: false, skipped: true };
+  }
+
+  const paidCents = toCents(appointment.paidAmount);
+  const dueCents = Math.max(0, finalAmountCents - paidCents);
+
+  if (!dueCents) {
+    await settleAppointmentPaymentStatus({
+      prisma,
+      appointmentId: appointment.id,
+      explicitFinalAmountCents: finalAmountCents,
+    });
+    return { attempted: false, skipped: true };
+  }
+
+  await queueAndAttemptPhasePayment({
+    prisma,
+    appointment,
+    phase: "settlement",
+    amountCents: dueCents,
+  });
+
+  return { attempted: true, skipped: false };
 }
 
 export async function processAutoscuolaPaymentRetries({
