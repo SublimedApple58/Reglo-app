@@ -126,7 +126,6 @@ export function AutoscuolePaymentsPage({
   const [stripeOnboardingLoading, setStripeOnboardingLoading] = React.useState(false);
   const [overview, setOverview] = React.useState<PaymentOverview | null>(null);
   const [appointments, setAppointments] = React.useState<PaymentAppointment[]>([]);
-  const [expandedAppointmentId, setExpandedAppointmentId] = React.useState<string | null>(null);
   const [stripeStatus, setStripeStatus] = React.useState<StripeConnectStatus | null>(null);
   const [vatOptions, setVatOptions] = React.useState<SelectOption[]>([]);
   const [methodOptions, setMethodOptions] = React.useState<SelectOption[]>([]);
@@ -670,140 +669,52 @@ export function AutoscuolePaymentsPage({
                   <th className="px-3 py-2">Dovuto</th>
                   <th className="px-3 py-2">Fattura</th>
                   <th className="px-3 py-2">Ultimo tentativo</th>
-                  <th className="px-3 py-2">Logs</th>
                 </tr>
               </thead>
               <tbody>
                 {appointments.map((row) => {
                   const latestPayment = row.payments[0];
-                  const isExpanded = expandedAppointmentId === row.id;
                   return (
-                    <React.Fragment key={row.id}>
-                      <tr className="border-t border-white/40 text-foreground">
-                        <td className="px-3 py-2">{formatDateTime(row.startsAt)}</td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{row.student.name || "-"}</div>
-                          <div className="text-xs text-muted-foreground">{row.student.email}</div>
-                        </td>
-                        <td className="px-3 py-2">{row.status}</td>
-                        <td className="px-3 py-2">{statusLabel(row.paymentStatus)}</td>
-                        <td className="px-3 py-2">{formatMoney(row.priceAmount)}</td>
-                        <td className="px-3 py-2">{formatMoney(row.penaltyAmount)}</td>
-                        <td className="px-3 py-2">{formatMoney(row.paidAmount)}</td>
-                        <td className="px-3 py-2">{formatMoney(row.dueAmount)}</td>
-                        <td className="px-3 py-2">
-                          {row.invoiceId ? (
-                            <span>{row.invoiceId}</span>
-                          ) : (
-                            <span className="text-muted-foreground">{row.invoiceStatus ?? "-"}</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          {latestPayment ? (
-                            <div>
-                              <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                                {latestPayment.phase}
-                              </div>
-                              <div>{latestPayment.status}</div>
-                              {latestPayment.failureMessage ? (
-                                <div className="text-xs text-rose-500">{latestPayment.failureMessage}</div>
-                              ) : null}
+                    <tr key={row.id} className="border-t border-white/40 text-foreground">
+                      <td className="px-3 py-2">{formatDateTime(row.startsAt)}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{row.student.name || "-"}</div>
+                        <div className="text-xs text-muted-foreground">{row.student.email}</div>
+                      </td>
+                      <td className="px-3 py-2">{row.status}</td>
+                      <td className="px-3 py-2">{statusLabel(row.paymentStatus)}</td>
+                      <td className="px-3 py-2">{formatMoney(row.priceAmount)}</td>
+                      <td className="px-3 py-2">{formatMoney(row.penaltyAmount)}</td>
+                      <td className="px-3 py-2">{formatMoney(row.paidAmount)}</td>
+                      <td className="px-3 py-2">{formatMoney(row.dueAmount)}</td>
+                      <td className="px-3 py-2">
+                        {row.invoiceId ? (
+                          <span>{row.invoiceId}</span>
+                        ) : (
+                          <span className="text-muted-foreground">{row.invoiceStatus ?? "-"}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {latestPayment ? (
+                          <div>
+                            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                              {latestPayment.phase}
                             </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() =>
-                              setExpandedAppointmentId((prev) => (prev === row.id ? null : row.id))
-                            }
-                          >
-                            {isExpanded ? "Chiudi" : "Dettagli"}
-                          </Button>
-                        </td>
-                      </tr>
-                      {isExpanded ? (
-                        <tr className="border-t border-white/20 bg-white/35 text-foreground">
-                          <td colSpan={11} className="px-3 py-3">
-                            <div className="space-y-3">
-                              <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-4">
-                                <div>
-                                  <span className="font-medium text-foreground">Fattura ID:</span>{" "}
-                                  {row.invoiceId ?? "-"}
-                                </div>
-                                <div>
-                                  <span className="font-medium text-foreground">Stato fattura:</span>{" "}
-                                  {row.invoiceStatus ?? "-"}
-                                </div>
-                                <div>
-                                  <span className="font-medium text-foreground">Stato pagamento:</span>{" "}
-                                  {statusLabel(row.paymentStatus)}
-                                </div>
-                                <div>
-                                  <span className="font-medium text-foreground">Ultimo update:</span>{" "}
-                                  {latestPayment ? formatDateTime(latestPayment.createdAt) : "-"}
-                                </div>
-                              </div>
-                              <div className="rounded-xl border border-white/60 bg-white/70 p-2">
-                                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                  Timeline tentativi
-                                </div>
-                                <div className="space-y-2">
-                                  {row.payments.map((payment) => (
-                                    <div
-                                      key={payment.id}
-                                      className="rounded-lg border border-white/70 bg-white/80 p-2 text-xs"
-                                    >
-                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <span className="font-medium text-foreground">
-                                          {payment.phase} · {payment.status}
-                                        </span>
-                                        <span className="text-muted-foreground">
-                                          {formatDateTime(payment.paidAt ?? payment.createdAt)}
-                                        </span>
-                                      </div>
-                                      <div className="mt-1 text-muted-foreground">
-                                        Importo: {formatMoney(payment.amount)} · Tentativi:{" "}
-                                        {payment.attemptCount}
-                                        {payment.nextAttemptAt
-                                          ? ` · Retry: ${formatDateTime(payment.nextAttemptAt)}`
-                                          : ""}
-                                      </div>
-                                      {payment.failureMessage ? (
-                                        <div className="mt-1 text-rose-600">
-                                          {payment.failureCode ? `[${payment.failureCode}] ` : ""}
-                                          {payment.failureMessage}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  ))}
-                                  {!row.payments.length ? (
-                                    <div className="text-xs text-muted-foreground">
-                                      Nessun tentativo registrato.
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                              {row.invoiceStatus === "failed" && !row.invoiceId ? (
-                                <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-xs text-rose-700">
-                                  Fattura fallita senza ID emesso: controlla l&apos;ultimo log
-                                  <span className="font-semibold"> phase=invoice </span>
-                                  nella timeline qui sopra.
-                                </div>
-                              ) : null}
-                            </div>
-                          </td>
-                        </tr>
-                      ) : null}
-                    </React.Fragment>
+                            <div>{latestPayment.status}</div>
+                            {latestPayment.failureMessage ? (
+                              <div className="text-xs text-rose-500">{latestPayment.failureMessage}</div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </td>
+                    </tr>
                   );
                 })}
                 {!appointments.length ? (
                   <tr>
-                    <td colSpan={11} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    <td colSpan={10} className="px-3 py-8 text-center text-sm text-muted-foreground">
                       Nessuna guida con pagamento automatico trovata.
                     </td>
                   </tr>
