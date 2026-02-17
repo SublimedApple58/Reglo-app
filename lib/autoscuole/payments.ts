@@ -1415,6 +1415,83 @@ export async function getMobileStudentPaymentProfile({
   };
 }
 
+export async function getMobileStudentPaymentHistory({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  limit = 30,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  limit?: number;
+}) {
+  const rows = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId,
+      paymentRequired: true,
+    },
+    include: {
+      instructor: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      vehicle: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      },
+    },
+    orderBy: { startsAt: "desc" },
+    take: Math.max(1, Math.min(100, Math.trunc(limit))),
+  });
+
+  return rows.map((appointment) => {
+    const finalAmountCents = computeFinalAmountCents(appointment);
+    const paidCents = toCents(appointment.paidAmount);
+    const latestSucceeded = appointment.payments.find(
+      (payment) => normalizeStatus(payment.status) === "succeeded",
+    );
+
+    return {
+      appointmentId: appointment.id,
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+      lessonStatus: appointment.status,
+      paymentStatus: appointment.paymentStatus,
+      priceAmount: toNumber(appointment.priceAmount),
+      penaltyAmount: toNumber(appointment.penaltyAmount),
+      finalAmount: roundAmount(finalAmountCents / 100),
+      paidAmount: toNumber(appointment.paidAmount),
+      dueAmount: roundAmount(Math.max(0, finalAmountCents - paidCents) / 100),
+      invoiceStatus: appointment.invoiceStatus,
+      instructorName: appointment.instructor?.name ?? null,
+      vehicleName: appointment.vehicle?.name ?? null,
+      latestPaidAt: latestSucceeded?.paidAt ?? latestSucceeded?.createdAt ?? null,
+      payments: appointment.payments.map((payment) => ({
+        id: payment.id,
+        phase: payment.phase,
+        status: payment.status,
+        amount: toNumber(payment.amount),
+        attemptCount: payment.attemptCount,
+        nextAttemptAt: payment.nextAttemptAt,
+        failureCode: payment.failureCode,
+        failureMessage: payment.failureMessage,
+        createdAt: payment.createdAt,
+        paidAt: payment.paidAt,
+      })),
+    };
+  });
+}
+
 export async function createStudentSetupIntent({
   prisma = defaultPrisma,
   companyId,
