@@ -66,6 +66,67 @@ const toNumber = (value: Prisma.Decimal | number | string | null | undefined) =>
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const parseLooseAmount = (value: unknown): number | null => {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (value == null) return null;
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    let cleaned = trimmed.replace(/\s+/g, "").replace(/[€$£]/g, "");
+    cleaned = cleaned.replace(/[^0-9.,-]/g, "");
+    if (!cleaned) return null;
+
+    if (cleaned.includes(",") && cleaned.includes(".")) {
+      const lastComma = cleaned.lastIndexOf(",");
+      const lastDot = cleaned.lastIndexOf(".");
+      if (lastComma > lastDot) {
+        cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+      } else {
+        cleaned = cleaned.replace(/,/g, "");
+      }
+    } else if (cleaned.includes(",")) {
+      cleaned = cleaned.replace(",", ".");
+    }
+
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  const parsed = Number(String(value));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const extractFicAmountDue = (payload: unknown) => {
+  const json = payload as
+    | {
+        extra?: { totals?: { amount_due?: unknown } };
+        error?: {
+          extra?: { totals?: { amount_due?: unknown } };
+          validation_result?: {
+            extra?: { totals?: { amount_due?: unknown } };
+          };
+        };
+      }
+    | null;
+
+  const candidates = [
+    json?.extra?.totals?.amount_due,
+    json?.error?.extra?.totals?.amount_due,
+    json?.error?.validation_result?.extra?.totals?.amount_due,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseLooseAmount(candidate);
+    if (parsed != null && Number.isFinite(parsed) && parsed > 0) {
+      return roundAmount(parsed);
+    }
+  }
+
+  return null;
+};
+
 const roundAmount = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
 const toCents = (value: Prisma.Decimal | number | string | null | undefined) =>
@@ -1182,37 +1243,85 @@ const createFicInvoiceForAppointment = async ({
     minute: "2-digit",
   });
 
-  const created = await ficFetch(`/c/${entityId}/issued_documents`, token, {
-    method: "POST",
-    body: JSON.stringify({
-      data: {
-        type: "invoice",
-        entity: {
-          id: clientId,
-          name: studentName,
-        },
-        currency: { code: "EUR" },
-        language: { code: "it", name: "Italiano" },
-        items_list: [
-          {
-            name: `Guida ${appointment.type} del ${startsLabel}`,
-            qty: 1,
-            net_price: netPrice,
-            vat: { id: config.ficVatTypeId },
-          },
-        ],
-        payment_method: {
-          id: Number(config.ficPaymentMethodId),
-        },
-        payments_list: [
-          {
-            amount: grossAmount,
-            due_date: getTodayIsoDate(),
-          },
-        ],
+  const buildInvoicePayload = (paymentAmount: number) => ({
+    data: {
+      type: "invoice",
+      entity: {
+        id: clientId,
+        name: studentName,
       },
-    }),
+      currency: { code: "EUR" },
+      language: { code: "it", name: "Italiano" },
+      items_list: [
+        {
+          name: `Guida ${appointment.type} del ${startsLabel}`,
+          qty: 1,
+          net_price: netPrice,
+          vat: { id: config.ficVatTypeId },
+        },
+      ],
+      payment_method: {
+        id: Number(config.ficPaymentMethodId),
+      },
+      payments_list: [
+        {
+          amount: paymentAmount,
+          due_date: getTodayIsoDate(),
+        },
+      ],
+    },
   });
+
+  const createInvoice = async (paymentAmount: number) => {
+    const response = await fetch(`https://api-v2.fattureincloud.it/c/${entityId}/issued_documents`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(buildInvoicePayload(paymentAmount)),
+    });
+
+    const rawText = await response.text();
+    let json: unknown = null;
+    try {
+      json = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      json = null;
+    }
+
+    if (!response.ok) {
+      const message =
+        (json as { error?: { message?: string } } | null)?.error?.message ||
+        rawText ||
+        "Errore Fatture in Cloud";
+      const amountDue = extractFicAmountDue(json);
+      return { ok: false as const, message, amountDue };
+    }
+
+    return { ok: true as const, data: json };
+  };
+
+  let createResult = await createInvoice(grossAmount);
+  if (!createResult.ok) {
+    const retryAmountDue = createResult.amountDue;
+    const shouldRetryWithAmountDue =
+      retryAmountDue != null &&
+      Number.isFinite(retryAmountDue) &&
+      retryAmountDue > 0 &&
+      /pagament/i.test(createResult.message);
+
+    if (shouldRetryWithAmountDue) {
+      createResult = await createInvoice(roundAmount(retryAmountDue));
+    }
+  }
+
+  if (!createResult.ok) {
+    throw new Error(createResult.message);
+  }
+
+  const created = createResult.data;
 
   const invoiceId =
     (created as { data?: { id?: string | number }; id?: string | number } | null)?.data?.id ??
