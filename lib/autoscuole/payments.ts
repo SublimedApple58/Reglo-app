@@ -1492,6 +1492,132 @@ export async function getMobileStudentPaymentHistory({
   });
 }
 
+const normalizePublicDocumentUrl = (value: unknown) => {
+  const url = asStringOrNull(value);
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (/^\/\//.test(url)) return `https:${url}`;
+  return null;
+};
+
+export async function getMobileAppointmentPaymentDocument({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  appointmentId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  appointmentId: string;
+}) {
+  const appointment = await prisma.autoscuolaAppointment.findFirst({
+    where: {
+      id: appointmentId,
+      companyId,
+      studentId,
+      paymentRequired: true,
+    },
+    select: {
+      id: true,
+      invoiceId: true,
+      invoiceStatus: true,
+      payments: {
+        where: { status: "succeeded" },
+        select: {
+          id: true,
+          stripeChargeId: true,
+          paidAt: true,
+          createdAt: true,
+        },
+        orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
+        take: 10,
+      },
+    },
+  });
+
+  if (!appointment) {
+    throw new Error("Pagamento non trovato.");
+  }
+
+  const resolveStripeReceipt = async () => {
+    const stripe = getStripe();
+    for (const payment of appointment.payments) {
+      if (!payment.stripeChargeId) continue;
+      try {
+        const charge = await stripe.charges.retrieve(payment.stripeChargeId);
+        const receiptUrl = normalizePublicDocumentUrl(charge.receipt_url);
+        if (!receiptUrl) continue;
+
+        return {
+          documentType: "receipt" as const,
+          label: "Ricevuta pagamento",
+          viewUrl: receiptUrl,
+          shareMode: "link" as const,
+          shareUrl: receiptUrl,
+          invoiceId: appointment.invoiceId,
+          invoiceStatus: appointment.invoiceStatus,
+          source: "stripe" as const,
+        };
+      } catch {
+        // keep trying older successful charges
+      }
+    }
+
+    return null;
+  };
+
+  if (appointment.invoiceId && normalizeStatus(appointment.invoiceStatus) === "issued") {
+    try {
+      const { token, entityId } = await getFicConnection({
+        prisma,
+        companyId,
+      });
+      const payload = await ficFetch(
+        `/c/${entityId}/issued_documents/${appointment.invoiceId}`,
+        token,
+        { method: "GET" },
+      );
+
+      const documentPayload = (payload as { data?: Record<string, unknown> } | null)?.data ?? {};
+      const invoiceUrl =
+        normalizePublicDocumentUrl(documentPayload.url) ??
+        normalizePublicDocumentUrl(documentPayload.attachment_url);
+
+      if (invoiceUrl) {
+        return {
+          documentType: "invoice" as const,
+          label: "Fattura",
+          viewUrl: invoiceUrl,
+          shareMode: "file" as const,
+          shareUrl: invoiceUrl,
+          invoiceId: appointment.invoiceId,
+          invoiceStatus: appointment.invoiceStatus,
+          source: "fic" as const,
+        };
+      }
+    } catch {
+      // fallback to stripe receipt if available
+    }
+  }
+
+  const stripeReceipt = await resolveStripeReceipt();
+  if (stripeReceipt) {
+    return stripeReceipt;
+  }
+
+  return {
+    documentType: "none" as const,
+    label: "Documento non disponibile",
+    viewUrl: null,
+    shareMode: "none" as const,
+    shareUrl: null,
+    invoiceId: appointment.invoiceId,
+    invoiceStatus: appointment.invoiceStatus,
+    source: "none" as const,
+  };
+}
+
 export async function createStudentSetupIntent({
   prisma = defaultPrisma,
   companyId,
