@@ -413,6 +413,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = bookingRequestSchema.parse(input);
+    const now = new Date();
     const durationSlots = payload.durationMinutes / SLOT_MINUTES;
     if (![1, 2].includes(durationSlots)) {
       return { success: false, message: "Durata non valida." };
@@ -423,6 +424,19 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return { success: false, message: "Data preferita non valida." };
     }
     const preferredDate = toTimeZoneDate(preferredDateParts, 0, 0);
+    const nowParts = getZonedParts(now);
+    const todayStart = toTimeZoneDate(
+      {
+        year: nowParts.year,
+        month: nowParts.month,
+        day: nowParts.day,
+      },
+      0,
+      0,
+    );
+    if (preferredDate < todayStart) {
+      return { success: false, message: "Non puoi prenotare una guida nel passato." };
+    }
 
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     const [activeInstructors, activeVehicles, studentAvailability] = await Promise.all([
@@ -650,6 +664,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       for (const startDate of candidateStarts) {
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
+        if (startMs < now.getTime()) continue;
         if (excludedStartMs && startMs === excludedStartMs) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
@@ -730,6 +745,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       const selectedStart = new Date(payload.selectedStartsAt);
       if (Number.isNaN(selectedStart.getTime())) {
         return { success: false, message: "Slot selezionato non valido." };
+      }
+      if (selectedStart.getTime() < now.getTime()) {
+        return { success: false, message: "Non puoi prenotare una guida nel passato." };
       }
       const selectedStartParts = getZonedParts(selectedStart);
       const candidate = await findCandidateForDay(

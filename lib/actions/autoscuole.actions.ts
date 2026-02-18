@@ -845,6 +845,12 @@ export async function createAutoscuolaAppointment(
     if (Number.isNaN(slotTime.getTime())) {
       return { success: false, message: "Orario di inizio non valido." };
     }
+    if (slotTime.getTime() < Date.now()) {
+      return {
+        success: false,
+        message: "Non puoi prenotare una guida nel passato.",
+      };
+    }
     const slotEnd = payload.endsAt
       ? new Date(payload.endsAt)
       : new Date(slotTime.getTime() + 30 * 60 * 1000);
