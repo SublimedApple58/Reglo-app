@@ -169,7 +169,9 @@ export function AutoscuoleAgendaPage({
         setLoading(true);
       }
     }
-    const requestId = ++bootstrapRequestRef.current;
+    const requestId = prefetch
+      ? bootstrapRequestRef.current
+      : ++bootstrapRequestRef.current;
 
     try {
       const response = await fetch(buildAgendaBootstrapUrl(from, to), {
