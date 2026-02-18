@@ -7,10 +7,14 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
 import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
-import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
+import {
   processAutoscuolaAppointmentSettlementNow,
+  getAutoscuolaPaymentAppointmentLogs,
   getAutoscuolaPaymentsAppointments,
   getAutoscuolaPaymentsOverview,
   prepareAppointmentPaymentSnapshot,
@@ -140,6 +144,16 @@ const DRIVING_LESSON_EXCLUDED_TYPES = new Set(["esame"]);
 const normalizeStatus = (value: string) => value.trim().toLowerCase();
 const normalizeLessonType = (value: string | null | undefined) =>
   (value ?? "").trim().toLowerCase();
+const normalizeOptionalFilter = (value: string | null | undefined) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (!normalized || normalized === "all") return null;
+  return normalized;
+};
+const toValidDate = (value: string | Date | null | undefined) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 const isDrivingLessonType = (value: string | null | undefined) => {
   const normalized = normalizeLessonType(value);
   if (!normalized) return false;
@@ -195,6 +209,15 @@ const isWithinInstructorDetailsWindow = (
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
   normalizeText(value).toLowerCase();
+const invalidateAgendaAndPaymentsCache = async (companyId: string) => {
+  await invalidateAutoscuoleCache({
+    companyId,
+    segments: [
+      AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+      AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+    ],
+  });
+};
 
 const parseNameParts = (name: string | null, email: string) => {
   const cleanName = normalizeText(name).replace(/\s+/g, " ");
@@ -276,6 +299,26 @@ const listDirectoryStudents = async (companyId: string) => {
   return members.map((member) => toStudentProfile(member.user, member.createdAt));
 };
 
+const listAutoscuolaInstructorsReadOnly = async (companyId: string) =>
+  prisma.autoscuolaInstructor.findMany({
+    where: {
+      companyId,
+      userId: { not: null },
+      user: {
+        companyMembers: {
+          some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+const listAutoscuolaVehiclesReadOnly = async (companyId: string) =>
+  prisma.autoscuolaVehicle.findMany({
+    where: { companyId },
+    orderBy: { name: "asc" },
+  });
+
 const mapCaseStudent = (student: UserSnapshot) => {
   const email = normalizeEmail(student.email);
   const nameParts = parseNameParts(student.name, email);
@@ -333,6 +376,99 @@ export async function getAutoscuolaOverview() {
         activeCasesCount,
         upcomingAppointmentsCount,
         overdueInstallmentsCount,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaAgendaBootstrapAction(input: {
+  from: string | Date;
+  to: string | Date;
+  instructorId?: string | null;
+  vehicleId?: string | null;
+  status?: string | null;
+  type?: string | null;
+  limit?: number | null;
+}, options?: { companyId?: string }) {
+  try {
+    const companyId =
+      options?.companyId ?? (await requireServiceAccess("AUTOSCUOLE")).membership.companyId;
+    const from = toValidDate(input.from);
+    const to = toValidDate(input.to);
+    if (!from || !to || to <= from) {
+      return { success: false, message: "Intervallo agenda non valido." };
+    }
+
+    const normalizedStatus = normalizeOptionalFilter(input.status);
+    const normalizedType = normalizeOptionalFilter(input.type);
+    const limit =
+      typeof input.limit === "number" && Number.isFinite(input.limit)
+        ? Math.max(1, Math.min(600, Math.trunc(input.limit)))
+        : 500;
+
+    const [appointments, students, instructors, vehicles] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          startsAt: { gte: from, lt: to },
+          ...(input.instructorId ? { instructorId: input.instructorId } : {}),
+          ...(input.vehicleId ? { vehicleId: input.vehicleId } : {}),
+          ...(normalizedStatus ? { status: normalizedStatus } : {}),
+          ...(normalizedType ? { type: normalizedType } : {}),
+        },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          startsAt: true,
+          endsAt: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          instructor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          vehicle: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { startsAt: "asc" },
+        take: limit,
+      }),
+      listDirectoryStudents(companyId),
+      listAutoscuolaInstructorsReadOnly(companyId),
+      listAutoscuolaVehiclesReadOnly(companyId),
+    ]);
+
+    return {
+      success: true,
+      data: {
+        appointments: appointments.map((appointment) => ({
+          ...appointment,
+          student: mapCaseStudent(appointment.student),
+        })),
+        students,
+        instructors,
+        vehicles,
+        meta: {
+          from,
+          to,
+          generatedAt: new Date(),
+          count: appointments.length,
+        },
       },
     };
   } catch (error) {
@@ -766,12 +902,51 @@ export async function createAutoscuolaCase(input: z.infer<typeof createCaseSchem
 }
 
 export async function getAutoscuolaAppointments() {
+  return getAutoscuolaAppointmentsFiltered();
+}
+
+export async function getAutoscuolaAppointmentsFiltered(input?: {
+  from?: string | Date | null;
+  to?: string | Date | null;
+  studentId?: string | null;
+  instructorId?: string | null;
+  status?: string | null;
+  type?: string | null;
+  limit?: number | null;
+}) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
+    const from = toValidDate(input?.from);
+    const to = toValidDate(input?.to);
+    const statusFilter = normalizeOptionalFilter(input?.status);
+    const typeFilter = normalizeOptionalFilter(input?.type);
+    const limit =
+      typeof input?.limit === "number" && Number.isFinite(input.limit)
+        ? Math.max(1, Math.min(500, Math.trunc(input.limit)))
+        : undefined;
+
+    const where: {
+      companyId: string;
+      startsAt?: { gte?: Date; lt?: Date };
+      studentId?: string;
+      instructorId?: string;
+      status?: string;
+      type?: string;
+    } = { companyId };
+
+    if (from || to) {
+      where.startsAt = {};
+      if (from) where.startsAt.gte = from;
+      if (to) where.startsAt.lt = to;
+    }
+    if (input?.studentId) where.studentId = input.studentId;
+    if (input?.instructorId) where.instructorId = input.instructorId;
+    if (statusFilter) where.status = statusFilter;
+    if (typeFilter) where.type = typeFilter;
 
     const appointments = await prisma.autoscuolaAppointment.findMany({
-      where: { companyId },
+      where,
       include: {
         student: {
           select: {
@@ -786,6 +961,7 @@ export async function getAutoscuolaAppointments() {
         vehicle: true,
       },
       orderBy: { startsAt: "asc" },
+      ...(limit ? { take: limit } : {}),
     });
 
     return {
@@ -918,6 +1094,8 @@ export async function createAutoscuolaAppointment(
       },
     });
 
+    await invalidateAgendaAndPaymentsCache(companyId);
+
     if (!payload.sendProposal) {
       return { success: true, data: appointment, message: "Appuntamento creato." };
     }
@@ -1036,6 +1214,8 @@ export async function cancelAutoscuolaAppointment(
         excludeStudentIds: [appointment.studentId],
       });
 
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
+
       return {
         success: true,
         data: { rescheduled: false, broadcasted: true },
@@ -1048,6 +1228,7 @@ export async function cancelAutoscuolaAppointment(
       membership.autoscuolaRole === "INSTRUCTOR";
 
     if (!canAutoReschedule || appointment.status === "proposal") {
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
       return { success: true, data: { rescheduled: false } };
     }
 
@@ -1078,6 +1259,7 @@ export async function cancelAutoscuolaAppointment(
     ]);
 
     if (!instructors.length || !vehicles.length) {
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
       return { success: true, data: { rescheduled: false } };
     }
 
@@ -1127,6 +1309,7 @@ export async function cancelAutoscuolaAppointment(
     }
 
     if (!newStartsAt || !newInstructorId || !newVehicleId) {
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
       return { success: true, data: { rescheduled: false } };
     }
 
@@ -1165,6 +1348,8 @@ export async function cancelAutoscuolaAppointment(
       },
     });
 
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
     return {
       success: true,
       data: { rescheduled: true, newStartsAt },
@@ -1186,13 +1371,37 @@ export async function getAutoscuolaPaymentsOverviewAction() {
   }
 }
 
-export async function getAutoscuolaPaymentsAppointmentsAction(limit = 100) {
+export async function getAutoscuolaPaymentsAppointmentsAction(input?: {
+  limit?: number;
+  cursor?: string | null;
+  paymentAttemptsLimit?: number;
+}) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const data = await getAutoscuolaPaymentsAppointments({
       companyId: membership.companyId,
-      limit,
+      limit: input?.limit ?? 100,
+      cursor: input?.cursor ?? null,
+      paymentAttemptsLimit: input?.paymentAttemptsLimit ?? 5,
     });
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaPaymentAppointmentLogsAction(appointmentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const data = await getAutoscuolaPaymentAppointmentLogs({
+      companyId: membership.companyId,
+      appointmentId,
+    });
+
+    if (!data) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
     return { success: true, data };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1253,6 +1462,8 @@ export async function deleteAutoscuolaAppointment(
     await prisma.autoscuolaAppointment.delete({
       where: { id: appointment.id },
     });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return {
       success: true,
@@ -1380,6 +1591,8 @@ export async function updateAutoscuolaAppointmentStatus(
       }
     }
 
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1464,6 +1677,8 @@ export async function updateAutoscuolaAppointmentDetails(
       data: updateData,
     });
 
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1473,39 +1688,7 @@ export async function updateAutoscuolaAppointmentDetails(
 export async function getAutoscuolaInstructors() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const companyId = membership.companyId;
-
-    const members = await prisma.companyMember.findMany({
-      where: { companyId, autoscuolaRole: "INSTRUCTOR" },
-      include: { user: true },
-    });
-
-    await Promise.all(
-      members.map((member) => {
-        const name =
-          member.user?.name ??
-          member.user?.email?.split("@")[0] ??
-          "Istruttore";
-        return getOrCreateInstructorForUser({
-          companyId,
-          userId: member.userId,
-          name,
-        });
-      }),
-    );
-
-    const instructors = await prisma.autoscuolaInstructor.findMany({
-      where: {
-        companyId,
-        userId: { not: null },
-        user: {
-          companyMembers: {
-            some: { companyId, autoscuolaRole: "INSTRUCTOR" },
-          },
-        },
-      },
-      orderBy: { name: "asc" },
-    });
+    const instructors = await listAutoscuolaInstructorsReadOnly(membership.companyId);
 
     return { success: true, data: instructors };
   } catch (error) {
@@ -1562,6 +1745,11 @@ export async function createAutoscuolaInstructor(
       },
     });
 
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
     return { success: true, data: instructor };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1571,12 +1759,7 @@ export async function createAutoscuolaInstructor(
 export async function getAutoscuolaVehicles() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const companyId = membership.companyId;
-
-    const vehicles = await prisma.autoscuolaVehicle.findMany({
-      where: { companyId },
-      orderBy: { name: "asc" },
-    });
+    const vehicles = await listAutoscuolaVehiclesReadOnly(membership.companyId);
 
     return { success: true, data: vehicles };
   } catch (error) {
@@ -1598,6 +1781,11 @@ export async function createAutoscuolaVehicle(
         name: payload.name,
         plate: payload.plate || null,
       },
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
     });
 
     return { success: true, data: vehicle };
@@ -1647,6 +1835,11 @@ export async function updateAutoscuolaInstructor(
       },
     });
 
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1677,6 +1870,11 @@ export async function updateAutoscuolaVehicle(
       },
     });
 
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1698,6 +1896,11 @@ export async function deactivateAutoscuolaVehicle(vehicleId: string) {
     const updated = await prisma.autoscuolaVehicle.update({
       where: { id: existing.id },
       data: { status: "inactive" },
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
     });
 
     return { success: true, data: updated };

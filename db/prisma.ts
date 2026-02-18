@@ -5,49 +5,59 @@ import ws from 'ws';
 
 // Sets up WebSocket connections, which enables Neon to use WebSocket communication.
 neonConfig.webSocketConstructor = ws;
-const connectionString = `${process.env.DATABASE_URL}`;
 
-// Creates a new connection pool using the provided connection string, allowing multiple concurrent connections.
-// const pool = new Pool({ connectionString });
+const createPrisma = () => {
+  const connectionString = `${process.env.DATABASE_URL}`;
+  const adapter = new PrismaNeon({ connectionString });
 
-// Instantiates the Prisma adapter using the Neon connection pool to handle the connection between Prisma and Neon.
-const adapter = new PrismaNeon({ connectionString });
-
-// Extends the PrismaClient with a custom result transformer to convert the price and rating fields to strings.
-export const prisma = new PrismaClient({ adapter }).$extends({
-  result: {
-    order: {
-      itemsPrice: {
-        needs: { itemsPrice: true },
-        compute(cart) {
-          return cart.itemsPrice.toString();
+  return new PrismaClient({ adapter }).$extends({
+    result: {
+      order: {
+        itemsPrice: {
+          needs: { itemsPrice: true },
+          compute(cart) {
+            return cart.itemsPrice.toString();
+          },
+        },
+        shippingPrice: {
+          needs: { shippingPrice: true },
+          compute(cart) {
+            return cart.shippingPrice.toString();
+          },
+        },
+        taxPrice: {
+          needs: { taxPrice: true },
+          compute(cart) {
+            return cart.taxPrice.toString();
+          },
+        },
+        totalPrice: {
+          needs: { totalPrice: true },
+          compute(cart) {
+            return cart.totalPrice.toString();
+          },
         },
       },
-      shippingPrice: {
-        needs: { shippingPrice: true },
-        compute(cart) {
-          return cart.shippingPrice.toString();
-        },
-      },
-      taxPrice: {
-        needs: { taxPrice: true },
-        compute(cart) {
-          return cart.taxPrice.toString();
-        },
-      },
-      totalPrice: {
-        needs: { totalPrice: true },
-        compute(cart) {
-          return cart.totalPrice.toString();
+      orderItem: {
+        price: {
+          compute(cart) {
+            return cart.price.toString();
+          },
         },
       },
     },
-    orderItem: {
-      price: {
-        compute(cart) {
-          return cart.price.toString();
-        },
-      },
-    },
-  },
-});
+  });
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __regloPrisma:
+    | ReturnType<typeof createPrisma>
+    | undefined;
+}
+
+export const prisma = global.__regloPrisma ?? createPrisma();
+
+if (process.env.NODE_ENV !== 'production') {
+  global.__regloPrisma = prisma;
+}

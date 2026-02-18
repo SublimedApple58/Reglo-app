@@ -5,6 +5,10 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
 
 const DEFAULT_AVAILABILITY_WEEKS = 4;
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
@@ -169,99 +173,132 @@ const asPreset = <T extends readonly number[]>(
     : fallback;
 };
 
+export type AutoscuolaSettingsData = {
+  availabilityWeeks: number;
+  studentReminderMinutes: number;
+  instructorReminderMinutes: number;
+  slotFillChannels: string[];
+  studentReminderChannels: string[];
+  instructorReminderChannels: string[];
+  autoPaymentsEnabled: boolean;
+  lessonPrice30: number;
+  lessonPrice60: number;
+  penaltyCutoffHoursPreset: (typeof PAYMENT_CUTOFF_PRESETS)[number];
+  penaltyPercentPreset: (typeof PAYMENT_PENALTY_PRESETS)[number];
+  paymentNotificationChannels: ("push" | "email")[];
+  ficVatTypeId: string | null;
+  ficPaymentMethodId: string | null;
+  stripeConnectedAccountId: string | null;
+};
+
+const resolveAutoscuolaSettingsData = (
+  limits: Record<string, unknown>,
+): AutoscuolaSettingsData => {
+  const availabilityWeeks =
+    typeof limits.availabilityWeeks === "number"
+      ? limits.availabilityWeeks
+      : DEFAULT_AVAILABILITY_WEEKS;
+  const studentReminderMinutes =
+    typeof limits.studentReminderMinutes === "number"
+      ? limits.studentReminderMinutes
+      : DEFAULT_STUDENT_REMINDER_MINUTES;
+  const instructorReminderMinutes =
+    typeof limits.instructorReminderMinutes === "number"
+      ? limits.instructorReminderMinutes
+      : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
+  const slotFillChannels = asChannelList(
+    limits.slotFillChannels,
+    DEFAULT_SLOT_FILL_CHANNELS,
+  );
+  const studentReminderChannels = asChannelList(
+    limits.studentReminderChannels,
+    DEFAULT_STUDENT_REMINDER_CHANNELS,
+  );
+  const instructorReminderChannels = asChannelList(
+    limits.instructorReminderChannels,
+    DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
+  );
+  const autoPaymentsEnabled =
+    typeof limits.autoPaymentsEnabled === "boolean"
+      ? limits.autoPaymentsEnabled
+      : DEFAULT_AUTO_PAYMENTS_ENABLED;
+  const lessonPrice30 =
+    typeof limits.lessonPrice30 === "number"
+      ? limits.lessonPrice30
+      : DEFAULT_LESSON_PRICE_30;
+  const lessonPrice60 =
+    typeof limits.lessonPrice60 === "number"
+      ? limits.lessonPrice60
+      : DEFAULT_LESSON_PRICE_60;
+  const penaltyCutoffHoursPreset = asPreset(
+    limits.penaltyCutoffHoursPreset,
+    PAYMENT_CUTOFF_PRESETS,
+    DEFAULT_PENALTY_CUTOFF_HOURS,
+  );
+  const penaltyPercentPreset = asPreset(
+    limits.penaltyPercentPreset,
+    PAYMENT_PENALTY_PRESETS,
+    DEFAULT_PENALTY_PERCENT,
+  );
+  const paymentNotificationChannels = asPaymentChannelList(
+    limits.paymentNotificationChannels,
+    DEFAULT_PAYMENT_NOTIFICATION_CHANNELS,
+  );
+  const ficVatTypeId =
+    typeof limits.ficVatTypeId === "string" && limits.ficVatTypeId.trim().length
+      ? limits.ficVatTypeId.trim()
+      : null;
+  const ficPaymentMethodId =
+    typeof limits.ficPaymentMethodId === "string" &&
+    limits.ficPaymentMethodId.trim().length
+      ? limits.ficPaymentMethodId.trim()
+      : null;
+  const stripeConnectedAccountId =
+    typeof limits.stripeConnectedAccountId === "string" &&
+    limits.stripeConnectedAccountId.trim().length
+      ? limits.stripeConnectedAccountId.trim()
+      : null;
+
+  return {
+    availabilityWeeks,
+    studentReminderMinutes,
+    instructorReminderMinutes,
+    slotFillChannels,
+    studentReminderChannels,
+    instructorReminderChannels,
+    autoPaymentsEnabled,
+    lessonPrice30,
+    lessonPrice60,
+    penaltyCutoffHoursPreset,
+    penaltyPercentPreset,
+    paymentNotificationChannels,
+    ficVatTypeId,
+    ficPaymentMethodId,
+    stripeConnectedAccountId,
+  };
+};
+
+export async function getAutoscuolaSettingsForCompany(
+  companyId: string,
+): Promise<AutoscuolaSettingsData> {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: {
+      limits: true,
+    },
+  });
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  return resolveAutoscuolaSettingsData(limits);
+}
+
 export async function getAutoscuolaSettings() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-
-    const service = await prisma.companyService.findFirst({
-      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-    });
-
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
-    const availabilityWeeks =
-      typeof limits.availabilityWeeks === "number"
-        ? limits.availabilityWeeks
-        : DEFAULT_AVAILABILITY_WEEKS;
-    const studentReminderMinutes =
-      typeof limits.studentReminderMinutes === "number"
-        ? limits.studentReminderMinutes
-        : DEFAULT_STUDENT_REMINDER_MINUTES;
-    const instructorReminderMinutes =
-      typeof limits.instructorReminderMinutes === "number"
-        ? limits.instructorReminderMinutes
-        : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
-    const slotFillChannels = asChannelList(
-      limits.slotFillChannels,
-      DEFAULT_SLOT_FILL_CHANNELS,
-    );
-    const studentReminderChannels = asChannelList(
-      limits.studentReminderChannels,
-      DEFAULT_STUDENT_REMINDER_CHANNELS,
-    );
-    const instructorReminderChannels = asChannelList(
-      limits.instructorReminderChannels,
-      DEFAULT_INSTRUCTOR_REMINDER_CHANNELS,
-    );
-    const autoPaymentsEnabled =
-      typeof limits.autoPaymentsEnabled === "boolean"
-        ? limits.autoPaymentsEnabled
-        : DEFAULT_AUTO_PAYMENTS_ENABLED;
-    const lessonPrice30 =
-      typeof limits.lessonPrice30 === "number"
-        ? limits.lessonPrice30
-        : DEFAULT_LESSON_PRICE_30;
-    const lessonPrice60 =
-      typeof limits.lessonPrice60 === "number"
-        ? limits.lessonPrice60
-        : DEFAULT_LESSON_PRICE_60;
-    const penaltyCutoffHoursPreset = asPreset(
-      limits.penaltyCutoffHoursPreset,
-      PAYMENT_CUTOFF_PRESETS,
-      DEFAULT_PENALTY_CUTOFF_HOURS,
-    );
-    const penaltyPercentPreset = asPreset(
-      limits.penaltyPercentPreset,
-      PAYMENT_PENALTY_PRESETS,
-      DEFAULT_PENALTY_PERCENT,
-    );
-    const paymentNotificationChannels = asPaymentChannelList(
-      limits.paymentNotificationChannels,
-      DEFAULT_PAYMENT_NOTIFICATION_CHANNELS,
-    );
-    const ficVatTypeId =
-      typeof limits.ficVatTypeId === "string" && limits.ficVatTypeId.trim().length
-        ? limits.ficVatTypeId.trim()
-        : null;
-    const ficPaymentMethodId =
-      typeof limits.ficPaymentMethodId === "string" &&
-      limits.ficPaymentMethodId.trim().length
-        ? limits.ficPaymentMethodId.trim()
-        : null;
-    const stripeConnectedAccountId =
-      typeof limits.stripeConnectedAccountId === "string" &&
-      limits.stripeConnectedAccountId.trim().length
-        ? limits.stripeConnectedAccountId.trim()
-        : null;
+    const data = await getAutoscuolaSettingsForCompany(membership.companyId);
 
     return {
       success: true,
-      data: {
-        availabilityWeeks,
-        studentReminderMinutes,
-        instructorReminderMinutes,
-        slotFillChannels,
-        studentReminderChannels,
-        instructorReminderChannels,
-        autoPaymentsEnabled,
-        lessonPrice30,
-        lessonPrice60,
-        penaltyCutoffHoursPreset,
-        penaltyPercentPreset,
-        paymentNotificationChannels,
-        ficVatTypeId,
-        ficPaymentMethodId,
-        stripeConnectedAccountId,
-      },
+      data,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -411,6 +448,11 @@ export async function updateAutoscuolaSettings(
         },
       });
     }
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+    });
 
     return {
       success: true,

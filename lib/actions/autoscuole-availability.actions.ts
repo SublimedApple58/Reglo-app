@@ -9,6 +9,10 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -69,6 +73,16 @@ const WEEKDAY_TO_INDEX: Record<string, number> = {
   Thu: 4,
   Fri: 5,
   Sat: 6,
+};
+
+const invalidateAgendaAndPaymentsCache = async (companyId: string) => {
+  await invalidateAutoscuoleCache({
+    companyId,
+    segments: [
+      AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+      AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+    ],
+  });
 };
 
 type CalendarDateParts = {
@@ -875,6 +889,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       });
 
       const request = await upsertBookingRequest("matched");
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
 
       return { success: true, data: { matched: true, appointment, request } };
     }
@@ -1112,6 +1127,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
 
       return { appointment, response };
     });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return {
       success: true,

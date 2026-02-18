@@ -466,6 +466,11 @@ model AutoscuolaAppointment {
   @@index([slotId])
   @@index([paymentRequired, paymentStatus])
   @@index([penaltyCutoffAt])
+  @@index([companyId, startsAt])
+  @@index([companyId, status, startsAt])
+  @@index([companyId, instructorId, startsAt])
+  @@index([companyId, studentId, startsAt])
+  @@index([companyId, paymentRequired, startsAt])
 }
 
 model AutoscuolaInstructor {
@@ -696,6 +701,8 @@ model AutoscuolaAppointmentPayment {
   @@index([companyId, studentId])
   @@index([status, nextAttemptAt])
   @@index([phase])
+  @@index([companyId, appointmentId, createdAt])
+  @@index([appointmentId, status])
   @@unique([stripePaymentIntentId])
 }
 

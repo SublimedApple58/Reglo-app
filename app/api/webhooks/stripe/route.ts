@@ -3,6 +3,10 @@ import Stripe from 'stripe';
 import { updateOrderToPaid } from '@/lib/actions/order.actions';
 import { prisma } from '@/db/prisma';
 import { persistAutoscuolaStripeConnectAccountStatus } from '@/lib/autoscuole/stripe-connect';
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from '@/lib/autoscuole/cache';
 
 export async function POST(req: NextRequest) {
   try {
@@ -137,6 +141,11 @@ export async function POST(req: NextRequest) {
                 where: { id: appointment.id },
                 data: { paymentStatus },
               });
+
+              await invalidateAutoscuoleCache({
+                companyId: payment.companyId,
+                segments: [AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+              });
             }
           }
         }
@@ -149,7 +158,7 @@ export async function POST(req: NextRequest) {
       if (paymentIntent.metadata?.kind === 'autoscuola_appointment_payment') {
         const paymentRecordId = paymentIntent.metadata.appointmentPaymentId;
         if (paymentRecordId) {
-          await prisma.autoscuolaAppointmentPayment.updateMany({
+          const updateResult = await prisma.autoscuolaAppointmentPayment.updateMany({
             where: {
               id: paymentRecordId,
               status: { not: 'succeeded' },
@@ -163,6 +172,19 @@ export async function POST(req: NextRequest) {
                 'Payment intent failed from webhook.',
             },
           });
+
+          if (updateResult.count > 0) {
+            const payment = await prisma.autoscuolaAppointmentPayment.findUnique({
+              where: { id: paymentRecordId },
+              select: { companyId: true },
+            });
+            if (payment?.companyId) {
+              await invalidateAutoscuoleCache({
+                companyId: payment.companyId,
+                segments: [AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+              });
+            }
+          }
         }
       }
       return NextResponse.json({ success: true, handled: 'payment_intent.payment_failed' });
@@ -184,6 +206,13 @@ export async function POST(req: NextRequest) {
         await persistAutoscuolaStripeConnectAccountStatus({
           companyId: connection.companyId,
           account,
+        });
+        await invalidateAutoscuoleCache({
+          companyId: connection.companyId,
+          segments: [
+            AUTOSCUOLE_CACHE_SEGMENTS.STRIPE,
+            AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+          ],
         });
       }
 

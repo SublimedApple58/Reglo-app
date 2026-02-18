@@ -2321,11 +2321,21 @@ export async function getAutoscuolaPaymentsAppointments({
   prisma = defaultPrisma,
   companyId,
   limit = 100,
+  cursor,
+  paymentAttemptsLimit = 5,
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
   limit?: number;
+  cursor?: string | null;
+  paymentAttemptsLimit?: number;
 }) {
+  const normalizedLimit = Math.max(1, Math.min(200, Math.trunc(limit)));
+  const normalizedAttemptsLimit = Math.max(
+    1,
+    Math.min(20, Math.trunc(paymentAttemptsLimit)),
+  );
+
   const appointments = await prisma.autoscuolaAppointment.findMany({
     where: {
       companyId,
@@ -2341,11 +2351,17 @@ export async function getAutoscuolaPaymentsAppointments({
       },
       payments: {
         orderBy: { createdAt: "desc" },
-        take: 5,
+        take: normalizedAttemptsLimit,
       },
     },
     orderBy: { startsAt: "desc" },
-    take: limit,
+    ...(cursor
+      ? {
+          cursor: { id: cursor },
+          skip: 1,
+        }
+      : {}),
+    take: normalizedLimit,
   });
 
   return appointments.map((appointment) => {
@@ -2378,6 +2394,72 @@ export async function getAutoscuolaPaymentsAppointments({
       })),
     };
   });
+}
+
+export async function getAutoscuolaPaymentAppointmentLogs({
+  prisma = defaultPrisma,
+  companyId,
+  appointmentId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  appointmentId: string;
+}) {
+  const appointment = await prisma.autoscuolaAppointment.findFirst({
+    where: {
+      id: appointmentId,
+      companyId,
+      paymentRequired: true,
+    },
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      },
+      payments: {
+        orderBy: { createdAt: "desc" },
+      },
+    },
+  });
+
+  if (!appointment) {
+    return null;
+  }
+
+  const finalAmountCents = computeFinalAmountCents(appointment);
+  const paidCents = toCents(appointment.paidAmount);
+  return {
+    id: appointment.id,
+    startsAt: appointment.startsAt,
+    endsAt: appointment.endsAt,
+    status: appointment.status,
+    paymentStatus: appointment.paymentStatus,
+    priceAmount: toNumber(appointment.priceAmount),
+    penaltyAmount: toNumber(appointment.penaltyAmount),
+    paidAmount: toNumber(appointment.paidAmount),
+    finalAmount: roundAmount(finalAmountCents / 100),
+    dueAmount: roundAmount(Math.max(0, finalAmountCents - paidCents) / 100),
+    invoiceId: appointment.invoiceId,
+    invoiceStatus: appointment.invoiceStatus,
+    student: appointment.student,
+    payments: appointment.payments.map((payment) => ({
+      id: payment.id,
+      phase: payment.phase,
+      status: payment.status,
+      amount: toNumber(payment.amount),
+      attemptCount: payment.attemptCount,
+      nextAttemptAt: payment.nextAttemptAt,
+      failureCode: payment.failureCode,
+      failureMessage: payment.failureMessage,
+      createdAt: payment.createdAt,
+      paidAt: payment.paidAt,
+      stripePaymentIntentId: payment.stripePaymentIntentId,
+      stripeChargeId: payment.stripeChargeId,
+    })),
+  };
 }
 
 export async function markAppointmentCancelledAt({

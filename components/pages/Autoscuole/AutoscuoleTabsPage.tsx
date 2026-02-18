@@ -1,15 +1,47 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { RegloTabs } from "@/components/ui/reglo-tabs";
 
-import { AutoscuoleAgendaPage } from "./AutoscuoleAgendaPage";
-import { AutoscuoleCommunicationsPage } from "./AutoscuoleCommunicationsPage";
 import { AutoscuoleDashboardPage } from "./AutoscuoleDashboardPage";
-import { AutoscuolePaymentsPage } from "./AutoscuolePaymentsPage";
-import { AutoscuoleResourcesPage } from "./AutoscuoleResourcesPage";
-import { AutoscuoleStudentsPage } from "./AutoscuoleStudentsPage";
+
+const AutoscuoleStudentsPage = dynamic(
+  () =>
+    import("./AutoscuoleStudentsPage").then((module) => ({
+      default: module.AutoscuoleStudentsPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
+const AutoscuoleAgendaPage = dynamic(
+  () =>
+    import("./AutoscuoleAgendaPage").then((module) => ({
+      default: module.AutoscuoleAgendaPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
+const AutoscuoleResourcesPage = dynamic(
+  () =>
+    import("./AutoscuoleResourcesPage").then((module) => ({
+      default: module.AutoscuoleResourcesPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
+const AutoscuolePaymentsPage = dynamic(
+  () =>
+    import("./AutoscuolePaymentsPage").then((module) => ({
+      default: module.AutoscuolePaymentsPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
+const AutoscuoleCommunicationsPage = dynamic(
+  () =>
+    import("./AutoscuoleCommunicationsPage").then((module) => ({
+      default: module.AutoscuoleCommunicationsPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
 
 type AutoscuoleTabKey =
   | "dashboard"
@@ -54,6 +86,47 @@ export function AutoscuoleTabsPage() {
     const tab = normalizeTab(searchParams.get("tab"));
     setActiveTab(tab);
   }, [searchParams]);
+
+  React.useEffect(() => {
+    const preloaders: Record<AutoscuoleTabKey, Array<() => Promise<unknown>>> = {
+      dashboard: [
+        () => import("./AutoscuoleStudentsPage"),
+        () => import("./AutoscuoleAgendaPage"),
+      ],
+      students: [() => import("./AutoscuoleAgendaPage")],
+      agenda: [
+        () => import("./AutoscuolePaymentsPage"),
+        () => import("./AutoscuoleResourcesPage"),
+      ],
+      disponibilita: [() => import("./AutoscuoleAgendaPage")],
+      payments: [() => import("./AutoscuoleAgendaPage")],
+      comunicazioni: [() => import("./AutoscuolePaymentsPage")],
+    };
+
+    const runPrefetch = () => {
+      const next = preloaders[activeTab] ?? [];
+      next.forEach((loader) => {
+        loader().catch(() => undefined);
+      });
+    };
+
+    if (typeof window === "undefined") return;
+    const w = window as Window & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === "function") {
+      const id = w.requestIdleCallback(runPrefetch);
+      return () => {
+        if (typeof w.cancelIdleCallback === "function") {
+          w.cancelIdleCallback(id);
+        }
+      };
+    }
+
+    const timeout = window.setTimeout(runPrefetch, 250);
+    return () => window.clearTimeout(timeout);
+  }, [activeTab]);
 
   const selectTab = React.useCallback(
     (tab: AutoscuoleTabKey) => {

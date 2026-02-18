@@ -20,10 +20,6 @@ import {
   createAutoscuolaAppointment,
   cancelAutoscuolaAppointment,
   deleteAutoscuolaAppointment,
-  getAutoscuolaAppointments,
-  getAutoscuolaStudents,
-  getAutoscuolaInstructors,
-  getAutoscuolaVehicles,
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -48,6 +44,24 @@ type AppointmentRow = {
   student: StudentOption;
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
+};
+
+type AgendaBootstrapPayload = {
+  appointments: AppointmentRow[];
+  students: Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+  }>;
+  instructors: ResourceOption[];
+  vehicles: ResourceOption[];
+  meta: {
+    from: string | Date;
+    to: string | Date;
+    generatedAt: string | Date;
+    count: number;
+    cache?: boolean;
+  };
 };
 
 const DAY_START_HOUR = 0;
@@ -108,63 +122,98 @@ export function AutoscuoleAgendaPage({
     duration: "30",
   });
   const [nowTick, setNowTick] = React.useState(() => Date.now());
+  const bootstrapRequestRef = React.useRef(0);
 
-  const load = React.useCallback(async (options?: { silent?: boolean }) => {
+  const weekEnd = addDays(weekStart, 7);
+  const rangeStart = viewMode === "week" ? weekStart : dayFocus;
+  const rangeEnd = viewMode === "week" ? weekEnd : addDays(dayFocus, 1);
+
+  const buildAgendaBootstrapUrl = React.useCallback(
+    (from: Date, to: Date) => {
+      const params = new URLSearchParams({
+        from: from.toISOString(),
+        to: to.toISOString(),
+        limit: "500",
+      });
+
+      if (instructorFilter !== "all") params.set("instructorId", instructorFilter);
+      if (vehicleFilter !== "all") params.set("vehicleId", vehicleFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (typeFilter !== "all") params.set("type", typeFilter);
+
+      return `/api/autoscuole/agenda/bootstrap?${params.toString()}`;
+    },
+    [instructorFilter, statusFilter, typeFilter, vehicleFilter],
+  );
+
+  const load = React.useCallback(async (options?: {
+    silent?: boolean;
+    prefetch?: boolean;
+    from?: Date;
+    to?: Date;
+  }) => {
     const silent = options?.silent ?? false;
-    if (silent) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-    try {
-      const [appRes, studentRes, instructorRes, vehicleRes] = await Promise.all([
-        getAutoscuolaAppointments(),
-        getAutoscuolaStudents(),
-        getAutoscuolaInstructors(),
-        getAutoscuolaVehicles(),
-      ]);
-      if (!appRes.success || !appRes.data) {
-        toast.error({
-          description: appRes.message ?? "Impossibile caricare l'agenda.",
-        });
+    const prefetch = options?.prefetch ?? false;
+    const from = options?.from ?? rangeStart;
+    const to = options?.to ?? rangeEnd;
+    if (!prefetch) {
+      if (silent) {
+        setRefreshing(true);
       } else {
-        setAppointments(appRes.data);
+        setLoading(true);
       }
-      if (studentRes.success && studentRes.data) {
-        setStudents(
-          studentRes.data.map((student) => ({
-            id: student.id,
-            firstName: student.firstName,
-            lastName: student.lastName,
-          })),
-        );
+    }
+    const requestId = ++bootstrapRequestRef.current;
+
+    try {
+      const response = await fetch(buildAgendaBootstrapUrl(from, to), {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; data?: AgendaBootstrapPayload; message?: string }
+        | null;
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message ?? "Impossibile caricare l'agenda.");
       }
-      if (instructorRes.success && instructorRes.data) {
-        const mapped = (instructorRes.data as ResourceOption[]).map((item) => ({
-          id: item.id,
-          name: item.name,
-        }));
-        setInstructors(mapped);
+
+      if (!prefetch && requestId === bootstrapRequestRef.current) {
+        setAppointments(payload.data.appointments ?? []);
+        setStudents(payload.data.students ?? []);
+        setInstructors(payload.data.instructors ?? []);
+        setVehicles(payload.data.vehicles ?? []);
       }
-      if (vehicleRes.success && vehicleRes.data) {
-        const mapped = (vehicleRes.data as ResourceOption[]).map((item) => ({
-          id: item.id,
-          name: item.name,
-        }));
-        setVehicles(mapped);
+    } catch (error) {
+      if (!prefetch) {
+        toast.error({
+          description:
+            error instanceof Error ? error.message : "Impossibile caricare l'agenda.",
+        });
       }
     } finally {
-      if (silent) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
+      if (!prefetch) {
+        if (silent) {
+          setRefreshing(false);
+        } else {
+          setLoading(false);
+        }
       }
     }
-  }, [toast]);
+  }, [buildAgendaBootstrapUrl, rangeEnd, rangeStart, toast]);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    load({ from: rangeStart, to: rangeEnd });
+  }, [load, rangeEnd, rangeStart]);
+
+  React.useEffect(() => {
+    const prefetchFrom = viewMode === "week" ? rangeEnd : addDays(rangeStart, 1);
+    const prefetchTo = viewMode === "week" ? addDays(rangeEnd, 7) : addDays(rangeEnd, 1);
+    const handle = setTimeout(() => {
+      load({ silent: true, prefetch: true, from: prefetchFrom, to: prefetchTo }).catch(
+        () => undefined,
+      );
+    }, 250);
+    return () => clearTimeout(handle);
+  }, [load, rangeEnd, rangeStart, viewMode]);
 
   React.useEffect(() => {
     const interval = setInterval(() => {
@@ -172,10 +221,6 @@ export function AutoscuoleAgendaPage({
     }, 30_000);
     return () => clearInterval(interval);
   }, []);
-
-  const weekEnd = addDays(weekStart, 7);
-  const rangeStart = viewMode === "week" ? weekStart : dayFocus;
-  const rangeEnd = viewMode === "week" ? weekEnd : addDays(dayFocus, 1);
 
   const filtered = appointments.filter((item) => {
     if ((item.status ?? "").toLowerCase() === "cancelled") return false;
@@ -186,18 +231,6 @@ export function AutoscuoleAgendaPage({
       !item.student.lastName.toLowerCase().includes(term) &&
       !item.type.toLowerCase().includes(term)
     ) {
-      return false;
-    }
-    if (instructorFilter !== "all" && item.instructor?.id !== instructorFilter) {
-      return false;
-    }
-    if (vehicleFilter !== "all" && item.vehicle?.id !== vehicleFilter) {
-      return false;
-    }
-    if (statusFilter !== "all" && item.status !== statusFilter) {
-      return false;
-    }
-    if (typeFilter !== "all" && item.type !== typeFilter) {
       return false;
     }
     const start = toDate(item.startsAt);

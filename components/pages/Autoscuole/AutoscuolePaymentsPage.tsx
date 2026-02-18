@@ -9,6 +9,12 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -16,11 +22,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  getAutoscuolaPaymentsAppointmentsAction,
-  getAutoscuolaPaymentsOverviewAction,
-} from "@/lib/actions/autoscuole.actions";
-import {
-  getAutoscuolaSettings,
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
 
@@ -60,7 +61,38 @@ type PaymentAppointment = {
     failureMessage: string | null;
     createdAt: string | Date;
     paidAt: string | Date | null;
+    stripePaymentIntentId?: string | null;
+    stripeChargeId?: string | null;
   }>;
+};
+
+type PaymentsBootstrapPayload = {
+  settings: {
+    autoPaymentsEnabled?: boolean;
+    lessonPrice30?: number;
+    lessonPrice60?: number;
+    penaltyCutoffHoursPreset?: number;
+    penaltyPercentPreset?: number;
+    ficVatTypeId?: string | null;
+    ficPaymentMethodId?: string | null;
+    paymentNotificationChannels?: Array<"push" | "email">;
+  };
+  overview: PaymentOverview | null;
+  appointmentsPage: {
+    items: PaymentAppointment[];
+    nextCursor: string | null;
+    limit: number;
+  };
+  stripeStatus: StripeConnectStatus | null;
+  ficStatus: {
+    connected: boolean;
+    status: string | null;
+    entityId: string | null;
+  };
+  meta: {
+    cache: boolean;
+    generatedAt: string;
+  };
 };
 
 type SelectOption = {
@@ -109,6 +141,24 @@ const statusLabel = (value: string) => {
   return value;
 };
 
+const phaseLabel = (value: string) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "penalty") return "Penale";
+  if (normalized === "settlement") return "Saldo";
+  if (normalized === "manual_recovery") return "Recupero";
+  return value;
+};
+
+const paymentAttemptStatusLabel = (value: string) => {
+  const normalized = (value ?? "").trim().toLowerCase();
+  if (normalized === "succeeded") return "Riuscito";
+  if (normalized === "failed") return "Fallito";
+  if (normalized === "processing") return "In elaborazione";
+  if (normalized === "pending") return "In coda";
+  if (normalized === "abandoned") return "Abbandonato";
+  return value;
+};
+
 export function AutoscuolePaymentsPage({
   hideNav = false,
   tabs,
@@ -131,6 +181,11 @@ export function AutoscuolePaymentsPage({
   const [methodOptions, setMethodOptions] = React.useState<SelectOption[]>([]);
   const [vatLoading, setVatLoading] = React.useState(false);
   const [methodLoading, setMethodLoading] = React.useState(false);
+  const [ficOptionsLoaded, setFicOptionsLoaded] = React.useState(false);
+  const [detailsLoading, setDetailsLoading] = React.useState(false);
+  const [detailsTargetId, setDetailsTargetId] = React.useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
+  const [detailsRow, setDetailsRow] = React.useState<PaymentAppointment | null>(null);
 
   const [autoPaymentsEnabled, setAutoPaymentsEnabled] = React.useState(false);
   const [lessonPrice30, setLessonPrice30] = React.useState("25");
@@ -142,7 +197,8 @@ export function AutoscuolePaymentsPage({
   const [pushEnabled, setPushEnabled] = React.useState(true);
   const [emailEnabled, setEmailEnabled] = React.useState(true);
 
-  const loadFicOptions = React.useCallback(async () => {
+  const loadFicOptions = React.useCallback(async (force = false) => {
+    if (ficOptionsLoaded && !force) return;
     setVatLoading(true);
     setMethodLoading(true);
 
@@ -192,18 +248,22 @@ export function AutoscuolePaymentsPage({
             .filter(Boolean) as SelectOption[],
         );
       }
+      setFicOptionsLoaded(true);
     } finally {
       setVatLoading(false);
       setMethodLoading(false);
     }
-  }, []);
+  }, [ficOptionsLoaded]);
 
-  const loadStripeStatus = React.useCallback(async () => {
+  const loadStripeStatus = React.useCallback(async (sync = false) => {
     setStripeLoading(true);
     try {
-      const response = await fetch("/api/autoscuole/payments/stripe-connect/status", {
-        cache: "no-store",
-      });
+      const response = await fetch(
+        `/api/autoscuole/payments/stripe-connect/status${sync ? "?sync=1" : ""}`,
+        {
+          cache: "no-store",
+        },
+      );
       const payload = (await response.json().catch(() => null)) as
         | { success?: boolean; data?: StripeConnectStatus; message?: string }
         | null;
@@ -229,41 +289,32 @@ export function AutoscuolePaymentsPage({
   const loadPage = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [settingsRes, overviewRes, appointmentsRes] = await Promise.all([
-        getAutoscuolaSettings(),
-        getAutoscuolaPaymentsOverviewAction(),
-        getAutoscuolaPaymentsAppointmentsAction(100),
-      ]);
-
-      if (!settingsRes.success || !settingsRes.data) {
-        throw new Error(settingsRes.message ?? "Impossibile caricare impostazioni pagamenti.");
+      const response = await fetch("/api/autoscuole/payments/bootstrap?limit=100", {
+        cache: "no-store",
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; data?: PaymentsBootstrapPayload; message?: string }
+        | null;
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message ?? "Impossibile caricare sezione pagamenti.");
       }
 
-      setAutoPaymentsEnabled(Boolean(settingsRes.data.autoPaymentsEnabled));
-      setLessonPrice30(String(settingsRes.data.lessonPrice30 ?? 25));
-      setLessonPrice60(String(settingsRes.data.lessonPrice60 ?? 50));
-      setPenaltyCutoffHoursPreset(String(settingsRes.data.penaltyCutoffHoursPreset ?? 24));
-      setPenaltyPercentPreset(String(settingsRes.data.penaltyPercentPreset ?? 50));
-      setFicVatTypeId(settingsRes.data.ficVatTypeId ?? "");
-      setFicPaymentMethodId(settingsRes.data.ficPaymentMethodId ?? "");
+      const settings = payload.data.settings ?? {};
+      setAutoPaymentsEnabled(Boolean(settings.autoPaymentsEnabled));
+      setLessonPrice30(String(settings.lessonPrice30 ?? 25));
+      setLessonPrice60(String(settings.lessonPrice60 ?? 50));
+      setPenaltyCutoffHoursPreset(String(settings.penaltyCutoffHoursPreset ?? 24));
+      setPenaltyPercentPreset(String(settings.penaltyPercentPreset ?? 50));
+      setFicVatTypeId(settings.ficVatTypeId ?? "");
+      setFicPaymentMethodId(settings.ficPaymentMethodId ?? "");
 
-      const channels = settingsRes.data.paymentNotificationChannels ?? ["push", "email"];
+      const channels = settings.paymentNotificationChannels ?? ["push", "email"];
       setPushEnabled(channels.includes("push"));
       setEmailEnabled(channels.includes("email"));
 
-      if (overviewRes.success && overviewRes.data) {
-        setOverview(overviewRes.data as PaymentOverview);
-      } else {
-        setOverview(null);
-      }
-
-      if (appointmentsRes.success && appointmentsRes.data) {
-        setAppointments(appointmentsRes.data as PaymentAppointment[]);
-      } else {
-        setAppointments([]);
-      }
-
-      await Promise.all([loadFicOptions(), loadStripeStatus()]);
+      setOverview(payload.data.overview);
+      setAppointments(payload.data.appointmentsPage?.items ?? []);
+      setStripeStatus(payload.data.stripeStatus ?? null);
     } catch (error) {
       toast.error({
         description:
@@ -274,11 +325,19 @@ export function AutoscuolePaymentsPage({
     } finally {
       setLoading(false);
     }
-  }, [loadFicOptions, loadStripeStatus, toast]);
+  }, [toast]);
 
   React.useEffect(() => {
     loadPage();
   }, [loadPage]);
+
+  React.useEffect(() => {
+    if (loading) return;
+    const handle = setTimeout(() => {
+      loadFicOptions().catch(() => undefined);
+    }, 450);
+    return () => clearTimeout(handle);
+  }, [loading, loadFicOptions]);
 
   React.useEffect(() => {
     const stripeReturn = searchParams.get("stripe_return");
@@ -303,7 +362,7 @@ export function AutoscuolePaymentsPage({
       });
     }
 
-    loadStripeStatus().catch(() => undefined);
+    loadStripeStatus(true).catch(() => undefined);
     if (typeof window !== "undefined") {
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -423,6 +482,37 @@ export function AutoscuolePaymentsPage({
     }
   };
 
+  const handleOpenPaymentDetails = async (appointmentId: string) => {
+    setDetailsLoading(true);
+    setDetailsTargetId(appointmentId);
+    try {
+      const response = await fetch(
+        `/api/autoscuole/payments/appointments/${appointmentId}/logs`,
+        {
+          cache: "no-store",
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as
+        | { success?: boolean; data?: PaymentAppointment; message?: string }
+        | null;
+      if (!response.ok || !payload?.success || !payload.data) {
+        throw new Error(payload?.message ?? "Impossibile caricare dettagli pagamento.");
+      }
+      setDetailsRow(payload.data);
+      setDetailsOpen(true);
+    } catch (error) {
+      toast.error({
+        description:
+          error instanceof Error
+            ? error.message
+            : "Errore caricando i dettagli pagamento.",
+      });
+    } finally {
+      setDetailsLoading(false);
+      setDetailsTargetId(null);
+    }
+  };
+
   const stripeReady = stripeStatus?.ready === true;
   const stripeStatusLabel = stripeReady
     ? "Attivo"
@@ -454,18 +544,28 @@ export function AutoscuolePaymentsPage({
                 Reglo ti guida nella procedura Stripe: termini, IBAN, P.IVA e documenti.
               </p>
             </div>
-            <Button
-              onClick={handleOpenStripeOnboarding}
-              disabled={stripeOnboardingLoading || stripeLoading}
-            >
-              {stripeOnboardingLoading
-                ? "Apertura..."
-                : stripeStatus?.ready
-                  ? "Gestisci Stripe"
-                  : stripeStatus?.connected
-                  ? "Completa onboarding Stripe"
-                  : "Configura Stripe"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => loadStripeStatus(true)}
+                disabled={stripeOnboardingLoading || stripeLoading}
+              >
+                {stripeLoading ? "Sync..." : "Aggiorna stato"}
+              </Button>
+              <Button
+                onClick={handleOpenStripeOnboarding}
+                disabled={stripeOnboardingLoading || stripeLoading}
+              >
+                {stripeOnboardingLoading
+                  ? "Apertura..."
+                  : stripeStatus?.ready
+                    ? "Gestisci Stripe"
+                    : stripeStatus?.connected
+                    ? "Completa onboarding Stripe"
+                    : "Configura Stripe"}
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
@@ -575,7 +675,13 @@ export function AutoscuolePaymentsPage({
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-1">
               <div className="text-xs font-medium text-muted-foreground">Aliquota IVA FIC</div>
-              <Select value={ficVatTypeId} onValueChange={setFicVatTypeId}>
+              <Select
+                value={ficVatTypeId}
+                onValueChange={setFicVatTypeId}
+                onOpenChange={(open) => {
+                  if (open) void loadFicOptions();
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue
                     placeholder={vatLoading ? "Caricamento IVA..." : "Seleziona aliquota"}
@@ -594,7 +700,13 @@ export function AutoscuolePaymentsPage({
               <div className="text-xs font-medium text-muted-foreground">
                 Metodo pagamento FIC
               </div>
-              <Select value={ficPaymentMethodId} onValueChange={setFicPaymentMethodId}>
+              <Select
+                value={ficPaymentMethodId}
+                onValueChange={setFicPaymentMethodId}
+                onOpenChange={(open) => {
+                  if (open) void loadFicOptions();
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue
                     placeholder={
@@ -669,6 +781,7 @@ export function AutoscuolePaymentsPage({
                   <th className="px-3 py-2">Dovuto</th>
                   <th className="px-3 py-2">Fattura</th>
                   <th className="px-3 py-2">Ultimo tentativo</th>
+                  <th className="px-3 py-2">Logs</th>
                 </tr>
               </thead>
               <tbody>
@@ -709,12 +822,23 @@ export function AutoscuolePaymentsPage({
                           <span className="text-muted-foreground">-</span>
                         )}
                       </td>
+                      <td className="px-3 py-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleOpenPaymentDetails(row.id)}
+                          disabled={detailsLoading}
+                        >
+                          {detailsLoading && detailsTargetId === row.id ? "Caricamento..." : "Dettagli"}
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
                 {!appointments.length ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-8 text-center text-sm text-muted-foreground">
+                    <td colSpan={11} className="px-3 py-8 text-center text-sm text-muted-foreground">
                       Nessuna guida con pagamento automatico trovata.
                     </td>
                   </tr>
@@ -724,6 +848,133 @@ export function AutoscuolePaymentsPage({
           </div>
         </div>
       </div>
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Dettagli pagamento guida</DialogTitle>
+          </DialogHeader>
+          {detailsRow ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Allievo</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {detailsRow.student?.name || "-"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{detailsRow.student?.email || "-"}</div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Guida</div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatDateTime(detailsRow.startsAt)}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Stato: {detailsRow.status}</div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-4">
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Prezzo
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatMoney(detailsRow.priceAmount)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Penale
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatMoney(detailsRow.penaltyAmount)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Pagato
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatMoney(detailsRow.paidAmount)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                    Dovuto
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {formatMoney(detailsRow.dueAmount)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  Stato fattura
+                </div>
+                <div className="mt-1 text-sm text-foreground">
+                  {detailsRow.invoiceId
+                    ? `Emessa (${detailsRow.invoiceId})`
+                    : detailsRow.invoiceStatus ?? "Nessuna"}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-foreground">Tentativi pagamento</h4>
+                <div className="max-h-[280px] space-y-2 overflow-auto pr-1">
+                  {detailsRow.payments.length ? (
+                    detailsRow.payments.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="rounded-xl border border-border/60 bg-muted/20 p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                            {phaseLabel(payment.phase)}
+                          </div>
+                          <div className="text-xs font-medium text-foreground">
+                            {paymentAttemptStatusLabel(payment.status)}
+                          </div>
+                        </div>
+                        <div className="mt-1 text-sm text-foreground">
+                          {formatMoney(payment.amount)} · Tentativo #{payment.attemptCount}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          Creato: {formatDateTime(payment.createdAt)}
+                          {payment.paidAt ? ` · Pagato: ${formatDateTime(payment.paidAt)}` : ""}
+                        </div>
+                        {payment.nextAttemptAt ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Prossimo retry: {formatDateTime(payment.nextAttemptAt)}
+                          </div>
+                        ) : null}
+                        {payment.stripePaymentIntentId ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            PI: {payment.stripePaymentIntentId}
+                          </div>
+                        ) : null}
+                        {payment.stripeChargeId ? (
+                          <div className="mt-1 text-xs text-muted-foreground">
+                            Charge: {payment.stripeChargeId}
+                          </div>
+                        ) : null}
+                        {payment.failureMessage ? (
+                          <div className="mt-1 text-xs text-rose-600">{payment.failureMessage}</div>
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+                      Nessun tentativo registrato.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="py-4 text-sm text-muted-foreground">Nessun dettaglio disponibile.</div>
+          )}
+        </DialogContent>
+      </Dialog>
     </ClientPageWrapper>
   );
 }
