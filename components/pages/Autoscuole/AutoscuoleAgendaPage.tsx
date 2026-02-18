@@ -124,9 +124,15 @@ export function AutoscuoleAgendaPage({
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const bootstrapRequestRef = React.useRef(0);
 
-  const weekEnd = addDays(weekStart, 7);
-  const rangeStart = viewMode === "week" ? weekStart : dayFocus;
-  const rangeEnd = viewMode === "week" ? weekEnd : addDays(dayFocus, 1);
+  const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
+  const rangeStart = React.useMemo(
+    () => (viewMode === "week" ? weekStart : dayFocus),
+    [dayFocus, viewMode, weekStart],
+  );
+  const rangeEnd = React.useMemo(
+    () => (viewMode === "week" ? weekEnd : addDays(dayFocus, 1)),
+    [dayFocus, viewMode, weekEnd],
+  );
 
   const buildAgendaBootstrapUrl = React.useCallback(
     (from: Date, to: Date) => {
