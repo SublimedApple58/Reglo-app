@@ -5,21 +5,23 @@ import { z } from 'zod';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const contactSchema = z.object({
-  fullName: z.string().min(2, 'Name is required'),
-  email: z.string().email('Invalid email'),
-  company: z.string().min(1, 'Company is required'),
-  phone: z.string().optional(),
-  managementSoftware: z.string().optional(),
-  process: z.string().optional(),
-  role: z.enum(['titolare', 'segreteria', 'istruttore']),
-  studentsCount: z.coerce.number().int().min(1, 'Students count must be at least 1'),
+const referralSchema = z.object({
+  studentName: z.string().min(2, 'Student name is required'),
+  phone: z.string().min(5, 'Phone is required'),
   city: z.string().min(1, 'City is required'),
-  source: z.enum(['home', 'demo']).optional(),
+  referredSchool: z.string().min(1, 'Referred school is required'),
+  role: z.enum(['allievo', 'ex_allievo']),
+  studentEmail: z.string().email('Invalid email').optional(),
+  schoolContact: z.string().optional(),
+  notes: z.string().optional(),
+  consent: z.boolean().refine((value) => value, {
+    message: 'Privacy consent is required',
+  }),
+  source: z.enum(['home']).optional(),
 });
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
-const slackWebhookUrl = process.env.SLACK_WEBHOOK_URL;
+const slackWebhookUrl = process.env.SLACK_REFERRAL_WEBHOOK_URL ?? process.env.SLACK_WEBHOOK_URL;
 
 const postToSlack = async (payload: { text: string }) => {
   if (!slackWebhookUrl) return;
@@ -102,7 +104,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = contactSchema.safeParse(body);
+  const parsed = referralSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { success: false, message: parsed.error.errors[0]?.message ?? 'Invalid data' },
@@ -111,24 +113,21 @@ export async function POST(request: Request) {
   }
 
   const {
-    fullName,
-    email,
-    company,
+    studentName,
     phone,
-    managementSoftware,
-    process: need,
-    role,
-    studentsCount,
     city,
+    referredSchool,
+    role,
+    studentEmail,
+    schoolContact,
+    notes,
     source,
   } = parsed.data;
 
   try {
-    const primaryNeed = [
-      need ? `Priorita: ${need}` : null,
-      `Ruolo: ${role}`,
-      `Numero allievi: ${studentsCount}`,
-      `Citta: ${city}`,
+    const notesMerged = [
+      notes ? `Note: ${notes}` : null,
+      schoolContact ? `Contatto autoscuola: ${schoolContact}` : null,
       source ? `Source: ${source}` : null,
     ]
       .filter(Boolean)
@@ -136,46 +135,48 @@ export async function POST(request: Request) {
 
     const primaryProperties = {
       Name: {
-        title: [{ text: { content: fullName } }],
+        title: [{ text: { content: studentName } }],
       },
       Company: {
-        rich_text: [{ text: { content: company } }],
+        rich_text: [{ text: { content: referredSchool } }],
       },
-      Email: {
-        email,
-      },
-      ...(phone
+      ...(studentEmail
         ? {
-            Phone: {
-              phone_number: phone,
+            Email: {
+              email: studentEmail,
             },
           }
         : {}),
-      ...(managementSoftware
-        ? {
-            Gestionale: {
-              rich_text: [{ text: { content: managementSoftware } }],
-            },
-          }
-        : {}),
-      ...(primaryNeed
+      Phone: {
+        phone_number: phone,
+      },
+      ...(notesMerged
         ? {
             Need: {
-              rich_text: [{ text: { content: primaryNeed } }],
+              rich_text: [{ text: { content: notesMerged } }],
             },
           }
         : {}),
       'Lead Type': {
-        select: { name: 'autoscuola_demo' },
+        select: { name: 'student_referral' },
       },
-      Ruolo: {
-        select: { name: role },
+      'Referral Status': {
+        select: { name: 'new' },
       },
-      'Numero allievi': {
-        number: studentsCount,
+      'Student Name': {
+        rich_text: [{ text: { content: studentName } }],
       },
-      Citta: {
+      'Student Phone': {
+        phone_number: phone,
+      },
+      'Student City': {
         rich_text: [{ text: { content: city } }],
+      },
+      'Referred School': {
+        rich_text: [{ text: { content: referredSchool } }],
+      },
+      'Reward Type': {
+        select: { name: '2_guide_voucher' },
       },
     };
 
@@ -198,32 +199,28 @@ export async function POST(request: Request) {
         parent: { database_id: process.env.NOTION_DATABASE_ID },
         properties: {
           Name: {
-            title: [{ text: { content: fullName } }],
+            title: [{ text: { content: studentName } }],
           },
           Company: {
-            rich_text: [{ text: { content: company } }],
+            rich_text: [{ text: { content: referredSchool } }],
           },
-          Email: {
-            email,
-          },
-          ...(phone
+          ...(studentEmail
             ? {
-                Phone: {
-                  phone_number: phone,
+                Email: {
+                  email: studentEmail,
                 },
               }
             : {}),
-          ...(managementSoftware
-            ? {
-                Gestionale: {
-                  rich_text: [{ text: { content: managementSoftware } }],
-                },
-              }
-            : {}),
-          ...(primaryNeed
+          Phone: {
+            phone_number: phone,
+          },
+          Gestionale: {
+            rich_text: [{ text: { content: `Referral role: ${role}` } }],
+          },
+          ...(notesMerged
             ? {
                 Need: {
-                  rich_text: [{ text: { content: primaryNeed } }],
+                  rich_text: [{ text: { content: notesMerged } }],
                 },
               }
             : {}),
@@ -233,16 +230,15 @@ export async function POST(request: Request) {
 
     const notionUrl = (created as { url?: string }).url;
     const messageLines = [
-      `Hey, ${fullName} ha chiesto una demo.`,
-      `Email: ${email}`,
-      `Azienda: ${company}`,
-      `Telefono: ${phone ?? '-'}`,
-      `Gestionale: ${managementSoftware ?? '-'}`,
-      `Ruolo: ${role}`,
-      `Numero allievi: ${studentsCount}`,
+      'Nuovo referral allievi (promo 2 guide).',
+      `Allievo: ${studentName}`,
+      `Telefono: ${phone}`,
       `Citta: ${city}`,
-      `Need: ${need ?? '-'}`,
-      `Source: ${source ?? '-'}`,
+      `Ruolo: ${role}`,
+      `Autoscuola segnalata: ${referredSchool}`,
+      `Email allievo: ${studentEmail ?? '-'}`,
+      `Contatto autoscuola: ${schoolContact ?? '-'}`,
+      `Note: ${notes ?? '-'}`,
       notionUrl ? `Notion: ${notionUrl}` : null,
     ].filter(Boolean);
 
