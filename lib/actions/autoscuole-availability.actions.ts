@@ -1517,6 +1517,18 @@ export async function broadcastWaitlistOffer({
     },
   });
 
+  const excludedStudentIds = Array.from(new Set(excludeStudentIds));
+  if (excludedStudentIds.length) {
+    await prisma.autoscuolaWaitlistResponse.createMany({
+      data: excludedStudentIds.map((studentId) => ({
+        offerId: offer.id,
+        studentId,
+        status: "declined",
+        respondedAt: new Date(),
+      })),
+    });
+  }
+
   const slot = await prisma.autoscuolaAvailabilitySlot.findFirst({
     where: {
       id: slotId,
@@ -1531,7 +1543,7 @@ export async function broadcastWaitlistOffer({
     where: {
       companyId,
       autoscuolaRole: "STUDENT",
-      ...(excludeStudentIds.length ? { userId: { notIn: excludeStudentIds } } : {}),
+      ...(excludedStudentIds.length ? { userId: { notIn: excludedStudentIds } } : {}),
     },
     include: {
       user: {

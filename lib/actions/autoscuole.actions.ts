@@ -1367,7 +1367,7 @@ export async function cancelAutoscuolaAppointment(
         slotId: appointment.slotId,
         startsAt: appointment.startsAt,
         expiresAt,
-        excludeStudentIds: [appointment.studentId],
+        excludeStudentIds: [appointment.studentId, membership.userId],
       });
 
       await invalidateAgendaAndPaymentsCache(membership.companyId);
