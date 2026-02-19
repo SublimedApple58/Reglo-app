@@ -858,7 +858,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             score,
             compatibleRequiredTypes,
             resolvedLessonType:
-              requestedPolicyType ||
+              (enforceLessonTypeTimeConstraints && requestedPolicyType) ||
               (enforceRequiredTypes && compatibleRequiredTypes.length === 1
                 ? compatibleRequiredTypes[0]
                 : "guida"),
@@ -1100,10 +1100,13 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       limits.bookingSlotDurations,
     );
 
-    let availableLessonTypes: string[] = [...LESSON_POLICY_TYPES];
+    const lessonTypeSelectionEnabled = policy.lessonPolicyEnabled;
+    let availableLessonTypes: string[] = lessonTypeSelectionEnabled
+      ? [...LESSON_POLICY_TYPES]
+      : [];
 
     if (
-      policy.lessonPolicyEnabled &&
+      lessonTypeSelectionEnabled &&
       policy.lessonRequiredTypesEnabled &&
       policy.lessonRequiredTypes.length
     ) {
@@ -1121,6 +1124,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       success: true,
       data: {
         bookingSlotDurations,
+        lessonTypeSelectionEnabled,
         availableLessonTypes,
       },
     };

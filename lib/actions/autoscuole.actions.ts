@@ -225,6 +225,77 @@ const formatLessonTypesList = (types: string[]) =>
   types.length
     ? types.map((type) => getLessonPolicyTypeLabel(type)).join(", ")
     : "nessun tipo disponibile";
+
+const notifyStudentAppointmentCancelled = async ({
+  companyId,
+  actorUserId,
+  appointment,
+}: {
+  companyId: string;
+  actorUserId: string;
+  appointment: {
+    id: string;
+    studentId: string;
+    startsAt: Date;
+    instructorId: string | null;
+  };
+}) => {
+  if (actorUserId === appointment.studentId) return;
+
+  const [studentUser, instructor] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: appointment.studentId },
+      select: { email: true },
+    }),
+    appointment.instructorId
+      ? prisma.autoscuolaInstructor.findFirst({
+          where: { id: appointment.instructorId, companyId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const dateLabel = appointment.startsAt.toLocaleDateString("it-IT", {
+    timeZone: "Europe/Rome",
+  });
+  const timeLabel = appointment.startsAt.toLocaleTimeString("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const title = "Reglo Autoscuole · Guida annullata";
+  const body = `La guida del ${dateLabel} alle ${timeLabel}${
+    instructor?.name ? ` con ${instructor.name}` : ""
+  } e stata annullata dall'autoscuola.`;
+
+  try {
+    await sendAutoscuolaPushToUsers({
+      companyId,
+      userIds: [appointment.studentId],
+      title,
+      body,
+      data: {
+        kind: "appointment_cancelled",
+        appointmentId: appointment.id,
+        startsAt: appointment.startsAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error("Appointment cancellation push error", error);
+  }
+
+  if (studentUser?.email) {
+    try {
+      await sendDynamicEmail({
+        to: studentUser.email,
+        subject: title,
+        body,
+      });
+    } catch (error) {
+      console.error("Appointment cancellation email error", error);
+    }
+  }
+};
 const invalidateAgendaAndPaymentsCache = async (companyId: string) => {
   await invalidateAutoscuoleCache({
     companyId,
@@ -1250,62 +1321,16 @@ export async function cancelAutoscuolaAppointment(
       data: { status: "cancelled", cancelledAt: new Date() },
     });
 
-    const cancelledByStudent = membership.userId === appointment.studentId;
-    if (!cancelledByStudent) {
-      const [studentUser, instructor] = await Promise.all([
-        prisma.user.findUnique({
-          where: { id: appointment.studentId },
-          select: { email: true, name: true },
-        }),
-        appointment.instructorId
-          ? prisma.autoscuolaInstructor.findFirst({
-              where: { id: appointment.instructorId, companyId: membership.companyId },
-              select: { name: true },
-            })
-          : Promise.resolve(null),
-      ]);
-
-      const dateLabel = appointment.startsAt.toLocaleDateString("it-IT", {
-        timeZone: "Europe/Rome",
-      });
-      const timeLabel = appointment.startsAt.toLocaleTimeString("it-IT", {
-        timeZone: "Europe/Rome",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const title = "Reglo Autoscuole · Guida annullata";
-      const body = `La guida del ${dateLabel} alle ${timeLabel}${
-        instructor?.name ? ` con ${instructor.name}` : ""
-      } e stata annullata dall'autoscuola.`;
-
-      try {
-        await sendAutoscuolaPushToUsers({
-          companyId: membership.companyId,
-          userIds: [appointment.studentId],
-          title,
-          body,
-          data: {
-            kind: "appointment_cancelled",
-            appointmentId: appointment.id,
-            startsAt: appointment.startsAt.toISOString(),
-          },
-        });
-      } catch (error) {
-        console.error("Appointment cancellation push error", error);
-      }
-
-      if (studentUser?.email) {
-        try {
-          await sendDynamicEmail({
-            to: studentUser.email,
-            subject: title,
-            body,
-          });
-        } catch (error) {
-          console.error("Appointment cancellation email error", error);
-        }
-      }
-    }
+    await notifyStudentAppointmentCancelled({
+      companyId: membership.companyId,
+      actorUserId: membership.userId,
+      appointment: {
+        id: appointment.id,
+        studentId: appointment.studentId,
+        startsAt: appointment.startsAt,
+        instructorId: appointment.instructorId,
+      },
+    });
 
     if (appointment.slotId) {
       const now = new Date();
@@ -1764,6 +1789,7 @@ export async function updateAutoscuolaAppointmentStatus(
       updateData.type = requestedLessonType;
     }
 
+    const wasCancelled = normalizeStatus(appointment.status) === "cancelled";
     if (nextStatus === "cancelled") {
       updateData.cancelledAt = appointment.cancelledAt ?? new Date();
     }
@@ -1781,6 +1807,19 @@ export async function updateAutoscuolaAppointmentStatus(
       } catch (error) {
         console.error("Autoscuola immediate settlement error", error);
       }
+    }
+
+    if (nextStatus === "cancelled" && !wasCancelled) {
+      await notifyStudentAppointmentCancelled({
+        companyId: membership.companyId,
+        actorUserId: membership.userId,
+        appointment: {
+          id: updated.id,
+          studentId: updated.studentId,
+          startsAt: updated.startsAt,
+          instructorId: updated.instructorId ?? null,
+        },
+      });
     }
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
