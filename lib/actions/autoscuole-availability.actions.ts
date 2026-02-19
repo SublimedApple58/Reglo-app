@@ -13,6 +13,16 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import {
+  LESSON_POLICY_TYPES,
+  isLessonPolicyType,
+  getCompatibleLessonTypesForInterval,
+  getLessonPolicyTypeLabel,
+  getStudentLessonPolicyCoverage,
+  normalizeBookingSlotDurations,
+  normalizeLessonType,
+  parseLessonPolicyFromLimits,
+} from "@/lib/autoscuole/lesson-policy";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -41,13 +51,18 @@ const getSlotsSchema = z.object({
 const bookingRequestSchema = z.object({
   studentId: z.string().uuid(),
   preferredDate: z.string(),
-  durationMinutes: z.number().int().min(30).max(60),
+  durationMinutes: z.number().int().min(30).max(120),
   preferredStartTime: z.string().optional(),
   preferredEndTime: z.string().optional(),
+  lessonType: z.string().optional(),
   maxDays: z.number().int().min(0).max(7).optional(),
   selectedStartsAt: z.string().optional(),
   excludeStartsAt: z.string().optional(),
   requestId: z.string().uuid().optional(),
+});
+
+const bookingOptionsSchema = z.object({
+  studentId: z.string().uuid(),
 });
 
 const respondOfferSchema = z.object({
@@ -429,9 +444,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const payload = bookingRequestSchema.parse(input);
     const now = new Date();
     const durationSlots = payload.durationMinutes / SLOT_MINUTES;
-    if (![1, 2].includes(durationSlots)) {
+    if (!Number.isInteger(durationSlots) || durationSlots < 1 || durationSlots > 4) {
       return { success: false, message: "Durata non valida." };
     }
+    const requestedLessonType = normalizeLessonType(payload.lessonType);
+    if (requestedLessonType && !isLessonPolicyType(requestedLessonType)) {
+      return { success: false, message: "Tipo guida non valido." };
+    }
+    const requestedPolicyType = isLessonPolicyType(requestedLessonType)
+      ? requestedLessonType
+      : null;
 
     const preferredDateParts = parseDateOnly(payload.preferredDate);
     if (!preferredDateParts) {
@@ -453,7 +475,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
-    const [activeInstructors, activeVehicles, studentAvailability] = await Promise.all([
+    const [activeInstructors, activeVehicles, studentAvailability, autoscuolaService] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: { companyId: membership.companyId, status: { not: "inactive" } },
         select: { id: true },
@@ -469,7 +491,56 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           ownerId: payload.studentId,
         },
       }),
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
     ]);
+    const lessonPolicy = parseLessonPolicyFromLimits(
+      (autoscuolaService?.limits ?? {}) as Record<string, unknown>,
+    );
+    const allowedDurations = normalizeBookingSlotDurations(
+      (autoscuolaService?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
+    );
+    if (!allowedDurations.some((duration) => duration === payload.durationMinutes)) {
+      return {
+        success: false,
+        message: "Durata non disponibile per questa autoscuola.",
+      };
+    }
+    const enforceRequiredTypes =
+      lessonPolicy.lessonPolicyEnabled &&
+      lessonPolicy.lessonRequiredTypesEnabled &&
+      lessonPolicy.lessonRequiredTypes.length > 0;
+    const studentCoverage: {
+      activeCaseId: string | null;
+      completedTypes: Set<string>;
+      missingRequiredTypes: string[];
+    } = enforceRequiredTypes
+      ? await getStudentLessonPolicyCoverage({
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          policy: lessonPolicy,
+        })
+      : {
+          activeCaseId: null,
+          completedTypes: new Set(),
+          missingRequiredTypes: [],
+        };
+    const missingRequiredTypes = studentCoverage.missingRequiredTypes;
+    if (
+      enforceRequiredTypes &&
+      missingRequiredTypes.length &&
+      requestedPolicyType &&
+      !missingRequiredTypes.includes(requestedPolicyType)
+    ) {
+      return {
+        success: false,
+        message: `Per ora puoi prenotare solo i tipi mancanti (${missingRequiredTypes
+          .map((type) => getLessonPolicyTypeLabel(type))
+          .join(", ")}).`,
+      };
+    }
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = activeVehicles.map((item) => item.id);
 
@@ -673,6 +744,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         instructorId: string;
         vehicleId: string;
         score: number;
+        compatibleRequiredTypes: string[];
+        resolvedLessonType: string;
       } | null = null;
 
       for (const startDate of candidateStarts) {
@@ -682,6 +755,39 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         if (excludedStartMs && startMs === excludedStartMs) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
+
+        if (
+          requestedPolicyType &&
+          !getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: startDate,
+            endsAt: endDate,
+            candidateTypes: [requestedPolicyType],
+          }).length
+        ) {
+          continue;
+        }
+
+        const compatibleRequiredTypes =
+          enforceRequiredTypes && missingRequiredTypes.length
+            ? getCompatibleLessonTypesForInterval({
+                policy: lessonPolicy,
+                startsAt: startDate,
+                endsAt: endDate,
+                candidateTypes: missingRequiredTypes,
+              })
+            : [];
+        if (enforceRequiredTypes && missingRequiredTypes.length && !compatibleRequiredTypes.length) {
+          continue;
+        }
+        if (
+          enforceRequiredTypes &&
+          missingRequiredTypes.length &&
+          requestedPolicyType &&
+          !compatibleRequiredTypes.includes(requestedPolicyType)
+        ) {
+          continue;
+        }
 
         const candidateStartMinutes = minutesFromDate(startDate);
         const candidateEndMinutes = candidateStartMinutes + payload.durationMinutes;
@@ -748,6 +854,12 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             instructorId: instructorChoice.id,
             vehicleId: vehicleChoice.id,
             score,
+            compatibleRequiredTypes,
+            resolvedLessonType:
+              requestedPolicyType ||
+              (enforceRequiredTypes && compatibleRequiredTypes.length === 1
+                ? compatibleRequiredTypes[0]
+                : "guida"),
           };
         }
       }
@@ -774,6 +886,21 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         selectedStart,
       );
       if (!candidate) {
+        if (requestedPolicyType) {
+          return {
+            success: false,
+            message: `Nessuno slot disponibile per il tipo guida ${getLessonPolicyTypeLabel(
+              requestedPolicyType,
+            )} nel giorno selezionato.`,
+          };
+        }
+        if (enforceRequiredTypes && missingRequiredTypes.length) {
+          const label = missingRequiredTypes.map((type) => getLessonPolicyTypeLabel(type)).join(", ");
+          return {
+            success: false,
+            message: `Slot non disponibile per i tipi guida obbligatori mancanti (${label}).`,
+          };
+        }
         return { success: false, message: "Slot non disponibile." };
       }
 
@@ -870,7 +997,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           data: {
             companyId: membership.companyId,
             studentId: payload.studentId,
-            type: "guida",
+            type: candidate.resolvedLessonType,
             startsAt: candidate.start,
             endsAt: candidate.end,
             status: "scheduled",
@@ -935,12 +1062,81 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
     const request = await upsertBookingRequest("pending");
 
+    if (requestedPolicyType) {
+      return {
+        success: false,
+        message: `Nessuno slot disponibile per il tipo guida ${getLessonPolicyTypeLabel(
+          requestedPolicyType,
+        )}.`,
+      };
+    }
+
+    if (enforceRequiredTypes && missingRequiredTypes.length) {
+      const label = missingRequiredTypes.map((type) => getLessonPolicyTypeLabel(type)).join(", ");
+      return {
+        success: false,
+        message: `Nessuno slot compatibile con i tipi guida obbligatori mancanti (${label}).`,
+      };
+    }
+
     return {
       success: true,
       data: {
         matched: false,
         request,
         suggestion,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getBookingOptions(input: z.infer<typeof bookingOptionsSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = bookingOptionsSchema.parse(input);
+
+    const [student, service] = await Promise.all([
+      ensureStudentMembership(membership.companyId, payload.studentId),
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
+    ]);
+
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    const policy = parseLessonPolicyFromLimits(limits);
+    const bookingSlotDurations = normalizeBookingSlotDurations(
+      limits.bookingSlotDurations,
+    );
+
+    let availableLessonTypes: string[] = [...LESSON_POLICY_TYPES];
+
+    if (
+      policy.lessonPolicyEnabled &&
+      policy.lessonRequiredTypesEnabled &&
+      policy.lessonRequiredTypes.length
+    ) {
+      const coverage = await getStudentLessonPolicyCoverage({
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        policy,
+      });
+      if (coverage.missingRequiredTypes.length) {
+        availableLessonTypes = coverage.missingRequiredTypes;
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        bookingSlotDurations,
+        availableLessonTypes,
       },
     };
   } catch (error) {
@@ -967,7 +1163,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       return { success: false, message: "Offerta non più valida." };
     }
 
-    const [student, existingResponse, studentAvailability] = await Promise.all([
+    const [student, existingResponse, studentAvailability, autoscuolaService] = await Promise.all([
       ensureStudentMembership(membership.companyId, payload.studentId),
       prisma.autoscuolaWaitlistResponse.findFirst({
         where: {
@@ -982,7 +1178,34 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           ownerId: payload.studentId,
         },
       }),
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
     ]);
+    const lessonPolicy = parseLessonPolicyFromLimits(
+      (autoscuolaService?.limits ?? {}) as Record<string, unknown>,
+    );
+    const enforceRequiredTypes =
+      lessonPolicy.lessonPolicyEnabled &&
+      lessonPolicy.lessonRequiredTypesEnabled &&
+      lessonPolicy.lessonRequiredTypes.length > 0;
+    const studentCoverage: {
+      activeCaseId: string | null;
+      completedTypes: Set<string>;
+      missingRequiredTypes: string[];
+    } = enforceRequiredTypes
+      ? await getStudentLessonPolicyCoverage({
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          policy: lessonPolicy,
+        })
+      : {
+          activeCaseId: null,
+          completedTypes: new Set(),
+          missingRequiredTypes: [],
+        };
+    const missingRequiredTypes = studentCoverage.missingRequiredTypes;
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
@@ -1037,6 +1260,21 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       )
     ) {
       return { success: false, message: "Hai già una guida in questa fascia oraria." };
+    }
+    const compatibleRequiredTypes =
+      enforceRequiredTypes && missingRequiredTypes.length
+        ? getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: offer.slot.startsAt,
+            endsAt: offer.slot.endsAt,
+            candidateTypes: missingRequiredTypes,
+          })
+        : [];
+    if (enforceRequiredTypes && missingRequiredTypes.length && !compatibleRequiredTypes.length) {
+      return {
+        success: false,
+        message: "Questo slot non è compatibile con i tipi guida obbligatori mancanti.",
+      };
     }
 
     const slotTime = offer.slot.startsAt;
@@ -1108,7 +1346,10 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
         data: {
           companyId: membership.companyId,
           studentId: payload.studentId,
-          type: "guida",
+          type:
+            enforceRequiredTypes && compatibleRequiredTypes.length === 1
+              ? compatibleRequiredTypes[0]
+              : "guida",
           startsAt: offer.slot.startsAt,
           endsAt: offer.slot.endsAt,
           status: "scheduled",
@@ -1158,7 +1399,7 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
       return { success: false, message: "Allievo non valido." };
     }
 
-    const [studentAvailability, offers, appointments] = await Promise.all([
+    const [studentAvailability, offers, appointments, autoscuolaService] = await Promise.all([
       prisma.autoscuolaWeeklyAvailability.findFirst({
         where: {
           companyId: membership.companyId,
@@ -1195,7 +1436,34 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
         },
         select: { startsAt: true, endsAt: true },
       }),
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
     ]);
+    const lessonPolicy = parseLessonPolicyFromLimits(
+      (autoscuolaService?.limits ?? {}) as Record<string, unknown>,
+    );
+    const enforceRequiredTypes =
+      lessonPolicy.lessonPolicyEnabled &&
+      lessonPolicy.lessonRequiredTypesEnabled &&
+      lessonPolicy.lessonRequiredTypes.length > 0;
+    const studentCoverage: {
+      activeCaseId: string | null;
+      completedTypes: Set<string>;
+      missingRequiredTypes: string[];
+    } = enforceRequiredTypes
+      ? await getStudentLessonPolicyCoverage({
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          policy: lessonPolicy,
+        })
+      : {
+          activeCaseId: null,
+          completedTypes: new Set(),
+          missingRequiredTypes: [],
+        };
+    const missingRequiredTypes = studentCoverage.missingRequiredTypes;
 
     if (!studentAvailability) {
       return { success: true, data: [] };
@@ -1218,6 +1486,16 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
             offer.slot.endsAt,
           ),
       )
+      .filter((offer) => {
+        if (!enforceRequiredTypes || !missingRequiredTypes.length) return true;
+        const compatible = getCompatibleLessonTypesForInterval({
+          policy: lessonPolicy,
+          startsAt: offer.slot.startsAt,
+          endsAt: offer.slot.endsAt,
+          candidateTypes: missingRequiredTypes,
+        });
+        return compatible.length > 0;
+      })
       .slice(0, limit)
       .map(({ responses: _responses, ...offer }) => offer);
 

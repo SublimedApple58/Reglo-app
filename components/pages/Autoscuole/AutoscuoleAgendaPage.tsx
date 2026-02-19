@@ -67,8 +67,19 @@ type AgendaBootstrapPayload = {
 const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
-const SLOT_OPTIONS = ["30", "60"];
+const SLOT_OPTIONS = ["30", "60", "90", "120"];
 const PIXELS_PER_MINUTE = 1.6;
+const LESSON_TYPE_OPTIONS = [
+  { value: "guida", label: "Guida" },
+  { value: "manovre", label: "Manovre" },
+  { value: "urbano", label: "Urbano" },
+  { value: "extraurbano", label: "Extraurbano" },
+  { value: "notturna", label: "Notturna" },
+  { value: "autostrada", label: "Autostrada" },
+  { value: "parcheggio", label: "Parcheggio" },
+  { value: "altro", label: "Altro" },
+  { value: "esame", label: "Esame" },
+] as const;
 const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 }, (_, index) => {
   const total = DAY_START_HOUR * 60 + index * 30;
   const hours = Math.floor(total / 60);
@@ -114,6 +125,7 @@ export function AutoscuoleAgendaPage({
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState({
     studentId: "",
+    type: "guida",
     day: "",
     time: "09:00",
     instructorId: "",
@@ -260,7 +272,7 @@ export function AutoscuoleAgendaPage({
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
-      type: "guida",
+      type: form.type,
       startsAt: startDate.toISOString(),
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
@@ -276,6 +288,7 @@ export function AutoscuoleAgendaPage({
     setCreateOpen(false);
     setForm({
       studentId: "",
+      type: "guida",
       day: "",
       time: "09:00",
       instructorId: "",
@@ -284,6 +297,11 @@ export function AutoscuoleAgendaPage({
       duration: "30",
     });
     toast.success({ description: res.message ?? "Operazione completata." });
+    if (Array.isArray((res as { warnings?: string[] }).warnings) && (res as { warnings?: string[] }).warnings?.length) {
+      toast.info({
+        description: (res as { warnings?: string[] }).warnings?.join(" "),
+      });
+    }
     load({ silent: true });
   };
 
@@ -439,7 +457,12 @@ export function AutoscuoleAgendaPage({
               value={typeFilter}
               allValue="all"
               onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
-              displayValue={typeFilter === "all" ? null : typeFilter === "guida" ? "Guida" : "Esame"}
+              displayValue={
+                typeFilter === "all"
+                  ? null
+                  : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ??
+                    typeFilter
+              }
             />
             <FilterTag
               label="Stato"
@@ -918,6 +941,26 @@ export function AutoscuoleAgendaPage({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">Tipo guida</div>
+              <Select
+                value={form.type}
+                onValueChange={(value) =>
+                  setForm((prev) => ({ ...prev, type: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona tipo guida" />
+                </SelectTrigger>
+                <SelectContent>
+                  {LESSON_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <Select
               value={form.instructorId}
               onValueChange={(value) =>
@@ -1179,8 +1222,10 @@ function getFilterOptions(
   if (kind === "type") {
     return [
       { value: "all", label: "Tutti i tipi" },
-      { value: "guida", label: "Guida" },
-      { value: "esame", label: "Esame" },
+      ...LESSON_TYPE_OPTIONS.map((option) => ({
+        value: option.value,
+        label: option.label,
+      })),
     ];
   }
   return [

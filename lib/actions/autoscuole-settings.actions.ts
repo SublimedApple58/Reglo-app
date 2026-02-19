@@ -9,6 +9,13 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import {
+  BOOKING_SLOT_DURATION_OPTIONS,
+  LESSON_POLICY_TYPES,
+  LessonPolicyType,
+  normalizeBookingSlotDurations,
+  parseLessonPolicyFromLimits,
+} from "@/lib/autoscuole/lesson-policy";
 
 const DEFAULT_AVAILABILITY_WEEKS = 4;
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
@@ -28,6 +35,9 @@ const DEFAULT_PENALTY_CUTOFF_HOURS = 24;
 const DEFAULT_PENALTY_PERCENT = 50;
 const DEFAULT_PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
+const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
+
+const LESSON_POLICY_TYPE_SET = new Set<string>(LESSON_POLICY_TYPES);
 
 const reminderMinutesSchema = z
   .number()
@@ -59,6 +69,82 @@ const optionalNullableIdSchema = z.preprocess(
   },
   z.string().trim().min(1).optional().nullable(),
 );
+
+const lessonTypeSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine((value) => LESSON_POLICY_TYPE_SET.has(value), {
+    message: "Tipo guida non valido.",
+  })
+  .transform((value) => value as LessonPolicyType);
+
+const lessonTypeConstraintSchema = z
+  .object({
+    daysOfWeek: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, "Seleziona almeno un giorno.")
+      .max(7)
+      .transform((days) => Array.from(new Set(days)).sort((a, b) => a - b)),
+    startMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(1410)
+      .refine((value) => value % 30 === 0, {
+        message: "Orario di inizio non valido.",
+      }),
+    endMinutes: z
+      .number()
+      .int()
+      .min(30)
+      .max(1440)
+      .refine((value) => value % 30 === 0, {
+        message: "Orario di fine non valido.",
+      }),
+  })
+  .refine((value) => value.endMinutes > value.startMinutes, {
+    message: "Intervallo orario non valido.",
+    path: ["endMinutes"],
+  });
+
+const lessonTypeConstraintsSchema = z
+  .record(z.string(), lessonTypeConstraintSchema.nullable())
+  .superRefine((value, ctx) => {
+    for (const key of Object.keys(value)) {
+      if (!LESSON_POLICY_TYPE_SET.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key],
+          message: "Tipo guida non valido.",
+        });
+      }
+    }
+  })
+  .transform((value) => {
+    const mapped: Partial<Record<LessonPolicyType, z.infer<typeof lessonTypeConstraintSchema> | null>> =
+      {};
+    for (const type of LESSON_POLICY_TYPES) {
+      mapped[type] = value[type] ?? null;
+    }
+    return mapped;
+  });
+
+const bookingSlotDurationsSchema = z
+  .array(z.number().int())
+  .min(1, "Seleziona almeno una durata prenotabile.")
+  .max(BOOKING_SLOT_DURATION_OPTIONS.length)
+  .superRefine((value, ctx) => {
+    for (const duration of value) {
+      if (!BOOKING_SLOT_DURATION_OPTIONS.includes(duration as (typeof BOOKING_SLOT_DURATION_OPTIONS)[number])) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Durata prenotabile non valida.",
+        });
+      }
+    }
+  })
+  .transform((durations) => Array.from(new Set(durations)).sort((a, b) => a - b));
 
 const autoscuolaSettingsPatchSchema = z
   .object({
@@ -101,6 +187,15 @@ const autoscuolaSettingsPatchSchema = z
     ficVatTypeId: optionalNullableIdSchema,
     ficPaymentMethodId: optionalNullableIdSchema,
     stripeConnectedAccountId: z.string().trim().min(1).optional().nullable(),
+    lessonPolicyEnabled: z.boolean().optional(),
+    lessonRequiredTypesEnabled: z.boolean().optional(),
+    lessonRequiredTypes: z
+      .array(lessonTypeSchema)
+      .max(LESSON_POLICY_TYPES.length)
+      .transform((types) => Array.from(new Set(types)))
+      .optional(),
+    lessonTypeConstraints: lessonTypeConstraintsSchema.optional(),
+    bookingSlotDurations: bookingSlotDurationsSchema.optional(),
   })
   .refine(
     (value) =>
@@ -118,7 +213,12 @@ const autoscuolaSettingsPatchSchema = z
       value.paymentNotificationChannels !== undefined ||
       value.ficVatTypeId !== undefined ||
       value.ficPaymentMethodId !== undefined ||
-      value.stripeConnectedAccountId !== undefined,
+      value.stripeConnectedAccountId !== undefined ||
+      value.lessonPolicyEnabled !== undefined ||
+      value.lessonRequiredTypesEnabled !== undefined ||
+      value.lessonRequiredTypes !== undefined ||
+      value.lessonTypeConstraints !== undefined ||
+      value.bookingSlotDurations !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -128,6 +228,19 @@ const autoscuolaSettingsPatchSchema = z
         code: z.ZodIssueCode.custom,
         path: ["stripeConnectedAccountId"],
         message: "Stripe Connected Account non valido (atteso formato acct_xxx).",
+      });
+    }
+
+    const requiredEnabled = value.lessonRequiredTypesEnabled === true;
+    if (
+      requiredEnabled &&
+      value.lessonRequiredTypes !== undefined &&
+      value.lessonRequiredTypes.length === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["lessonRequiredTypes"],
+        message: "Seleziona almeno un tipo guida obbligatorio.",
       });
     }
   });
@@ -189,6 +302,20 @@ export type AutoscuolaSettingsData = {
   ficVatTypeId: string | null;
   ficPaymentMethodId: string | null;
   stripeConnectedAccountId: string | null;
+  lessonPolicyEnabled: boolean;
+  lessonRequiredTypesEnabled: boolean;
+  lessonRequiredTypes: LessonPolicyType[];
+  lessonTypeConstraints: Partial<
+    Record<
+      LessonPolicyType,
+      {
+        daysOfWeek: number[];
+        startMinutes: number;
+        endMinutes: number;
+      } | null
+    >
+  >;
+  bookingSlotDurations: number[];
 };
 
 const resolveAutoscuolaSettingsData = (
@@ -258,6 +385,11 @@ const resolveAutoscuolaSettingsData = (
     limits.stripeConnectedAccountId.trim().length
       ? limits.stripeConnectedAccountId.trim()
       : null;
+  const lessonPolicy = parseLessonPolicyFromLimits(limits);
+  const bookingSlotDurations = normalizeBookingSlotDurations(
+    limits.bookingSlotDurations,
+    DEFAULT_BOOKING_SLOT_DURATIONS,
+  );
 
   return {
     availabilityWeeks,
@@ -275,6 +407,11 @@ const resolveAutoscuolaSettingsData = (
     ficVatTypeId,
     ficPaymentMethodId,
     stripeConnectedAccountId,
+    lessonPolicyEnabled: lessonPolicy.lessonPolicyEnabled,
+    lessonRequiredTypesEnabled: lessonPolicy.lessonRequiredTypesEnabled,
+    lessonRequiredTypes: lessonPolicy.lessonRequiredTypes,
+    lessonTypeConstraints: lessonPolicy.lessonTypeConstraints,
+    bookingSlotDurations,
   };
 };
 
@@ -380,6 +517,11 @@ export async function updateAutoscuolaSettings(
       limits.ficPaymentMethodId.trim().length
         ? limits.ficPaymentMethodId.trim()
         : null;
+    const previousLessonPolicy = parseLessonPolicyFromLimits(limits);
+    const previousBookingSlotDurations = normalizeBookingSlotDurations(
+      limits.bookingSlotDurations,
+      DEFAULT_BOOKING_SLOT_DURATIONS,
+    );
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
@@ -399,6 +541,17 @@ export async function updateAutoscuolaSettings(
       payload.ficPaymentMethodId !== undefined
         ? payload.ficPaymentMethodId
         : previousFicPaymentMethodId;
+    const nextLessonPolicyEnabled =
+      payload.lessonPolicyEnabled ?? previousLessonPolicy.lessonPolicyEnabled;
+    const nextLessonRequiredTypesEnabled =
+      payload.lessonRequiredTypesEnabled ??
+      previousLessonPolicy.lessonRequiredTypesEnabled;
+    const nextLessonRequiredTypes =
+      payload.lessonRequiredTypes ?? previousLessonPolicy.lessonRequiredTypes;
+    const nextLessonTypeConstraints =
+      payload.lessonTypeConstraints ?? previousLessonPolicy.lessonTypeConstraints;
+    const nextBookingSlotDurations =
+      payload.bookingSlotDurations ?? previousBookingSlotDurations;
 
     if (nextAutoPaymentsEnabled) {
       const stripe = await isAutoscuolaStripeConnectReady({
@@ -409,6 +562,10 @@ export async function updateAutoscuolaSettings(
           "Completa onboarding Stripe (termini, IBAN, P.IVA e documenti) prima di attivare i pagamenti automatici.",
         );
       }
+    }
+
+    if (nextLessonRequiredTypesEnabled && !nextLessonRequiredTypes.length) {
+      throw new Error("Seleziona almeno un tipo guida obbligatorio.");
     }
 
     const nextLimits = {
@@ -431,6 +588,11 @@ export async function updateAutoscuolaSettings(
       paymentNotificationChannels: nextPaymentNotificationChannels,
       ficVatTypeId: nextFicVatTypeId,
       ficPaymentMethodId: nextFicPaymentMethodId,
+      lessonPolicyEnabled: nextLessonPolicyEnabled,
+      lessonRequiredTypesEnabled: nextLessonRequiredTypesEnabled,
+      lessonRequiredTypes: nextLessonRequiredTypes,
+      lessonTypeConstraints: nextLessonTypeConstraints,
+      bookingSlotDurations: nextBookingSlotDurations,
     };
 
     if (service) {
@@ -451,7 +613,10 @@ export async function updateAutoscuolaSettings(
 
     await invalidateAutoscuoleCache({
       companyId: membership.companyId,
-      segments: [AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+      segments: [
+        AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+        AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+      ],
     });
 
     return {
@@ -471,6 +636,11 @@ export async function updateAutoscuolaSettings(
         paymentNotificationChannels: nextLimits.paymentNotificationChannels,
         ficVatTypeId: nextLimits.ficVatTypeId,
         ficPaymentMethodId: nextLimits.ficPaymentMethodId,
+        lessonPolicyEnabled: nextLimits.lessonPolicyEnabled,
+        lessonRequiredTypesEnabled: nextLimits.lessonRequiredTypesEnabled,
+        lessonRequiredTypes: nextLimits.lessonRequiredTypes,
+        lessonTypeConstraints: nextLimits.lessonTypeConstraints,
+        bookingSlotDurations: nextLimits.bookingSlotDurations,
       },
     };
   } catch (error) {

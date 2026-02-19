@@ -43,12 +43,64 @@ const formatDateLocal = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+const BOOKING_DURATION_OPTIONS = [30, 60, 90, 120] as const;
 const CHANNEL_OPTIONS = [
   { value: "push", label: "Push" },
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "Email" },
 ] as const;
 type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
+
+const LESSON_TYPE_OPTIONS = [
+  { value: "manovre", label: "Manovre" },
+  { value: "urbano", label: "Urbano" },
+  { value: "extraurbano", label: "Extraurbano" },
+  { value: "notturna", label: "Notturna" },
+  { value: "autostrada", label: "Autostrada" },
+  { value: "parcheggio", label: "Parcheggio" },
+  { value: "altro", label: "Altro" },
+] as const;
+type LessonTypeValue = (typeof LESSON_TYPE_OPTIONS)[number]["value"];
+
+const WEEKDAY_OPTIONS = [
+  { value: 1, label: "Lun" },
+  { value: 2, label: "Mar" },
+  { value: 3, label: "Mer" },
+  { value: 4, label: "Gio" },
+  { value: 5, label: "Ven" },
+  { value: 6, label: "Sab" },
+  { value: 0, label: "Dom" },
+] as const;
+
+const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => index * 30);
+const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => (index + 1) * 30);
+
+type LessonConstraintState = {
+  enabled: boolean;
+  daysOfWeek: number[];
+  startMinutes: number;
+  endMinutes: number;
+};
+
+type LessonConstraintMap = Record<LessonTypeValue, LessonConstraintState>;
+
+const DEFAULT_LESSON_CONSTRAINT: LessonConstraintState = {
+  enabled: false,
+  daysOfWeek: [1, 2, 3, 4, 5],
+  startMinutes: 9 * 60,
+  endMinutes: 18 * 60,
+};
+
+const createDefaultLessonConstraintMap = (): LessonConstraintMap =>
+  LESSON_TYPE_OPTIONS.reduce((accumulator, option) => {
+    accumulator[option.value] = { ...DEFAULT_LESSON_CONSTRAINT };
+    return accumulator;
+  }, {} as LessonConstraintMap);
+
+const normalizeDays = (days: number[]) =>
+  Array.from(new Set(days.filter((day) => Number.isInteger(day) && day >= 0 && day <= 6))).sort(
+    (left, right) => left - right,
+  );
 
 export function AutoscuoleResourcesPage({
   hideNav = false,
@@ -77,6 +129,13 @@ export function AutoscuoleResourcesPage({
   const [instructorReminderChannels, setInstructorReminderChannels] = React.useState<
     ChannelValue[]
   >(["push", "whatsapp", "email"]);
+  const [lessonPolicyEnabled, setLessonPolicyEnabled] = React.useState(false);
+  const [lessonRequiredTypesEnabled, setLessonRequiredTypesEnabled] = React.useState(false);
+  const [lessonRequiredTypes, setLessonRequiredTypes] = React.useState<LessonTypeValue[]>([]);
+  const [lessonConstraints, setLessonConstraints] = React.useState<LessonConstraintMap>(
+    createDefaultLessonConstraintMap(),
+  );
+  const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
@@ -156,6 +215,26 @@ export function AutoscuoleResourcesPage({
       setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
       setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
       setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
+      const nextConstraints = createDefaultLessonConstraintMap();
+      for (const option of LESSON_TYPE_OPTIONS) {
+        const constraint = res.data.lessonTypeConstraints?.[option.value];
+        if (!constraint) continue;
+        nextConstraints[option.value] = {
+          enabled: true,
+          daysOfWeek: normalizeDays(constraint.daysOfWeek),
+          startMinutes: constraint.startMinutes,
+          endMinutes: constraint.endMinutes,
+        };
+      }
+      setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
+      setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
+      setLessonRequiredTypes(
+        (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
+          LESSON_TYPE_OPTIONS.some((option) => option.value === value),
+        ),
+      );
+      setLessonConstraints(nextConstraints);
+      setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
     };
     loadSettings();
     return () => {
@@ -200,6 +279,50 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: "Seleziona almeno un canale per reminder istruttore." });
       return;
     }
+    if (!bookingSlotDurations.length) {
+      toast.error({ description: "Seleziona almeno una durata prenotabile per l'allievo." });
+      return;
+    }
+    if (lessonRequiredTypesEnabled && !lessonRequiredTypes.length) {
+      toast.error({ description: "Seleziona almeno un tipo guida obbligatorio." });
+      return;
+    }
+
+    const lessonTypeConstraints = {} as Record<
+      LessonTypeValue,
+      { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null
+    >;
+    for (const option of LESSON_TYPE_OPTIONS) {
+      const state = lessonConstraints[option.value];
+      if (!state?.enabled) {
+        lessonTypeConstraints[option.value] = null;
+        continue;
+      }
+      const daysOfWeek = normalizeDays(state.daysOfWeek);
+      if (!daysOfWeek.length) {
+        toast.error({ description: `Seleziona almeno un giorno per ${option.label}.` });
+        return;
+      }
+      if (
+        !Number.isInteger(state.startMinutes) ||
+        !Number.isInteger(state.endMinutes) ||
+        state.startMinutes < 0 ||
+        state.startMinutes > 1410 ||
+        state.endMinutes < 30 ||
+        state.endMinutes > 1440 ||
+        state.startMinutes % 30 !== 0 ||
+        state.endMinutes % 30 !== 0 ||
+        state.endMinutes <= state.startMinutes
+      ) {
+        toast.error({ description: `Intervallo non valido per ${option.label}.` });
+        return;
+      }
+      lessonTypeConstraints[option.value] = {
+        daysOfWeek,
+        startMinutes: state.startMinutes,
+        endMinutes: state.endMinutes,
+      };
+    }
 
     setSavingSettings(true);
     const res = await updateAutoscuolaSettings({
@@ -211,6 +334,11 @@ export function AutoscuoleResourcesPage({
       slotFillChannels,
       studentReminderChannels,
       instructorReminderChannels,
+      lessonPolicyEnabled,
+      lessonRequiredTypesEnabled,
+      lessonRequiredTypes,
+      lessonTypeConstraints,
+      bookingSlotDurations,
     });
     setSavingSettings(false);
 
@@ -227,6 +355,26 @@ export function AutoscuoleResourcesPage({
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
     setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
     setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
+    const nextConstraints = createDefaultLessonConstraintMap();
+    for (const option of LESSON_TYPE_OPTIONS) {
+      const constraint = res.data.lessonTypeConstraints?.[option.value];
+      if (!constraint) continue;
+      nextConstraints[option.value] = {
+        enabled: true,
+        daysOfWeek: normalizeDays(constraint.daysOfWeek),
+        startMinutes: constraint.startMinutes,
+        endMinutes: constraint.endMinutes,
+      };
+    }
+    setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
+    setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
+    setLessonRequiredTypes(
+      (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
+        LESSON_TYPE_OPTIONS.some((option) => option.value === value),
+      ),
+    );
+    setLessonConstraints(nextConstraints);
+    setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
 
@@ -239,6 +387,68 @@ export function AutoscuoleResourcesPage({
         ? current.filter((item) => item !== channel)
         : [...current, channel],
     );
+  };
+
+  const toggleRequiredType = (type: LessonTypeValue) => {
+    setLessonRequiredTypes((current) =>
+      current.includes(type)
+        ? current.filter((item) => item !== type)
+        : [...current, type],
+    );
+  };
+
+  const toggleConstraintEnabled = (type: LessonTypeValue) => {
+    setLessonConstraints((current) => ({
+      ...current,
+      [type]: {
+        ...(current[type] ?? DEFAULT_LESSON_CONSTRAINT),
+        enabled: !(current[type]?.enabled ?? false),
+      },
+    }));
+  };
+
+  const toggleConstraintDay = (type: LessonTypeValue, day: number) => {
+    setLessonConstraints((current) => {
+      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
+      const nextDays = state.daysOfWeek.includes(day)
+        ? state.daysOfWeek.filter((item) => item !== day)
+        : [...state.daysOfWeek, day];
+      return {
+        ...current,
+        [type]: {
+          ...state,
+          daysOfWeek: normalizeDays(nextDays),
+        },
+      };
+    });
+  };
+
+  const updateConstraintWindow = (
+    type: LessonTypeValue,
+    field: "startMinutes" | "endMinutes",
+    value: string,
+  ) => {
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return;
+    setLessonConstraints((current) => {
+      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
+      return {
+        ...current,
+        [type]: {
+          ...state,
+          [field]: minutes,
+        },
+      };
+    });
+  };
+
+  const toggleBookingDuration = (duration: number) => {
+    setBookingSlotDurations((current) => {
+      const next = current.includes(duration)
+        ? current.filter((value) => value !== duration)
+        : [...current, duration];
+      return next.sort((a, b) => a - b);
+    });
   };
 
   return (
@@ -345,10 +555,162 @@ export function AutoscuoleResourcesPage({
               }
             />
           </div>
+          <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
+            <div className="text-xs font-medium text-muted-foreground">
+              Durata prenotazione allievo
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {BOOKING_DURATION_OPTIONS.map((duration) => {
+                const active = bookingSlotDurations.includes(duration);
+                return (
+                  <button
+                    key={duration}
+                    type="button"
+                    onClick={() => toggleBookingDuration(duration)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                      active
+                        ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                        : "border-white/70 bg-white/85 text-muted-foreground"
+                    }`}
+                  >
+                    {duration} min
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="flex justify-end">
             <Button onClick={handleSaveSettings} disabled={savingSettings}>
               {savingSettings ? "Salvataggio..." : "Salva impostazioni"}
             </Button>
+          </div>
+        </div>
+
+        <div className="glass-panel glass-strong space-y-4 p-4">
+          <div>
+            <div className="text-sm font-semibold text-foreground">Regole tipi guida</div>
+            <p className="text-xs text-muted-foreground">
+              Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida.
+            </p>
+          </div>
+          <div className="grid gap-3 md:grid-cols-2">
+            <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
+              <span>Abilita policy tipi guida</span>
+              <Checkbox
+                checked={lessonPolicyEnabled}
+                onCheckedChange={(checked) => setLessonPolicyEnabled(Boolean(checked))}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
+              <span>Richiedi almeno 1 guida per tipo</span>
+              <Checkbox
+                checked={lessonRequiredTypesEnabled}
+                onCheckedChange={(checked) => setLessonRequiredTypesEnabled(Boolean(checked))}
+              />
+            </label>
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
+            <div className="text-xs font-medium text-muted-foreground">Tipi obbligatori</div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {LESSON_TYPE_OPTIONS.map((option) => (
+                <label
+                  key={option.value}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs"
+                >
+                  <span>{option.label}</span>
+                  <Checkbox
+                    checked={lessonRequiredTypes.includes(option.value)}
+                    onCheckedChange={() => toggleRequiredType(option.value)}
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="text-xs font-medium text-muted-foreground">
+              Limiti per tipo guida (giorni + fascia oraria)
+            </div>
+            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+              {LESSON_TYPE_OPTIONS.map((option) => {
+                const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
+                return (
+                  <div
+                    key={option.value}
+                    className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3"
+                  >
+                    <label className="flex items-center justify-between gap-2 text-xs">
+                      <span className="font-medium text-foreground">{option.label}</span>
+                      <Checkbox
+                        checked={constraint.enabled}
+                        onCheckedChange={() => toggleConstraintEnabled(option.value)}
+                      />
+                    </label>
+                    {constraint.enabled ? (
+                      <>
+                        <div className="grid grid-cols-4 gap-2">
+                          {WEEKDAY_OPTIONS.map((day) => (
+                            <button
+                              key={`${option.value}-${day.value}`}
+                              type="button"
+                              onClick={() => toggleConstraintDay(option.value, day.value)}
+                              className={`rounded-full border px-2 py-1 text-[11px] transition ${
+                                constraint.daysOfWeek.includes(day.value)
+                                  ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                                  : "border-white/70 bg-white/85 text-muted-foreground"
+                              }`}
+                            >
+                              {day.label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Select
+                            value={String(constraint.startMinutes)}
+                            onValueChange={(value) =>
+                              updateConstraintWindow(option.value, "startMinutes", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Inizio" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {START_TIME_OPTIONS.map((minutes) => (
+                                <SelectItem key={`${option.value}-start-${minutes}`} value={String(minutes)}>
+                                  {formatMinutes(minutes)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={String(constraint.endMinutes)}
+                            onValueChange={(value) =>
+                              updateConstraintWindow(option.value, "endMinutes", value)
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Fine" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {END_TIME_OPTIONS.map((minutes) => (
+                                <SelectItem key={`${option.value}-end-${minutes}`} value={String(minutes)}>
+                                  {formatMinutes(minutes)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-[11px] text-muted-foreground">
+                        Nessun limite attivo per questo tipo.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -474,6 +836,12 @@ function pad(value: number) {
 
 function formatTime(date: Date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatMinutes(totalMinutes: number) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${pad(hours)}:${pad(minutes)}`;
 }
 
 function ChannelGroup({

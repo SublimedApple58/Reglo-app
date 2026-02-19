@@ -19,6 +19,17 @@ import {
   getAutoscuolaPaymentsOverview,
   prepareAppointmentPaymentSnapshot,
 } from "@/lib/autoscuole/payments";
+import {
+  LESSON_ALL_ALLOWED_TYPES,
+  getCompatibleLessonTypesForInterval,
+  getLessonPolicyTypeLabel,
+  getStudentLessonPolicyCoverage,
+  isLessonAllowedType,
+  isLessonPolicyType,
+  isLessonTypeAllowedForInterval,
+  normalizeLessonType as normalizeLessonTypeFromPolicy,
+  parseLessonPolicyFromLimits,
+} from "@/lib/autoscuole/lesson-policy";
 
 const createStudentSchema = z.object({
   firstName: z.string().min(1),
@@ -42,7 +53,7 @@ const createCaseSchema = z.object({
 const createAppointmentSchema = z.object({
   studentId: z.string().uuid(),
   caseId: z.string().uuid().optional().nullable(),
-  type: z.string().min(1),
+  type: z.string().optional(),
   startsAt: z.string().min(1),
   endsAt: z.string().optional().nullable(),
   status: z.string().optional(),
@@ -127,23 +138,14 @@ const ensureAutoscuolaRole = (
 };
 
 const REQUIRED_LESSONS_COUNT = 10;
-const LESSON_TYPE_OPTIONS = [
-  "manovre",
-  "urbano",
-  "extraurbano",
-  "notturna",
-  "autostrada",
-  "parcheggio",
-  "altro",
-  "guida",
-] as const;
+const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
 const LESSON_TYPE_SET = new Set<string>(LESSON_TYPE_OPTIONS);
 const INSTRUCTOR_ALLOWED_STATUSES = new Set(["checked_in", "no_show"]);
 const DRIVING_LESSON_EXCLUDED_TYPES = new Set(["esame"]);
 
 const normalizeStatus = (value: string) => value.trim().toLowerCase();
 const normalizeLessonType = (value: string | null | undefined) =>
-  (value ?? "").trim().toLowerCase();
+  normalizeLessonTypeFromPolicy(value);
 const normalizeOptionalFilter = (value: string | null | undefined) => {
   const normalized = (value ?? "").trim().toLowerCase();
   if (!normalized || normalized === "all") return null;
@@ -209,6 +211,19 @@ const isWithinInstructorDetailsWindow = (
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
   normalizeText(value).toLowerCase();
+
+const getLessonPolicyForCompany = async (companyId: string) => {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  return parseLessonPolicyFromLimits((service?.limits ?? {}) as Record<string, unknown>);
+};
+
+const formatLessonTypesList = (types: string[]) =>
+  types.length
+    ? types.map((type) => getLessonPolicyTypeLabel(type)).join(", ")
+    : "nessun tipo disponibile";
 const invalidateAgendaAndPaymentsCache = async (companyId: string) => {
   await invalidateAutoscuoleCache({
     companyId,
@@ -983,8 +998,9 @@ export async function createAutoscuolaAppointment(
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
     const payload = createAppointmentSchema.parse(input);
+    const requestedType = normalizeLessonType(payload.type);
 
-    const [student, instructor, vehicle] = await Promise.all([
+    const [student, instructor, vehicle, lessonPolicy] = await Promise.all([
       prisma.companyMember.findFirst({
         where: {
           companyId,
@@ -1008,6 +1024,7 @@ export async function createAutoscuolaAppointment(
       prisma.autoscuolaVehicle.findFirst({
         where: { id: payload.vehicleId, companyId },
       }),
+      getLessonPolicyForCompany(companyId),
     ]);
 
     if (!student || !instructor || !vehicle) {
@@ -1016,6 +1033,21 @@ export async function createAutoscuolaAppointment(
         message: "Seleziona allievo, istruttore e veicolo validi.",
       };
     }
+
+    if (lessonPolicy.lessonPolicyEnabled && !requestedType) {
+      return {
+        success: false,
+        message: "Con policy attiva devi selezionare il tipo guida.",
+      };
+    }
+
+    if (requestedType && !isLessonAllowedType(requestedType)) {
+      return {
+        success: false,
+        message: "Tipo guida non valido.",
+      };
+    }
+    const resolvedType = requestedType || "guida";
 
     const slotTime = new Date(payload.startsAt);
     if (Number.isNaN(slotTime.getTime())) {
@@ -1035,6 +1067,41 @@ export async function createAutoscuolaAppointment(
         success: false,
         message: "Orario di fine non valido.",
       };
+    }
+    const warnings: string[] = [];
+    if (
+      lessonPolicy.lessonPolicyEnabled &&
+      lessonPolicy.lessonRequiredTypesEnabled &&
+      lessonPolicy.lessonRequiredTypes.length
+    ) {
+      const coverage = await getStudentLessonPolicyCoverage({
+        companyId,
+        studentId: payload.studentId,
+        policy: lessonPolicy,
+      });
+      const selectedPolicyType = isLessonPolicyType(resolvedType) ? resolvedType : null;
+      if (
+        coverage.missingRequiredTypes.length &&
+        (!selectedPolicyType || !coverage.missingRequiredTypes.includes(selectedPolicyType))
+      ) {
+        warnings.push(
+          `Tipo guida non prioritario rispetto ai tipi ancora mancanti (${formatLessonTypesList(
+            coverage.missingRequiredTypes,
+          )}).`,
+        );
+      }
+    }
+    if (
+      lessonPolicy.lessonPolicyEnabled &&
+      isLessonPolicyType(resolvedType) &&
+      !isLessonTypeAllowedForInterval({
+        policy: lessonPolicy,
+        lessonType: resolvedType,
+        startsAt: slotTime,
+        endsAt: slotEnd,
+      })
+    ) {
+      warnings.push("Il tipo guida selezionato è fuori dalla finestra configurata.");
     }
 
     const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
@@ -1077,7 +1144,7 @@ export async function createAutoscuolaAppointment(
         companyId,
         studentId: payload.studentId,
         caseId: payload.caseId || null,
-        type: payload.type,
+        type: resolvedType,
         startsAt: slotTime,
         endsAt: slotEnd,
         status: payload.status ?? (payload.sendProposal ? "proposal" : "scheduled"),
@@ -1097,7 +1164,12 @@ export async function createAutoscuolaAppointment(
     await invalidateAgendaAndPaymentsCache(companyId);
 
     if (!payload.sendProposal) {
-      return { success: true, data: appointment, message: "Appuntamento creato." };
+      return {
+        success: true,
+        data: appointment,
+        message: "Appuntamento creato.",
+        ...(warnings.length ? { warnings } : {}),
+      };
     }
 
     let notificationSent = false;
@@ -1151,6 +1223,7 @@ export async function createAutoscuolaAppointment(
       success: true,
       data: appointment,
       message: pushMessage,
+      ...(warnings.length ? { warnings } : {}),
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1543,8 +1616,45 @@ export async function updateAutoscuolaAppointmentStatus(
 
     const requestedLessonType = normalizeLessonType(payload.lessonType);
     const appointmentLessonType = normalizeLessonType(appointment.type);
+    const appointmentEnd = computeAppointmentEnd({
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+    });
+    let enforceRequiredTypeSelection = false;
+    let compatibleMissingTypes: string[] = [];
+
+    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+      const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
+      if (
+        lessonPolicy.lessonPolicyEnabled &&
+        lessonPolicy.lessonRequiredTypesEnabled &&
+        lessonPolicy.lessonRequiredTypes.length
+      ) {
+        const coverage = await getStudentLessonPolicyCoverage({
+          companyId: membership.companyId,
+          studentId: appointment.studentId,
+          policy: lessonPolicy,
+        });
+        if (coverage.missingRequiredTypes.length) {
+          enforceRequiredTypeSelection = true;
+          compatibleMissingTypes = getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: appointment.startsAt,
+            endsAt: appointmentEnd,
+            candidateTypes: coverage.missingRequiredTypes,
+          });
+        }
+      }
+    }
     const updateData: { status: string; type?: string; cancelledAt?: Date | null } = {
       status: nextStatus,
+    };
+    const isOwnerPresetType =
+      appointmentLessonType.length > 0 && appointmentLessonType !== "guida";
+    const isInstructorTypeAllowed = (type: string) => {
+      if (!enforceRequiredTypeSelection) return true;
+      if (compatibleMissingTypes.includes(type)) return true;
+      return isOwnerPresetType && type === appointmentLessonType;
     };
 
     if (nextStatus === "checked_in") {
@@ -1555,6 +1665,14 @@ export async function updateAutoscuolaAppointmentStatus(
           message: "Seleziona un tipo guida valido.",
         };
       }
+      if (!isInstructorTypeAllowed(resolvedLessonType)) {
+        return {
+          success: false,
+          message: `Seleziona un tipo guida compatibile (${formatLessonTypesList(
+            compatibleMissingTypes,
+          )}).`,
+        };
+      }
       updateData.type = resolvedLessonType;
     } else if (nextStatus === "no_show" && requestedLessonType) {
       if (!LESSON_TYPE_SET.has(requestedLessonType)) {
@@ -1563,12 +1681,28 @@ export async function updateAutoscuolaAppointmentStatus(
           message: "Tipo guida non valido.",
         };
       }
+      if (!isInstructorTypeAllowed(requestedLessonType)) {
+        return {
+          success: false,
+          message: `Tipo guida non compatibile (${formatLessonTypesList(
+            compatibleMissingTypes,
+          )}).`,
+        };
+      }
       updateData.type = requestedLessonType;
     } else if (
       payload.lessonType &&
       requestedLessonType &&
       LESSON_TYPE_SET.has(requestedLessonType)
     ) {
+      if (!isInstructorTypeAllowed(requestedLessonType)) {
+        return {
+          success: false,
+          message: `Tipo guida non compatibile (${formatLessonTypesList(
+            compatibleMissingTypes,
+          )}).`,
+        };
+      }
       updateData.type = requestedLessonType;
     }
 
@@ -1654,11 +1788,59 @@ export async function updateAutoscuolaAppointmentDetails(
     }
 
     const updateData: { type?: string; notes?: string | null } = {};
+    const appointmentLessonType = normalizeLessonType(appointment.type);
+    const appointmentEnd = computeAppointmentEnd({
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+    });
+    let enforceRequiredTypeSelection = false;
+    let compatibleMissingTypes: string[] = [];
+    const isInstructorRole =
+      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+
+    if (isInstructorRole) {
+      const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
+      if (
+        lessonPolicy.lessonPolicyEnabled &&
+        lessonPolicy.lessonRequiredTypesEnabled &&
+        lessonPolicy.lessonRequiredTypes.length
+      ) {
+        const coverage = await getStudentLessonPolicyCoverage({
+          companyId: membership.companyId,
+          studentId: appointment.studentId,
+          policy: lessonPolicy,
+        });
+        if (coverage.missingRequiredTypes.length) {
+          enforceRequiredTypeSelection = true;
+          compatibleMissingTypes = getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: appointment.startsAt,
+            endsAt: appointmentEnd,
+            candidateTypes: coverage.missingRequiredTypes,
+          });
+        }
+      }
+    }
+    const isOwnerPresetType =
+      appointmentLessonType.length > 0 && appointmentLessonType !== "guida";
+    const isInstructorTypeAllowed = (type: string) => {
+      if (!enforceRequiredTypeSelection) return true;
+      if (compatibleMissingTypes.includes(type)) return true;
+      return isOwnerPresetType && type === appointmentLessonType;
+    };
 
     if (payload.lessonType !== undefined) {
       const normalizedLessonType = normalizeLessonType(payload.lessonType);
       if (!normalizedLessonType || !LESSON_TYPE_SET.has(normalizedLessonType)) {
         return { success: false, message: "Tipo guida non valido." };
+      }
+      if (isInstructorRole && !isInstructorTypeAllowed(normalizedLessonType)) {
+        return {
+          success: false,
+          message: `Tipo guida non compatibile (${formatLessonTypesList(
+            compatibleMissingTypes,
+          )}).`,
+        };
       }
       updateData.type = normalizedLessonType;
     }
