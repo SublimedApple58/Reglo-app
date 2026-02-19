@@ -512,6 +512,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       lessonPolicy.lessonPolicyEnabled &&
       lessonPolicy.lessonRequiredTypesEnabled &&
       lessonPolicy.lessonRequiredTypes.length > 0;
+    const enforceLessonTypeTimeConstraints = lessonPolicy.lessonPolicyEnabled;
     const studentCoverage: {
       activeCaseId: string | null;
       completedTypes: Set<string>;
@@ -757,6 +758,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
         if (
+          enforceLessonTypeTimeConstraints &&
           requestedPolicyType &&
           !getCompatibleLessonTypesForInterval({
             policy: lessonPolicy,
@@ -886,7 +888,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         selectedStart,
       );
       if (!candidate) {
-        if (requestedPolicyType) {
+        if (requestedPolicyType && enforceLessonTypeTimeConstraints) {
           return {
             success: false,
             message: `Nessuno slot disponibile per il tipo guida ${getLessonPolicyTypeLabel(
@@ -1061,23 +1063,6 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     const request = await upsertBookingRequest("pending");
-
-    if (requestedPolicyType) {
-      return {
-        success: false,
-        message: `Nessuno slot disponibile per il tipo guida ${getLessonPolicyTypeLabel(
-          requestedPolicyType,
-        )}.`,
-      };
-    }
-
-    if (enforceRequiredTypes && missingRequiredTypes.length) {
-      const label = missingRequiredTypes.map((type) => getLessonPolicyTypeLabel(type)).join(", ");
-      return {
-        success: false,
-        message: `Nessuno slot compatibile con i tipi guida obbligatori mancanti (${label}).`,
-      };
-    }
 
     return {
       success: true,
