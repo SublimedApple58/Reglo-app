@@ -1609,49 +1609,26 @@ export async function broadcastWaitlistOffer({
   const title = "Reglo Autoscuole · Slot guida disponibile";
 
   if (channels.includes("push")) {
-    const emails = Array.from(
-      new Set(
-        availableStudents
-          .map((student) => student.user.email?.trim().toLowerCase())
-          .filter((email): email is string => Boolean(email)),
-      ),
+    const studentUserIds = Array.from(
+      new Set(availableStudents.map((student) => student.user.id)),
     );
 
-    if (emails.length) {
-      const members = await prisma.companyMember.findMany({
-        where: {
+    if (studentUserIds.length) {
+      try {
+        await sendAutoscuolaPushToUsers({
           companyId,
-          autoscuolaRole: "STUDENT",
-          user: { email: { in: emails } },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-            },
+          userIds: studentUserIds,
+          title,
+          body: message,
+          data: {
+            kind: "slot_fill_offer",
+            offerId: offer.id,
+            slotId: slot.id,
+            startsAt: slot.startsAt.toISOString(),
           },
-        },
-      });
-
-      const studentUserIds = members.map((member) => member.user.id);
-      if (studentUserIds.length) {
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId,
-            userIds: studentUserIds,
-            title,
-            body: message,
-            data: {
-              kind: "slot_fill_offer",
-              offerId: offer.id,
-              slotId: slot.id,
-              startsAt: slot.startsAt.toISOString(),
-            },
-          });
-        } catch (error) {
-          console.error("Waitlist push error", error);
-        }
+        });
+      } catch (error) {
+        console.error("Waitlist push error", error);
       }
     }
   }

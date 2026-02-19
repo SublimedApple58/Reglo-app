@@ -3,6 +3,7 @@
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
+import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
@@ -1248,6 +1249,63 @@ export async function cancelAutoscuolaAppointment(
       where: { id: appointment.id },
       data: { status: "cancelled", cancelledAt: new Date() },
     });
+
+    const cancelledByStudent = membership.userId === appointment.studentId;
+    if (!cancelledByStudent) {
+      const [studentUser, instructor] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: appointment.studentId },
+          select: { email: true, name: true },
+        }),
+        appointment.instructorId
+          ? prisma.autoscuolaInstructor.findFirst({
+              where: { id: appointment.instructorId, companyId: membership.companyId },
+              select: { name: true },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      const dateLabel = appointment.startsAt.toLocaleDateString("it-IT", {
+        timeZone: "Europe/Rome",
+      });
+      const timeLabel = appointment.startsAt.toLocaleTimeString("it-IT", {
+        timeZone: "Europe/Rome",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const title = "Reglo Autoscuole · Guida annullata";
+      const body = `La guida del ${dateLabel} alle ${timeLabel}${
+        instructor?.name ? ` con ${instructor.name}` : ""
+      } e stata annullata dall'autoscuola.`;
+
+      try {
+        await sendAutoscuolaPushToUsers({
+          companyId: membership.companyId,
+          userIds: [appointment.studentId],
+          title,
+          body,
+          data: {
+            kind: "appointment_cancelled",
+            appointmentId: appointment.id,
+            startsAt: appointment.startsAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        console.error("Appointment cancellation push error", error);
+      }
+
+      if (studentUser?.email) {
+        try {
+          await sendDynamicEmail({
+            to: studentUser.email,
+            subject: title,
+            body,
+          });
+        } catch (error) {
+          console.error("Appointment cancellation email error", error);
+        }
+      }
+    }
 
     if (appointment.slotId) {
       const now = new Date();
