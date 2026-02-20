@@ -38,7 +38,6 @@ export default defineConfig({
   },
   additionalFiles: [
     "node_modules/.prisma/client/**",
-    "node_modules/.pnpm/**/.prisma/client/**",
     "node_modules/@prisma/client/**",
     "prisma/schema.prisma",
     "prisma/migrations/**",

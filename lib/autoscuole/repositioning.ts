@@ -431,6 +431,10 @@ const findOperationalCandidate = async ({
   durationMinutes,
   earliestStartsAt,
   lessonType,
+  excludedStartsAt,
+  excludedEndsAt,
+  excludedInstructorId,
+  excludedVehicleId,
 }: {
   prisma: PrismaClientLike;
   companyId: string;
@@ -438,6 +442,10 @@ const findOperationalCandidate = async ({
   durationMinutes: number;
   earliestStartsAt: Date;
   lessonType: string;
+  excludedStartsAt?: Date | null;
+  excludedEndsAt?: Date | null;
+  excludedInstructorId?: string | null;
+  excludedVehicleId?: string | null;
 }) => {
   const [activeInstructors, activeVehicles, studentAvailability, autoscuolaService] =
     await Promise.all([
@@ -471,8 +479,16 @@ const findOperationalCandidate = async ({
     (autoscuolaService?.limits ?? {}) as Record<string, unknown>,
   );
 
-  const activeInstructorIds = activeInstructors.map((item) => item.id);
-  const activeVehicleIds = activeVehicles.map((item) => item.id);
+  const activeInstructorIds = activeInstructors
+    .map((item) => item.id)
+    .filter((id) => !excludedInstructorId || id !== excludedInstructorId);
+  const activeVehicleIds = activeVehicles
+    .map((item) => item.id)
+    .filter((id) => !excludedVehicleId || id !== excludedVehicleId);
+
+  if (!activeInstructorIds.length || !activeVehicleIds.length) {
+    return null;
+  }
 
   const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
     prisma.autoscuolaWeeklyAvailability.findMany({
@@ -538,6 +554,8 @@ const findOperationalCandidate = async ({
   } | null = null;
 
   const earliestRoundedMinutes = Math.ceil(minutesFromDate(earliest) / SLOT_MINUTES) * SLOT_MINUTES;
+  const excludedStartMs = excludedStartsAt?.getTime() ?? null;
+  const excludedEndMs = excludedEndsAt?.getTime() ?? null;
 
   for (let offset = 0; offset <= REPOSITION_MAX_DAYS; offset += 1) {
     const dayParts = addDaysToDateParts(startDay, offset);
@@ -579,6 +597,16 @@ const findOperationalCandidate = async ({
 
       const startMs = start.getTime();
       const endMs = end.getTime();
+
+      if (
+        excludedStartMs != null &&
+        excludedEndMs != null &&
+        startMs === excludedStartMs &&
+        endMs === excludedEndMs
+      ) {
+        continue;
+      }
+
       if (overlaps(studentIntervals, startMs, endMs)) continue;
 
       const candidateStartMinutes = minutesFromDate(start);
@@ -911,6 +939,13 @@ export async function attemptOperationalRepositionTask({
     SLOT_MINUTES,
     Math.round((getAppointmentEnd(source).getTime() - source.startsAt.getTime()) / 60000),
   );
+  const sourceEndsAt = getAppointmentEnd(source);
+  const reason = (task.reason ?? "").trim();
+  const excludeInstructor =
+    reason === "instructor_cancel" ||
+    reason === "instructor_inactive" ||
+    reason === "directory_instructor_removed";
+  const excludeVehicle = reason === "vehicle_inactive";
 
   const candidate = await findOperationalCandidate({
     prisma,
@@ -919,6 +954,10 @@ export async function attemptOperationalRepositionTask({
     durationMinutes,
     earliestStartsAt: now,
     lessonType: source.type,
+    excludedStartsAt: source.startsAt,
+    excludedEndsAt: sourceEndsAt,
+    excludedInstructorId: excludeInstructor ? source.instructorId : null,
+    excludedVehicleId: excludeVehicle ? source.vehicleId : null,
   });
 
   if (!candidate) {
