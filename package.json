@@ -44,7 +44,7 @@
     "@stripe/react-stripe-js": "^3.0.0",
     "@stripe/stripe-js": "^5.2.0",
     "@tabler/icons-react": "^3.34.0",
-    "@trigger.dev/sdk": "4.3.3",
+    "@trigger.dev/sdk": "4.4.0",
     "@upstash/redis": "^1.36.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
