@@ -11,6 +11,10 @@ import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communication
 import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
+  cancelAndQueueOperationalRepositionByResource,
+  queueOperationalRepositionForAppointment,
+} from "@/lib/autoscuole/repositioning";
+import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
@@ -79,6 +83,11 @@ const cancelAppointmentSchema = z.object({
 
 const deleteAppointmentSchema = z.object({
   appointmentId: z.string().uuid(),
+});
+
+const repositionAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+  reason: z.string().min(1).max(120).optional(),
 });
 
 const updateAppointmentStatusSchema = z.object({
@@ -162,6 +171,12 @@ const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
 const LESSON_TYPE_SET = new Set<string>(LESSON_TYPE_OPTIONS);
 const INSTRUCTOR_ALLOWED_STATUSES = new Set(["checked_in", "no_show"]);
 const DRIVING_LESSON_EXCLUDED_TYPES = new Set(["esame"]);
+const OPERATIONAL_REPOSITIONABLE_STATUSES = [
+  "scheduled",
+  "confirmed",
+  "proposal",
+  "checked_in",
+] as const;
 
 const normalizeStatus = (value: string) => value.trim().toLowerCase();
 const normalizeLessonType = (value: string | null | undefined) =>
@@ -1457,7 +1472,12 @@ export async function cancelAutoscuolaAppointment(
 
     await prisma.autoscuolaAppointment.update({
       where: { id: appointment.id },
-      data: { status: "cancelled", cancelledAt: new Date() },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancellationKind: "manual_cancel",
+        cancellationReason: "manual_cancel",
+      },
     });
 
     const cancelledByAutoscuola =
@@ -1673,6 +1693,105 @@ export async function cancelAutoscuolaAppointment(
   }
 }
 
+export async function cancelAndRepositionAutoscuolaAppointment(
+  input: z.infer<typeof repositionAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = repositionAppointmentSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+      select: {
+        id: true,
+        startsAt: true,
+        instructorId: true,
+        status: true,
+      },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+      const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: membership.userId,
+          status: { not: "inactive" },
+        },
+        select: { id: true },
+      });
+
+      if (!ownInstructor || appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi riposizionare solo le tue guide future.",
+        };
+      }
+    } else if (
+      membership.role !== "admin" &&
+      membership.autoscuolaRole !== "OWNER"
+    ) {
+      return {
+        success: false,
+        message: "Operazione non consentita.",
+      };
+    }
+
+    if (appointment.startsAt.getTime() <= Date.now()) {
+      return {
+        success: false,
+        message: "Puoi riposizionare solo appuntamenti futuri.",
+      };
+    }
+
+    const normalizedStatus = normalizeStatus(appointment.status);
+    if (["cancelled", "completed", "no_show"].includes(normalizedStatus)) {
+      return {
+        success: false,
+        message: "Appuntamento già chiuso.",
+      };
+    }
+
+    const reason =
+      payload.reason?.trim() ||
+      (membership.autoscuolaRole === "INSTRUCTOR"
+        ? "instructor_cancel"
+        : "owner_delete");
+
+    const response = await queueOperationalRepositionForAppointment({
+      companyId: membership.companyId,
+      appointmentId: appointment.id,
+      reason,
+      actorUserId: membership.userId,
+      attemptNow: true,
+    });
+
+    if (!response.success) {
+      return {
+        success: false,
+        message: response.message ?? "Impossibile avviare il riposizionamento.",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        queued: true,
+        proposalCreated: response.proposalCreated,
+        proposalStartsAt: response.proposalStartsAt,
+        taskId: response.taskId ?? undefined,
+      },
+      message: response.proposalCreated
+        ? "Guida cancellata e nuova proposta inviata all'allievo."
+        : "Guida cancellata. Ricerca nuovo slot in corso.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function getAutoscuolaPaymentsOverviewAction() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -1727,10 +1846,12 @@ export async function deleteAutoscuolaAppointment(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.role !== "admin") {
+    const canDelete =
+      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+    if (!canDelete) {
       return {
         success: false,
-        message: "Solo admin puo cancellare definitivamente un evento.",
+        message: "Solo admin o titolare possono cancellare e riposizionare un evento.",
       };
     }
 
@@ -1741,54 +1862,33 @@ export async function deleteAutoscuolaAppointment(
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
     }
-
-    if (appointment.slotId) {
-      const rangeEnd =
-        appointment.endsAt ??
-        new Date(appointment.startsAt.getTime() + 30 * 60 * 1000);
-      const ownerFilters = [
-        { ownerType: "student", ownerId: appointment.studentId },
-      ];
-      if (appointment.instructorId) {
-        ownerFilters.push({
-          ownerType: "instructor",
-          ownerId: appointment.instructorId,
-        });
-      }
-      if (appointment.vehicleId) {
-        ownerFilters.push({
-          ownerType: "vehicle",
-          ownerId: appointment.vehicleId,
-        });
-      }
-
-      await prisma.autoscuolaAvailabilitySlot.updateMany({
-        where: {
-          companyId: membership.companyId,
-          status: "booked",
-          startsAt: { gte: appointment.startsAt, lt: rangeEnd },
-          OR: ownerFilters,
-        },
-        data: { status: "open" },
-      });
-    }
-
-    await refundLessonCreditIfEligible({
+    const response = await queueOperationalRepositionForAppointment({
+      companyId: membership.companyId,
       appointmentId: appointment.id,
-      cancelledByAutoscuola: true,
+      reason: "owner_delete",
       actorUserId: membership.userId,
+      attemptNow: true,
     });
 
-    await prisma.autoscuolaAppointment.delete({
-      where: { id: appointment.id },
-    });
-
-    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    if (!response.success) {
+      return {
+        success: false,
+        message: response.message ?? "Impossibile cancellare e riposizionare.",
+      };
+    }
 
     return {
       success: true,
-      data: { deleted: true },
-      message: "Evento cancellato definitivamente.",
+      data: {
+        deleted: false,
+        queued: true,
+        proposalCreated: response.proposalCreated,
+        proposalStartsAt: response.proposalStartsAt,
+        taskId: response.taskId ?? undefined,
+      },
+      message: response.proposalCreated
+        ? "Evento cancellato e nuova proposta inviata all'allievo."
+        : "Evento cancellato. Ricerca nuovo slot in corso.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -1893,7 +1993,13 @@ export async function updateAutoscuolaAppointmentStatus(
         }
       }
     }
-    const updateData: { status: string; type?: string; cancelledAt?: Date | null } = {
+    const updateData: {
+      status: string;
+      type?: string;
+      cancelledAt?: Date | null;
+      cancellationKind?: string | null;
+      cancellationReason?: string | null;
+    } = {
       status: nextStatus,
     };
     const isOwnerPresetType =
@@ -1956,6 +2062,8 @@ export async function updateAutoscuolaAppointmentStatus(
     const wasCancelled = normalizeStatus(appointment.status) === "cancelled";
     if (nextStatus === "cancelled") {
       updateData.cancelledAt = appointment.cancelledAt ?? new Date();
+      updateData.cancellationKind = "manual_cancel";
+      updateData.cancellationReason = "manual_cancel";
     }
 
     const updated = await prisma.autoscuolaAppointment.update({
@@ -2288,6 +2396,29 @@ export async function updateAutoscuolaInstructor(
       },
     });
 
+    const shouldReposition =
+      (existing.status !== "inactive" && updated.status === "inactive") ||
+      (payload.userId !== undefined && payload.userId !== existing.userId);
+
+    if (shouldReposition) {
+      const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          instructorId: existing.id,
+          startsAt: { gt: new Date() },
+          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        },
+        select: { id: true },
+      });
+
+      await cancelAndQueueOperationalRepositionByResource({
+        companyId: membership.companyId,
+        appointmentIds: impactedAppointments.map((item) => item.id),
+        reason: updated.status === "inactive" ? "instructor_inactive" : "directory_instructor_removed",
+        actorUserId: membership.userId,
+      });
+    }
+
     await invalidateAutoscuoleCache({
       companyId: membership.companyId,
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
@@ -2323,6 +2454,28 @@ export async function updateAutoscuolaVehicle(
       },
     });
 
+    const shouldReposition =
+      existing.status !== "inactive" && updated.status === "inactive";
+
+    if (shouldReposition) {
+      const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          vehicleId: existing.id,
+          startsAt: { gt: new Date() },
+          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        },
+        select: { id: true },
+      });
+
+      await cancelAndQueueOperationalRepositionByResource({
+        companyId: membership.companyId,
+        appointmentIds: impactedAppointments.map((item) => item.id),
+        reason: "vehicle_inactive",
+        actorUserId: membership.userId,
+      });
+    }
+
     await invalidateAutoscuoleCache({
       companyId: membership.companyId,
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
@@ -2349,6 +2502,23 @@ export async function deactivateAutoscuolaVehicle(vehicleId: string) {
     const updated = await prisma.autoscuolaVehicle.update({
       where: { id: existing.id },
       data: { status: "inactive" },
+    });
+
+    const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: membership.companyId,
+        vehicleId: existing.id,
+        startsAt: { gt: new Date() },
+        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+      },
+      select: { id: true },
+    });
+
+    await cancelAndQueueOperationalRepositionByResource({
+      companyId: membership.companyId,
+      appointmentIds: impactedAppointments.map((item) => item.id),
+      reason: "vehicle_inactive",
+      actorUserId: membership.userId,
     });
 
     await invalidateAutoscuoleCache({

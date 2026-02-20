@@ -344,7 +344,19 @@ export function AutoscuoleAgendaPage({
       setPendingEventActionId(null);
       return;
     }
-    toast.success({ description: res.message ?? "Evento cancellato." });
+    if (res.data?.proposalCreated && res.data?.proposalStartsAt) {
+      toast.success({
+        description: `Guida riposizionata: proposta inviata per ${new Date(
+          res.data.proposalStartsAt,
+        ).toLocaleString("it-IT")}.`,
+      });
+    } else if (res.data?.queued) {
+      toast.info({
+        description: "Guida cancellata. Ricerca nuovo slot in corso.",
+      });
+    } else {
+      toast.success({ description: res.message ?? "Evento cancellato." });
+    }
     await load({ silent: true });
     setPendingEventActionId(null);
   };
@@ -822,7 +834,7 @@ export function AutoscuoleAgendaPage({
                                   disabled={isPendingAction}
                                   onClick={() => handleDelete(item.id)}
                                 >
-                                  Cancella definitivamente
+                                  Cancella e riposiziona
                                 </Button>
                               </DropdownMenuContent>
                             </DropdownMenu>

@@ -17,6 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
+import { cancelAndQueueOperationalRepositionByResource } from '@/lib/autoscuole/repositioning';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -393,6 +394,43 @@ export async function deleteUser(id: string) {
         });
       }
     });
+
+    if (targetMembership.autoscuolaRole === 'INSTRUCTOR') {
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: context.companyId,
+          userId: id,
+        },
+        select: { id: true },
+      });
+
+      if (instructor) {
+        await prisma.autoscuolaInstructor.update({
+          where: { id: instructor.id },
+          data: {
+            status: 'inactive',
+            userId: null,
+          },
+        });
+
+        const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId: context.companyId,
+            instructorId: instructor.id,
+            startsAt: { gt: new Date() },
+            status: { in: ['scheduled', 'confirmed', 'proposal', 'checked_in'] },
+          },
+          select: { id: true },
+        });
+
+        await cancelAndQueueOperationalRepositionByResource({
+          companyId: context.companyId,
+          appointmentIds: impactedAppointments.map((item) => item.id),
+          reason: 'directory_instructor_removed',
+          actorUserId: context.userId,
+        });
+      }
+    }
 
     revalidatePath('/admin/users');
 

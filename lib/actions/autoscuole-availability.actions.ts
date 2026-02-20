@@ -9,6 +9,7 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
+import { cancelAndQueueOperationalRepositionByResource } from "@/lib/autoscuole/repositioning";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -80,6 +81,12 @@ const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
+const OPERATIONAL_REPOSITIONABLE_STATUSES = [
+  "scheduled",
+  "confirmed",
+  "proposal",
+  "checked_in",
+] as const;
 const WEEKDAY_TO_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -343,6 +350,43 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
       },
     });
 
+    if (payload.ownerType === "instructor" || payload.ownerType === "vehicle") {
+      const ownerField =
+        payload.ownerType === "instructor"
+          ? { instructorId: payload.ownerId }
+          : { vehicleId: payload.ownerId };
+
+      const futureAppointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          startsAt: { gt: new Date() },
+          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+          ...ownerField,
+        },
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      });
+
+      const impactedIds = futureAppointments
+        .filter((appointment) => {
+          const end = appointment.endsAt ?? getSlotEnd(appointment.startsAt, SLOT_MINUTES);
+          return !isWeeklyAvailabilityCovering(availability, appointment.startsAt, end);
+        })
+        .map((appointment) => appointment.id);
+
+      if (impactedIds.length) {
+        await cancelAndQueueOperationalRepositionByResource({
+          companyId: membership.companyId,
+          appointmentIds: impactedIds,
+          reason: "availability_changed",
+          actorUserId: membership.userId,
+        });
+      }
+    }
+
     return { success: true, data: { count: availability ? 1 : 0 } };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -360,6 +404,32 @@ export async function deleteAvailabilitySlots(input: z.infer<typeof deleteSlotsS
         ownerId: payload.ownerId,
       },
     });
+
+    if (payload.ownerType === "instructor" || payload.ownerType === "vehicle") {
+      const ownerField =
+        payload.ownerType === "instructor"
+          ? { instructorId: payload.ownerId }
+          : { vehicleId: payload.ownerId };
+
+      const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          startsAt: { gt: new Date() },
+          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+          ...ownerField,
+        },
+        select: { id: true },
+      });
+
+      if (impactedAppointments.length) {
+        await cancelAndQueueOperationalRepositionByResource({
+          companyId: membership.companyId,
+          appointmentIds: impactedAppointments.map((item) => item.id),
+          reason: "availability_changed",
+          actorUserId: membership.userId,
+        });
+      }
+    }
 
     return { success: true, data: { count: deleted.count } };
   } catch (error) {

@@ -69,6 +69,8 @@ model User {
   autoscuolaLessonCreditLedgerStudent AutoscuolaStudentLessonCreditLedger[] @relation("AutoscuolaCreditLedgerStudent")
   autoscuolaLessonCreditLedgerActor AutoscuolaStudentLessonCreditLedger[] @relation("AutoscuolaCreditLedgerActor")
   autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
+  autoscuolaRepositionTasksStudent AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionTaskStudent")
+  autoscuolaRepositionTasksActor AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionTaskActor")
   autoscuolaMessageLogs AutoscuolaMessageLog[]
 }
 
@@ -210,6 +212,7 @@ model Company {
   autoscuolaLessonCreditBalances AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedger AutoscuolaStudentLessonCreditLedger[]
   autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
+  autoscuolaRepositionTasks AutoscuolaAppointmentRepositionTask[]
   autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
   autoscuolaMessageRules AutoscuolaMessageRule[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
@@ -449,6 +452,9 @@ model AutoscuolaAppointment {
   penaltyCutoffAt DateTime? @db.Timestamp(6)
   paidAmount Decimal @default(0) @db.Decimal(12, 2)
   cancelledAt DateTime? @db.Timestamp(6)
+  cancellationKind String?
+  cancellationReason String?
+  replacedByAppointmentId String? @db.Uuid
   invoiceId String?
   invoiceStatus String?
   creditApplied Boolean @default(false)
@@ -462,9 +468,13 @@ model AutoscuolaAppointment {
   slot      AutoscuolaAvailabilitySlot? @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor AutoscuolaInstructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle    AutoscuolaVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  replacedByAppointment AutoscuolaAppointment? @relation("AutoscuolaAppointmentReplacement", fields: [replacedByAppointmentId], references: [id], onDelete: SetNull)
+  replacedAppointments AutoscuolaAppointment[] @relation("AutoscuolaAppointmentReplacement")
   payments   AutoscuolaAppointmentPayment[]
   creditLedger AutoscuolaStudentLessonCreditLedger[]
   messageLogs AutoscuolaMessageLog[]
+  repositionTaskSource AutoscuolaAppointmentRepositionTask? @relation("AutoscuolaRepositionSource")
+  repositionTaskMatched AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionMatched")
 
   @@index([companyId])
   @@index([studentId])
@@ -480,6 +490,34 @@ model AutoscuolaAppointment {
   @@index([companyId, studentId, startsAt])
   @@index([companyId, paymentRequired, startsAt])
   @@index([companyId, studentId, creditApplied])
+  @@index([replacedByAppointmentId])
+  @@index([companyId, cancellationKind, startsAt])
+}
+
+model AutoscuolaAppointmentRepositionTask {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  sourceAppointmentId String @db.Uuid
+  studentId String   @db.Uuid
+  status    String   @default("pending")
+  reason    String
+  attemptCount Int   @default(0)
+  nextAttemptAt DateTime? @db.Timestamp(6)
+  lastAttemptAt DateTime? @db.Timestamp(6)
+  matchedAppointmentId String? @db.Uuid
+  createdByUserId String? @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sourceAppointment AutoscuolaAppointment @relation("AutoscuolaRepositionSource", fields: [sourceAppointmentId], references: [id], onDelete: Cascade)
+  matchedAppointment AutoscuolaAppointment? @relation("AutoscuolaRepositionMatched", fields: [matchedAppointmentId], references: [id], onDelete: SetNull)
+  student   User @relation("AutoscuolaRepositionTaskStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  createdByUser User? @relation("AutoscuolaRepositionTaskActor", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceAppointmentId])
+  @@index([companyId, status, nextAttemptAt])
+  @@index([studentId, status])
 }
 
 model AutoscuolaInstructor {

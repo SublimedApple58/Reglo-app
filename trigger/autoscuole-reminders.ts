@@ -10,6 +10,7 @@ import {
   processAutoscuolaPaymentRetries,
   processAutoscuolaInvoiceFinalization,
 } from "@/lib/autoscuole/communications";
+import { processAutoscuolaPendingRepositions } from "@/lib/autoscuole/repositioning";
 
 export const autoscuoleReminders = schedules.task({
   id: "autoscuole-reminders",
@@ -21,6 +22,7 @@ export const autoscuoleReminders = schedules.task({
     await processAutoscuolaLessonSettlement({ prisma });
     await processAutoscuolaPaymentRetries({ prisma });
     await processAutoscuolaInvoiceFinalization({ prisma });
+    await processAutoscuolaPendingRepositions({ prisma, limit: 50 });
     await processAutoscuolaConfiguredAppointmentReminders({ prisma });
     await processAutoscuolaAppointmentReminders({ prisma });
     await processAutoscuolaCaseDeadlines({ prisma });
