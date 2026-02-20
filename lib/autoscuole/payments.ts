@@ -755,7 +755,9 @@ const consumeLessonCreditIfAvailable = async ({
       companyId,
       studentId,
       balanceId: balance.id,
-      appointmentId: appointmentId ?? null,
+      // Booking flow computes the snapshot before the appointment row exists.
+      // Keep appointmentId null here to avoid FK violations on immediate checks.
+      appointmentId: null,
       delta: -1,
       reason: "booking_consume",
       actorUserId: actorUserId ?? null,
