@@ -65,6 +65,9 @@ model User {
   autoscuolaDocuments AutoscuolaDocument[]
   autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles AutoscuolaStudentPaymentProfile[]
+  autoscuolaLessonCreditBalances AutoscuolaStudentLessonCreditBalance[]
+  autoscuolaLessonCreditLedgerStudent AutoscuolaStudentLessonCreditLedger[] @relation("AutoscuolaCreditLedgerStudent")
+  autoscuolaLessonCreditLedgerActor AutoscuolaStudentLessonCreditLedger[] @relation("AutoscuolaCreditLedgerActor")
   autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
 }
@@ -204,6 +207,8 @@ model Company {
   autoscuolaDocuments AutoscuolaDocument[]
   autoscuolaPaymentPlans AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles AutoscuolaStudentPaymentProfile[]
+  autoscuolaLessonCreditBalances AutoscuolaStudentLessonCreditBalance[]
+  autoscuolaLessonCreditLedger AutoscuolaStudentLessonCreditLedger[]
   autoscuolaAppointmentPayments AutoscuolaAppointmentPayment[]
   autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
   autoscuolaMessageRules AutoscuolaMessageRule[]
@@ -446,6 +451,8 @@ model AutoscuolaAppointment {
   cancelledAt DateTime? @db.Timestamp(6)
   invoiceId String?
   invoiceStatus String?
+  creditApplied Boolean @default(false)
+  creditRefundedAt DateTime? @db.Timestamp(6)
   createdAt DateTime @default(now()) @db.Timestamp(6)
   updatedAt DateTime @updatedAt
 
@@ -456,6 +463,7 @@ model AutoscuolaAppointment {
   instructor AutoscuolaInstructor? @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle    AutoscuolaVehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   payments   AutoscuolaAppointmentPayment[]
+  creditLedger AutoscuolaStudentLessonCreditLedger[]
   messageLogs AutoscuolaMessageLog[]
 
   @@index([companyId])
@@ -471,6 +479,7 @@ model AutoscuolaAppointment {
   @@index([companyId, instructorId, startsAt])
   @@index([companyId, studentId, startsAt])
   @@index([companyId, paymentRequired, startsAt])
+  @@index([companyId, studentId, creditApplied])
 }
 
 model AutoscuolaInstructor {
@@ -670,6 +679,44 @@ model AutoscuolaStudentPaymentProfile {
   @@unique([companyId, studentId])
   @@index([companyId])
   @@index([studentId])
+}
+
+model AutoscuolaStudentLessonCreditBalance {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  availableCredits Int @default(0)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   User @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  ledger    AutoscuolaStudentLessonCreditLedger[]
+
+  @@unique([companyId, studentId])
+  @@index([companyId])
+  @@index([studentId])
+}
+
+model AutoscuolaStudentLessonCreditLedger {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  studentId String   @db.Uuid
+  balanceId String   @db.Uuid
+  appointmentId String? @db.Uuid
+  delta     Int
+  reason    String
+  actorUserId String? @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student   User @relation("AutoscuolaCreditLedgerStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  balance   AutoscuolaStudentLessonCreditBalance @relation(fields: [balanceId], references: [id], onDelete: Cascade)
+  appointment AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  actor     User? @relation("AutoscuolaCreditLedgerActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, studentId, createdAt])
+  @@index([appointmentId])
 }
 
 model AutoscuolaAppointmentPayment {

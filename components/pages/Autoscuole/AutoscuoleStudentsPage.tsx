@@ -22,7 +22,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
+  adjustAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentDrivingRegister,
+  getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -80,6 +82,20 @@ type StudentRegister = {
   }>;
 };
 
+type StudentCredits = {
+  student: StudentProfile;
+  availableCredits: number;
+  ledger: Array<{
+    id: string;
+    appointmentId: string | null;
+    delta: number;
+    reason: string;
+    actorUserId: string | null;
+    actorName: string | null;
+    createdAt: string | Date;
+  }>;
+};
+
 const LESSON_TYPE_LABELS: Record<string, string> = {
   manovre: "Manovre",
   urbano: "Urbano",
@@ -112,6 +128,16 @@ const formatLessonType = (value: string) =>
 
 const formatStatus = (value: string) =>
   STATUS_LABELS[value] ?? formatLabel(value);
+
+const CREDIT_REASON_LABELS: Record<string, string> = {
+  manual_grant: "Assegnazione manuale",
+  manual_revoke: "Storno manuale",
+  booking_consume: "Prenotazione guida",
+  cancel_refund: "Rimborso annullamento",
+};
+
+const formatCreditReason = (value: string) =>
+  CREDIT_REASON_LABELS[value] ?? formatLabel(value);
 
 const formatDate = (value: string | Date, withTime = false) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -147,6 +173,11 @@ export function AutoscuoleStudentsPage({
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const registerRequestRef = React.useRef(0);
+  const [credits, setCredits] = React.useState<StudentCredits | null>(null);
+  const [creditsLoading, setCreditsLoading] = React.useState(false);
+  const [creditsSaving, setCreditsSaving] = React.useState<"grant" | "revoke" | null>(null);
+  const [creditsInput, setCreditsInput] = React.useState("1");
+  const creditsRequestRef = React.useRef(0);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -186,6 +217,60 @@ export function AutoscuoleStudentsPage({
       setRegisterLoading(false);
     },
     [toast],
+  );
+
+  const loadCredits = React.useCallback(
+    async (studentId: string) => {
+      const requestId = creditsRequestRef.current + 1;
+      creditsRequestRef.current = requestId;
+      setCreditsLoading(true);
+      setCredits(null);
+      const res = await getAutoscuolaStudentLessonCredits(studentId);
+      if (requestId !== creditsRequestRef.current) return;
+      if (!res.success || !res.data) {
+        toast.error({
+          description: res.message ?? "Impossibile caricare i crediti guida.",
+        });
+        setCreditsLoading(false);
+        return;
+      }
+      setCredits(res.data as StudentCredits);
+      setCreditsLoading(false);
+    },
+    [toast],
+  );
+
+  const handleAdjustCredits = React.useCallback(
+    async (direction: "grant" | "revoke") => {
+      if (!selectedStudentId || creditsSaving) return;
+      const parsedValue = Number(creditsInput);
+      if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+        toast.error({ description: "Inserisci un numero crediti valido." });
+        return;
+      }
+      const delta = Math.max(1, Math.trunc(parsedValue));
+      setCreditsSaving(direction);
+      const res = await adjustAutoscuolaStudentLessonCredits({
+        studentId: selectedStudentId,
+        delta,
+        reason: direction === "grant" ? "manual_grant" : "manual_revoke",
+      });
+      if (!res.success || !res.data) {
+        toast.error({
+          description: res.message ?? "Impossibile aggiornare i crediti.",
+        });
+        setCreditsSaving(null);
+        return;
+      }
+      toast.success({
+        description:
+          res.message ??
+          (direction === "grant" ? "Crediti assegnati." : "Crediti stornati."),
+      });
+      await loadCredits(selectedStudentId);
+      setCreditsSaving(null);
+    },
+    [creditsInput, creditsSaving, loadCredits, selectedStudentId, toast],
   );
 
   React.useEffect(() => {
@@ -284,6 +369,7 @@ export function AutoscuoleStudentsPage({
                           setSelectedStudentId(student.id);
                           setDrawerOpen(true);
                           void loadRegister(student.id);
+                          void loadCredits(student.id);
                         }}
                       >
                         Dettaglio
@@ -313,6 +399,11 @@ export function AutoscuoleStudentsPage({
             setSelectedStudentId(null);
             setRegister(null);
             setRegisterLoading(false);
+            creditsRequestRef.current += 1;
+            setCredits(null);
+            setCreditsLoading(false);
+            setCreditsSaving(null);
+            setCreditsInput("1");
           }
         }}
       >
@@ -363,6 +454,84 @@ export function AutoscuoleStudentsPage({
                       </p>
                     </div>
                   </div>
+                </section>
+
+                <section className="glass-panel glass-strong space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    Crediti guida
+                  </p>
+                  {creditsLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-6 w-28 rounded-full" />
+                      <Skeleton className="h-10 w-full rounded-xl" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground">Saldo disponibile</p>
+                          <p className="text-2xl font-semibold text-foreground">
+                            {credits?.availableCredits ?? 0}
+                          </p>
+                        </div>
+                        <Badge variant="outline">
+                          {credits?.availableCredits ?? 0} crediti
+                        </Badge>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={creditsInput}
+                          onChange={(event) => setCreditsInput(event.target.value)}
+                          className="border-white/60 bg-white/80"
+                          placeholder="Crediti"
+                        />
+                        <Button
+                          onClick={() => void handleAdjustCredits("grant")}
+                          disabled={creditsSaving !== null}
+                        >
+                          {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => void handleAdjustCredits("revoke")}
+                          disabled={creditsSaving !== null}
+                        >
+                          {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
+                        </Button>
+                      </div>
+                      {credits?.ledger.length ? (
+                        <div className="space-y-2">
+                          {credits.ledger.slice(0, 8).map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 p-3"
+                            >
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium text-foreground">
+                                  {formatCreditReason(entry.reason)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {formatDate(entry.createdAt, true)}
+                                  {entry.actorName ? ` · ${entry.actorName}` : ""}
+                                </p>
+                              </div>
+                              <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
+                                {entry.delta >= 0 ? "+" : ""}
+                                {entry.delta}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Nessun movimento crediti disponibile.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </section>
 
                 <section className="glass-panel glass-strong space-y-3 p-4">

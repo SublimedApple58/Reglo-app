@@ -40,7 +40,14 @@ type AppointmentPricingSnapshot = {
   penaltyCutoffAt: Date | null;
   paidAmount: Prisma.Decimal;
   invoiceStatus: string | null;
+  creditApplied: boolean;
 };
+
+export type LessonCreditLedgerReason =
+  | "manual_grant"
+  | "manual_revoke"
+  | "booking_consume"
+  | "cancel_refund";
 
 let stripeSingleton: Stripe | null = null;
 
@@ -665,20 +672,333 @@ const resolveStudentPaymentMethod = async ({
   return paymentMethodId;
 };
 
+const getOrCreateStudentLessonCreditBalance = async ({
+  prisma,
+  companyId,
+  studentId,
+}: {
+  prisma: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+}) => {
+  const existing = await prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+    where: {
+      companyId_studentId: {
+        companyId,
+        studentId,
+      },
+    },
+  });
+  if (existing) return existing;
+  return prisma.autoscuolaStudentLessonCreditBalance.create({
+    data: {
+      companyId,
+      studentId,
+      availableCredits: 0,
+    },
+  });
+};
+
+const consumeLessonCreditIfAvailable = async ({
+  prisma,
+  companyId,
+  studentId,
+  appointmentId,
+  actorUserId,
+}: {
+  prisma: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  appointmentId?: string | null;
+  actorUserId?: string | null;
+}) => {
+  const balance = await getOrCreateStudentLessonCreditBalance({
+    prisma,
+    companyId,
+    studentId,
+  });
+  if (balance.availableCredits <= 0) {
+    return {
+      consumed: false,
+      availableCredits: 0,
+    };
+  }
+
+  const decremented = await prisma.autoscuolaStudentLessonCreditBalance.updateMany({
+    where: {
+      id: balance.id,
+      availableCredits: { gt: 0 },
+    },
+    data: {
+      availableCredits: { decrement: 1 },
+    },
+  });
+
+  if (!decremented.count) {
+    const latest = await prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+      where: { id: balance.id },
+      select: { availableCredits: true },
+    });
+    return {
+      consumed: false,
+      availableCredits: Math.max(0, latest?.availableCredits ?? 0),
+    };
+  }
+
+  const updatedBalance = await prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+    where: { id: balance.id },
+    select: { availableCredits: true },
+  });
+
+  await prisma.autoscuolaStudentLessonCreditLedger.create({
+    data: {
+      companyId,
+      studentId,
+      balanceId: balance.id,
+      appointmentId: appointmentId ?? null,
+      delta: -1,
+      reason: "booking_consume",
+      actorUserId: actorUserId ?? null,
+    },
+  });
+
+  return {
+    consumed: true,
+    availableCredits: Math.max(0, updatedBalance?.availableCredits ?? 0),
+  };
+};
+
+export async function getStudentLessonCredits({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  limit = 20,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  limit?: number;
+}) {
+  const normalizedLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  const [balance, ledger] = await Promise.all([
+    prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+      where: {
+        companyId_studentId: {
+          companyId,
+          studentId,
+        },
+      },
+      select: {
+        availableCredits: true,
+      },
+    }),
+    prisma.autoscuolaStudentLessonCreditLedger.findMany({
+      where: {
+        companyId,
+        studentId,
+      },
+      select: {
+        id: true,
+        appointmentId: true,
+        delta: true,
+        reason: true,
+        actorUserId: true,
+        actor: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: normalizedLimit,
+    }),
+  ]);
+
+  return {
+    availableCredits: Math.max(0, balance?.availableCredits ?? 0),
+    ledger,
+  };
+}
+
+export async function adjustStudentLessonCredits({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  delta,
+  reason,
+  actorUserId,
+  appointmentId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  delta: number;
+  reason: LessonCreditLedgerReason;
+  actorUserId?: string | null;
+  appointmentId?: string | null;
+}) {
+  if (!Number.isInteger(delta) || delta === 0) {
+    throw new Error("Delta crediti non valido.");
+  }
+
+  const balance = await getOrCreateStudentLessonCreditBalance({
+    prisma,
+    companyId,
+    studentId,
+  });
+
+  const appliedDelta =
+    delta > 0
+      ? delta
+      : -Math.min(Math.max(0, balance.availableCredits), Math.abs(delta));
+
+  if (appliedDelta === 0) {
+    return {
+      appliedDelta: 0,
+      availableCredits: Math.max(0, balance.availableCredits),
+    };
+  }
+
+  const updated = await prisma.autoscuolaStudentLessonCreditBalance.update({
+    where: { id: balance.id },
+    data: {
+      availableCredits: { increment: appliedDelta },
+    },
+    select: {
+      availableCredits: true,
+    },
+  });
+
+  await prisma.autoscuolaStudentLessonCreditLedger.create({
+    data: {
+      companyId,
+      studentId,
+      balanceId: balance.id,
+      appointmentId: appointmentId ?? null,
+      delta: appliedDelta,
+      reason,
+      actorUserId: actorUserId ?? null,
+    },
+  });
+
+  return {
+    appliedDelta,
+    availableCredits: Math.max(0, updated.availableCredits),
+  };
+}
+
+export async function refundLessonCreditIfEligible({
+  prisma = defaultPrisma,
+  appointmentId,
+  cancelledByAutoscuola,
+  actorUserId,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  appointmentId: string;
+  cancelledByAutoscuola: boolean;
+  actorUserId?: string | null;
+  now?: Date;
+}) {
+  const appointment = await prisma.autoscuolaAppointment.findUnique({
+    where: { id: appointmentId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      status: true,
+      creditApplied: true,
+      creditRefundedAt: true,
+      penaltyCutoffAt: true,
+      cancelledAt: true,
+    },
+  });
+
+  if (!appointment || !appointment.creditApplied || appointment.creditRefundedAt) {
+    return { refunded: false, reason: "not_eligible" as const };
+  }
+
+  const status = normalizeStatus(appointment.status);
+  if (status === "no_show") {
+    return { refunded: false, reason: "no_show" as const };
+  }
+
+  const cancelledAt = appointment.cancelledAt ?? now;
+  const cancelledBeforeCutoff =
+    appointment.penaltyCutoffAt != null &&
+    cancelledAt.getTime() < appointment.penaltyCutoffAt.getTime();
+  const shouldRefund = cancelledByAutoscuola || cancelledBeforeCutoff;
+  if (!shouldRefund) {
+    return { refunded: false, reason: "late_cancel" as const };
+  }
+
+  const executeRefund = async (tx: PrismaClientLike) => {
+    const markRefunded = await tx.autoscuolaAppointment.updateMany({
+      where: {
+        id: appointment.id,
+        creditApplied: true,
+        creditRefundedAt: null,
+      },
+      data: {
+        creditRefundedAt: now,
+      },
+    });
+
+    if (!markRefunded.count) {
+      return { refunded: false, reason: "already_refunded" as const };
+    }
+
+    const adjustment = await adjustStudentLessonCredits({
+      prisma: tx as never,
+      companyId: appointment.companyId,
+      studentId: appointment.studentId,
+      delta: 1,
+      reason: "cancel_refund",
+      actorUserId: actorUserId ?? null,
+      appointmentId: appointment.id,
+    });
+
+    return {
+      refunded: true,
+      reason: "refunded" as const,
+      availableCredits: adjustment.availableCredits,
+    };
+  };
+
+  if (
+    "$transaction" in prisma &&
+    typeof prisma.$transaction === "function"
+  ) {
+    return prisma.$transaction(async (tx) => executeRefund(tx as never));
+  }
+
+  return executeRefund(prisma);
+}
+
 export async function prepareAppointmentPaymentSnapshot({
   prisma = defaultPrisma,
   companyId,
   studentId,
   startsAt,
   endsAt,
+  appointmentId,
+  actorUserId,
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
   studentId: string;
   startsAt: Date;
   endsAt: Date | null;
+  appointmentId?: string | null;
+  actorUserId?: string | null;
 }): Promise<AppointmentPricingSnapshot> {
   const config = await getAutoscuolaPaymentConfig({ prisma, companyId });
+  const duration = computeDurationMinutes(startsAt, endsAt);
+  const lessonPrice = duration >= 60 ? config.lessonPrice60 : config.lessonPrice30;
+  const penaltyAmount = roundAmount((lessonPrice * config.penaltyPercent) / 100);
+  const penaltyCutoffAt = new Date(startsAt.getTime() - config.penaltyCutoffHours * 60 * 60 * 1000);
   if (!config.enabled) {
     return {
       paymentRequired: false,
@@ -688,9 +1008,9 @@ export async function prepareAppointmentPaymentSnapshot({
       penaltyCutoffAt: null,
       paidAmount: toDecimal(0),
       invoiceStatus: null,
+      creditApplied: false,
     };
   }
-  await getAutoscuolaStripeDestinationAccountId({ prisma, companyId });
 
   const insoluti = await prisma.autoscuolaAppointment.count({
     where: {
@@ -704,6 +1024,28 @@ export async function prepareAppointmentPaymentSnapshot({
   if (insoluti > 0) {
     throw new Error("Hai pagamenti insoluti. Salda prima di prenotare una nuova guida.");
   }
+
+  const creditConsumption = await consumeLessonCreditIfAvailable({
+    prisma,
+    companyId,
+    studentId,
+    appointmentId,
+    actorUserId,
+  });
+  if (creditConsumption.consumed) {
+    return {
+      paymentRequired: false,
+      paymentStatus: "not_required",
+      priceAmount: toDecimal(lessonPrice),
+      penaltyAmount: toDecimal(0),
+      penaltyCutoffAt,
+      paidAmount: toDecimal(0),
+      invoiceStatus: "not_required",
+      creditApplied: true,
+    };
+  }
+
+  await getAutoscuolaStripeDestinationAccountId({ prisma, companyId });
 
   const profile = await getOrCreateStudentPaymentProfile({ prisma, companyId, studentId });
   const paymentMethodId = await resolveStudentPaymentMethod({
@@ -731,11 +1073,6 @@ export async function prepareAppointmentPaymentSnapshot({
     );
   }
 
-  const duration = computeDurationMinutes(startsAt, endsAt);
-  const lessonPrice = duration >= 60 ? config.lessonPrice60 : config.lessonPrice30;
-  const penaltyAmount = roundAmount((lessonPrice * config.penaltyPercent) / 100);
-  const penaltyCutoffAt = new Date(startsAt.getTime() - config.penaltyCutoffHours * 60 * 60 * 1000);
-
   return {
     paymentRequired: true,
     paymentStatus: "pending_penalty",
@@ -744,6 +1081,7 @@ export async function prepareAppointmentPaymentSnapshot({
     penaltyCutoffAt,
     paidAmount: toDecimal(0),
     invoiceStatus: "pending",
+    creditApplied: false,
   };
 }
 
@@ -1629,7 +1967,7 @@ export async function getMobileStudentPaymentProfile({
   companyId: string;
   studentId: string;
 }) {
-  const [config, profile, insoluti] = await Promise.all([
+  const [config, profile, insoluti, creditsBalance] = await Promise.all([
     getAutoscuolaPaymentConfig({ prisma, companyId }),
     prisma.autoscuolaStudentPaymentProfile.findUnique({
       where: {
@@ -1659,6 +1997,17 @@ export async function getMobileStudentPaymentProfile({
       },
       orderBy: { startsAt: "asc" },
       take: 10,
+    }),
+    prisma.autoscuolaStudentLessonCreditBalance.findUnique({
+      where: {
+        companyId_studentId: {
+          companyId,
+          studentId,
+        },
+      },
+      select: {
+        availableCredits: true,
+      },
     }),
   ]);
 
@@ -1707,6 +2056,7 @@ export async function getMobileStudentPaymentProfile({
     paymentMethod: paymentMethodSummary,
     blockedByInsoluti: outstanding.length > 0,
     outstanding,
+    lessonCreditsAvailable: Math.max(0, creditsBalance?.availableCredits ?? 0),
   };
 }
 

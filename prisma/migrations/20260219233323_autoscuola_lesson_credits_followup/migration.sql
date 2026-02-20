@@ -1,0 +1,2 @@
+-- RenameIndex
+ALTER INDEX "AutoscuolaStudentLessonCreditLedger_companyId_studentId_created" RENAME TO "AutoscuolaStudentLessonCreditLedger_companyId_studentId_cre_idx";

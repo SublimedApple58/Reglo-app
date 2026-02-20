@@ -906,14 +906,18 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         return { success: false, message: "Slot non disponibile." };
       }
 
-      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
-        companyId: membership.companyId,
-        studentId: payload.studentId,
-        startsAt: candidate.start,
-        endsAt: candidate.end,
-      });
-
+      const appointmentId = randomUUID();
       const appointment = await prisma.$transaction(async (tx) => {
+        const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+          prisma: tx as never,
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          startsAt: candidate.start,
+          endsAt: candidate.end,
+          appointmentId,
+          actorUserId: membership.userId,
+        });
+
         const studentSlot = await tx.autoscuolaAvailabilitySlot.upsert({
           where: {
             companyId_ownerType_ownerId_startsAt: {
@@ -997,6 +1001,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
         return tx.autoscuolaAppointment.create({
           data: {
+            id: appointmentId,
             companyId: membership.companyId,
             studentId: payload.studentId,
             type: candidate.resolvedLessonType,
@@ -1013,6 +1018,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
             paidAmount: paymentSnapshot.paidAmount,
             invoiceStatus: paymentSnapshot.invoiceStatus,
+            creditApplied: paymentSnapshot.creditApplied,
           },
         });
       });
@@ -1290,6 +1296,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       return { success: false, message: "Slot non disponibile." };
     }
 
+    const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
       const response = await tx.autoscuolaWaitlistResponse.create({
         data: {
@@ -1333,6 +1340,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
 
       const appointment = await tx.autoscuolaAppointment.create({
         data: {
+          id: appointmentId,
           companyId: membership.companyId,
           studentId: payload.studentId,
           type:
@@ -1351,6 +1359,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
             studentId: payload.studentId,
             startsAt: offer.slot.startsAt,
             endsAt: offer.slot.endsAt,
+            appointmentId,
+            actorUserId: membership.userId,
           })),
         },
       });

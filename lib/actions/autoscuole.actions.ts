@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
@@ -15,10 +16,13 @@ import {
 } from "@/lib/autoscuole/cache";
 import {
   processAutoscuolaAppointmentSettlementNow,
+  adjustStudentLessonCredits,
   getAutoscuolaPaymentAppointmentLogs,
   getAutoscuolaPaymentsAppointments,
   getAutoscuolaPaymentsOverview,
+  getStudentLessonCredits,
   prepareAppointmentPaymentSnapshot,
+  refundLessonCreditIfEligible,
 } from "@/lib/autoscuole/payments";
 import {
   LESSON_ALL_ALLOWED_TYPES,
@@ -115,6 +119,14 @@ const updateVehicleSchema = z.object({
   status: z.string().optional(),
 });
 
+const adjustStudentLessonCreditsSchema = z.object({
+  studentId: z.string().uuid(),
+  delta: z.number().int().refine((value) => value !== 0, {
+    message: "Delta crediti non valido.",
+  }),
+  reason: z.enum(["manual_grant", "manual_revoke"]),
+});
+
 const importStudentsSchema = z.object({
   rows: z.array(
     z.object({
@@ -137,6 +149,13 @@ const ensureAutoscuolaRole = (
     throw new Error("Operazione non consentita.");
   }
 };
+
+const canManageStudentCredits = (membership: {
+  role: string;
+  autoscuolaRole: string | null;
+}) =>
+  membership.role === "admin" ||
+  membership.autoscuolaRole === "OWNER";
 
 const REQUIRED_LESSONS_COUNT = 10;
 const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
@@ -888,6 +907,118 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
   }
 }
 
+export async function getAutoscuolaStudentLessonCredits(studentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const studentMembership = await prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        autoscuolaRole: "STUDENT",
+        userId: studentId,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    if (!studentMembership) {
+      return { success: false, message: "Allievo non trovato." };
+    }
+
+    const credits = await getStudentLessonCredits({
+      companyId,
+      studentId,
+      limit: 30,
+    });
+
+    return {
+      success: true,
+      data: {
+        student: toStudentProfile(studentMembership.user, studentMembership.createdAt),
+        availableCredits: credits.availableCredits,
+        ledger: credits.ledger.map((entry) => ({
+          ...entry,
+          actorName: entry.actor?.name ?? null,
+        })),
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function adjustAutoscuolaStudentLessonCredits(
+  input: z.infer<typeof adjustStudentLessonCreditsSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const payload = adjustStudentLessonCreditsSchema.parse(input);
+    const studentMembership = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        autoscuolaRole: "STUDENT",
+        userId: payload.studentId,
+      },
+      select: {
+        userId: true,
+      },
+    });
+
+    if (!studentMembership) {
+      return { success: false, message: "Allievo non trovato." };
+    }
+
+    const normalizedDelta = payload.reason === "manual_grant"
+      ? Math.abs(payload.delta)
+      : -Math.abs(payload.delta);
+
+    const result = await adjustStudentLessonCredits({
+      companyId: membership.companyId,
+      studentId: payload.studentId,
+      delta: normalizedDelta,
+      reason: payload.reason,
+      actorUserId: membership.userId,
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [
+        AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+        AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+      ],
+    });
+
+    return {
+      success: true,
+      data: {
+        availableCredits: result.availableCredits,
+        appliedDelta: result.appliedDelta,
+      },
+      message:
+        result.appliedDelta === 0 && payload.reason === "manual_revoke"
+          ? "Nessun credito disponibile da stornare."
+          : payload.reason === "manual_grant"
+            ? "Crediti assegnati."
+            : "Crediti stornati.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function createAutoscuolaStudent(input: z.infer<typeof createStudentSchema>) {
   try {
     await requireServiceAccess("AUTOSCUOLE");
@@ -1176,13 +1307,6 @@ export async function createAutoscuolaAppointment(
       warnings.push("Il tipo guida selezionato è fuori dalla finestra configurata.");
     }
 
-    const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
-      companyId,
-      studentId: payload.studentId,
-      startsAt: slotTime,
-      endsAt: slotEnd,
-    });
-
     const scanStart = new Date(slotTime);
     scanStart.setDate(scanStart.getDate() - 1);
     const scanEnd = new Date(slotEnd);
@@ -1211,26 +1335,41 @@ export async function createAutoscuolaAppointment(
       };
     }
 
-    const appointment = await prisma.autoscuolaAppointment.create({
-      data: {
+    const appointmentId = randomUUID();
+    const appointment = await prisma.$transaction(async (tx) => {
+      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+        prisma: tx as never,
         companyId,
         studentId: payload.studentId,
-        caseId: payload.caseId || null,
-        type: resolvedType,
         startsAt: slotTime,
         endsAt: slotEnd,
-        status: payload.status ?? (payload.sendProposal ? "proposal" : "scheduled"),
-        instructorId: payload.instructorId,
-        vehicleId: payload.vehicleId,
-        notes: payload.notes ?? null,
-        paymentRequired: paymentSnapshot.paymentRequired,
-        paymentStatus: paymentSnapshot.paymentStatus,
-        priceAmount: paymentSnapshot.priceAmount,
-        penaltyAmount: paymentSnapshot.penaltyAmount,
-        penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
-        paidAmount: paymentSnapshot.paidAmount,
-        invoiceStatus: paymentSnapshot.invoiceStatus,
-      },
+        appointmentId,
+        actorUserId: membership.userId,
+      });
+
+      return tx.autoscuolaAppointment.create({
+        data: {
+          id: appointmentId,
+          companyId,
+          studentId: payload.studentId,
+          caseId: payload.caseId || null,
+          type: resolvedType,
+          startsAt: slotTime,
+          endsAt: slotEnd,
+          status: payload.status ?? (payload.sendProposal ? "proposal" : "scheduled"),
+          instructorId: payload.instructorId,
+          vehicleId: payload.vehicleId,
+          notes: payload.notes ?? null,
+          paymentRequired: paymentSnapshot.paymentRequired,
+          paymentStatus: paymentSnapshot.paymentStatus,
+          priceAmount: paymentSnapshot.priceAmount,
+          penaltyAmount: paymentSnapshot.penaltyAmount,
+          penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
+          paidAmount: paymentSnapshot.paidAmount,
+          invoiceStatus: paymentSnapshot.invoiceStatus,
+          creditApplied: paymentSnapshot.creditApplied,
+        },
+      });
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
@@ -1319,6 +1458,17 @@ export async function cancelAutoscuolaAppointment(
     await prisma.autoscuolaAppointment.update({
       where: { id: appointment.id },
       data: { status: "cancelled", cancelledAt: new Date() },
+    });
+
+    const cancelledByAutoscuola =
+      membership.role === "admin" ||
+      membership.autoscuolaRole === "OWNER" ||
+      membership.autoscuolaRole === "INSTRUCTOR";
+
+    await refundLessonCreditIfEligible({
+      appointmentId: appointment.id,
+      cancelledByAutoscuola,
+      actorUserId: membership.userId,
     });
 
     await notifyStudentAppointmentCancelled({
@@ -1475,33 +1625,41 @@ export async function cancelAutoscuolaAppointment(
         appointment.startsAt.getTime(),
     );
     const newEndsAt = new Date(newStartsAt.getTime() + originalDurationMs);
-    const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
-      companyId: membership.companyId,
-      studentId: appointment.studentId,
-      startsAt: newStartsAt,
-      endsAt: newEndsAt,
-    });
-
-    await prisma.autoscuolaAppointment.create({
-      data: {
+    const newAppointmentId = randomUUID();
+    await prisma.$transaction(async (tx) => {
+      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+        prisma: tx as never,
         companyId: membership.companyId,
         studentId: appointment.studentId,
-        caseId: appointment.caseId,
-        type: appointment.type,
         startsAt: newStartsAt,
         endsAt: newEndsAt,
-        status: "scheduled",
-        instructorId: newInstructorId,
-        vehicleId: newVehicleId,
-        notes: appointment.notes,
-        paymentRequired: paymentSnapshot.paymentRequired,
-        paymentStatus: paymentSnapshot.paymentStatus,
-        priceAmount: paymentSnapshot.priceAmount,
-        penaltyAmount: paymentSnapshot.penaltyAmount,
-        penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
-        paidAmount: paymentSnapshot.paidAmount,
-        invoiceStatus: paymentSnapshot.invoiceStatus,
-      },
+        appointmentId: newAppointmentId,
+        actorUserId: membership.userId,
+      });
+
+      await tx.autoscuolaAppointment.create({
+        data: {
+          id: newAppointmentId,
+          companyId: membership.companyId,
+          studentId: appointment.studentId,
+          caseId: appointment.caseId,
+          type: appointment.type,
+          startsAt: newStartsAt,
+          endsAt: newEndsAt,
+          status: "scheduled",
+          instructorId: newInstructorId,
+          vehicleId: newVehicleId,
+          notes: appointment.notes,
+          paymentRequired: paymentSnapshot.paymentRequired,
+          paymentStatus: paymentSnapshot.paymentStatus,
+          priceAmount: paymentSnapshot.priceAmount,
+          penaltyAmount: paymentSnapshot.penaltyAmount,
+          penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
+          paidAmount: paymentSnapshot.paidAmount,
+          invoiceStatus: paymentSnapshot.invoiceStatus,
+          creditApplied: paymentSnapshot.creditApplied,
+        },
+      });
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -1614,6 +1772,12 @@ export async function deleteAutoscuolaAppointment(
         data: { status: "open" },
       });
     }
+
+    await refundLessonCreditIfEligible({
+      appointmentId: appointment.id,
+      cancelledByAutoscuola: true,
+      actorUserId: membership.userId,
+    });
 
     await prisma.autoscuolaAppointment.delete({
       where: { id: appointment.id },
@@ -1810,6 +1974,16 @@ export async function updateAutoscuolaAppointmentStatus(
     }
 
     if (nextStatus === "cancelled" && !wasCancelled) {
+      const cancelledByAutoscuola =
+        membership.role === "admin" ||
+        membership.autoscuolaRole === "OWNER" ||
+        membership.autoscuolaRole === "INSTRUCTOR";
+      await refundLessonCreditIfEligible({
+        appointmentId: updated.id,
+        cancelledByAutoscuola,
+        actorUserId: membership.userId,
+      });
+
       await notifyStudentAppointmentCancelled({
         companyId: membership.companyId,
         actorUserId: membership.userId,
