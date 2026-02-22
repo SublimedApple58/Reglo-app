@@ -1278,6 +1278,9 @@ export async function createAutoscuolaAppointment(
     }
 
     const shouldSendProposal = payload.sendProposal || isInstructorActor;
+    const appointmentStatus = shouldSendProposal
+      ? "proposal"
+      : payload.status ?? "scheduled";
 
     const [student, instructor, vehicle, lessonPolicy] = await Promise.all([
       prisma.companyMember.findFirst({
@@ -1423,18 +1426,18 @@ export async function createAutoscuolaAppointment(
         actorUserId: membership.userId,
       });
 
-      return tx.autoscuolaAppointment.create({
-        data: {
-          id: appointmentId,
-          companyId,
-          studentId: payload.studentId,
-          caseId: payload.caseId || null,
-          type: resolvedType,
-          startsAt: slotTime,
-          endsAt: slotEnd,
-          status: payload.status ?? (shouldSendProposal ? "proposal" : "scheduled"),
-          instructorId: resolvedInstructorId,
-          vehicleId: payload.vehicleId,
+        return tx.autoscuolaAppointment.create({
+          data: {
+            id: appointmentId,
+            companyId,
+            studentId: payload.studentId,
+            caseId: payload.caseId || null,
+            type: resolvedType,
+            startsAt: slotTime,
+            endsAt: slotEnd,
+            status: appointmentStatus,
+            instructorId: resolvedInstructorId,
+            vehicleId: payload.vehicleId,
           notes: payload.notes ?? null,
           paymentRequired: paymentSnapshot.paymentRequired,
           paymentStatus: paymentSnapshot.paymentStatus,
