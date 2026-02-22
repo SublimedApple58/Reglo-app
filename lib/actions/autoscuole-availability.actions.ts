@@ -11,6 +11,11 @@ import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
 import { cancelAndQueueOperationalRepositionByResource } from "@/lib/autoscuole/repositioning";
 import {
+  getBookingGovernanceForCompany,
+  isStudentAppBookingEnabled,
+} from "@/lib/autoscuole/booking-governance";
+import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
+import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
@@ -66,6 +71,10 @@ const bookingOptionsSchema = z.object({
   studentId: z.string().uuid(),
 });
 
+const instructorBookingSuggestSchema = z.object({
+  studentId: z.string().uuid(),
+});
+
 const respondOfferSchema = z.object({
   offerId: z.string().uuid(),
   studentId: z.string().uuid(),
@@ -79,6 +88,7 @@ const getWaitlistOffersSchema = z.object({
 
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
+const DURATION_PRIORITY = [60, 30, 90, 120] as const;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
 const OPERATIONAL_REPOSITIONABLE_STATUSES = [
@@ -181,6 +191,13 @@ const normalizeChannels = (
   );
   const unique = Array.from(new Set(channels));
   return unique.length ? unique : [...fallback];
+};
+
+const pickSuggestedDuration = (durations: number[]) => {
+  for (const preferred of DURATION_PRIORITY) {
+    if (durations.includes(preferred)) return preferred;
+  }
+  return durations[0] ?? 60;
 };
 
 const minutesFromDate = (date: Date) => {
@@ -304,6 +321,40 @@ const ensureStudentMembership = async (companyId: string, studentId: string) =>
     },
     select: { userId: true },
   });
+
+const ensureStudentCanBookFromApp = async ({
+  companyId,
+  membership,
+  studentId,
+}: {
+  companyId: string;
+  membership: { role: string; autoscuolaRole: string | null; userId: string };
+  studentId: string;
+}) => {
+  if (membership.role === "admin" || membership.autoscuolaRole === "OWNER") {
+    return { allowed: true as const };
+  }
+  if (membership.autoscuolaRole !== "STUDENT") {
+    return {
+      allowed: false as const,
+      message: "Prenotazione da app non consentita per questo ruolo.",
+    };
+  }
+  if (membership.userId !== studentId) {
+    return {
+      allowed: false as const,
+      message: "Puoi prenotare solo per il tuo profilo allievo.",
+    };
+  }
+  const governance = await getBookingGovernanceForCompany(companyId);
+  if (!isStudentAppBookingEnabled(governance)) {
+    return {
+      allowed: false as const,
+      message: "La prenotazione da app è abilitata solo per istruttori.",
+    };
+  }
+  return { allowed: true as const };
+};
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
   try {
@@ -512,6 +563,14 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = bookingRequestSchema.parse(input);
+    const bookingAccess = await ensureStudentCanBookFromApp({
+      companyId: membership.companyId,
+      membership,
+      studentId: payload.studentId,
+    });
+    if (!bookingAccess.allowed) {
+      return { success: false, message: bookingAccess.message };
+    }
     const now = new Date();
     const durationSlots = payload.durationMinutes / SLOT_MINUTES;
     if (!Number.isInteger(durationSlots) || durationSlots < 1 || durationSlots > 4) {
@@ -1157,6 +1216,14 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = bookingOptionsSchema.parse(input);
+    const bookingAccess = await ensureStudentCanBookFromApp({
+      companyId: membership.companyId,
+      membership,
+      studentId: payload.studentId,
+    });
+    if (!bookingAccess.allowed) {
+      return { success: false, message: bookingAccess.message };
+    }
 
     const [student, service] = await Promise.all([
       ensureStudentMembership(membership.companyId, payload.studentId),
@@ -1202,6 +1269,94 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         bookingSlotDurations,
         lessonTypeSelectionEnabled,
         availableLessonTypes,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function suggestInstructorBooking(
+  input: z.infer<typeof instructorBookingSuggestSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = instructorBookingSuggestSchema.parse(input);
+
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "INSTRUCTOR") {
+      return { success: false, message: "Operazione consentita solo agli istruttori." };
+    }
+
+    const governance = await getBookingGovernanceForCompany(membership.companyId);
+    if (
+      governance.appBookingActors !== "instructors" &&
+      governance.appBookingActors !== "both"
+    ) {
+      return {
+        success: false,
+        message: "La prenotazione da app è abilitata solo per allievi.",
+      };
+    }
+
+    const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: membership.userId,
+        status: { not: "inactive" },
+      },
+      select: { id: true },
+    });
+    if (!ownInstructor) {
+      return {
+        success: false,
+        message: "Profilo istruttore non trovato per questo account.",
+      };
+    }
+
+    const [student, service] = await Promise.all([
+      ensureStudentMembership(membership.companyId, payload.studentId),
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
+    ]);
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    const bookingSlotDurations = normalizeBookingSlotDurations(
+      limits.bookingSlotDurations,
+    );
+    const durationMinutes = pickSuggestedDuration(bookingSlotDurations);
+    const now = new Date();
+    const preferredDate = now.toISOString().slice(0, 10);
+    const match = await findBestAutoscuolaSlot({
+      companyId: membership.companyId,
+      studentId: payload.studentId,
+      preferredDate,
+      durationMinutes,
+      maxDays: DEFAULT_MAX_DAYS,
+      requiredInstructorId: ownInstructor.id,
+      now,
+    });
+
+    if (!match) {
+      return {
+        success: false,
+        message: "Nessuno slot disponibile al momento per questo allievo.",
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        startsAt: match.start,
+        endsAt: match.end,
+        instructorId: match.instructorId,
+        vehicleId: match.vehicleId,
+        suggestedLessonType: match.resolvedLessonType,
+        durationMinutes,
       },
     };
   } catch (error) {

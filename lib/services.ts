@@ -21,6 +21,8 @@ export type ServiceLimits = {
   slotFillChannels?: ("push" | "whatsapp" | "email")[];
   studentReminderChannels?: ("push" | "whatsapp" | "email")[];
   instructorReminderChannels?: ("push" | "whatsapp" | "email")[];
+  appBookingActors?: "students" | "instructors" | "both";
+  instructorBookingMode?: "manual_full" | "manual_engine" | "guided_proposal";
 };
 
 export type CompanyServiceInfo = {

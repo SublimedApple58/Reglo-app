@@ -44,12 +44,24 @@ const formatDateLocal = (date: Date) =>
 
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
 const BOOKING_DURATION_OPTIONS = [30, 60, 90, 120] as const;
+const APP_BOOKING_ACTOR_OPTIONS = [
+  { value: "students", label: "Solo allievi" },
+  { value: "instructors", label: "Solo istruttori" },
+  { value: "both", label: "Entrambi" },
+] as const;
+const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
+  { value: "manual_full", label: "Manuale totale" },
+  { value: "manual_engine", label: "Manuale + motore annullamenti" },
+  { value: "guided_proposal", label: "Guidata con proposta" },
+] as const;
 const CHANNEL_OPTIONS = [
   { value: "push", label: "Push" },
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "Email" },
 ] as const;
 type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
+type AppBookingActorsValue = (typeof APP_BOOKING_ACTOR_OPTIONS)[number]["value"];
+type InstructorBookingModeValue = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number]["value"];
 
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
@@ -136,6 +148,8 @@ export function AutoscuoleResourcesPage({
     createDefaultLessonConstraintMap(),
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
+  const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
+  const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
@@ -235,6 +249,18 @@ export function AutoscuoleResourcesPage({
       );
       setLessonConstraints(nextConstraints);
       setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
+      setAppBookingActors(
+        APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
+          ? (res.data.appBookingActors as AppBookingActorsValue)
+          : "students",
+      );
+      setInstructorBookingMode(
+        INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
+          (option) => option.value === res.data.instructorBookingMode,
+        )
+          ? (res.data.instructorBookingMode as InstructorBookingModeValue)
+          : "manual_engine",
+      );
     };
     loadSettings();
     return () => {
@@ -281,6 +307,13 @@ export function AutoscuoleResourcesPage({
     }
     if (!bookingSlotDurations.length) {
       toast.error({ description: "Seleziona almeno una durata prenotabile per l'allievo." });
+      return;
+    }
+    if (
+      (appBookingActors === "instructors" || appBookingActors === "both") &&
+      !instructorBookingMode
+    ) {
+      toast.error({ description: "Seleziona la modalità prenotazione istruttore." });
       return;
     }
     if (lessonRequiredTypesEnabled && !lessonRequiredTypes.length) {
@@ -339,6 +372,8 @@ export function AutoscuoleResourcesPage({
       lessonRequiredTypes,
       lessonTypeConstraints,
       bookingSlotDurations,
+      appBookingActors,
+      instructorBookingMode,
     });
     setSavingSettings(false);
 
@@ -375,6 +410,18 @@ export function AutoscuoleResourcesPage({
     );
     setLessonConstraints(nextConstraints);
     setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
+    setAppBookingActors(
+      APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
+        ? (res.data.appBookingActors as AppBookingActorsValue)
+        : "students",
+    );
+    setInstructorBookingMode(
+      INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
+        (option) => option.value === res.data.instructorBookingMode,
+      )
+        ? (res.data.instructorBookingMode as InstructorBookingModeValue)
+        : "manual_engine",
+    );
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
 
@@ -577,6 +624,59 @@ export function AutoscuoleResourcesPage({
                   </button>
                 );
               })}
+            </div>
+          </div>
+          <div className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3">
+            <div className="text-xs font-medium text-muted-foreground">
+              Prenotazioni da app
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Chi può prenotare
+                </div>
+                <Select
+                  value={appBookingActors}
+                  onValueChange={(value) =>
+                    setAppBookingActors(value as AppBookingActorsValue)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona policy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {appBookingActors === "instructors" || appBookingActors === "both" ? (
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Modalità istruttore
+                  </div>
+                  <Select
+                    value={instructorBookingMode}
+                    onValueChange={(value) =>
+                      setInstructorBookingMode(value as InstructorBookingModeValue)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona modalità" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex justify-end">

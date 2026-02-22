@@ -11,6 +11,11 @@ import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communication
 import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
+  getBookingGovernanceForCompany,
+  isInstructorAppBookingEnabled,
+  isStudentAppBookingEnabled,
+} from "@/lib/autoscuole/booking-governance";
+import {
   cancelAndQueueOperationalRepositionByResource,
   queueOperationalRepositionForAppointment,
 } from "@/lib/autoscuole/repositioning";
@@ -165,6 +170,16 @@ const canManageStudentCredits = (membership: {
 }) =>
   membership.role === "admin" ||
   membership.autoscuolaRole === "OWNER";
+
+const getOwnInstructorProfile = async (companyId: string, userId: string) =>
+  prisma.autoscuolaInstructor.findFirst({
+    where: {
+      companyId,
+      userId,
+      status: { not: "inactive" },
+    },
+    select: { id: true },
+  });
 
 const REQUIRED_LESSONS_COUNT = 10;
 const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
@@ -1217,6 +1232,52 @@ export async function createAutoscuolaAppointment(
     const companyId = membership.companyId;
     const payload = createAppointmentSchema.parse(input);
     const requestedType = normalizeLessonType(payload.type);
+    const governance = await getBookingGovernanceForCompany(companyId);
+
+    const isInstructorActor =
+      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+    const isStudentActor =
+      membership.autoscuolaRole === "STUDENT" && membership.role !== "admin";
+    const isOwnerOrAdminActor =
+      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+
+    let resolvedInstructorId = payload.instructorId;
+    if (isStudentActor) {
+      if (!isStudentAppBookingEnabled(governance)) {
+        return {
+          success: false,
+          message: "La prenotazione da app è abilitata solo per istruttori.",
+        };
+      }
+      if (payload.studentId !== membership.userId) {
+        return {
+          success: false,
+          message: "Puoi prenotare solo per il tuo profilo allievo.",
+        };
+      }
+    } else if (isInstructorActor) {
+      if (!isInstructorAppBookingEnabled(governance)) {
+        return {
+          success: false,
+          message: "La prenotazione da app è abilitata solo per allievi.",
+        };
+      }
+      const ownInstructor = await getOwnInstructorProfile(
+        companyId,
+        membership.userId,
+      );
+      if (!ownInstructor) {
+        return {
+          success: false,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+      resolvedInstructorId = ownInstructor.id;
+    } else if (!isOwnerOrAdminActor) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const shouldSendProposal = payload.sendProposal || isInstructorActor;
 
     const [student, instructor, vehicle, lessonPolicy] = await Promise.all([
       prisma.companyMember.findFirst({
@@ -1237,7 +1298,7 @@ export async function createAutoscuolaAppointment(
         },
       }),
       prisma.autoscuolaInstructor.findFirst({
-        where: { id: payload.instructorId, companyId },
+        where: { id: resolvedInstructorId, companyId },
       }),
       prisma.autoscuolaVehicle.findFirst({
         where: { id: payload.vehicleId, companyId },
@@ -1333,7 +1394,7 @@ export async function createAutoscuolaAppointment(
         startsAt: { gte: scanStart, lt: scanEnd },
         status: { notIn: ["cancelled"] },
         OR: [
-          { instructorId: payload.instructorId },
+          { instructorId: resolvedInstructorId },
           { vehicleId: payload.vehicleId },
         ],
       },
@@ -1371,8 +1432,8 @@ export async function createAutoscuolaAppointment(
           type: resolvedType,
           startsAt: slotTime,
           endsAt: slotEnd,
-          status: payload.status ?? (payload.sendProposal ? "proposal" : "scheduled"),
-          instructorId: payload.instructorId,
+          status: payload.status ?? (shouldSendProposal ? "proposal" : "scheduled"),
+          instructorId: resolvedInstructorId,
           vehicleId: payload.vehicleId,
           notes: payload.notes ?? null,
           paymentRequired: paymentSnapshot.paymentRequired,
@@ -1389,7 +1450,7 @@ export async function createAutoscuolaAppointment(
 
     await invalidateAgendaAndPaymentsCache(companyId);
 
-    if (!payload.sendProposal) {
+    if (!shouldSendProposal) {
       return {
         success: true,
         data: appointment,
@@ -1468,6 +1529,32 @@ export async function cancelAutoscuolaAppointment(
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    if (membership.role !== "admin" && membership.autoscuolaRole === "INSTRUCTOR") {
+      const ownInstructor = await getOwnInstructorProfile(
+        membership.companyId,
+        membership.userId,
+      );
+      if (!ownInstructor || appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi annullare solo le tue guide.",
+        };
+      }
+      const governance = await getBookingGovernanceForCompany(membership.companyId);
+      if (!isInstructorAppBookingEnabled(governance)) {
+        return {
+          success: false,
+          message: "La prenotazione da app è abilitata solo per allievi.",
+        };
+      }
+      if (governance.instructorBookingMode !== "manual_full") {
+        return {
+          success: false,
+          message: "In questa modalità usa 'Cancella e riposiziona'.",
+        };
+      }
     }
 
     await prisma.autoscuolaAppointment.update({
@@ -1714,6 +1801,13 @@ export async function cancelAndRepositionAutoscuolaAppointment(
     }
 
     if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+      const governance = await getBookingGovernanceForCompany(membership.companyId);
+      if (!isInstructorAppBookingEnabled(governance)) {
+        return {
+          success: false,
+          message: "La prenotazione da app è abilitata solo per allievi.",
+        };
+      }
       const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
           companyId: membership.companyId,

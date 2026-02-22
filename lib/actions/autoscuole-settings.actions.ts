@@ -16,6 +16,15 @@ import {
   normalizeBookingSlotDurations,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
+import {
+  APP_BOOKING_ACTOR_OPTIONS,
+  AppBookingActors,
+  DEFAULT_APP_BOOKING_ACTORS,
+  DEFAULT_INSTRUCTOR_BOOKING_MODE,
+  INSTRUCTOR_BOOKING_MODE_OPTIONS,
+  InstructorBookingMode,
+  parseBookingGovernanceFromLimits,
+} from "@/lib/autoscuole/booking-governance";
 
 const DEFAULT_AVAILABILITY_WEEKS = 4;
 const REMINDER_MINUTES = [120, 60, 30, 20, 15] as const;
@@ -146,6 +155,9 @@ const bookingSlotDurationsSchema = z
   })
   .transform((durations) => Array.from(new Set(durations)).sort((a, b) => a - b));
 
+const appBookingActorsSchema = z.enum(APP_BOOKING_ACTOR_OPTIONS);
+const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
+
 const autoscuolaSettingsPatchSchema = z
   .object({
     availabilityWeeks: z.number().int().min(1).max(12).optional(),
@@ -196,6 +208,8 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     lessonTypeConstraints: lessonTypeConstraintsSchema.optional(),
     bookingSlotDurations: bookingSlotDurationsSchema.optional(),
+    appBookingActors: appBookingActorsSchema.optional(),
+    instructorBookingMode: instructorBookingModeSchema.optional(),
   })
   .refine(
     (value) =>
@@ -218,7 +232,9 @@ const autoscuolaSettingsPatchSchema = z
       value.lessonRequiredTypesEnabled !== undefined ||
       value.lessonRequiredTypes !== undefined ||
       value.lessonTypeConstraints !== undefined ||
-      value.bookingSlotDurations !== undefined,
+      value.bookingSlotDurations !== undefined ||
+      value.appBookingActors !== undefined ||
+      value.instructorBookingMode !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -241,6 +257,20 @@ const autoscuolaSettingsPatchSchema = z
         code: z.ZodIssueCode.custom,
         path: ["lessonRequiredTypes"],
         message: "Seleziona almeno un tipo guida obbligatorio.",
+      });
+    }
+
+    const appBookingActors = value.appBookingActors;
+    const instructorBookingMode = value.instructorBookingMode;
+    if (
+      appBookingActors &&
+      (appBookingActors === "instructors" || appBookingActors === "both") &&
+      instructorBookingMode === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["instructorBookingMode"],
+        message: "Seleziona la modalità prenotazione istruttore.",
       });
     }
   });
@@ -316,6 +346,8 @@ export type AutoscuolaSettingsData = {
     >
   >;
   bookingSlotDurations: number[];
+  appBookingActors: AppBookingActors;
+  instructorBookingMode: InstructorBookingMode;
 };
 
 const resolveAutoscuolaSettingsData = (
@@ -390,6 +422,7 @@ const resolveAutoscuolaSettingsData = (
     limits.bookingSlotDurations,
     DEFAULT_BOOKING_SLOT_DURATIONS,
   );
+  const bookingGovernance = parseBookingGovernanceFromLimits(limits);
 
   return {
     availabilityWeeks,
@@ -412,6 +445,8 @@ const resolveAutoscuolaSettingsData = (
     lessonRequiredTypes: lessonPolicy.lessonRequiredTypes,
     lessonTypeConstraints: lessonPolicy.lessonTypeConstraints,
     bookingSlotDurations,
+    appBookingActors: bookingGovernance.appBookingActors,
+    instructorBookingMode: bookingGovernance.instructorBookingMode,
   };
 };
 
@@ -522,6 +557,7 @@ export async function updateAutoscuolaSettings(
       limits.bookingSlotDurations,
       DEFAULT_BOOKING_SLOT_DURATIONS,
     );
+    const previousBookingGovernance = parseBookingGovernanceFromLimits(limits);
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
@@ -552,6 +588,13 @@ export async function updateAutoscuolaSettings(
       payload.lessonTypeConstraints ?? previousLessonPolicy.lessonTypeConstraints;
     const nextBookingSlotDurations =
       payload.bookingSlotDurations ?? previousBookingSlotDurations;
+    const nextAppBookingActors =
+      payload.appBookingActors ?? previousBookingGovernance.appBookingActors;
+    const nextInstructorBookingMode =
+      payload.instructorBookingMode ??
+      (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
+        ? previousBookingGovernance.instructorBookingMode
+        : DEFAULT_INSTRUCTOR_BOOKING_MODE);
 
     if (nextAutoPaymentsEnabled) {
       const stripe = await isAutoscuolaStripeConnectReady({
@@ -566,6 +609,12 @@ export async function updateAutoscuolaSettings(
 
     if (nextLessonRequiredTypesEnabled && !nextLessonRequiredTypes.length) {
       throw new Error("Seleziona almeno un tipo guida obbligatorio.");
+    }
+    if (
+      (nextAppBookingActors === "instructors" || nextAppBookingActors === "both") &&
+      !nextInstructorBookingMode
+    ) {
+      throw new Error("Seleziona la modalità prenotazione istruttore.");
     }
 
     const nextLimits = {
@@ -593,6 +642,8 @@ export async function updateAutoscuolaSettings(
       lessonRequiredTypes: nextLessonRequiredTypes,
       lessonTypeConstraints: nextLessonTypeConstraints,
       bookingSlotDurations: nextBookingSlotDurations,
+      appBookingActors: nextAppBookingActors,
+      instructorBookingMode: nextInstructorBookingMode,
     };
 
     if (service) {
@@ -641,6 +692,8 @@ export async function updateAutoscuolaSettings(
         lessonRequiredTypes: nextLimits.lessonRequiredTypes,
         lessonTypeConstraints: nextLimits.lessonTypeConstraints,
         bookingSlotDurations: nextLimits.bookingSlotDurations,
+        appBookingActors: nextLimits.appBookingActors,
+        instructorBookingMode: nextLimits.instructorBookingMode,
       },
     };
   } catch (error) {
