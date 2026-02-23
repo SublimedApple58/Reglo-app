@@ -3,7 +3,9 @@
 import React from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useAtomValue } from "jotai";
 import { RegloTabs } from "@/components/ui/reglo-tabs";
+import { companyAtom } from "@/atoms/company.store";
 
 import { AutoscuoleDashboardPage } from "./AutoscuoleDashboardPage";
 
@@ -75,6 +77,14 @@ export function AutoscuoleTabsPage() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const company = useAtomValue(companyAtom);
+
+  const isAutoscuoleOnlyCompany = React.useMemo(() => {
+    const activeServices =
+      company?.services?.filter((service) => service.status === "active") ?? [];
+    if (!company?.services?.length) return false;
+    return activeServices.length === 1 && activeServices[0]?.key === "AUTOSCUOLE";
+  }, [company?.services]);
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -142,7 +152,7 @@ export function AutoscuoleTabsPage() {
     },
     [pathname, router, searchParams],
   );
-  const tabsNode = (
+  const tabsNode = isAutoscuoleOnlyCompany ? null : (
     <RegloTabs
       items={TAB_ITEMS}
       activeKey={activeTab}

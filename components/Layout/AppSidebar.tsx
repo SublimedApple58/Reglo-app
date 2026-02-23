@@ -11,11 +11,15 @@ import {
   FolderKanban,
   ClipboardCheck,
   GraduationCap,
+  CalendarDays,
+  SlidersHorizontal,
+  WalletCards,
+  MessageSquareMore,
   ChevronsUpDown,
   Plus,
 } from "lucide-react";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 
@@ -53,48 +57,95 @@ import { setActiveCompany } from "@/lib/actions/company.actions";
 import { integrationsRefreshAtom } from "@/atoms/integrations.store";
 import { isServiceActive, type ServiceKey } from "@/lib/services";
 
-const items = [
+type SidebarItem = {
+  title: string;
+  url: string;
+  icon: React.ComponentType<{ className?: string }>;
+  service?: ServiceKey;
+  tabKey?: "dashboard" | "students" | "agenda" | "disponibilita" | "payments" | "comunicazioni";
+};
+
+const items: SidebarItem[] = [
   {
     title: "Home",
-    url: "/home",
+    url: "home",
     icon: LayoutDashboard,
   },
   {
     title: "Workflows",
-    url: "/workflows",
+    url: "workflows",
     icon: Workflow,
     service: "WORKFLOWS" as ServiceKey,
   },
   {
     title: "Doc manager",
-    url: "/doc_manager",
+    url: "doc_manager",
     icon: FolderKanban,
     service: "DOC_MANAGER" as ServiceKey,
   },
   {
     title: "Documents",
-    url: "/documents",
+    url: "documents",
     icon: Folders,
     service: "DOC_MANAGER" as ServiceKey,
   },
   {
     title: "Compilazioni",
-    url: "/compilazioni",
+    url: "compilazioni",
     icon: ClipboardCheck,
     service: "DOC_MANAGER" as ServiceKey,
   },
   {
     title: "Autoscuole",
-    url: "/autoscuole",
+    url: "autoscuole",
     icon: GraduationCap,
     service: "AUTOSCUOLE" as ServiceKey,
+  },
+];
+
+const autoscuoleSidebarItems: SidebarItem[] = [
+  {
+    title: "Dashboard",
+    url: "autoscuole",
+    icon: LayoutDashboard,
+    tabKey: "dashboard",
+  },
+  {
+    title: "Allievi",
+    url: "autoscuole?tab=students",
+    icon: Users,
+    tabKey: "students",
+  },
+  {
+    title: "Agenda",
+    url: "autoscuole?tab=agenda",
+    icon: CalendarDays,
+    tabKey: "agenda",
+  },
+  {
+    title: "Disponibilita",
+    url: "autoscuole?tab=disponibilita",
+    icon: SlidersHorizontal,
+    tabKey: "disponibilita",
+  },
+  {
+    title: "Pagamenti",
+    url: "autoscuole?tab=payments",
+    icon: WalletCards,
+    tabKey: "payments",
+  },
+  {
+    title: "Comunicazioni",
+    url: "autoscuole?tab=comunicazioni",
+    icon: MessageSquareMore,
+    tabKey: "comunicazioni",
   },
 ];
 
 const adminItems = [
   {
     title: "Users",
-    url: "/users",
+    url: "users",
     icon: Users,
   },
   // {
@@ -104,21 +155,21 @@ const adminItems = [
   // },
 ]
 
-const configurationItems = [
+const configurationItems: SidebarItem[] = [
   {
     title: "Settings",
-    url: "/settings",
+    url: "settings",
     icon: Settings,
   },
   {
     title: "Assistant",
-    url: "/assistant",
+    url: "assistant",
     icon: Bot,
     service: "AI_ASSISTANT" as ServiceKey,
   },
   {
     title: "Ask support",
-    url: "/help",
+    url: "help",
     icon: HeartHandshake,
   },
 ];
@@ -126,6 +177,7 @@ const configurationItems = [
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
   const path = usePathname() || "";
+  const searchParams = useSearchParams();
   const company = useAtomValue(companyAtom);
   const companyList = useAtomValue(companyListAtom);
   const setCompanyRefresh = useSetAtom(companyRefreshAtom);
@@ -134,14 +186,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const companyName = company?.name ?? "Reglo srl";
   const companyRole = company?.role ?? null;
   const isMobile = useIsMobile();
-
-  const mainSection = useMemo(() => {
-    if (path === "/") {
-      return "home";
-    }
-    const sections = path.split("/").filter(Boolean);
-    return sections[0] || "";
-  }, [path]);
 
   const localePrefix = useMemo(() => {
     const segments = path.split("/").filter(Boolean);
@@ -152,6 +196,38 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
     return "";
   }, [path]);
+  const normalizedPath = useMemo(
+    () => path.replace(/\/+$/, "") || "/",
+    [path],
+  );
+  const activeAutoscuoleTab = useMemo(() => {
+    const tab = (searchParams.get("tab") ?? "dashboard").trim().toLowerCase();
+    if (
+      tab === "students" ||
+      tab === "agenda" ||
+      tab === "disponibilita" ||
+      tab === "payments" ||
+      tab === "comunicazioni"
+    ) {
+      return tab;
+    }
+    return "dashboard";
+  }, [searchParams]);
+  const activeServiceKeys = useMemo(
+    () =>
+      (company?.services ?? [])
+        .filter((service) => service.status === "active")
+        .map((service) => service.key),
+    [company?.services],
+  );
+  const isAutoscuoleOnlyCompany = useMemo(() => {
+    if (!company?.services?.length) return false;
+    return activeServiceKeys.length === 1 && activeServiceKeys[0] === "AUTOSCUOLE";
+  }, [activeServiceKeys, company?.services]);
+  const sidebarItems = useMemo(
+    () => (isAutoscuoleOnlyCompany ? autoscuoleSidebarItems : items),
+    [isAutoscuoleOnlyCompany],
+  );
 
   const { isMobile: sidebarIsMobile, setOpenMobile } = useSidebar();
 
@@ -162,6 +238,26 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     (company
       ? { ...company, plan: "Pro plan", logoUrl: company.logoUrl }
       : null);
+
+  const toUserHref = (url: string) => `/user/${url.replace(/^\/+/, "")}`;
+  const toAdminHref = (url: string) => `/admin/${url.replace(/^\/+/, "")}`;
+  const matchesPath = (targetPath: string) => {
+    const normalizedTarget = targetPath.replace(/\/+$/, "");
+    const localizedTarget = `${localePrefix}${normalizedTarget}`.replace(/\/+$/, "");
+    return (
+      normalizedPath === normalizedTarget ||
+      normalizedPath.startsWith(`${normalizedTarget}/`) ||
+      normalizedPath === localizedTarget ||
+      normalizedPath.startsWith(`${localizedTarget}/`)
+    );
+  };
+  const isSidebarItemActive = (item: SidebarItem) => {
+    if (item.tabKey) {
+      if (!matchesPath(toUserHref("autoscuole"))) return false;
+      return activeAutoscuoleTab === item.tabKey;
+    }
+    return matchesPath(toUserHref(item.url));
+  };
 
   const handleCompanySwitch = async (companyId: string) => {
     if (!company || companyId === company.id) return;
@@ -275,14 +371,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             {/* <SidebarGroupLabel>Application</SidebarGroupLabel> */}
             <SidebarGroupContent>
               <SidebarMenu>
-                {items.map((item) => (
+                {sidebarItems.map((item) => (
                   <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
                     <SidebarMenuButton
                       asChild
-                      isActive={
-                        (item.title === "Home" && path === "/") ||
-                        mainSection === item.title.toLowerCase()
-                      }
+                      isActive={isSidebarItemActive(item)}
                     >
                       <div
                         className={
@@ -292,7 +385,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             : ""
                         }
                         onClick={() => {
-                          router.push(`/user/${item.url}`);
+                          router.push(toUserHref(item.url));
                           if (sidebarIsMobile) {
                             setOpenMobile(false);
                           }
@@ -315,7 +408,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          {isAuthorized && (
+          {!isAutoscuoleOnlyCompany && isAuthorized && (
             <SidebarGroup>
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>
@@ -324,11 +417,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
                         <SidebarMenuButton
                           asChild
-                          isActive={mainSection === item.title.toLowerCase()}
+                          isActive={matchesPath(toAdminHref(item.url))}
                         >
                           <div
                             onClick={() => {
-                              router.push(`/admin/${item.url}`);
+                              router.push(toAdminHref(item.url));
                               if (sidebarIsMobile) {
                                 setOpenMobile(false);
                               }
@@ -346,46 +439,48 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           )}
         </div>
         {/* <Separator style={{ width: "90%", marginInline: "auto" }} /> */}
-        <SidebarGroup className="px-1">
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {configurationItems.map((item) => (
-                <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={mainSection === item.title.toLowerCase()}
-                  >
-                    <div
-                      className={
-                        item.service &&
-                        !isServiceActive(company?.services ?? null, item.service, true)
-                          ? "opacity-60"
-                          : ""
-                      }
-                      onClick={() => {
-                        router.push(`/user/${item.url}`);
-                        if (sidebarIsMobile) {
-                          setOpenMobile(false);
-                        }
-                      }}
+        {!isAutoscuoleOnlyCompany ? (
+          <SidebarGroup className="px-1">
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {configurationItems.map((item) => (
+                  <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={matchesPath(toUserHref(item.url))}
                     >
-                      <item.icon />
-                      <span className="flex items-center gap-2">
-                        {item.title}
-                        {item.service &&
-                        !isServiceActive(company?.services ?? null, item.service, true) ? (
-                          <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                            Locked
-                          </span>
-                        ) : null}
-                      </span>
-                    </div>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+                      <div
+                        className={
+                          item.service &&
+                          !isServiceActive(company?.services ?? null, item.service, true)
+                            ? "opacity-60"
+                            : ""
+                        }
+                        onClick={() => {
+                          router.push(toUserHref(item.url));
+                          if (sidebarIsMobile) {
+                            setOpenMobile(false);
+                          }
+                        }}
+                      >
+                        <item.icon />
+                        <span className="flex items-center gap-2">
+                          {item.title}
+                          {item.service &&
+                          !isServiceActive(company?.services ?? null, item.service, true) ? (
+                            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                              Locked
+                            </span>
+                          ) : null}
+                        </span>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
       </SidebarContent>
       <SidebarFooter className="px-1">
         <NavUser />

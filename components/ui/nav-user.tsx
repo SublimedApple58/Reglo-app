@@ -6,7 +6,7 @@ import {
   IconNotification,
   IconUserCircle,
 } from "@tabler/icons-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +27,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import { useAtomValue } from "jotai";
 import { userAvatarUrlAtom, userSessionAtom } from "@/atoms/user.store";
+import { UserAvatarFallback } from "@/components/ui/user-avatar-fallback";
 
 export function NavUser() {
   const { isMobile } = useSidebar();
@@ -57,9 +58,7 @@ export function NavUser() {
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={avatarUrl ?? undefined} alt="User avatar" />
-                <AvatarFallback className="rounded-lg">
-                  {initials}
-                </AvatarFallback>
+                <UserAvatarFallback initials={initials} />
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{session.user.name}</span>
@@ -80,9 +79,7 @@ export function NavUser() {
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={avatarUrl ?? undefined} alt="User avatar" />
-                  <AvatarFallback className="rounded-lg">
-                    {initials}
-                  </AvatarFallback>
+                  <UserAvatarFallback initials={initials} />
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{session.user.name}</span>

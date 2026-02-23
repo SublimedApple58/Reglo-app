@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import {
   Select,
@@ -37,6 +37,7 @@ import {
   integrationConnectionsAtom,
   integrationsRefreshAtom,
 } from "@/atoms/integrations.store";
+import { UserAvatarFallback } from "@/components/ui/user-avatar-fallback";
 
 type TabKey = "account" | "company" | "integrations";
 type TabItem = { label: string; value: TabKey };
@@ -553,7 +554,7 @@ export function SettingsPage(): React.ReactElement {
                     <div className="flex items-center gap-4">
                       <Avatar className="h-14 w-14">
                         <AvatarImage src={avatarUrl ?? undefined} alt="Profile" />
-                        <AvatarFallback>{avatarInitials}</AvatarFallback>
+                        <UserAvatarFallback initials={avatarInitials} />
                       </Avatar>
                       <div>
                         <p className="text-sm font-medium">Profile image</p>
