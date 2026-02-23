@@ -32,6 +32,15 @@ export type AutoscuolaStripeConnectStatus = {
 const DEFAULT_RETURN_PATH = "/en/user/autoscuole/payments?stripe_return=1";
 const DEFAULT_REFRESH_PATH = "/en/user/autoscuole/payments?stripe_refresh=1";
 
+const isStripeAccountAccessError = (message: string) => {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("does not have access to account") ||
+    normalized.includes("no such account") ||
+    normalized.includes("application access may have been revoked")
+  );
+};
+
 const getStripe = () => {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) {
@@ -387,10 +396,15 @@ export async function getAutoscuolaStripeConnectStatus({
     return status;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Errore sync Stripe Connect.";
+    const isAccessError = isStripeAccountAccessError(message);
     const fallbackWithError: AutoscuolaStripeConnectStatus = {
       ...fallback,
       connected: true,
       accountId: existing.externalAccountId,
+      chargesEnabled: isAccessError ? false : fallback.chargesEnabled,
+      payoutsEnabled: isAccessError ? false : fallback.payoutsEnabled,
+      status: isAccessError ? "restricted" : fallback.status,
+      ready: false,
       syncError: message,
     };
     await persistStatus({
@@ -486,6 +500,20 @@ export async function createAutoscuolaStripeConnectOnboardingLink({
     (await migrateLegacyStripeConnectedAccount({ prisma, companyId }));
 
   let accountId = existing?.externalAccountId ?? null;
+  const stripe = getStripe();
+
+  if (accountId) {
+    try {
+      await stripe.accounts.retrieve(accountId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (isStripeAccountAccessError(message)) {
+        accountId = null;
+      } else {
+        throw error;
+      }
+    }
+  }
 
   if (!accountId) {
     const created = await createStripeConnectAccount({ companyId });
@@ -494,7 +522,6 @@ export async function createAutoscuolaStripeConnectOnboardingLink({
     accountId = created.id;
   }
 
-  const stripe = getStripe();
   const normalizedReturnPath = normalizeRelativePath(returnPath, DEFAULT_RETURN_PATH);
   const normalizedRefreshPath = normalizeRelativePath(refreshPath, DEFAULT_REFRESH_PATH);
 
