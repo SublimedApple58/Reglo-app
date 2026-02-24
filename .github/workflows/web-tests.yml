@@ -62,7 +62,6 @@ jobs:
 
   test-e2e-smoke:
     runs-on: ubuntu-latest
-    if: ${{ secrets.E2E_BASE_URL != '' && secrets.E2E_USER_EMAIL != '' && secrets.E2E_USER_PASSWORD != '' }}
     env:
       E2E_BASE_URL: ${{ secrets.E2E_BASE_URL }}
       E2E_USER_EMAIL: ${{ secrets.E2E_USER_EMAIL }}
