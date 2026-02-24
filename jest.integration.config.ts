@@ -3,10 +3,9 @@ import { jestSharedConfig } from "./jest.shared";
 
 const config: Config = {
   ...jestSharedConfig,
-  testMatch: [
-    "<rootDir>/tests/unit/**/*.test.ts",
-    "<rootDir>/tests/integration/**/*.test.ts",
-  ],
+  displayName: "integration",
+  testMatch: ["<rootDir>/tests/integration/**/*.test.ts"],
+  maxWorkers: 1,
 };
 
 export default config;

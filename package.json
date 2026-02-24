@@ -10,8 +10,13 @@
     "start:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config next start",
     "lint": "next lint",
     "postinstall": "npx prisma generate",
-    "test": "jest",
-    "test:watch": "jest --watch",
+    "test": "jest --config jest.config.ts",
+    "test:watch": "jest --config jest.config.ts --watch",
+    "test:unit": "jest --config jest.unit.config.ts",
+    "test:integration": "jest --config jest.integration.config.ts --runInBand",
+    "test:e2e": "playwright test",
+    "test:web": "pnpm test:unit && pnpm test:integration",
+    "test:ci": "pnpm build && pnpm test:web && pnpm test:e2e",
     "trigger:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev",
     "trigger:deploy:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 deploy",
     "trigger:deploy:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 deploy",
@@ -84,6 +89,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.51.1",
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.0",

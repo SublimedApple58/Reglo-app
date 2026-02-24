@@ -532,7 +532,7 @@ export function AutoscuolePaymentsPage({
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
-      <div className="w-full space-y-5">
+      <div className="w-full space-y-5" data-testid="autoscuole-payments-page">
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
