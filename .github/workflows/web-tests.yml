@@ -80,7 +80,7 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install --with-deps chromium
       - name: Run smoke E2E
-        run: pnpm test:e2e -- --grep @smoke
+        run: pnpm exec playwright test --grep "@smoke"
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
