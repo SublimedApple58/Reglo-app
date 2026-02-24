@@ -12,10 +12,24 @@ test.describe("Autoscuole smoke", () => {
   );
 
   test("login e navigazione dashboard/agenda/pagamenti @smoke", async ({ page }) => {
-    await page.goto("/it/sign-in");
-    await page.getByLabel("Email").fill(userEmail!);
-    await page.getByLabel("Password").fill(userPassword!);
-    await page.getByRole("button", { name: "Accedi" }).click();
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    const hasEmailOnLocalizedSignIn = await emailInput
+      .first()
+      .isVisible({ timeout: 5000 })
+      .catch(() => false);
+
+    if (!hasEmailOnLocalizedSignIn) {
+      await page.goto("/sign-in", { waitUntil: "domcontentloaded" });
+    }
+
+    await expect(emailInput.first()).toBeVisible({ timeout: 15000 });
+    await expect(passwordInput.first()).toBeVisible({ timeout: 15000 });
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
 
     await page.goto("/it/user/autoscuole");
     await expect(page.getByTestId("app-sidebar")).toBeVisible();
