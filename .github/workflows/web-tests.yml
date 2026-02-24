@@ -7,6 +7,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  STRIPE_SECRET_KEY: sk_test_ci_dummy
+  NEXTAUTH_SECRET: ci-test-secret
+
 jobs:
   build:
     runs-on: ubuntu-latest
