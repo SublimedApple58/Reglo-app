@@ -14,7 +14,6 @@ import {
   CalendarDays,
   SlidersHorizontal,
   WalletCards,
-  MessageSquareMore,
   ChevronsUpDown,
   Plus,
 } from "lucide-react";
@@ -62,7 +61,7 @@ type SidebarItem = {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   service?: ServiceKey;
-  tabKey?: "dashboard" | "students" | "agenda" | "disponibilita" | "payments" | "comunicazioni";
+  tabKey?: "dashboard" | "students" | "agenda" | "disponibilita" | "payments";
 };
 
 const items: SidebarItem[] = [
@@ -134,12 +133,6 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     icon: WalletCards,
     tabKey: "payments",
   },
-  {
-    title: "Comunicazioni",
-    url: "autoscuole?tab=comunicazioni",
-    icon: MessageSquareMore,
-    tabKey: "comunicazioni",
-  },
 ];
 
 const adminItems = [
@@ -206,8 +199,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       tab === "students" ||
       tab === "agenda" ||
       tab === "disponibilita" ||
-      tab === "payments" ||
-      tab === "comunicazioni"
+      tab === "payments"
     ) {
       return tab;
     }
@@ -408,7 +400,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          {!isAutoscuoleOnlyCompany && isAuthorized && (
+          {isAuthorized && (
             <SidebarGroup>
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>

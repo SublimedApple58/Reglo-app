@@ -134,14 +134,8 @@ export function SettingsPage(): React.ReactElement {
   const isAdmin = companyRole === "admin";
   const avatarInitials = useMemo(() => {
     const name = session?.user?.name?.trim();
-    if (!name) return "RG";
-    return name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase();
+    if (!name) return "R";
+    return name.charAt(0).toUpperCase();
   }, [session?.user?.name]);
 
   const integrationState = useMemo(() => {

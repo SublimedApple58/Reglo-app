@@ -37,21 +37,13 @@ const AutoscuolePaymentsPage = dynamic(
     })),
   { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
 );
-const AutoscuoleCommunicationsPage = dynamic(
-  () =>
-    import("./AutoscuoleCommunicationsPage").then((module) => ({
-      default: module.AutoscuoleCommunicationsPage,
-    })),
-  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
-);
 
 type AutoscuoleTabKey =
   | "dashboard"
   | "students"
   | "agenda"
   | "disponibilita"
-  | "payments"
-  | "comunicazioni";
+  | "payments";
 
 type TabItem = {
   key: AutoscuoleTabKey;
@@ -64,7 +56,6 @@ const TAB_ITEMS: TabItem[] = [
   { key: "agenda", label: "Agenda" },
   { key: "disponibilita", label: "Disponibilita" },
   { key: "payments", label: "Pagamenti" },
-  { key: "comunicazioni", label: "Comunicazioni" },
 ];
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
@@ -110,7 +101,6 @@ export function AutoscuoleTabsPage() {
       ],
       disponibilita: [() => import("./AutoscuoleAgendaPage")],
       payments: [() => import("./AutoscuoleAgendaPage")],
-      comunicazioni: [() => import("./AutoscuolePaymentsPage")],
     };
 
     const runPrefetch = () => {
@@ -177,9 +167,6 @@ export function AutoscuoleTabsPage() {
       ) : null}
       {activeTab === "payments" ? (
         <AutoscuolePaymentsPage hideNav tabs={tabsNode} />
-      ) : null}
-      {activeTab === "comunicazioni" ? (
-        <AutoscuoleCommunicationsPage hideNav tabs={tabsNode} />
       ) : null}
     </div>
   );

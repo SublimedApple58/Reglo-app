@@ -12,7 +12,6 @@ const navItems = [
   { label: "Agenda", href: "/user/autoscuole/agenda" },
   { label: "Disponibilità", href: "/user/autoscuole/disponibilita" },
   { label: "Pagamenti", href: "/user/autoscuole/payments" },
-  { label: "Comunicazioni", href: "/user/autoscuole/comunicazioni" },
 ];
 
 export function AutoscuoleNav() {

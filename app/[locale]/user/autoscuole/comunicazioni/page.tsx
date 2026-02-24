@@ -6,5 +6,5 @@ export default async function AutoscuoleCommunicationsRoute({
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  redirect(`/${locale}/user/autoscuole?tab=comunicazioni`);
+  redirect(`/${locale}/user/autoscuole`);
 }

@@ -12,7 +12,7 @@ export function UserAvatarFallback({
   initials,
   className,
 }: UserAvatarFallbackProps) {
-  const label = (initials || "RG").trim().slice(0, 2).toUpperCase();
+  const label = (initials || "R").trim().slice(0, 1).toUpperCase();
 
   return (
     <AvatarFallback
@@ -21,7 +21,7 @@ export function UserAvatarFallback({
         className,
       )}
     >
-      <span className="text-[0.72rem] font-semibold tracking-[0.08em]">
+      <span className="text-sm font-semibold tracking-[0.08em]">
         {label}
       </span>
     </AvatarFallback>
