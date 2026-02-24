@@ -178,6 +178,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const toast = useFeedbackToast();
   const companyName = company?.name ?? "Reglo srl";
   const companyRole = company?.role ?? null;
+  const isCompanyContextReady = Boolean(company);
   const isMobile = useIsMobile();
 
   const localePrefix = useMemo(() => {
@@ -213,9 +214,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [company?.services],
   );
   const isAutoscuoleOnlyCompany = useMemo(() => {
-    if (!company?.services?.length) return false;
+    if (!company || !company.services?.length) return false;
     return activeServiceKeys.length === 1 && activeServiceKeys[0] === "AUTOSCUOLE";
-  }, [activeServiceKeys, company?.services]);
+  }, [activeServiceKeys, company]);
   const sidebarItems = useMemo(
     () => (isAutoscuoleOnlyCompany ? autoscuoleSidebarItems : items),
     [isAutoscuoleOnlyCompany],
@@ -270,90 +271,104 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarHeader className="px-1">
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton
-                  size="lg"
-                  className="gap-3 rounded-xl px-3 py-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-                >
-                  <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border border-border/70 shadow-sm">
-                    {activeCompany?.logoUrl ? (
-                      <Image
-                        src={activeCompany.logoUrl}
-                        alt="Company logo"
-                        width={32}
-                        height={32}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-sm font-semibold">
-                        {(activeCompany?.name ?? companyName ?? "C")
-                          .slice(0, 1)
-                          .toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">
-                      {activeCompany?.name ?? companyName}
-                    </span>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {activeCompany?.plan ?? "Pro plan"}
-                    </span>
-                  </div>
-                  <ChevronsUpDown className="ml-auto size-4" />
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
-                align="start"
-                side={isMobile ? "bottom" : "right"}
-                sideOffset={4}
-              >
-                <DropdownMenuLabel className="text-xs text-muted-foreground">
-                  Company
-                </DropdownMenuLabel>
-                {companyList.map((entry, index) => (
-                  <DropdownMenuItem
-                    key={entry.id}
-                    onClick={() => handleCompanySwitch(entry.id)}
-                    className="gap-2 p-2"
+            {isCompanyContextReady ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="gap-3 rounded-xl px-3 py-2 data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                   >
-                    <div className="flex size-6 items-center justify-center rounded-sm border bg-background">
-                      {entry.logoUrl ? (
+                    <div className="-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg overflow-hidden border border-border/70 shadow-sm">
+                      {activeCompany?.logoUrl ? (
                         <Image
-                          src={entry.logoUrl}
-                          alt={entry.name}
-                          width={20}
-                          height={20}
-                          className="h-4 w-4 rounded-sm object-cover"
+                          src={activeCompany.logoUrl}
+                          alt="Company logo"
+                          width={32}
+                          height={32}
+                          className="h-full w-full object-cover"
                         />
                       ) : (
-                        <span className="text-xs font-semibold">
-                          {entry.name.slice(0, 1).toUpperCase()}
+                        <span className="text-sm font-semibold">
+                          {(activeCompany?.name ?? companyName ?? "C")
+                            .slice(0, 1)
+                            .toUpperCase()}
                         </span>
                       )}
                     </div>
-                    {entry.name}
-                    <span className="ml-auto text-[10px] text-muted-foreground">
-                      {entry.plan}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  className="gap-2 p-2"
-                  onClick={() => router.push(`${localePrefix}/select-company`)}
+                    <div className="grid flex-1 text-left text-sm leading-tight">
+                      <span className="truncate font-semibold">
+                        {activeCompany?.name ?? companyName}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        {activeCompany?.plan ?? "Pro plan"}
+                      </span>
+                    </div>
+                    <ChevronsUpDown className="ml-auto size-4" />
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                  align="start"
+                  side={isMobile ? "bottom" : "right"}
+                  sideOffset={4}
                 >
-                  <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                    <Plus className="size-4" />
-                  </div>
-                  <div className="font-medium text-muted-foreground">
-                    Cambia company
-                  </div>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    Company
+                  </DropdownMenuLabel>
+                  {companyList.map((entry) => (
+                    <DropdownMenuItem
+                      key={entry.id}
+                      onClick={() => handleCompanySwitch(entry.id)}
+                      className="gap-2 p-2"
+                    >
+                      <div className="flex size-6 items-center justify-center rounded-sm border bg-background">
+                        {entry.logoUrl ? (
+                          <Image
+                            src={entry.logoUrl}
+                            alt={entry.name}
+                            width={20}
+                            height={20}
+                            className="h-4 w-4 rounded-sm object-cover"
+                          />
+                        ) : (
+                          <span className="text-xs font-semibold">
+                            {entry.name.slice(0, 1).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      {entry.name}
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {entry.plan}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="gap-2 p-2"
+                    onClick={() => router.push(`${localePrefix}/select-company`)}
+                  >
+                    <div className="flex size-6 items-center justify-center rounded-md border bg-background">
+                      <Plus className="size-4" />
+                    </div>
+                    <div className="font-medium text-muted-foreground">
+                      Cambia company
+                    </div>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <SidebarMenuButton
+                size="lg"
+                className="gap-3 rounded-xl px-3 py-2"
+                disabled
+              >
+                <div className="size-8 rounded-lg bg-muted/70 animate-pulse" />
+                <div className="grid flex-1 gap-1.5">
+                  <span className="h-3.5 w-24 rounded bg-muted/70 animate-pulse" />
+                  <span className="h-2.5 w-16 rounded bg-muted/60 animate-pulse" />
+                </div>
+              </SidebarMenuButton>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
@@ -363,7 +378,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             {/* <SidebarGroupLabel>Application</SidebarGroupLabel> */}
             <SidebarGroupContent>
               <SidebarMenu>
-                {sidebarItems.map((item) => (
+                {!isCompanyContextReady
+                  ? [0, 1, 2, 3, 4].map((index) => (
+                      <SidebarMenuItem key={`sidebar-loading-${index}`}>
+                        <div className="flex h-8 items-center gap-3 rounded-md px-2">
+                          <span className="size-4 rounded bg-muted/70 animate-pulse" />
+                          <span className="h-3 w-24 rounded bg-muted/70 animate-pulse" />
+                        </div>
+                      </SidebarMenuItem>
+                    ))
+                  : sidebarItems.map((item) => (
                   <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
                     <SidebarMenuButton
                       asChild
@@ -400,7 +424,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          {isAuthorized && (
+          {isCompanyContextReady && isAuthorized && (
             <SidebarGroup>
               <SidebarGroupLabel>Admin</SidebarGroupLabel>
               <SidebarGroupContent>
@@ -431,7 +455,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           )}
         </div>
         {/* <Separator style={{ width: "90%", marginInline: "auto" }} /> */}
-        {!isAutoscuoleOnlyCompany ? (
+        {isCompanyContextReady && !isAutoscuoleOnlyCompany ? (
           <SidebarGroup className="px-1">
             <SidebarGroupContent>
               <SidebarMenu>

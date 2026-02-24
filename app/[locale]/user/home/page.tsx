@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useAtomValue } from "jotai";
 import { userSessionAtom } from "@/atoms/user.store";
+import { companyAtom } from "@/atoms/company.store";
 import {
   Dialog,
   DialogContent,
@@ -67,13 +68,28 @@ type HomeOverview = {
 export default function HomePage(): React.ReactElement {
   const router = useRouter();
   const session = useAtomValue(userSessionAtom);
+  const company = useAtomValue(companyAtom);
   const toast = useFeedbackToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [workflowName, setWorkflowName] = useState("");
   const [overview, setOverview] = useState<HomeOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const isCompanyContextReady = Boolean(company);
+  const isAutoscuoleOnlyCompany = React.useMemo(() => {
+    if (!company?.services?.length) return false;
+    const activeServices = company.services.filter(
+      (service) => service.status === "active",
+    );
+    return activeServices.length === 1 && activeServices[0]?.key === "AUTOSCUOLE";
+  }, [company?.services]);
 
   React.useEffect(() => {
+    if (!isCompanyContextReady || !isAutoscuoleOnlyCompany) return;
+    router.replace("/user/autoscuole");
+  }, [isAutoscuoleOnlyCompany, isCompanyContextReady, router]);
+
+  React.useEffect(() => {
+    if (!isCompanyContextReady || isAutoscuoleOnlyCompany) return;
     let active = true;
     const load = async () => {
       if (active) setIsLoading(true);
@@ -93,11 +109,26 @@ export default function HomePage(): React.ReactElement {
     return () => {
       active = false;
     };
-  }, [toast]);
+  }, [isAutoscuoleOnlyCompany, isCompanyContextReady, toast]);
 
   const greetingName =
     session?.user?.name?.split(" ").filter(Boolean)[0] ?? "there";
   const metrics = overview?.metrics;
+
+  if (!isCompanyContextReady || isAutoscuoleOnlyCompany) {
+    return (
+      <ClientPageWrapper title="Home" hideHero>
+        <div className="space-y-5">
+          <Skeleton className="h-56 w-full rounded-3xl" />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((index) => (
+              <Skeleton key={index} className="h-32 w-full rounded-2xl" />
+            ))}
+          </div>
+        </div>
+      </ClientPageWrapper>
+    );
+  }
 
   const quickActions: QuickAction[] = [
     {
