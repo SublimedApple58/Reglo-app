@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-export default async function AutoscuoleDisponibilitaRoute({
+export default async function AutoscuoleSettingsRoute({
   params,
 }: {
   params: Promise<{ locale: string }>;

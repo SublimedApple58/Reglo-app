@@ -42,7 +42,7 @@ type AutoscuoleTabKey =
   | "dashboard"
   | "students"
   | "agenda"
-  | "disponibilita"
+  | "settings"
   | "payments";
 
 type TabItem = {
@@ -54,12 +54,13 @@ const TAB_ITEMS: TabItem[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "students", label: "Allievi" },
   { key: "agenda", label: "Agenda" },
-  { key: "disponibilita", label: "Disponibilita" },
+  { key: "settings", label: "Settings" },
   { key: "payments", label: "Pagamenti" },
 ];
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
   if (!value) return "dashboard";
+  if (value === "disponibilita") return "settings";
   const found = TAB_ITEMS.find((item) => item.key === value);
   return found?.key ?? "dashboard";
 }
@@ -99,7 +100,7 @@ export function AutoscuoleTabsPage() {
         () => import("./AutoscuolePaymentsPage"),
         () => import("./AutoscuoleResourcesPage"),
       ],
-      disponibilita: [() => import("./AutoscuoleAgendaPage")],
+      settings: [() => import("./AutoscuoleAgendaPage")],
       payments: [() => import("./AutoscuoleAgendaPage")],
     };
 
@@ -162,7 +163,7 @@ export function AutoscuoleTabsPage() {
       {activeTab === "agenda" ? (
         <AutoscuoleAgendaPage hideNav tabs={tabsNode} />
       ) : null}
-      {activeTab === "disponibilita" ? (
+      {activeTab === "settings" ? (
         <AutoscuoleResourcesPage hideNav tabs={tabsNode} />
       ) : null}
       {activeTab === "payments" ? (

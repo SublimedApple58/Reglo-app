@@ -103,9 +103,9 @@ export function AutoscuoleDashboardPage({
       },
       {
         key: "resources",
-        title: "Disponibilità",
-        description: "Orari istruttori, veicoli e regole guida.",
-        href: `/${locale}/user/autoscuole?tab=disponibilita`,
+        title: "Settings",
+        description: "Disponibilità, regole guida e policy prenotazioni.",
+        href: `/${locale}/user/autoscuole?tab=settings`,
         icon: SlidersHorizontal,
       },
       {

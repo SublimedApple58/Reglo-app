@@ -61,7 +61,7 @@ type SidebarItem = {
   url: string;
   icon: React.ComponentType<{ className?: string }>;
   service?: ServiceKey;
-  tabKey?: "dashboard" | "students" | "agenda" | "disponibilita" | "payments";
+  tabKey?: "dashboard" | "students" | "agenda" | "settings" | "payments";
 };
 
 const items: SidebarItem[] = [
@@ -122,10 +122,10 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     tabKey: "agenda",
   },
   {
-    title: "Disponibilita",
-    url: "autoscuole?tab=disponibilita",
+    title: "Settings",
+    url: "autoscuole?tab=settings",
     icon: SlidersHorizontal,
-    tabKey: "disponibilita",
+    tabKey: "settings",
   },
   {
     title: "Pagamenti",
@@ -195,11 +195,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     [path],
   );
   const activeAutoscuoleTab = useMemo(() => {
-    const tab = (searchParams.get("tab") ?? "dashboard").trim().toLowerCase();
+    const rawTab = (searchParams.get("tab") ?? "dashboard").trim().toLowerCase();
+    const tab = rawTab === "disponibilita" ? "settings" : rawTab;
     if (
       tab === "students" ||
       tab === "agenda" ||
-      tab === "disponibilita" ||
+      tab === "settings" ||
       tab === "payments"
     ) {
       return tab;

@@ -501,7 +501,7 @@ export function AutoscuoleResourcesPage({
   return (
     <ClientPageWrapper
       title="Autoscuole"
-      subTitle="Disponibilità istruttori e veicoli"
+      subTitle="Settings operativi: disponibilità, policy e reminder"
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
