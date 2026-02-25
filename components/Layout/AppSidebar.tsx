@@ -194,6 +194,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     () => path.replace(/\/+$/, "") || "/",
     [path],
   );
+  const toUserHref = (url: string) => `/user/${url.replace(/^\/+/, "")}`;
+  const toAdminHref = (url: string) => `/admin/${url.replace(/^\/+/, "")}`;
+  const matchesPath = (targetPath: string) => {
+    const normalizedTarget = targetPath.replace(/\/+$/, "");
+    const localizedTarget = `${localePrefix}${normalizedTarget}`.replace(/\/+$/, "");
+    return (
+      normalizedPath === normalizedTarget ||
+      normalizedPath.startsWith(`${normalizedTarget}/`) ||
+      normalizedPath === localizedTarget ||
+      normalizedPath.startsWith(`${localizedTarget}/`)
+    );
+  };
   const activeAutoscuoleTab = useMemo(() => {
     const rawTab = (searchParams.get("tab") ?? "dashboard").trim().toLowerCase();
     const tab = rawTab === "disponibilita" ? "settings" : rawTab;
@@ -218,9 +230,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     if (!company || !company.services?.length) return false;
     return activeServiceKeys.length === 1 && activeServiceKeys[0] === "AUTOSCUOLE";
   }, [activeServiceKeys, company]);
+  const isInsideAutoscuoleArea = matchesPath(toUserHref("autoscuole"));
+  const shouldUseAutoscuoleSidebar = isAutoscuoleOnlyCompany || isInsideAutoscuoleArea;
   const sidebarItems = useMemo(
-    () => (isAutoscuoleOnlyCompany ? autoscuoleSidebarItems : items),
-    [isAutoscuoleOnlyCompany],
+    () => (shouldUseAutoscuoleSidebar ? autoscuoleSidebarItems : items),
+    [shouldUseAutoscuoleSidebar],
   );
 
   const { isMobile: sidebarIsMobile, setOpenMobile } = useSidebar();
@@ -232,19 +246,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     (company
       ? { ...company, plan: "Pro plan", logoUrl: company.logoUrl }
       : null);
-
-  const toUserHref = (url: string) => `/user/${url.replace(/^\/+/, "")}`;
-  const toAdminHref = (url: string) => `/admin/${url.replace(/^\/+/, "")}`;
-  const matchesPath = (targetPath: string) => {
-    const normalizedTarget = targetPath.replace(/\/+$/, "");
-    const localizedTarget = `${localePrefix}${normalizedTarget}`.replace(/\/+$/, "");
-    return (
-      normalizedPath === normalizedTarget ||
-      normalizedPath.startsWith(`${normalizedTarget}/`) ||
-      normalizedPath === localizedTarget ||
-      normalizedPath.startsWith(`${localizedTarget}/`)
-    );
-  };
   const isSidebarItemActive = (item: SidebarItem) => {
     if (item.tabKey) {
       if (!matchesPath(toUserHref("autoscuole"))) return false;
