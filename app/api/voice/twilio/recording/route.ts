@@ -12,11 +12,24 @@ const toStringMap = (payload: FormData) => {
   return data;
 };
 
+const resolvePublicRequestUrl = (request: Request) => {
+  try {
+    const parsed = new URL(request.url);
+    const forwardedProto = request.headers.get("x-forwarded-proto")?.trim();
+    const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
+    if (!forwardedHost) return request.url;
+    const protocol = forwardedProto || parsed.protocol.replace(":", "") || "https";
+    return `${protocol}://${forwardedHost}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return request.url;
+  }
+};
+
 export async function POST(request: Request) {
   const formData = await request.formData();
   const payload = toStringMap(formData);
   const validSignature = verifyTwilioRequestSignature({
-    requestUrl: request.url,
+    requestUrl: resolvePublicRequestUrl(request),
     payload,
     signature: request.headers.get("x-twilio-signature"),
   });

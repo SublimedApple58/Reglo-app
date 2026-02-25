@@ -186,17 +186,49 @@ export async function resolveVoiceLineContextByNumber(
   };
 }
 
-const buildTwilioValidationUrlCandidates = (requestUrl: string) => {
-  const candidates = new Set<string>([requestUrl]);
-  const base = normalizeString(process.env.TWILIO_WEBHOOK_BASE_URL);
-  if (!base) return Array.from(candidates);
+const normalizeTwilioUrlVariants = (inputUrl: string) => {
+  const variants = new Set<string>([inputUrl]);
   try {
-    const parsed = new URL(requestUrl);
-    const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-    candidates.add(`${normalizedBase}${parsed.pathname}${parsed.search}`);
-    candidates.add(`${normalizedBase}${parsed.pathname}`);
+    const parsed = new URL(inputUrl);
+    const trimmedPath = parsed.pathname.endsWith("/")
+      ? parsed.pathname.slice(0, -1)
+      : parsed.pathname;
+    const slashPath = trimmedPath ? `${trimmedPath}/` : "/";
+
+    const protocols: Array<"http:" | "https:"> = ["https:", "http:"];
+    for (const protocol of protocols) {
+      const base = `${protocol}//${parsed.host}`;
+      variants.add(`${base}${trimmedPath}${parsed.search}`);
+      variants.add(`${base}${trimmedPath}`);
+      variants.add(`${base}${slashPath}${parsed.search}`);
+      variants.add(`${base}${slashPath}`);
+    }
   } catch {
-    candidates.add(base);
+    // Keep original URL only.
+  }
+  return Array.from(variants);
+};
+
+const buildTwilioValidationUrlCandidates = (requestUrl: string) => {
+  const candidates = new Set<string>(normalizeTwilioUrlVariants(requestUrl));
+  const base = normalizeString(process.env.TWILIO_WEBHOOK_BASE_URL);
+  if (base) {
+    try {
+      const parsed = new URL(requestUrl);
+      const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+      const withPath = `${normalizedBase}${parsed.pathname}`;
+      const withPathAndSearch = `${withPath}${parsed.search}`;
+      for (const variant of normalizeTwilioUrlVariants(withPathAndSearch)) {
+        candidates.add(variant);
+      }
+      for (const variant of normalizeTwilioUrlVariants(withPath)) {
+        candidates.add(variant);
+      }
+    } catch {
+      for (const variant of normalizeTwilioUrlVariants(base)) {
+        candidates.add(variant);
+      }
+    }
   }
   return Array.from(candidates);
 };
