@@ -72,6 +72,9 @@ model User {
   autoscuolaRepositionTasksStudent AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionTaskStudent")
   autoscuolaRepositionTasksActor AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionTaskActor")
   autoscuolaMessageLogs AutoscuolaMessageLog[]
+  autoscuolaVoiceCallsStudent AutoscuolaVoiceCall[] @relation("AutoscuolaVoiceCallStudent")
+  autoscuolaVoiceCallbackTasksStudent AutoscuolaVoiceCallbackTask[] @relation("AutoscuolaVoiceCallbackStudent")
+  autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[] @relation("AutoscuolaVoiceCallbackAssignee")
 }
 
 model Account {
@@ -216,6 +219,10 @@ model Company {
   autoscuolaMessageTemplates AutoscuolaMessageTemplate[]
   autoscuolaMessageRules AutoscuolaMessageRule[]
   autoscuolaMessageLogs AutoscuolaMessageLog[]
+  autoscuolaVoiceLines AutoscuolaVoiceLine[]
+  autoscuolaVoiceCalls AutoscuolaVoiceCall[]
+  autoscuolaVoiceCallbackTasks AutoscuolaVoiceCallbackTask[]
+  autoscuolaVoiceKnowledgeChunks AutoscuolaVoiceKnowledgeChunk[]
   services CompanyService[]
   mobileTokens MobileAccessToken[]
   pushDevices MobilePushDevice[]
@@ -473,6 +480,7 @@ model AutoscuolaAppointment {
   payments   AutoscuolaAppointmentPayment[]
   creditLedger AutoscuolaStudentLessonCreditLedger[]
   messageLogs AutoscuolaMessageLog[]
+  voiceCalls AutoscuolaVoiceCall[]
   repositionTaskSource AutoscuolaAppointmentRepositionTask? @relation("AutoscuolaRepositionSource")
   repositionTaskMatched AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionMatched")
 
@@ -492,6 +500,112 @@ model AutoscuolaAppointment {
   @@index([companyId, studentId, creditApplied])
   @@index([replacedByAppointmentId])
   @@index([companyId, cancellationKind, startsAt])
+}
+
+model AutoscuolaVoiceLine {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  displayNumber  String
+  twilioNumber   String
+  twilioPhoneSid String
+  status         String   @default("ready")
+  routingMode    String   @default("twilio")
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  calls   AutoscuolaVoiceCall[]
+
+  @@unique([twilioPhoneSid])
+  @@index([companyId])
+}
+
+model AutoscuolaVoiceCall {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @db.Uuid
+  lineId       String   @db.Uuid
+  twilioCallSid String  @unique
+  fromNumber   String
+  toNumber     String
+  status       String   @default("received")
+  studentId    String?  @db.Uuid
+  appointmentId String? @db.Uuid
+  startedAt    DateTime @default(now()) @db.Timestamp(6)
+  endedAt      DateTime? @db.Timestamp(6)
+  durationSec  Int?
+  outcome      String?
+  summary      String?
+  recordingSid String?
+  recordingUrl String?
+  transcriptText String?
+  needsCallback Boolean @default(false)
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  line    AutoscuolaVoiceLine @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  student User? @relation("AutoscuolaVoiceCallStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  appointment AutoscuolaAppointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  turns   AutoscuolaVoiceCallTurn[]
+  callbackTasks AutoscuolaVoiceCallbackTask[]
+
+  @@index([companyId, status, startedAt])
+  @@index([lineId])
+  @@index([studentId])
+  @@index([appointmentId])
+}
+
+model AutoscuolaVoiceCallTurn {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  callId     String   @db.Uuid
+  speaker    String
+  text       String
+  confidence Float?
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+
+  call AutoscuolaVoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@index([callId, createdAt])
+}
+
+model AutoscuolaVoiceCallbackTask {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String   @db.Uuid
+  callId           String   @db.Uuid
+  studentId        String?  @db.Uuid
+  phoneNumber      String
+  reason           String
+  status           String   @default("pending")
+  assignedToUserId String?  @db.Uuid
+  nextAttemptAt    DateTime? @db.Timestamp(6)
+  attemptCount     Int      @default(0)
+  createdAt        DateTime @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  call    AutoscuolaVoiceCall @relation(fields: [callId], references: [id], onDelete: Cascade)
+  student User? @relation("AutoscuolaVoiceCallbackStudent", fields: [studentId], references: [id], onDelete: SetNull)
+  assignee User? @relation("AutoscuolaVoiceCallbackAssignee", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, status, nextAttemptAt])
+  @@index([studentId])
+}
+
+model AutoscuolaVoiceKnowledgeChunk {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scope     String
+  companyId String?  @db.Uuid
+  title     String
+  content   String
+  tags      String[]
+  language  String   @default("it-IT")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([scope, companyId, language, active])
 }
 
 model AutoscuolaAppointmentRepositionTask {

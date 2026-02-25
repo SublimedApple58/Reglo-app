@@ -11,12 +11,14 @@ import {
   processAutoscuolaInvoiceFinalization,
 } from "@/lib/autoscuole/communications";
 import { processAutoscuolaPendingRepositions } from "@/lib/autoscuole/repositioning";
+import { cleanupAutoscuolaVoiceRetention } from "@/lib/autoscuole/voice";
 
 export const autoscuoleReminders = schedules.task({
   id: "autoscuole-reminders",
   cron: "*/1 * * * *",
   run: async () => {
     const prisma = await getPrisma();
+    const now = new Date();
     await processAutoscuolaAutoCompleteCheckedIn({ prisma });
     await processAutoscuolaPenaltyCharges({ prisma });
     await processAutoscuolaLessonSettlement({ prisma });
@@ -26,6 +28,9 @@ export const autoscuoleReminders = schedules.task({
     await processAutoscuolaConfiguredAppointmentReminders({ prisma });
     await processAutoscuolaAppointmentReminders({ prisma });
     await processAutoscuolaCaseDeadlines({ prisma });
+    if (now.getUTCMinutes() === 0) {
+      await cleanupAutoscuolaVoiceRetention({ prisma, now });
+    }
     return { ok: true };
   },
 });

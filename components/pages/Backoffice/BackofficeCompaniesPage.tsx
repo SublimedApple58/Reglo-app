@@ -7,6 +7,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Drawer,
   DrawerClose,
@@ -77,6 +78,13 @@ function ServiceCard({
   });
 
   const fields = limitFields[serviceKey];
+  const voiceFeatureEnabled = Boolean(limits.voiceFeatureEnabled);
+  const voiceProvisioningStatus =
+    typeof limits.voiceProvisioningStatus === "string"
+      ? limits.voiceProvisioningStatus
+      : "not_started";
+  const voiceLineRef =
+    typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
 
   const handleSave = () => {
     startTransition(async () => {
@@ -123,23 +131,95 @@ function ServiceCard({
       {fields.length ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {fields.map((field) => (
-            <div key={field.key} className="space-y-2">
+            (() => {
+              const rawValue = limits[field.key];
+              const numericValue =
+                typeof rawValue === "number" && Number.isFinite(rawValue)
+                  ? rawValue
+                  : 0;
+              return (
+                <div key={field.key} className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                    {field.label}
+                  </p>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={numericValue}
+                    onChange={(event) =>
+                      setLimits((prev) => ({
+                        ...prev,
+                        [field.key]: Number(event.target.value || 0),
+                      }))
+                    }
+                  />
+                </div>
+              );
+            })()
+          ))}
+        </div>
+      ) : serviceKey === "AUTOSCUOLE" ? (
+        <div className="space-y-3 rounded-2xl border border-white/60 bg-white/75 p-3">
+          <label className="flex items-center justify-between gap-2 text-xs">
+            <span className="font-medium text-foreground">Voice AI disponibile</span>
+            <Checkbox
+              checked={voiceFeatureEnabled}
+              onCheckedChange={(checked) =>
+                setLimits((prev) => ({
+                  ...prev,
+                  voiceFeatureEnabled: Boolean(checked),
+                  voiceProvisioningStatus: Boolean(checked)
+                    ? (typeof prev.voiceProvisioningStatus === "string"
+                        ? prev.voiceProvisioningStatus
+                        : "provisioning")
+                    : "not_started",
+                  voiceLineRef: Boolean(checked) ? prev.voiceLineRef ?? "" : null,
+                }))
+              }
+            />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {field.label}
+                Provisioning
+              </p>
+              <Select
+                value={String(voiceProvisioningStatus)}
+                onValueChange={(value) =>
+                  setLimits((prev) => ({
+                    ...prev,
+                    voiceProvisioningStatus:
+                      value as ServiceLimits["voiceProvisioningStatus"],
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="not_started">Not started</SelectItem>
+                  <SelectItem value="provisioning">Provisioning</SelectItem>
+                  <SelectItem value="ready">Ready</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Line reference
               </p>
               <Input
-                type="number"
-                min={0}
-                value={limits[field.key] ?? 0}
+                value={voiceLineRef}
+                placeholder="UUID linea assegnata"
                 onChange={(event) =>
                   setLimits((prev) => ({
                     ...prev,
-                    [field.key]: Number(event.target.value || 0),
+                    voiceLineRef: event.target.value || null,
                   }))
                 }
               />
             </div>
-          ))}
+          </div>
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">

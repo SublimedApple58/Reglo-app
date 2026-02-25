@@ -23,6 +23,25 @@ export type ServiceLimits = {
   instructorReminderChannels?: ("push" | "whatsapp" | "email")[];
   appBookingActors?: "students" | "instructors" | "both";
   instructorBookingMode?: "manual_full" | "manual_engine" | "guided_proposal";
+  voiceFeatureEnabled?: boolean;
+  voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
+  voiceLineRef?: string | null;
+  voiceAssistantEnabled?: boolean;
+  voiceBookingEnabled?: boolean;
+  voiceLanguage?: "it-IT";
+  voiceLegalGreetingEnabled?: boolean;
+  voiceOfficeHours?: {
+    daysOfWeek: number[];
+    startMinutes: number;
+    endMinutes: number;
+  } | null;
+  voiceHandoffPhone?: string | null;
+  voiceFallbackMode?: "transfer_or_callback";
+  voiceRecordingEnabled?: boolean;
+  voiceTranscriptionEnabled?: boolean;
+  voiceRetentionDays?: 90;
+  voiceInstructions?: string;
+  voiceAllowedActions?: Array<"faq" | "lesson_info" | "booking">;
 };
 
 export type CompanyServiceInfo = {

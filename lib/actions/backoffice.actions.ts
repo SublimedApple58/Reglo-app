@@ -15,9 +15,29 @@ const updateCompanyServiceSchema = z.object({
   limits: z
     .record(
       z.string(),
-      z.union([z.number(), z.string(), z.boolean(), z.null(), z.array(z.string())]),
+      z.union([
+        z.number(),
+        z.string(),
+        z.boolean(),
+        z.null(),
+        z.array(z.string()),
+        z.array(z.number()),
+        z.record(z.string(), z.any()),
+      ]),
     )
     .optional(),
+});
+
+const assignAutoscuolaVoiceLineSchema = z.object({
+  companyId: z.string().uuid(),
+  displayNumber: z.string().trim().min(5),
+  twilioNumber: z.string().trim().min(5),
+  twilioPhoneSid: z.string().trim().min(6),
+  routingMode: z.enum(["twilio", "sip"]).default("twilio"),
+});
+
+const unassignAutoscuolaVoiceLineSchema = z.object({
+  companyId: z.string().uuid(),
 });
 
 const backofficeSignInSchema = z.object({
@@ -97,6 +117,112 @@ export async function updateCompanyService(input: z.infer<typeof updateCompanySe
         data: { autoscuolaRole: "STUDENT" },
       });
     }
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function assignAutoscuolaVoiceLine(
+  input: z.infer<typeof assignAutoscuolaVoiceLineSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const payload = assignAutoscuolaVoiceLineSchema.parse(input);
+
+    const line = await prisma.autoscuolaVoiceLine.upsert({
+      where: { twilioPhoneSid: payload.twilioPhoneSid },
+      update: {
+        companyId: payload.companyId,
+        displayNumber: payload.displayNumber,
+        twilioNumber: payload.twilioNumber,
+        status: "ready",
+        routingMode: payload.routingMode,
+      },
+      create: {
+        companyId: payload.companyId,
+        displayNumber: payload.displayNumber,
+        twilioNumber: payload.twilioNumber,
+        twilioPhoneSid: payload.twilioPhoneSid,
+        status: "ready",
+        routingMode: payload.routingMode,
+      },
+    });
+
+    const existingService = await prisma.companyService.findFirst({
+      where: { companyId: payload.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { id: true, limits: true },
+    });
+    const currentLimits = (existingService?.limits ?? {}) as Record<string, unknown>;
+    const nextLimits = {
+      ...currentLimits,
+      voiceFeatureEnabled: true,
+      voiceProvisioningStatus: "ready",
+      voiceLineRef: line.id,
+    };
+
+    if (existingService) {
+      await prisma.companyService.update({
+        where: { id: existingService.id },
+        data: { limits: nextLimits, status: "ACTIVE" },
+      });
+    } else {
+      await prisma.companyService.create({
+        data: {
+          companyId: payload.companyId,
+          serviceKey: "AUTOSCUOLE",
+          status: "ACTIVE",
+          limits: nextLimits,
+        },
+      });
+    }
+
+    return { success: true, data: { lineId: line.id } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function unassignAutoscuolaVoiceLine(
+  input: z.infer<typeof unassignAutoscuolaVoiceLineSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const payload = unassignAutoscuolaVoiceLineSchema.parse(input);
+
+    const existingService = await prisma.companyService.findFirst({
+      where: { companyId: payload.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { id: true, limits: true },
+    });
+    if (!existingService) {
+      return { success: true };
+    }
+
+    const currentLimits = (existingService.limits ?? {}) as Record<string, unknown>;
+    const lineId =
+      typeof currentLimits.voiceLineRef === "string" ? currentLimits.voiceLineRef : null;
+
+    if (lineId) {
+      await prisma.autoscuolaVoiceLine.updateMany({
+        where: { id: lineId, companyId: payload.companyId },
+        data: { status: "inactive" },
+      });
+    }
+
+    const nextLimits = {
+      ...currentLimits,
+      voiceFeatureEnabled: false,
+      voiceProvisioningStatus: "not_started",
+      voiceLineRef: null,
+      voiceAssistantEnabled: false,
+      voiceBookingEnabled: false,
+    };
+
+    await prisma.companyService.update({
+      where: { id: existingService.id },
+      data: { limits: nextLimits },
+    });
 
     return { success: true };
   } catch (error) {

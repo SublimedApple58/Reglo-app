@@ -45,6 +45,30 @@ const DEFAULT_PENALTY_PERCENT = 50;
 const DEFAULT_PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
+const VOICE_PROVISIONING_STATUSES = [
+  "not_started",
+  "provisioning",
+  "ready",
+  "error",
+] as const;
+const DEFAULT_VOICE_FEATURE_ENABLED = false;
+const DEFAULT_VOICE_PROVISIONING_STATUS =
+  "not_started" as (typeof VOICE_PROVISIONING_STATUSES)[number];
+const DEFAULT_VOICE_ASSISTANT_ENABLED = false;
+const DEFAULT_VOICE_BOOKING_ENABLED = false;
+const DEFAULT_VOICE_LANGUAGE = "it-IT" as const;
+const DEFAULT_VOICE_LEGAL_GREETING_ENABLED = true;
+const DEFAULT_VOICE_FALLBACK_MODE = "transfer_or_callback" as const;
+const DEFAULT_VOICE_RECORDING_ENABLED = true;
+const DEFAULT_VOICE_TRANSCRIPTION_ENABLED = true;
+const DEFAULT_VOICE_RETENTION_DAYS = 90 as const;
+const VOICE_ALLOWED_ACTIONS = ["faq", "lesson_info", "booking"] as const;
+const DEFAULT_VOICE_ALLOWED_ACTIONS = ["faq", "lesson_info"] as const;
+const DEFAULT_VOICE_OFFICE_HOURS = {
+  daysOfWeek: [1, 2, 3, 4, 5],
+  startMinutes: 9 * 60,
+  endMinutes: 19 * 60,
+};
 
 const LESSON_POLICY_TYPE_SET = new Set<string>(LESSON_POLICY_TYPES);
 
@@ -157,6 +181,21 @@ const bookingSlotDurationsSchema = z
 
 const appBookingActorsSchema = z.enum(APP_BOOKING_ACTOR_OPTIONS);
 const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
+const voiceAllowedActionSchema = z.enum(VOICE_ALLOWED_ACTIONS);
+const voiceOfficeHoursSchema = z
+  .object({
+    daysOfWeek: z
+      .array(z.number().int().min(0).max(6))
+      .min(1)
+      .max(7)
+      .transform((days) => Array.from(new Set(days)).sort((a, b) => a - b)),
+    startMinutes: z.number().int().min(0).max(1410),
+    endMinutes: z.number().int().min(30).max(1440),
+  })
+  .refine((value) => value.endMinutes > value.startMinutes, {
+    message: "Fascia oraria voce non valida.",
+    path: ["endMinutes"],
+  });
 
 const autoscuolaSettingsPatchSchema = z
   .object({
@@ -210,6 +249,22 @@ const autoscuolaSettingsPatchSchema = z
     bookingSlotDurations: bookingSlotDurationsSchema.optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
+    voiceAssistantEnabled: z.boolean().optional(),
+    voiceBookingEnabled: z.boolean().optional(),
+    voiceLanguage: z.literal("it-IT").optional(),
+    voiceLegalGreetingEnabled: z.boolean().optional(),
+    voiceOfficeHours: voiceOfficeHoursSchema.nullable().optional(),
+    voiceHandoffPhone: optionalNullableIdSchema,
+    voiceFallbackMode: z.literal("transfer_or_callback").optional(),
+    voiceRecordingEnabled: z.boolean().optional(),
+    voiceTranscriptionEnabled: z.boolean().optional(),
+    voiceRetentionDays: z.literal(90).optional(),
+    voiceInstructions: z.string().max(6000).optional(),
+    voiceAllowedActions: z
+      .array(voiceAllowedActionSchema)
+      .min(1)
+      .transform((items) => Array.from(new Set(items)))
+      .optional(),
   })
   .refine(
     (value) =>
@@ -234,7 +289,19 @@ const autoscuolaSettingsPatchSchema = z
       value.lessonTypeConstraints !== undefined ||
       value.bookingSlotDurations !== undefined ||
       value.appBookingActors !== undefined ||
-      value.instructorBookingMode !== undefined,
+      value.instructorBookingMode !== undefined ||
+      value.voiceAssistantEnabled !== undefined ||
+      value.voiceBookingEnabled !== undefined ||
+      value.voiceLanguage !== undefined ||
+      value.voiceLegalGreetingEnabled !== undefined ||
+      value.voiceOfficeHours !== undefined ||
+      value.voiceHandoffPhone !== undefined ||
+      value.voiceFallbackMode !== undefined ||
+      value.voiceRecordingEnabled !== undefined ||
+      value.voiceTranscriptionEnabled !== undefined ||
+      value.voiceRetentionDays !== undefined ||
+      value.voiceInstructions !== undefined ||
+      value.voiceAllowedActions !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -271,6 +338,18 @@ const autoscuolaSettingsPatchSchema = z
         code: z.ZodIssueCode.custom,
         path: ["instructorBookingMode"],
         message: "Seleziona la modalità prenotazione istruttore.",
+      });
+    }
+
+    if (
+      value.voiceBookingEnabled === true &&
+      value.voiceAllowedActions !== undefined &&
+      !value.voiceAllowedActions.includes("booking")
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["voiceAllowedActions"],
+        message: "Per abilitare booking voce devi includere l'azione booking.",
       });
     }
   });
@@ -348,6 +427,25 @@ export type AutoscuolaSettingsData = {
   bookingSlotDurations: number[];
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
+  voiceFeatureEnabled: boolean;
+  voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
+  voiceLineRef: string | null;
+  voiceAssistantEnabled: boolean;
+  voiceBookingEnabled: boolean;
+  voiceLanguage: "it-IT";
+  voiceLegalGreetingEnabled: boolean;
+  voiceOfficeHours: {
+    daysOfWeek: number[];
+    startMinutes: number;
+    endMinutes: number;
+  } | null;
+  voiceHandoffPhone: string | null;
+  voiceFallbackMode: "transfer_or_callback";
+  voiceRecordingEnabled: boolean;
+  voiceTranscriptionEnabled: boolean;
+  voiceRetentionDays: 90;
+  voiceInstructions: string;
+  voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
 };
 
 const resolveAutoscuolaSettingsData = (
@@ -423,6 +521,65 @@ const resolveAutoscuolaSettingsData = (
     DEFAULT_BOOKING_SLOT_DURATIONS,
   );
   const bookingGovernance = parseBookingGovernanceFromLimits(limits);
+  const voiceFeatureEnabled =
+    typeof limits.voiceFeatureEnabled === "boolean"
+      ? limits.voiceFeatureEnabled
+      : DEFAULT_VOICE_FEATURE_ENABLED;
+  const voiceProvisioningStatus = VOICE_PROVISIONING_STATUSES.includes(
+    limits.voiceProvisioningStatus as (typeof VOICE_PROVISIONING_STATUSES)[number],
+  )
+    ? (limits.voiceProvisioningStatus as (typeof VOICE_PROVISIONING_STATUSES)[number])
+    : DEFAULT_VOICE_PROVISIONING_STATUS;
+  const voiceLineRef =
+    typeof limits.voiceLineRef === "string" && limits.voiceLineRef.trim().length
+      ? limits.voiceLineRef.trim()
+      : null;
+  const voiceAssistantEnabled =
+    typeof limits.voiceAssistantEnabled === "boolean"
+      ? limits.voiceAssistantEnabled
+      : DEFAULT_VOICE_ASSISTANT_ENABLED;
+  const voiceBookingEnabled =
+    typeof limits.voiceBookingEnabled === "boolean"
+      ? limits.voiceBookingEnabled
+      : DEFAULT_VOICE_BOOKING_ENABLED;
+  const voiceLanguage = DEFAULT_VOICE_LANGUAGE;
+  const voiceLegalGreetingEnabled =
+    typeof limits.voiceLegalGreetingEnabled === "boolean"
+      ? limits.voiceLegalGreetingEnabled
+      : DEFAULT_VOICE_LEGAL_GREETING_ENABLED;
+  const parsedOfficeHours = voiceOfficeHoursSchema.safeParse(
+    (limits.voiceOfficeHours as Record<string, unknown> | null | undefined) ??
+      DEFAULT_VOICE_OFFICE_HOURS,
+  );
+  const voiceOfficeHours = parsedOfficeHours.success
+    ? parsedOfficeHours.data
+    : DEFAULT_VOICE_OFFICE_HOURS;
+  const voiceHandoffPhone =
+    typeof limits.voiceHandoffPhone === "string" && limits.voiceHandoffPhone.trim().length
+      ? limits.voiceHandoffPhone.trim()
+      : null;
+  const voiceFallbackMode = DEFAULT_VOICE_FALLBACK_MODE;
+  const voiceRecordingEnabled =
+    typeof limits.voiceRecordingEnabled === "boolean"
+      ? limits.voiceRecordingEnabled
+      : DEFAULT_VOICE_RECORDING_ENABLED;
+  const voiceTranscriptionEnabled =
+    typeof limits.voiceTranscriptionEnabled === "boolean"
+      ? limits.voiceTranscriptionEnabled
+      : DEFAULT_VOICE_TRANSCRIPTION_ENABLED;
+  const voiceRetentionDays = DEFAULT_VOICE_RETENTION_DAYS;
+  const voiceInstructions =
+    typeof limits.voiceInstructions === "string" ? limits.voiceInstructions : "";
+  const voiceAllowedActions = Array.isArray(limits.voiceAllowedActions)
+    ? Array.from(
+        new Set(
+          limits.voiceAllowedActions.filter((item): item is (typeof VOICE_ALLOWED_ACTIONS)[number] =>
+            typeof item === "string" &&
+            (VOICE_ALLOWED_ACTIONS as readonly string[]).includes(item),
+          ),
+        ),
+      )
+    : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
 
   return {
     availabilityWeeks,
@@ -447,6 +604,21 @@ const resolveAutoscuolaSettingsData = (
     bookingSlotDurations,
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
+    voiceFeatureEnabled,
+    voiceProvisioningStatus,
+    voiceLineRef,
+    voiceAssistantEnabled,
+    voiceBookingEnabled,
+    voiceLanguage,
+    voiceLegalGreetingEnabled,
+    voiceOfficeHours,
+    voiceHandoffPhone,
+    voiceFallbackMode,
+    voiceRecordingEnabled,
+    voiceTranscriptionEnabled,
+    voiceRetentionDays,
+    voiceInstructions,
+    voiceAllowedActions,
   };
 };
 
@@ -558,6 +730,59 @@ export async function updateAutoscuolaSettings(
       DEFAULT_BOOKING_SLOT_DURATIONS,
     );
     const previousBookingGovernance = parseBookingGovernanceFromLimits(limits);
+    const previousVoiceFeatureEnabled =
+      typeof limits.voiceFeatureEnabled === "boolean"
+        ? limits.voiceFeatureEnabled
+        : DEFAULT_VOICE_FEATURE_ENABLED;
+    const previousVoiceProvisioningStatus = VOICE_PROVISIONING_STATUSES.includes(
+      limits.voiceProvisioningStatus as (typeof VOICE_PROVISIONING_STATUSES)[number],
+    )
+      ? (limits.voiceProvisioningStatus as (typeof VOICE_PROVISIONING_STATUSES)[number])
+      : DEFAULT_VOICE_PROVISIONING_STATUS;
+    const previousVoiceLineRef =
+      typeof limits.voiceLineRef === "string" && limits.voiceLineRef.trim().length
+        ? limits.voiceLineRef.trim()
+        : null;
+    const previousVoiceAssistantEnabled =
+      typeof limits.voiceAssistantEnabled === "boolean"
+        ? limits.voiceAssistantEnabled
+        : DEFAULT_VOICE_ASSISTANT_ENABLED;
+    const previousVoiceBookingEnabled =
+      typeof limits.voiceBookingEnabled === "boolean"
+        ? limits.voiceBookingEnabled
+        : DEFAULT_VOICE_BOOKING_ENABLED;
+    const previousVoiceLegalGreetingEnabled =
+      typeof limits.voiceLegalGreetingEnabled === "boolean"
+        ? limits.voiceLegalGreetingEnabled
+        : DEFAULT_VOICE_LEGAL_GREETING_ENABLED;
+    const previousVoiceOfficeHours = voiceOfficeHoursSchema.safeParse(
+      (limits.voiceOfficeHours as Record<string, unknown> | null | undefined) ??
+        DEFAULT_VOICE_OFFICE_HOURS,
+    );
+    const previousVoiceHandoffPhone =
+      typeof limits.voiceHandoffPhone === "string" && limits.voiceHandoffPhone.trim().length
+        ? limits.voiceHandoffPhone.trim()
+        : null;
+    const previousVoiceRecordingEnabled =
+      typeof limits.voiceRecordingEnabled === "boolean"
+        ? limits.voiceRecordingEnabled
+        : DEFAULT_VOICE_RECORDING_ENABLED;
+    const previousVoiceTranscriptionEnabled =
+      typeof limits.voiceTranscriptionEnabled === "boolean"
+        ? limits.voiceTranscriptionEnabled
+        : DEFAULT_VOICE_TRANSCRIPTION_ENABLED;
+    const previousVoiceInstructions =
+      typeof limits.voiceInstructions === "string" ? limits.voiceInstructions : "";
+    const previousVoiceAllowedActions = Array.isArray(limits.voiceAllowedActions)
+      ? Array.from(
+          new Set(
+            limits.voiceAllowedActions.filter((item): item is (typeof VOICE_ALLOWED_ACTIONS)[number] =>
+              typeof item === "string" &&
+              (VOICE_ALLOWED_ACTIONS as readonly string[]).includes(item),
+            ),
+          ),
+        )
+      : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
@@ -595,6 +820,41 @@ export async function updateAutoscuolaSettings(
       (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
         ? previousBookingGovernance.instructorBookingMode
         : DEFAULT_INSTRUCTOR_BOOKING_MODE);
+    const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
+    const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
+    const nextVoiceLineRef = previousVoiceLineRef;
+    const nextVoiceAssistantEnabled = nextVoiceFeatureEnabled
+      ? payload.voiceAssistantEnabled ?? previousVoiceAssistantEnabled
+      : false;
+    const nextVoiceBookingEnabled = nextVoiceFeatureEnabled
+      ? payload.voiceBookingEnabled ?? previousVoiceBookingEnabled
+      : false;
+    const nextVoiceLegalGreetingEnabled = nextVoiceFeatureEnabled
+      ? true
+      : DEFAULT_VOICE_LEGAL_GREETING_ENABLED;
+    const nextVoiceOfficeHours = nextVoiceFeatureEnabled
+      ? payload.voiceOfficeHours ??
+        (previousVoiceOfficeHours.success
+          ? previousVoiceOfficeHours.data
+          : DEFAULT_VOICE_OFFICE_HOURS)
+      : null;
+    const nextVoiceHandoffPhone = nextVoiceFeatureEnabled
+      ? payload.voiceHandoffPhone !== undefined
+        ? payload.voiceHandoffPhone
+        : previousVoiceHandoffPhone
+      : null;
+    const nextVoiceRecordingEnabled = nextVoiceFeatureEnabled
+      ? payload.voiceRecordingEnabled ?? previousVoiceRecordingEnabled
+      : DEFAULT_VOICE_RECORDING_ENABLED;
+    const nextVoiceTranscriptionEnabled = nextVoiceFeatureEnabled
+      ? payload.voiceTranscriptionEnabled ?? previousVoiceTranscriptionEnabled
+      : DEFAULT_VOICE_TRANSCRIPTION_ENABLED;
+    const nextVoiceInstructions = nextVoiceFeatureEnabled
+      ? payload.voiceInstructions ?? previousVoiceInstructions
+      : "";
+    const nextVoiceAllowedActions = nextVoiceFeatureEnabled
+      ? payload.voiceAllowedActions ?? previousVoiceAllowedActions
+      : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
 
     if (nextAutoPaymentsEnabled) {
       const stripe = await isAutoscuolaStripeConnectReady({
@@ -615,6 +875,29 @@ export async function updateAutoscuolaSettings(
       !nextInstructorBookingMode
     ) {
       throw new Error("Seleziona la modalità prenotazione istruttore.");
+    }
+
+    if (payload.voiceAssistantEnabled !== undefined && !nextVoiceFeatureEnabled) {
+      throw new Error("Feature segretaria AI non abilitata dal backoffice.");
+    }
+    if (nextVoiceFeatureEnabled && nextVoiceAssistantEnabled) {
+      if (!nextVoiceLineRef || nextVoiceProvisioningStatus !== "ready") {
+        throw new Error(
+          "Linea voce non pronta. Contatta Reglo backoffice per completare provisioning.",
+        );
+      }
+      if (!nextVoiceHandoffPhone) {
+        throw new Error("Inserisci il numero handoff segreteria.");
+      }
+      if (!nextVoiceOfficeHours) {
+        throw new Error("Configura gli orari segreteria voce.");
+      }
+      if (!nextVoiceAllowedActions.length) {
+        throw new Error("Seleziona almeno un'azione consentita per la voce.");
+      }
+      if (nextVoiceBookingEnabled && !nextVoiceAllowedActions.includes("booking")) {
+        throw new Error("Per abilitare booking voce devi includere l'azione booking.");
+      }
     }
 
     const nextLimits = {
@@ -644,6 +927,21 @@ export async function updateAutoscuolaSettings(
       bookingSlotDurations: nextBookingSlotDurations,
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
+      voiceFeatureEnabled: nextVoiceFeatureEnabled,
+      voiceProvisioningStatus: nextVoiceProvisioningStatus,
+      voiceLineRef: nextVoiceLineRef,
+      voiceAssistantEnabled: nextVoiceAssistantEnabled,
+      voiceBookingEnabled: nextVoiceBookingEnabled,
+      voiceLanguage: DEFAULT_VOICE_LANGUAGE,
+      voiceLegalGreetingEnabled: nextVoiceLegalGreetingEnabled,
+      voiceOfficeHours: nextVoiceOfficeHours,
+      voiceHandoffPhone: nextVoiceHandoffPhone,
+      voiceFallbackMode: DEFAULT_VOICE_FALLBACK_MODE,
+      voiceRecordingEnabled: nextVoiceRecordingEnabled,
+      voiceTranscriptionEnabled: nextVoiceTranscriptionEnabled,
+      voiceRetentionDays: DEFAULT_VOICE_RETENTION_DAYS,
+      voiceInstructions: nextVoiceInstructions,
+      voiceAllowedActions: nextVoiceAllowedActions,
     };
 
     if (service) {
@@ -694,6 +992,21 @@ export async function updateAutoscuolaSettings(
         bookingSlotDurations: nextLimits.bookingSlotDurations,
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
+        voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
+        voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
+        voiceLineRef: nextLimits.voiceLineRef,
+        voiceAssistantEnabled: nextLimits.voiceAssistantEnabled,
+        voiceBookingEnabled: nextLimits.voiceBookingEnabled,
+        voiceLanguage: nextLimits.voiceLanguage,
+        voiceLegalGreetingEnabled: nextLimits.voiceLegalGreetingEnabled,
+        voiceOfficeHours: nextLimits.voiceOfficeHours,
+        voiceHandoffPhone: nextLimits.voiceHandoffPhone,
+        voiceFallbackMode: nextLimits.voiceFallbackMode,
+        voiceRecordingEnabled: nextLimits.voiceRecordingEnabled,
+        voiceTranscriptionEnabled: nextLimits.voiceTranscriptionEnabled,
+        voiceRetentionDays: nextLimits.voiceRetentionDays,
+        voiceInstructions: nextLimits.voiceInstructions,
+        voiceAllowedActions: nextLimits.voiceAllowedActions,
       },
     };
   } catch (error) {

@@ -62,6 +62,8 @@ const CHANNEL_OPTIONS = [
 type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
 type AppBookingActorsValue = (typeof APP_BOOKING_ACTOR_OPTIONS)[number]["value"];
 type InstructorBookingModeValue = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number]["value"];
+type VoiceProvisioningStatus = "not_started" | "provisioning" | "ready" | "error";
+type VoiceAllowedAction = "faq" | "lesson_info" | "booking";
 
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
@@ -83,6 +85,12 @@ const WEEKDAY_OPTIONS = [
   { value: 6, label: "Sab" },
   { value: 0, label: "Dom" },
 ] as const;
+
+const VOICE_ALLOWED_ACTION_OPTIONS = [
+  { value: "faq" as const, label: "FAQ autoscuola" },
+  { value: "lesson_info" as const, label: "Info lezioni e corsi" },
+  { value: "booking" as const, label: "Prenotazione guida" },
+];
 
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => index * 30);
 const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => (index + 1) * 30);
@@ -150,6 +158,24 @@ export function AutoscuoleResourcesPage({
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
+  const [voiceFeatureEnabled, setVoiceFeatureEnabled] = React.useState(false);
+  const [voiceProvisioningStatus, setVoiceProvisioningStatus] =
+    React.useState<VoiceProvisioningStatus>("not_started");
+  const [voiceLineRef, setVoiceLineRef] = React.useState<string | null>(null);
+  const [voiceAssistantEnabled, setVoiceAssistantEnabled] = React.useState(false);
+  const [voiceBookingEnabled, setVoiceBookingEnabled] = React.useState(false);
+  const [voiceLegalGreetingEnabled, setVoiceLegalGreetingEnabled] = React.useState(true);
+  const [voiceOfficeDays, setVoiceOfficeDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
+  const [voiceOfficeStartMinutes, setVoiceOfficeStartMinutes] = React.useState(9 * 60);
+  const [voiceOfficeEndMinutes, setVoiceOfficeEndMinutes] = React.useState(19 * 60);
+  const [voiceHandoffPhone, setVoiceHandoffPhone] = React.useState<string | null>(null);
+  const [voiceRecordingEnabled, setVoiceRecordingEnabled] = React.useState(true);
+  const [voiceTranscriptionEnabled, setVoiceTranscriptionEnabled] = React.useState(true);
+  const [voiceInstructions, setVoiceInstructions] = React.useState("");
+  const [voiceAllowedActions, setVoiceAllowedActions] = React.useState<VoiceAllowedAction[]>([
+    "faq",
+    "lesson_info",
+  ]);
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
@@ -261,6 +287,31 @@ export function AutoscuoleResourcesPage({
           ? (res.data.instructorBookingMode as InstructorBookingModeValue)
           : "manual_engine",
       );
+      setVoiceFeatureEnabled(Boolean(res.data.voiceFeatureEnabled));
+      setVoiceProvisioningStatus(
+        (res.data.voiceProvisioningStatus as VoiceProvisioningStatus) ?? "not_started",
+      );
+      setVoiceLineRef(res.data.voiceLineRef ?? null);
+      setVoiceAssistantEnabled(Boolean(res.data.voiceAssistantEnabled));
+      setVoiceBookingEnabled(Boolean(res.data.voiceBookingEnabled));
+      setVoiceLegalGreetingEnabled(
+        res.data.voiceLegalGreetingEnabled !== false,
+      );
+      setVoiceOfficeDays(
+        normalizeDays(Array.from(res.data.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])),
+      );
+      setVoiceOfficeStartMinutes(res.data.voiceOfficeHours?.startMinutes ?? 9 * 60);
+      setVoiceOfficeEndMinutes(res.data.voiceOfficeHours?.endMinutes ?? 19 * 60);
+      setVoiceHandoffPhone(res.data.voiceHandoffPhone ?? null);
+      setVoiceRecordingEnabled(res.data.voiceRecordingEnabled !== false);
+      setVoiceTranscriptionEnabled(res.data.voiceTranscriptionEnabled !== false);
+      setVoiceInstructions(res.data.voiceInstructions ?? "");
+      setVoiceAllowedActions(
+        ((res.data.voiceAllowedActions ?? ["faq", "lesson_info"]).filter(
+          (item): item is VoiceAllowedAction =>
+            VOICE_ALLOWED_ACTION_OPTIONS.some((option) => option.value === item),
+        ) as VoiceAllowedAction[]) || ["faq", "lesson_info"],
+      );
     };
     loadSettings();
     return () => {
@@ -315,6 +366,33 @@ export function AutoscuoleResourcesPage({
     ) {
       toast.error({ description: "Seleziona la modalità prenotazione istruttore." });
       return;
+    }
+    if (voiceFeatureEnabled && voiceAssistantEnabled) {
+      if (voiceProvisioningStatus !== "ready" || !voiceLineRef) {
+        toast.error({
+          description:
+            "Linea voce non pronta. Contatta il backoffice Reglo per completare il provisioning.",
+        });
+        return;
+      }
+      if (!voiceHandoffPhone?.trim()) {
+        toast.error({ description: "Inserisci il numero handoff segreteria." });
+        return;
+      }
+      if (!voiceOfficeDays.length || voiceOfficeEndMinutes <= voiceOfficeStartMinutes) {
+        toast.error({ description: "Orari segreteria voce non validi." });
+        return;
+      }
+      if (!voiceAllowedActions.length) {
+        toast.error({ description: "Seleziona almeno un'azione consentita per la voce." });
+        return;
+      }
+      if (voiceBookingEnabled && !voiceAllowedActions.includes("booking")) {
+        toast.error({
+          description: "Per attivare prenotazioni voce devi abilitare l'azione booking.",
+        });
+        return;
+      }
     }
     if (lessonRequiredTypesEnabled && !lessonRequiredTypes.length) {
       toast.error({ description: "Seleziona almeno un tipo guida obbligatorio." });
@@ -374,6 +452,24 @@ export function AutoscuoleResourcesPage({
       bookingSlotDurations,
       appBookingActors,
       instructorBookingMode,
+      voiceAssistantEnabled,
+      voiceBookingEnabled,
+      voiceLanguage: "it-IT",
+      voiceLegalGreetingEnabled,
+      voiceOfficeHours: voiceFeatureEnabled
+        ? {
+            daysOfWeek: normalizeDays(voiceOfficeDays),
+            startMinutes: voiceOfficeStartMinutes,
+            endMinutes: voiceOfficeEndMinutes,
+          }
+        : null,
+      voiceHandoffPhone: voiceFeatureEnabled ? voiceHandoffPhone : null,
+      voiceFallbackMode: "transfer_or_callback",
+      voiceRecordingEnabled,
+      voiceTranscriptionEnabled,
+      voiceRetentionDays: 90,
+      voiceInstructions,
+      voiceAllowedActions,
     });
     setSavingSettings(false);
 
@@ -421,6 +517,30 @@ export function AutoscuoleResourcesPage({
       )
         ? (res.data.instructorBookingMode as InstructorBookingModeValue)
         : "manual_engine",
+    );
+    setVoiceFeatureEnabled(Boolean(res.data.voiceFeatureEnabled));
+    setVoiceProvisioningStatus(
+      (res.data.voiceProvisioningStatus as VoiceProvisioningStatus) ?? "not_started",
+    );
+    setVoiceLineRef(res.data.voiceLineRef ?? null);
+    setVoiceAssistantEnabled(Boolean(res.data.voiceAssistantEnabled));
+    setVoiceBookingEnabled(Boolean(res.data.voiceBookingEnabled));
+    setVoiceLegalGreetingEnabled(res.data.voiceLegalGreetingEnabled !== false);
+    setVoiceOfficeDays(
+      normalizeDays(Array.from(res.data.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])),
+    );
+    setVoiceOfficeStartMinutes(res.data.voiceOfficeHours?.startMinutes ?? 9 * 60);
+    setVoiceOfficeEndMinutes(res.data.voiceOfficeHours?.endMinutes ?? 19 * 60);
+    setVoiceHandoffPhone(res.data.voiceHandoffPhone ?? null);
+    setVoiceRecordingEnabled(res.data.voiceRecordingEnabled !== false);
+    setVoiceTranscriptionEnabled(res.data.voiceTranscriptionEnabled !== false);
+    setVoiceInstructions(res.data.voiceInstructions ?? "");
+    const allowedActions = (res.data.voiceAllowedActions ?? []).filter(
+      (item): item is VoiceAllowedAction =>
+        VOICE_ALLOWED_ACTION_OPTIONS.some((option) => option.value === item),
+    );
+    setVoiceAllowedActions(
+      allowedActions.length ? allowedActions : ["faq", "lesson_info"],
     );
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
@@ -495,6 +615,15 @@ export function AutoscuoleResourcesPage({
         ? current.filter((value) => value !== duration)
         : [...current, duration];
       return next.sort((a, b) => a - b);
+    });
+  };
+
+  const toggleVoiceAction = (action: VoiceAllowedAction) => {
+    setVoiceAllowedActions((current) => {
+      const next = current.includes(action)
+        ? current.filter((value) => value !== action)
+        : [...current, action];
+      return next;
     });
   };
 
@@ -679,6 +808,201 @@ export function AutoscuoleResourcesPage({
               ) : null}
             </div>
           </div>
+          {voiceFeatureEnabled ? (
+            <div className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Segretaria AI Voce
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Assistente vocale inbound, fallback handoff/callback, audit chiamate.
+                  </p>
+                </div>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
+                  Enabled
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-xs">
+                    <span>Assistant attivo</span>
+                    <Checkbox
+                      checked={voiceAssistantEnabled}
+                      onCheckedChange={(checked) =>
+                        setVoiceAssistantEnabled(Boolean(checked))
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-xs">
+                    <span>Prenotazioni voce</span>
+                    <Checkbox
+                      checked={voiceBookingEnabled}
+                      onCheckedChange={(checked) =>
+                        setVoiceBookingEnabled(Boolean(checked))
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-xs">
+                    <span>Greeting legale</span>
+                    <Checkbox
+                      checked={voiceLegalGreetingEnabled}
+                      onCheckedChange={(checked) =>
+                        setVoiceLegalGreetingEnabled(Boolean(checked))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Provisioning BO
+                    </div>
+                    <div className="rounded-xl border border-white/70 bg-white/85 px-3 py-2 text-xs">
+                      {voiceProvisioningStatus}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-muted-foreground">Line ref</div>
+                    <div className="truncate rounded-xl border border-white/70 bg-white/85 px-3 py-2 text-xs">
+                      {voiceLineRef || "—"}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Numero handoff
+                    </div>
+                    <input
+                      value={voiceHandoffPhone ?? ""}
+                      onChange={(event) =>
+                        setVoiceHandoffPhone(event.target.value || null)
+                      }
+                      className="h-9 w-full rounded-xl border border-white/70 bg-white/85 px-3 text-xs outline-none focus:border-[#324D7A]"
+                      placeholder="+39..."
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-2xl border border-white/60 bg-white/80 p-3">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Orari segreteria voce
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {WEEKDAY_OPTIONS.map((day) => (
+                      <button
+                        key={`voice-day-${day.value}`}
+                        type="button"
+                        onClick={() =>
+                          setVoiceOfficeDays((current) =>
+                            current.includes(day.value)
+                              ? current.filter((value) => value !== day.value)
+                              : normalizeDays([...current, day.value]),
+                          )
+                        }
+                        className={`rounded-full border px-2 py-1 text-[11px] transition ${
+                          voiceOfficeDays.includes(day.value)
+                            ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                            : "border-white/70 bg-white/85 text-muted-foreground"
+                        }`}
+                      >
+                        {day.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={String(voiceOfficeStartMinutes)}
+                      onValueChange={(value) => setVoiceOfficeStartMinutes(Number(value))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Inizio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {START_TIME_OPTIONS.map((minutes) => (
+                          <SelectItem key={`voice-start-${minutes}`} value={String(minutes)}>
+                            {formatMinutes(minutes)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={String(voiceOfficeEndMinutes)}
+                      onValueChange={(value) => setVoiceOfficeEndMinutes(Number(value))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Fine" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {END_TIME_OPTIONS.map((minutes) => (
+                          <SelectItem key={`voice-end-${minutes}`} value={String(minutes)}>
+                            {formatMinutes(minutes)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2 rounded-2xl border border-white/60 bg-white/80 p-3">
+                  <div className="text-xs font-medium text-muted-foreground">Azioni consentite</div>
+                  <div className="flex flex-wrap gap-2">
+                    {VOICE_ALLOWED_ACTION_OPTIONS.map((option) => {
+                      const active = voiceAllowedActions.includes(option.value);
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => toggleVoiceAction(option.value)}
+                          className={`rounded-full border px-3 py-1.5 text-xs transition ${
+                            active
+                              ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                              : "border-white/70 bg-white/90 text-muted-foreground"
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-xs">
+                    <span>Registra audio</span>
+                    <Checkbox
+                      checked={voiceRecordingEnabled}
+                      onCheckedChange={(checked) =>
+                        setVoiceRecordingEnabled(Boolean(checked))
+                      }
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-xs">
+                    <span>Trascrivi chiamate</span>
+                    <Checkbox
+                      checked={voiceTranscriptionEnabled}
+                      onCheckedChange={(checked) =>
+                        setVoiceTranscriptionEnabled(Boolean(checked))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Istruzioni personalizzate segretaria
+                  </div>
+                  <textarea
+                    value={voiceInstructions}
+                    onChange={(event) => setVoiceInstructions(event.target.value)}
+                    className="min-h-[110px] w-full rounded-2xl border border-white/70 bg-white/85 p-3 text-xs outline-none focus:border-[#324D7A]"
+                    placeholder="Inserisci policy, tono, limitazioni e regole operative della tua autoscuola."
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
           <div className="flex justify-end">
             <Button onClick={handleSaveSettings} disabled={savingSettings}>
               {savingSettings ? "Salvataggio..." : "Salva impostazioni"}
