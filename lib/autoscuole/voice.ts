@@ -242,6 +242,10 @@ export function verifyTwilioRequestSignature({
   payload: Record<string, string>;
   signature: string | null;
 }) {
+  if (process.env.TWILIO_DISABLE_SIGNATURE_CHECK === "1") {
+    return true;
+  }
+
   const authToken = normalizeString(process.env.TWILIO_AUTH_TOKEN);
   if (!authToken) return true;
   if (!signature) return false;
