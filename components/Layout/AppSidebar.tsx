@@ -287,7 +287,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                           alt="Company logo"
                           width={32}
                           height={32}
-                          className="h-full w-full object-cover"
+                          className="h-full w-full object-contain"
                         />
                       ) : (
                         <span className="text-sm font-semibold">
@@ -330,7 +330,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                             alt={entry.name}
                             width={20}
                             height={20}
-                            className="h-4 w-4 rounded-sm object-cover"
+                            className="h-4 w-4 rounded-sm object-contain"
                           />
                         ) : (
                           <span className="text-xs font-semibold">

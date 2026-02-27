@@ -729,7 +729,7 @@ export function SettingsPage(): React.ReactElement {
                               alt="Company logo"
                               width={56}
                               height={56}
-                              className="h-full w-full object-cover"
+                              className="h-full w-full object-contain"
                             />
                           ) : (
                             <span className="text-xs text-muted-foreground">

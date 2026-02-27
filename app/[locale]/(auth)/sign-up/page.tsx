@@ -7,8 +7,7 @@ import {
 } from '@/components/ui/card';
 import { Metadata } from 'next';
 import Link from 'next/link';
-import Image from 'next/image';
-import { APP_NAME } from '@/lib/constants';
+import { RegloMark } from '@/components/ui/reglo-mark';
 import { auth } from '@/auth';
 import { redirect } from 'next/navigation';
 import SignUpForm from './sign-up-form';
@@ -35,16 +34,7 @@ const SignUpPage = async (props: {
     <div className='grid w-full items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]'>
       <div className='space-y-6'>
         <Link href='/' className='inline-flex items-center gap-3'>
-          <span className='flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e9f2f2] shadow-md overflow-hidden'>
-            <Image
-              src='/images/R_logo.png'
-              width={60}
-              height={60}
-              alt={`${APP_NAME} logo`}
-              priority
-              className='h-full w-full object-cover'
-            />
-          </span>
+          <RegloMark />
           <div>
             <p className='text-sm font-semibold text-[#324e7a]'>Reglo</p>
             <p className='text-xs text-muted-foreground'>Workspace Suite</p>

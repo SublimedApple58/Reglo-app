@@ -25,7 +25,7 @@ function AvatarImage({ className, alt, ...props }: AvatarImageProps) {
   return (
     <img
       data-slot="avatar-image"
-      className={cn("aspect-square size-full object-cover", className)}
+      className={cn("aspect-square size-full object-contain", className)}
       alt={alt ?? ""}
       {...props}
     />
