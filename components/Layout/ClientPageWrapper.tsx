@@ -44,10 +44,10 @@ export default function ClientPageWrapper({
         parentTitle={parentTitle}
       />
       <div className="relative flex flex-1">
-        <main className="relative flex-1 px-3 pb-10 pt-4 lg:px-5 lg:pt-5">
+        <main className="relative flex-1 px-3 pb-10 pt-4 sm:px-4 lg:px-6 lg:pt-5">
           <div
             className={cn(
-              "flex h-full w-full flex-col gap-4 lg:gap-5",
+              "mx-auto flex h-full w-full flex-col gap-4 lg:gap-5",
               contentWidthClassName ?? "max-w-7xl",
             )}
           >
