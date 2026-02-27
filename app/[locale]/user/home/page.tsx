@@ -171,7 +171,7 @@ export default function HomePage(): React.ReactElement {
 
   return (
     <ClientPageWrapper title="Home" hideHero>
-      <div className="relative space-y-5">
+      <div className="relative space-y-5 overflow-x-clip">
         <div className="pointer-events-none absolute inset-0 overflow-visible">
           <div className="absolute -left-4 top-24 h-72 w-72 rounded-full bg-[#324D7A]/14 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
           <div className="absolute right-1/3 top-40 h-44 w-44 rounded-full bg-[#DCE8F9]/70 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
@@ -249,7 +249,7 @@ export default function HomePage(): React.ReactElement {
               </div>
             </div>
           </div>
-          <div className="mt-6 grid gap-3 md:grid-cols-4">
+          <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <MetricCard
               title="Compilazioni completate"
               value={metrics?.documentsCompletedMonth ?? 0}
@@ -290,7 +290,7 @@ export default function HomePage(): React.ReactElement {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Attivita recente
+                  Attività recente
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Eventi del mese corrente su documenti e workflow.
