@@ -62,6 +62,20 @@ const getStripe = () => {
   return stripeSingleton;
 };
 
+const isStripeMissingCustomerError = (error: unknown) => {
+  if (!(error instanceof Stripe.errors.StripeError)) return false;
+  const err = error as Stripe.errors.StripeError & {
+    raw?: { code?: string; param?: string };
+    param?: string;
+    code?: string;
+  };
+  const code = err.code ?? err.raw?.code;
+  const param = err.param ?? err.raw?.param;
+  if (code !== "resource_missing") return false;
+  if (param === "customer") return true;
+  return /No such customer/i.test(err.message ?? "");
+};
+
 const toNumber = (value: Prisma.Decimal | number | string | null | undefined) => {
   if (value == null) return 0;
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -571,6 +585,40 @@ export async function getOrCreateStudentPaymentProfile({
   companyId: string;
   studentId: string;
 }) {
+  const createStripeCustomerForStudent = async () => {
+    const member = await prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        userId: studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      include: {
+        user: {
+          select: {
+            email: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    if (!member) {
+      throw new Error("Allievo non valido per questa autoscuola.");
+    }
+
+    const stripe = getStripe();
+    const customer = await stripe.customers.create({
+      email: member.user.email,
+      name: member.user.name ?? member.user.email,
+      metadata: {
+        companyId,
+        studentId,
+      },
+    });
+
+    return customer.id;
+  };
+
   const existing = await prisma.autoscuolaStudentPaymentProfile.findUnique({
     where: {
       companyId_studentId: {
@@ -580,7 +628,29 @@ export async function getOrCreateStudentPaymentProfile({
     },
   });
   if (existing) return existing;
+  const stripeCustomerId = await createStripeCustomerForStudent();
 
+  return prisma.autoscuolaStudentPaymentProfile.create({
+    data: {
+      companyId,
+      studentId,
+      stripeCustomerId,
+      status: "requires_update",
+    },
+  });
+}
+
+const recreateStripeCustomerForProfile = async ({
+  prisma,
+  profileId,
+  companyId,
+  studentId,
+}: {
+  prisma: PrismaClientLike;
+  profileId: string;
+  companyId: string;
+  studentId: string;
+}) => {
   const member = await prisma.companyMember.findFirst({
     where: {
       companyId,
@@ -611,15 +681,58 @@ export async function getOrCreateStudentPaymentProfile({
     },
   });
 
-  return prisma.autoscuolaStudentPaymentProfile.create({
+  return prisma.autoscuolaStudentPaymentProfile.update({
+    where: { id: profileId },
     data: {
-      companyId,
-      studentId,
       stripeCustomerId: customer.id,
+      stripeDefaultPaymentMethodId: null,
       status: "requires_update",
     },
   });
-}
+};
+
+const ensureStripeCustomerForProfile = async ({
+  prisma,
+  profile,
+}: {
+  prisma: PrismaClientLike;
+  profile: {
+    id: string;
+    companyId: string;
+    studentId: string;
+    stripeCustomerId: string;
+    stripeDefaultPaymentMethodId: string | null;
+    status: string;
+  };
+}) => {
+  const stripe = getStripe();
+  try {
+    const customer = await stripe.customers.retrieve(profile.stripeCustomerId);
+    if (customer && !customer.deleted) {
+      return profile;
+    }
+  } catch (error) {
+    if (!isStripeMissingCustomerError(error)) {
+      throw error;
+    }
+  }
+
+  const recreated = await recreateStripeCustomerForProfile({
+    prisma,
+    profileId: profile.id,
+    companyId: profile.companyId,
+    studentId: profile.studentId,
+  });
+
+  return {
+    id: recreated.id,
+    companyId: recreated.companyId,
+    studentId: recreated.studentId,
+    stripeCustomerId: recreated.stripeCustomerId,
+    stripeDefaultPaymentMethodId: recreated.stripeDefaultPaymentMethodId,
+    status: recreated.status,
+  };
+};
 
 const resolveStudentPaymentMethod = async ({
   prisma,
@@ -628,6 +741,8 @@ const resolveStudentPaymentMethod = async ({
   prisma: PrismaClientLike;
   profile: {
     id: string;
+    companyId?: string;
+    studentId?: string;
     stripeCustomerId: string;
     stripeDefaultPaymentMethodId: string | null;
     status: string;
@@ -637,7 +752,29 @@ const resolveStudentPaymentMethod = async ({
 
   let paymentMethodId = profile.stripeDefaultPaymentMethodId;
   if (!paymentMethodId) {
-    const customer = await stripe.customers.retrieve(profile.stripeCustomerId);
+    let customer: Stripe.Response<Stripe.Customer | Stripe.DeletedCustomer>;
+    try {
+      customer = await stripe.customers.retrieve(profile.stripeCustomerId);
+    } catch (error) {
+      if (
+        isStripeMissingCustomerError(error) &&
+        profile.companyId &&
+        profile.studentId
+      ) {
+        const recreated = await recreateStripeCustomerForProfile({
+          prisma,
+          profileId: profile.id,
+          companyId: profile.companyId,
+          studentId: profile.studentId,
+        });
+        profile.stripeCustomerId = recreated.stripeCustomerId;
+        profile.stripeDefaultPaymentMethodId = recreated.stripeDefaultPaymentMethodId;
+        profile.status = recreated.status;
+        customer = await stripe.customers.retrieve(profile.stripeCustomerId);
+      } else {
+        throw error;
+      }
+    }
     if (!customer || customer.deleted) {
       throw new Error("Customer Stripe non disponibile.");
     }
@@ -650,11 +787,37 @@ const resolveStudentPaymentMethod = async ({
     if (defaultMethod) {
       paymentMethodId = defaultMethod;
     } else {
-      const methods = await stripe.paymentMethods.list({
-        customer: profile.stripeCustomerId,
-        type: "card",
-        limit: 1,
-      });
+      let methods: Stripe.ApiList<Stripe.PaymentMethod>;
+      try {
+        methods = await stripe.paymentMethods.list({
+          customer: profile.stripeCustomerId,
+          type: "card",
+          limit: 1,
+        });
+      } catch (error) {
+        if (
+          isStripeMissingCustomerError(error) &&
+          profile.companyId &&
+          profile.studentId
+        ) {
+          const recreated = await recreateStripeCustomerForProfile({
+            prisma,
+            profileId: profile.id,
+            companyId: profile.companyId,
+            studentId: profile.studentId,
+          });
+          profile.stripeCustomerId = recreated.stripeCustomerId;
+          profile.stripeDefaultPaymentMethodId = recreated.stripeDefaultPaymentMethodId;
+          profile.status = recreated.status;
+          methods = await stripe.paymentMethods.list({
+            customer: profile.stripeCustomerId,
+            type: "card",
+            limit: 1,
+          });
+        } else {
+          throw error;
+        }
+      }
       paymentMethodId = methods.data[0]?.id ?? null;
     }
 
@@ -1054,6 +1217,8 @@ export async function prepareAppointmentPaymentSnapshot({
     prisma,
     profile: {
       id: profile.id,
+      companyId,
+      studentId,
       stripeCustomerId: profile.stripeCustomerId,
       stripeDefaultPaymentMethodId: profile.stripeDefaultPaymentMethodId,
       status: profile.status,
@@ -1198,6 +1363,8 @@ const attemptAutomaticPaymentRecord = async ({
     prisma,
     profile: {
       id: profile.id,
+      companyId: payment.companyId,
+      studentId: payment.studentId,
       stripeCustomerId: profile.stripeCustomerId,
       stripeDefaultPaymentMethodId: profile.stripeDefaultPaymentMethodId,
       status: profile.status,
@@ -2274,10 +2441,21 @@ export async function createStudentSetupIntent({
   companyId: string;
   studentId: string;
 }) {
-  const profile = await getOrCreateStudentPaymentProfile({
+  const rawProfile = await getOrCreateStudentPaymentProfile({
     prisma,
     companyId,
     studentId,
+  });
+  const profile = await ensureStripeCustomerForProfile({
+    prisma,
+    profile: {
+      id: rawProfile.id,
+      companyId,
+      studentId,
+      stripeCustomerId: rawProfile.stripeCustomerId,
+      stripeDefaultPaymentMethodId: rawProfile.stripeDefaultPaymentMethodId,
+      status: rawProfile.status,
+    },
   });
 
   const stripe = getStripe();
@@ -2320,10 +2498,21 @@ export async function confirmStudentPaymentMethod({
   setupIntentId?: string | null;
   paymentMethodId?: string | null;
 }) {
-  const profile = await getOrCreateStudentPaymentProfile({
+  const rawProfile = await getOrCreateStudentPaymentProfile({
     prisma,
     companyId,
     studentId,
+  });
+  const profile = await ensureStripeCustomerForProfile({
+    prisma,
+    profile: {
+      id: rawProfile.id,
+      companyId,
+      studentId,
+      stripeCustomerId: rawProfile.stripeCustomerId,
+      stripeDefaultPaymentMethodId: rawProfile.stripeDefaultPaymentMethodId,
+      status: rawProfile.status,
+    },
   });
   const stripe = getStripe();
 
@@ -2438,10 +2627,21 @@ export async function createManualRecoveryIntent({
     throw new Error("Nessun importo da saldare.");
   }
 
-  const profile = await getOrCreateStudentPaymentProfile({
+  const rawProfile = await getOrCreateStudentPaymentProfile({
     prisma,
     companyId,
     studentId,
+  });
+  const profile = await ensureStripeCustomerForProfile({
+    prisma,
+    profile: {
+      id: rawProfile.id,
+      companyId,
+      studentId,
+      stripeCustomerId: rawProfile.stripeCustomerId,
+      stripeDefaultPaymentMethodId: rawProfile.stripeDefaultPaymentMethodId,
+      status: rawProfile.status,
+    },
   });
   const destinationAccountId = await getAutoscuolaStripeDestinationAccountId({
     prisma,
