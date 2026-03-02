@@ -76,6 +76,20 @@ const isStripeMissingCustomerError = (error: unknown) => {
   return /No such customer/i.test(err.message ?? "");
 };
 
+const isStripeMissingSetupIntentError = (error: unknown) => {
+  if (!(error instanceof Stripe.errors.StripeError)) return false;
+  const err = error as Stripe.errors.StripeError & {
+    raw?: { code?: string; param?: string };
+    param?: string;
+    code?: string;
+  };
+  const code = err.code ?? err.raw?.code;
+  const param = err.param ?? err.raw?.param;
+  if (code !== "resource_missing") return false;
+  if (param === "setupintent") return true;
+  return /No such setupintent/i.test(err.message ?? "");
+};
+
 const toNumber = (value: Prisma.Decimal | number | string | null | undefined) => {
   if (value == null) return 0;
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -2519,12 +2533,31 @@ export async function confirmStudentPaymentMethod({
   let resolvedPaymentMethodId = paymentMethodId?.trim() || null;
 
   if (!resolvedPaymentMethodId && setupIntentId) {
-    const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
-    const paymentMethod =
-      typeof setupIntent.payment_method === "string"
-        ? setupIntent.payment_method
-        : setupIntent.payment_method?.id;
-    resolvedPaymentMethodId = paymentMethod ?? null;
+    try {
+      const setupIntent = await stripe.setupIntents.retrieve(setupIntentId);
+      const paymentMethod =
+        typeof setupIntent.payment_method === "string"
+          ? setupIntent.payment_method
+          : setupIntent.payment_method?.id;
+      resolvedPaymentMethodId = paymentMethod ?? null;
+    } catch (error) {
+      if (!isStripeMissingSetupIntentError(error)) {
+        throw error;
+      }
+      // Fallback: setup intent not found (often test/live key mismatch or stale setup intent).
+      // Try resolving an already attached card before failing hard.
+      const methods = await stripe.paymentMethods.list({
+        customer: profile.stripeCustomerId,
+        type: "card",
+        limit: 1,
+      });
+      resolvedPaymentMethodId = methods.data[0]?.id ?? null;
+      if (!resolvedPaymentMethodId) {
+        throw new Error(
+          "Setup pagamento non valido. Verifica che app e backend usino chiavi Stripe dello stesso ambiente (test o live).",
+        );
+      }
+    }
   }
 
   if (!resolvedPaymentMethodId) {
