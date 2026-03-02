@@ -14,6 +14,9 @@ export async function GET(request: Request) {
       typeof parsedLimit === "number" && Number.isFinite(parsedLimit)
         ? parsedLimit
         : undefined;
+    const light =
+      searchParams.get("light") === "1" ||
+      searchParams.get("light") === "true";
 
     const hasFilters = [
       searchParams.get("from"),
@@ -23,6 +26,7 @@ export async function GET(request: Request) {
       searchParams.get("status"),
       searchParams.get("type"),
       rawLimit,
+      searchParams.get("light"),
     ].some((value) => value !== null && value !== "");
 
     const res = await measure("action", () =>
@@ -35,6 +39,7 @@ export async function GET(request: Request) {
             status: searchParams.get("status"),
             type: searchParams.get("type"),
             limit,
+            light,
           })
         : getAutoscuolaAppointments(),
     );

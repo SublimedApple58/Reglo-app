@@ -556,10 +556,22 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         },
         select: {
           id: true,
+          companyId: true,
+          studentId: true,
+          caseId: true,
+          slotId: true,
           type: true,
+          notes: true,
           status: true,
           startsAt: true,
           endsAt: true,
+          instructorId: true,
+          vehicleId: true,
+          cancellationKind: true,
+          cancellationReason: true,
+          replacedByAppointmentId: true,
+          createdAt: true,
+          updatedAt: true,
           student: {
             select: {
               id: true,
@@ -594,6 +606,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       data: {
         appointments: appointments.map((appointment) => ({
           ...appointment,
+          case: null,
           student: mapCaseStudent(appointment.student),
         })),
         students,
@@ -1161,6 +1174,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
   status?: string | null;
   type?: string | null;
   limit?: number | null;
+  light?: boolean | null;
 }) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -1193,6 +1207,73 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
     if (statusFilter) where.status = statusFilter;
     if (typeFilter) where.type = typeFilter;
 
+    if (input?.light) {
+      const appointments = await prisma.autoscuolaAppointment.findMany({
+        where,
+        select: {
+          id: true,
+          companyId: true,
+          studentId: true,
+          caseId: true,
+          slotId: true,
+          type: true,
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          instructorId: true,
+          vehicleId: true,
+          notes: true,
+          cancellationKind: true,
+          cancellationReason: true,
+          replacedByAppointmentId: true,
+          createdAt: true,
+          updatedAt: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+          instructor: {
+            select: {
+              id: true,
+              companyId: true,
+              userId: true,
+              name: true,
+              phone: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+          vehicle: {
+            select: {
+              id: true,
+              companyId: true,
+              name: true,
+              plate: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+        orderBy: { startsAt: "asc" },
+        ...(limit ? { take: limit } : {}),
+      });
+
+      return {
+        success: true,
+        data: appointments.map((item) => ({
+          ...item,
+          case: null,
+          student: mapCaseStudent(item.student),
+        })),
+      };
+    }
+
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where,
       include: {
@@ -1218,6 +1299,50 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         ...item,
         student: mapCaseStudent(item.student),
       })),
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function getAutoscuolaLatestStudentAppointmentNote(input: {
+  studentId?: string | null;
+  before?: string | Date | null;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const studentId = (input.studentId ?? "").trim();
+    if (!studentId) {
+      return { success: false, message: "Allievo non valido." };
+    }
+    const before = toValidDate(input.before) ?? new Date();
+
+    const latestWithNote = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        studentId,
+        startsAt: { lt: before },
+        status: { not: "cancelled" },
+        NOT: [{ notes: null }, { notes: "" }],
+      },
+      select: {
+        id: true,
+        startsAt: true,
+        notes: true,
+      },
+      orderBy: { startsAt: "desc" },
+    });
+
+    return {
+      success: true,
+      data: latestWithNote
+        ? {
+            appointmentId: latestWithNote.id,
+            startsAt: latestWithNote.startsAt,
+            note: (latestWithNote.notes ?? "").trim(),
+          }
+        : null,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
