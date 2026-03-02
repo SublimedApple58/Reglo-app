@@ -740,11 +740,9 @@ const buildDrivingRegisterData = ({
     .filter((lesson) => isDrivingLessonType(lesson.type))
     .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
 
-  const scopedDrivingLessons = activeCase
-    ? drivingLessons.filter((lesson) => lesson.caseId === activeCase.id)
-    : drivingLessons;
-
-  const completedLessons = scopedDrivingLessons.filter(
+  // Progress must reflect the student's real completed lessons, even when
+  // appointments are not linked to the currently active case (legacy/null caseId).
+  const completedLessons = drivingLessons.filter(
     (lesson) => normalizeStatus(lesson.status) === "completed",
   );
 
