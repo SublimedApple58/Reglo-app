@@ -73,6 +73,10 @@ const bookingOptionsSchema = z.object({
 
 const instructorBookingSuggestSchema = z.object({
   studentId: z.string().uuid(),
+  preferredDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 const respondOfferSchema = z.object({
@@ -1330,13 +1334,13 @@ export async function suggestInstructorBooking(
     );
     const durationMinutes = pickSuggestedDuration(bookingSlotDurations);
     const now = new Date();
-    const preferredDate = now.toISOString().slice(0, 10);
+    const preferredDate = payload.preferredDate ?? now.toISOString().slice(0, 10);
     const match = await findBestAutoscuolaSlot({
       companyId: membership.companyId,
       studentId: payload.studentId,
       preferredDate,
       durationMinutes,
-      maxDays: DEFAULT_MAX_DAYS,
+      maxDays: 7,
       requiredInstructorId: ownInstructor.id,
       now,
     });
