@@ -2609,6 +2609,76 @@ export async function confirmStudentPaymentMethod({
   };
 }
 
+export async function removeStudentPaymentMethod({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+}) {
+  const profile = await prisma.autoscuolaStudentPaymentProfile.findUnique({
+    where: {
+      companyId_studentId: {
+        companyId,
+        studentId,
+      },
+    },
+  });
+
+  if (!profile) {
+    return { removed: false };
+  }
+
+  const stripe = getStripe();
+  const knownDefaultMethodId = profile.stripeDefaultPaymentMethodId;
+
+  try {
+    const customer = await stripe.customers.retrieve(profile.stripeCustomerId);
+    if (customer && !customer.deleted) {
+      const customerDefaultMethodId =
+        typeof customer.invoice_settings.default_payment_method === "string"
+          ? customer.invoice_settings.default_payment_method
+          : customer.invoice_settings.default_payment_method?.id ?? null;
+      const methodToDetach = knownDefaultMethodId ?? customerDefaultMethodId;
+
+      await stripe.customers.update(profile.stripeCustomerId, {
+        invoice_settings: {
+          default_payment_method: "",
+        },
+      });
+
+      if (methodToDetach) {
+        try {
+          await stripe.paymentMethods.detach(methodToDetach);
+        } catch (error) {
+          if (
+            !(error instanceof Stripe.errors.StripeError) ||
+            (error.code !== "resource_missing" && error.code !== "payment_method_unexpected_state")
+          ) {
+            throw error;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (!isStripeMissingCustomerError(error)) {
+      throw error;
+    }
+  }
+
+  await prisma.autoscuolaStudentPaymentProfile.update({
+    where: { id: profile.id },
+    data: {
+      stripeDefaultPaymentMethodId: null,
+      status: "requires_update",
+    },
+  });
+
+  return { removed: true };
+}
+
 export async function createManualRecoveryIntent({
   prisma = defaultPrisma,
   companyId,
