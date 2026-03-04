@@ -186,6 +186,33 @@ export async function resolveVoiceLineContextByNumber(
   };
 }
 
+const buildHostVariants = (parsed: URL) => {
+  const variants = new Set<string>();
+  const protocol = parsed.protocol;
+  const hostname = parsed.hostname;
+  const explicitPort = parsed.port;
+
+  if (parsed.host) {
+    variants.add(parsed.host);
+  }
+  if (hostname) {
+    variants.add(hostname);
+  }
+  if (!explicitPort) {
+    if (protocol === "https:") {
+      variants.add(`${hostname}:443`);
+    } else if (protocol === "http:") {
+      variants.add(`${hostname}:80`);
+    }
+  } else if (protocol === "https:" && explicitPort === "443") {
+    variants.add(hostname);
+  } else if (protocol === "http:" && explicitPort === "80") {
+    variants.add(hostname);
+  }
+
+  return Array.from(variants).filter(Boolean);
+};
+
 const normalizeTwilioUrlVariants = (inputUrl: string) => {
   const variants = new Set<string>([inputUrl]);
   try {
@@ -196,12 +223,15 @@ const normalizeTwilioUrlVariants = (inputUrl: string) => {
     const slashPath = trimmedPath ? `${trimmedPath}/` : "/";
 
     const protocols: Array<"http:" | "https:"> = ["https:", "http:"];
+    const hosts = buildHostVariants(parsed);
     for (const protocol of protocols) {
-      const base = `${protocol}//${parsed.host}`;
-      variants.add(`${base}${trimmedPath}${parsed.search}`);
-      variants.add(`${base}${trimmedPath}`);
-      variants.add(`${base}${slashPath}${parsed.search}`);
-      variants.add(`${base}${slashPath}`);
+      for (const host of hosts) {
+        const base = `${protocol}//${host}`;
+        variants.add(`${base}${trimmedPath}${parsed.search}`);
+        variants.add(`${base}${trimmedPath}`);
+        variants.add(`${base}${slashPath}${parsed.search}`);
+        variants.add(`${base}${slashPath}`);
+      }
     }
   } catch {
     // Keep original URL only.
@@ -215,8 +245,26 @@ const buildTwilioValidationUrlCandidates = (requestUrl: string) => {
   if (base) {
     try {
       const parsed = new URL(requestUrl);
-      const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
-      const withPath = `${normalizedBase}${parsed.pathname}`;
+      const parsedBase = new URL(base);
+      const normalizedOrigin = parsedBase.origin.endsWith("/")
+        ? parsedBase.origin.slice(0, -1)
+        : parsedBase.origin;
+
+      const baseHasCustomPath =
+        parsedBase.pathname !== "/" && parsedBase.pathname.trim().length > 1;
+
+      if (baseHasCustomPath) {
+        const explicitBase = `${normalizedOrigin}${parsedBase.pathname}`;
+        const explicitWithSearch = `${explicitBase}${parsed.search}`;
+        for (const variant of normalizeTwilioUrlVariants(explicitWithSearch)) {
+          candidates.add(variant);
+        }
+        for (const variant of normalizeTwilioUrlVariants(explicitBase)) {
+          candidates.add(variant);
+        }
+      }
+
+      const withPath = `${normalizedOrigin}${parsed.pathname}`;
       const withPathAndSearch = `${withPath}${parsed.search}`;
       for (const variant of normalizeTwilioUrlVariants(withPathAndSearch)) {
         candidates.add(variant);

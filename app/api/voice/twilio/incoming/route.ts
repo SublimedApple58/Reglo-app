@@ -51,9 +51,20 @@ const resolvePublicRequestUrl = (request: Request) => {
     const parsed = new URL(request.url);
     const forwardedProto = request.headers.get("x-forwarded-proto")?.trim();
     const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
-    if (!forwardedHost) return request.url;
+    const forwardedPort = request.headers.get("x-forwarded-port")?.trim();
+    if (!forwardedHost && !forwardedPort) return request.url;
+
+    const hostWithOptionalPort = (() => {
+      if (!forwardedHost) return parsed.host;
+      if (forwardedHost.includes(":")) return forwardedHost;
+      if (!forwardedPort || forwardedPort === "80" || forwardedPort === "443") {
+        return forwardedHost;
+      }
+      return `${forwardedHost}:${forwardedPort}`;
+    })();
+
     const protocol = forwardedProto || parsed.protocol.replace(":", "") || "https";
-    return `${protocol}://${forwardedHost}${parsed.pathname}${parsed.search}`;
+    return `${protocol}://${hostWithOptionalPort}${parsed.pathname}${parsed.search}`;
   } catch {
     return request.url;
   }
@@ -70,6 +81,13 @@ export async function POST(request: Request) {
   });
 
   if (!validSignature) {
+    console.warn("[voice][twilio][incoming] invalid signature", {
+      requestUrl: request.url,
+      resolvedUrl: resolvePublicRequestUrl(request),
+      to: payload.To ?? payload.Called ?? null,
+      callSid: payload.CallSid ?? null,
+      hasSignature: Boolean(signature),
+    });
     return xml(
       buildFallbackTwiml({
         message: "Richiesta non valida. Contatta la segreteria autoscuola.",
