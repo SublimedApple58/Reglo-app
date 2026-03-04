@@ -62,14 +62,23 @@ const safeJsonParse = (raw, fallback = null) => {
   }
 };
 
+const normalizeCompanyName = (value) => {
+  if (typeof value !== "string") return "Autoscuola";
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  return cleaned || "Autoscuola";
+};
+
 const buildSessionInstructions = (state) => {
   const actions = state.voiceAllowedActions.length
     ? state.voiceAllowedActions.join(", ")
     : "faq, lesson_info";
+  const companyName = normalizeCompanyName(state.companyName);
 
   return [
     "Sei la segretaria AI di un'autoscuola italiana.",
-    "Rispondi solo in italiano con tono professionale, breve e chiaro.",
+    `Nome autoscuola: ${companyName}.`,
+    "Rispondi solo in italiano con tono naturale, umano e diretto.",
+    "Niente giri di parole: frasi brevi e subito orientate alla richiesta.",
     "Non inventare mai regole o disponibilita'.",
     "Azioni consentite in questa chiamata: " + actions + ".",
     "Per informazioni didattiche usa search_knowledge.",
@@ -151,6 +160,7 @@ const createCallState = (twilioSocket) => ({
   streamSid: null,
   companyId: null,
   callId: null,
+  companyName: null,
   twilioCallSid: null,
   fromNumber: null,
   toNumber: null,
@@ -299,8 +309,9 @@ const setupOpenAiSocket = (state) => {
       type: "response.create",
       response: {
         modalities: ["audio", "text"],
-        instructions:
-          "Saluta brevemente e chiedi come puoi aiutare per pratiche, guide o informazioni.",
+        instructions: `Apri dicendo: "${normalizeCompanyName(
+          state.companyName,
+        )}, come posso aiutarti?"`,
       },
     });
   });
@@ -410,6 +421,8 @@ wsServer.on("connection", (socket) => {
       state.twilioCallSid = event.start?.callSid || null;
       const params = event.start?.customParameters || {};
       state.companyId = typeof params.companyId === "string" ? params.companyId : null;
+      state.companyName =
+        typeof params.companyName === "string" ? normalizeCompanyName(params.companyName) : null;
       state.callId = typeof params.callId === "string" ? params.callId : null;
       state.fromNumber = typeof params.from === "string" ? params.from : null;
       state.toNumber = typeof params.to === "string" ? params.to : null;

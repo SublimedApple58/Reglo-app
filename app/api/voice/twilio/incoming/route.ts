@@ -176,6 +176,7 @@ export async function POST(request: Request) {
   <Connect>
     <Stream url="${escapeXml(runtimeUrl)}">
       <Parameter name="companyId" value="${escapeXml(lineContext.companyId)}" />
+      <Parameter name="companyName" value="${escapeXml(lineContext.companyName ?? "")}" />
       <Parameter name="lineId" value="${escapeXml(lineContext.line.id)}" />
       <Parameter name="callId" value="${escapeXml(call.id)}" />
       <Parameter name="twilioCallSid" value="${escapeXml(callSid)}" />

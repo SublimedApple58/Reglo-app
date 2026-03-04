@@ -40,6 +40,7 @@ type VoiceLineContext = {
     routingMode: string;
   };
   companyId: string;
+  companyName: string | null;
   settings: AutoscuolaVoiceSettings;
 };
 
@@ -178,10 +179,16 @@ export async function resolveVoiceLineContextByNumber(
   const line = lines[0];
   if (!line) return null;
 
+  const company = await prisma.company.findUnique({
+    where: { id: line.companyId },
+    select: { name: true },
+  });
+
   const settings = await mapVoiceSettings(line.companyId);
   return {
     line,
     companyId: line.companyId,
+    companyName: company?.name?.trim() || null,
     settings,
   };
 }
