@@ -338,10 +338,16 @@ const findCompanyStudentByPhone = async ({
   companyId: string;
   phone: string | null | undefined;
 }) => {
-  const members = await prisma.companyMember.findMany({
+  const candidates = toPhoneCandidates(phone);
+  if (!candidates.length) return null;
+
+  const member = await prisma.companyMember.findFirst({
     where: {
       companyId,
       autoscuolaRole: "STUDENT",
+      user: {
+        phone: { in: candidates },
+      },
     },
     select: {
       user: {
@@ -355,10 +361,8 @@ const findCompanyStudentByPhone = async ({
       },
     },
   });
-  const user = members.map((member) => member.user).find((candidate) =>
-    phonesMatch(candidate.phone, phone),
-  );
-  if (!user) return null;
+  if (!member) return null;
+  const user = member.user;
   return {
     id: user.id,
     name: user.name,
@@ -888,6 +892,15 @@ export async function updateAutoscuolaVoiceKnowledgeChunk({
   });
 }
 
+const IT_STOP_WORDS = new Set([
+  "il", "lo", "la", "le", "li", "i", "gli", "un", "una", "uno",
+  "di", "a", "da", "in", "con", "su", "per", "tra", "fra",
+  "e", "o", "ma", "che", "del", "della", "delle", "dei", "degli",
+  "al", "alla", "alle", "ai", "agli", "nel", "nella", "nelle",
+  "nei", "negli", "sul", "sulla", "sulle", "sui", "sugli",
+  "come", "sono", "mi", "ti", "si", "ci", "vi", "non", "se",
+]);
+
 export async function searchAutoscuolaVoiceKnowledge({
   companyId,
   query,
@@ -902,20 +915,31 @@ export async function searchAutoscuolaVoiceKnowledge({
   const safeLimit = Math.max(1, Math.min(20, Math.trunc(limit)));
   const normalized = normalizeString(query);
   if (!normalized) return [];
+
+  const words = normalized
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length >= 2 && !IT_STOP_WORDS.has(w));
+
+  const wordMatchConditions =
+    words.length > 0
+      ? words.flatMap((word) => [
+          { title: { contains: word, mode: "insensitive" as const } },
+          { content: { contains: word, mode: "insensitive" as const } },
+          { tags: { has: word } },
+        ])
+      : [
+          { title: { contains: normalized, mode: "insensitive" as const } },
+          { content: { contains: normalized, mode: "insensitive" as const } },
+          { tags: { has: normalized.toLowerCase() } },
+        ];
+
   return prisma.autoscuolaVoiceKnowledgeChunk.findMany({
     where: {
       active: true,
       language: "it-IT",
       OR: [{ scope: "global" }, { scope: "company", companyId }],
-      AND: [
-        {
-          OR: [
-            { title: { contains: normalized, mode: "insensitive" } },
-            { content: { contains: normalized, mode: "insensitive" } },
-            { tags: { has: normalized.toLowerCase() } },
-          ],
-        },
-      ],
+      AND: [{ OR: wordMatchConditions }],
     },
     orderBy: [{ scope: "desc" }, { updatedAt: "desc" }],
     take: safeLimit,
@@ -951,6 +975,18 @@ export async function listAutoscuolaVoiceKnowledge({
     orderBy: [{ scope: "desc" }, { updatedAt: "desc" }],
     take: safeLimit,
   });
+}
+
+export async function getVoiceCompanyConfig({
+  companyId,
+}: {
+  companyId: string;
+}) {
+  const settings = await mapVoiceSettings(companyId);
+  return {
+    voiceInstructions: settings.voiceInstructions || null,
+    voiceAllowedActions: settings.voiceAllowedActions,
+  };
 }
 
 export async function cleanupAutoscuolaVoiceRetention({

@@ -830,7 +830,7 @@ export async function updateAutoscuolaSettings(
       ? payload.voiceBookingEnabled ?? previousVoiceBookingEnabled
       : false;
     const nextVoiceLegalGreetingEnabled = nextVoiceFeatureEnabled
-      ? true
+      ? (payload.voiceLegalGreetingEnabled ?? previousVoiceLegalGreetingEnabled)
       : DEFAULT_VOICE_LEGAL_GREETING_ENABLED;
     const nextVoiceOfficeHours = nextVoiceFeatureEnabled
       ? payload.voiceOfficeHours ??

@@ -14,6 +14,10 @@ const openAiRealtimeUrl =
   `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(openAiModel)}`;
 const assistantVoice = process.env.OPENAI_REALTIME_VOICE || "alloy";
 
+const OPENAI_CONNECT_TIMEOUT_MS = 8000;
+const MAX_PENDING_AUDIO_CHUNKS = 200;
+const WS_KEEPALIVE_INTERVAL_MS = 30000;
+
 const json = (res, status, payload) => {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
@@ -68,13 +72,13 @@ const normalizeCompanyName = (value) => {
   return cleaned || "Autoscuola";
 };
 
-const buildSessionInstructions = (state) => {
+const buildSessionInstructions = (state, customInstructions = "") => {
   const actions = state.voiceAllowedActions.length
     ? state.voiceAllowedActions.join(", ")
     : "faq, lesson_info";
   const companyName = normalizeCompanyName(state.companyName);
 
-  return [
+  const parts = [
     "Sei la segretaria AI di un'autoscuola italiana.",
     `Nome autoscuola: ${companyName}.`,
     "Rispondi solo in italiano con tono naturale, umano e diretto.",
@@ -84,7 +88,14 @@ const buildSessionInstructions = (state) => {
     "Per informazioni didattiche usa search_knowledge.",
     "Se non puoi completare la richiesta, proponi callback e usa create_callback.",
     "Non condividere dati sensibili non richiesti.",
-  ].join(" ");
+  ];
+
+  if (customInstructions.trim()) {
+    parts.push("Istruzioni aggiuntive della segreteria:");
+    parts.push(customInstructions.trim());
+  }
+
+  return parts.join(" ");
 };
 
 const buildRealtimeTools = (state) => {
@@ -169,7 +180,20 @@ const createCallState = (twilioSocket) => ({
   pendingAudio: [],
   handledFunctionCalls: new Set(),
   connectedAt: Date.now(),
+  _openAiKeepAlive: null,
+  _openAiConnectTimeout: null,
 });
+
+const clearTimers = (state) => {
+  if (state._openAiKeepAlive) {
+    clearInterval(state._openAiKeepAlive);
+    state._openAiKeepAlive = null;
+  }
+  if (state._openAiConnectTimeout) {
+    clearTimeout(state._openAiConnectTimeout);
+    state._openAiConnectTimeout = null;
+  }
+};
 
 const sendToTwilio = (state, payloadBase64) => {
   if (!state.streamSid) return;
@@ -218,7 +242,10 @@ const handleFunctionCall = async ({ state, name, callId, rawArguments }) => {
   state.handledFunctionCalls.add(callId);
 
   const input = typeof rawArguments === "string" ? safeJsonParse(rawArguments, {}) : {};
-  const allowed = ["search_knowledge", "create_callback", "find_student", "verify_student_dob"];
+  const baseAllowed = ["search_knowledge", "create_callback"];
+  const allowed = state.voiceBookingEnabled
+    ? [...baseAllowed, "find_student", "verify_student_dob"]
+    : baseAllowed;
   const tool = allowed.includes(name) ? name : null;
   if (!tool) {
     sendToOpenAi(state, {
@@ -285,7 +312,46 @@ const setupOpenAiSocket = (state) => {
   });
   state.openAiSocket = socket;
 
-  socket.on("open", () => {
+  state._openAiConnectTimeout = setTimeout(() => {
+    if (socket.readyState !== WebSocket.OPEN) {
+      process.stdout.write(
+        `[voice-runtime] openai connection timeout after ${OPENAI_CONNECT_TIMEOUT_MS}ms\n`,
+      );
+      socket.terminate();
+      if (state.twilioSocket.readyState === WebSocket.OPEN) {
+        state.twilioSocket.close();
+      }
+    }
+  }, OPENAI_CONNECT_TIMEOUT_MS);
+
+  socket.on("open", async () => {
+    clearTimeout(state._openAiConnectTimeout);
+    state._openAiConnectTimeout = null;
+
+    state._openAiKeepAlive = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.ping();
+      }
+    }, WS_KEEPALIVE_INTERVAL_MS);
+
+    let customInstructions = "";
+    try {
+      const configResult = await callTool({
+        companyId: state.companyId,
+        tool: "get_config",
+        input: {},
+      });
+      if (configResult.success && configResult.data?.voiceInstructions) {
+        customInstructions = configResult.data.voiceInstructions;
+      }
+    } catch (error) {
+      process.stdout.write(
+        `[voice-runtime] get_config failed: ${
+          error instanceof Error ? error.message : "unknown"
+        }\n`,
+      );
+    }
+
     sendToOpenAi(state, {
       type: "session.update",
       session: {
@@ -294,7 +360,8 @@ const setupOpenAiSocket = (state) => {
         input_audio_format: "g711_ulaw",
         output_audio_format: "g711_ulaw",
         turn_detection: { type: "server_vad" },
-        instructions: buildSessionInstructions(state),
+        input_audio_transcription: { model: "whisper-1" },
+        instructions: buildSessionInstructions(state, customInstructions),
         tools: buildRealtimeTools(state),
         tool_choice: "auto",
       },
@@ -361,6 +428,7 @@ const setupOpenAiSocket = (state) => {
   });
 
   socket.on("close", () => {
+    clearTimers(state);
     state.openAiSocket = null;
     if (state.twilioSocket.readyState === WebSocket.OPEN) {
       state.twilioSocket.close();
@@ -412,6 +480,12 @@ const wsServer = new WebSocketServer({ noServer: true });
 wsServer.on("connection", (socket) => {
   const state = createCallState(socket);
 
+  const twilioKeepAlive = setInterval(() => {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.ping();
+    }
+  }, WS_KEEPALIVE_INTERVAL_MS);
+
   socket.on("message", (raw) => {
     const event = safeJsonParse(String(raw));
     if (!event || typeof event !== "object") return;
@@ -456,7 +530,7 @@ wsServer.on("connection", (socket) => {
         type: "input_audio_buffer.append",
         audio: payload,
       });
-      if (!forwarded) {
+      if (!forwarded && state.pendingAudio.length < MAX_PENDING_AUDIO_CHUNKS) {
         state.pendingAudio.push(payload);
       }
       return;
@@ -471,6 +545,8 @@ wsServer.on("connection", (socket) => {
   });
 
   socket.on("close", () => {
+    clearInterval(twilioKeepAlive);
+    clearTimers(state);
     if (state.openAiSocket && state.openAiSocket.readyState === WebSocket.OPEN) {
       state.openAiSocket.close();
     }

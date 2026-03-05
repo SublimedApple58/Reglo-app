@@ -5,6 +5,10 @@ import {
   upsertIncomingVoiceCall,
   verifyTwilioRequestSignature,
 } from "@/lib/autoscuole/voice";
+import {
+  toStringMap,
+  resolvePublicRequestUrl,
+} from "@/lib/autoscuole/voice-webhook";
 
 const xml = (body: string) =>
   new NextResponse(body, {
@@ -23,6 +27,49 @@ const escapeXml = (value: string) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
+const isWithinOfficeHours = (
+  officeHours: {
+    daysOfWeek: number[];
+    startMinutes: number;
+    endMinutes: number;
+  } | null,
+): boolean => {
+  if (!officeHours) return true;
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Rome",
+    weekday: "short",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+  const dayMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  const dayOfWeek =
+    dayMap[parts.find((p) => p.type === "weekday")?.value ?? ""] ?? -1;
+  const hour = parseInt(
+    parts.find((p) => p.type === "hour")?.value ?? "0",
+    10,
+  );
+  const minute = parseInt(
+    parts.find((p) => p.type === "minute")?.value ?? "0",
+    10,
+  );
+  const currentMinutes = hour * 60 + minute;
+  if (!officeHours.daysOfWeek.includes(dayOfWeek)) return false;
+  return (
+    currentMinutes >= officeHours.startMinutes &&
+    currentMinutes < officeHours.endMinutes
+  );
+};
+
 const buildFallbackTwiml = ({
   message,
   handoffPhone,
@@ -36,38 +83,6 @@ const buildFallbackTwiml = ({
     return `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="it-IT">${safeMessage}</Say><Dial>${safePhone}</Dial></Response>`;
   }
   return `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="it-IT">${safeMessage}</Say><Hangup/></Response>`;
-};
-
-const toStringMap = (payload: FormData) => {
-  const data: Record<string, string> = {};
-  for (const [key, value] of payload.entries()) {
-    data[key] = typeof value === "string" ? value : "";
-  }
-  return data;
-};
-
-const resolvePublicRequestUrl = (request: Request) => {
-  try {
-    const parsed = new URL(request.url);
-    const forwardedProto = request.headers.get("x-forwarded-proto")?.trim();
-    const forwardedHost = request.headers.get("x-forwarded-host")?.trim();
-    const forwardedPort = request.headers.get("x-forwarded-port")?.trim();
-    if (!forwardedHost && !forwardedPort) return request.url;
-
-    const hostWithOptionalPort = (() => {
-      if (!forwardedHost) return parsed.host;
-      if (forwardedHost.includes(":")) return forwardedHost;
-      if (!forwardedPort || forwardedPort === "80" || forwardedPort === "443") {
-        return forwardedHost;
-      }
-      return `${forwardedHost}:${forwardedPort}`;
-    })();
-
-    const protocol = forwardedProto || parsed.protocol.replace(":", "") || "https";
-    return `${protocol}://${hostWithOptionalPort}${parsed.pathname}${parsed.search}`;
-  } catch {
-    return request.url;
-  }
 };
 
 export async function POST(request: Request) {
@@ -148,6 +163,16 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!isWithinOfficeHours(lineContext.settings.voiceOfficeHours)) {
+    return xml(
+      buildFallbackTwiml({
+        message:
+          "La segreteria automatica è al momento chiusa. Ti trasferisco alla segreteria.",
+        handoffPhone: lineContext.settings.voiceHandoffPhone,
+      }),
+    );
+  }
+
   const runtimeUrl = process.env.VOICE_RUNTIME_TWILIO_STREAM_URL?.trim();
   if (!runtimeUrl) {
     if (call.studentId == null) {
@@ -167,12 +192,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const greeting =
-    "Questa chiamata potrebbe essere registrata e analizzata da un assistente virtuale Reglo.";
+  const legalGreeting = lineContext.settings.voiceLegalGreetingEnabled
+    ? `<Say language="it-IT">${escapeXml(
+        "Questa chiamata potrebbe essere registrata e analizzata da un assistente virtuale Reglo.",
+      )}</Say>`
+    : "";
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say language="it-IT">${escapeXml(greeting)}</Say>
+  ${legalGreeting}
   <Connect>
     <Stream url="${escapeXml(runtimeUrl)}">
       <Parameter name="companyId" value="${escapeXml(lineContext.companyId)}" />

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   appendVoiceCallTurn,
   createVoiceCallbackTask,
+  getVoiceCompanyConfig,
   getVoiceStudentByPhone,
   searchAutoscuolaVoiceKnowledge,
   verifyRuntimeHmacSignature,
@@ -14,6 +15,7 @@ const payloadSchema = z.object({
   callId: z.string().uuid().optional(),
   tool: z.enum([
     "ping",
+    "get_config",
     "find_student",
     "verify_student_dob",
     "create_callback",
@@ -66,6 +68,11 @@ export async function POST(request: Request) {
         success: true,
         data: { ok: true, ts: new Date().toISOString() },
       });
+    }
+
+    if (tool === "get_config") {
+      const config = await getVoiceCompanyConfig({ companyId });
+      return NextResponse.json({ success: true, data: config });
     }
 
     if (tool === "find_student") {
