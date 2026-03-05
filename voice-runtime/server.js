@@ -79,20 +79,31 @@ const buildSessionInstructions = (state, customInstructions = "") => {
   const companyName = normalizeCompanyName(state.companyName);
 
   const parts = [
-    "Sei la segretaria AI di un'autoscuola italiana.",
-    `Nome autoscuola: ${companyName}.`,
-    "Rispondi solo in italiano con tono naturale, umano e diretto.",
-    "Niente giri di parole: frasi brevi e subito orientate alla richiesta.",
-    "Non inventare mai regole o disponibilita'.",
-    "Azioni consentite in questa chiamata: " + actions + ".",
-    "Per informazioni didattiche usa search_knowledge.",
-    "Se non puoi completare la richiesta, proponi callback e usa create_callback.",
-    "Non condividere dati sensibili non richiesti.",
+    "Sei la segretaria telefonica dell'autoscuola " + companyName + ".",
+    "REGOLE DI COMUNICAZIONE IMPORTANTISSIME:",
+    "- Rispondi SOLO in italiano.",
+    "- Sii BREVISSIMA: massimo 1-2 frasi per risposta. Vai dritta al punto.",
+    "- NON fare premesse, NON ripetere la domanda, NON dire 'certo', 'assolutamente', 'capisco'.",
+    "- NON inventare mai informazioni. Se non sai qualcosa, dillo subito.",
+    "- Se hai il tool giusto, USALO subito senza annunciare che lo userai.",
+    "AZIONI CONSENTITE: " + actions + ".",
+    "STRUMENTI:",
+    "- search_knowledge: per info su corsi, prezzi, regolamenti.",
   ];
 
+  if (state.voiceBookingEnabled) {
+    parts.push(
+      "- check_availability: per controllare le disponibilita' di lezioni. USALO SEMPRE quando chiedono disponibilita'. Riporta i risultati in modo sintetico.",
+    );
+  }
+
+  parts.push(
+    "- create_callback: se non riesci a completare la richiesta, proponi di far richiamare.",
+    "Se non puoi completare la richiesta, proponi callback. Non condividere dati sensibili non richiesti.",
+  );
+
   if (customInstructions.trim()) {
-    parts.push("Istruzioni aggiuntive della segreteria:");
-    parts.push(customInstructions.trim());
+    parts.push("ISTRUZIONI AGGIUNTIVE: " + customInstructions.trim());
   }
 
   return parts.join(" ");
@@ -157,6 +168,25 @@ const buildRealtimeTools = (state) => {
             dob: { type: "string" },
           },
           required: ["phoneNumber", "dob"],
+        },
+      },
+      {
+        type: "function",
+        name: "check_availability",
+        description:
+          "Controlla le disponibilita' per lezioni di guida in un intervallo di date. Restituisce gli slot liberi per giorno.",
+        parameters: {
+          type: "object",
+          properties: {
+            fromDate: {
+              type: "string",
+              description: "Data inizio ricerca (YYYY-MM-DD). Default: oggi.",
+            },
+            toDate: {
+              type: "string",
+              description: "Data fine ricerca (YYYY-MM-DD). Default: 7 giorni da fromDate.",
+            },
+          },
         },
       },
     );
@@ -244,7 +274,7 @@ const handleFunctionCall = async ({ state, name, callId, rawArguments }) => {
   const input = typeof rawArguments === "string" ? safeJsonParse(rawArguments, {}) : {};
   const baseAllowed = ["search_knowledge", "create_callback"];
   const allowed = state.voiceBookingEnabled
-    ? [...baseAllowed, "find_student", "verify_student_dob"]
+    ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability"]
     : baseAllowed;
   const tool = allowed.includes(name) ? name : null;
   if (!tool) {
@@ -376,9 +406,9 @@ const setupOpenAiSocket = (state) => {
       type: "response.create",
       response: {
         modalities: ["audio", "text"],
-        instructions: `Apri dicendo: "${normalizeCompanyName(
+        instructions: `Saluta brevemente: "${normalizeCompanyName(
           state.companyName,
-        )}, come posso aiutarti?"`,
+        )}, buongiorno. Mi dica." Non aggiungere altro.`,
       },
     });
   });

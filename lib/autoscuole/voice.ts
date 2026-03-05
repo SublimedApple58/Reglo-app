@@ -989,6 +989,202 @@ export async function getVoiceCompanyConfig({
   };
 }
 
+const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
+
+const IT_DAY_NAMES = ["domenica", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi", "sabato"];
+
+const formatMinutesAsTime = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+};
+
+const getZonedDateParts = (date: Date) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  return {
+    year: parseInt(parts.find((p) => p.type === "year")?.value ?? "0", 10),
+    month: parseInt(parts.find((p) => p.type === "month")?.value ?? "0", 10),
+    day: parseInt(parts.find((p) => p.type === "day")?.value ?? "0", 10),
+  };
+};
+
+export async function checkVoiceAvailability({
+  companyId,
+  fromDate: fromDateStr,
+  toDate: toDateStr,
+  prisma = defaultPrisma,
+}: {
+  companyId: string;
+  fromDate?: string;
+  toDate?: string;
+  prisma?: PrismaClientLike;
+}) {
+  const now = new Date();
+  const todayParts = getZonedDateParts(now);
+
+  const parseYmd = (s?: string) => {
+    if (!s) return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    return { year: parseInt(m[1], 10), month: parseInt(m[2], 10), day: parseInt(m[3], 10) };
+  };
+
+  const from = parseYmd(fromDateStr) ?? todayParts;
+  const defaultTo = new Date(Date.UTC(from.year, from.month - 1, from.day + 7));
+  const toParts = parseYmd(toDateStr) ?? getZonedDateParts(defaultTo);
+
+  // Build list of dates to check (max 14 days)
+  const dates: Array<{ year: number; month: number; day: number; dayOfWeek: number; label: string }> = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(Date.UTC(from.year, from.month - 1, from.day + i));
+    const parts = { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+    if (
+      parts.year > toParts.year ||
+      (parts.year === toParts.year && parts.month > toParts.month) ||
+      (parts.year === toParts.year && parts.month === toParts.month && parts.day > toParts.day)
+    ) {
+      break;
+    }
+    const dayOfWeek = d.getUTCDay();
+    dates.push({
+      ...parts,
+      dayOfWeek,
+      label: `${IT_DAY_NAMES[dayOfWeek]} ${parts.day}/${parts.month}`,
+    });
+  }
+
+  if (!dates.length) {
+    return { message: "Nessuna data valida nell'intervallo richiesto.", days: [] };
+  }
+
+  // Get all instructor weekly availability for this company
+  const weeklyAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
+    where: {
+      companyId,
+      ownerType: "instructor",
+    },
+  });
+
+  if (!weeklyAvailabilities.length) {
+    return { message: "Nessuna disponibilita' configurata per gli istruttori.", days: [] };
+  }
+
+  // Get existing appointments in the date range to subtract busy times
+  const rangeStart = new Date(Date.UTC(from.year, from.month - 1, from.day));
+  const rangeEnd = new Date(Date.UTC(toParts.year, toParts.month - 1, toParts.day + 1));
+
+  const existingAppointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      startsAt: { gte: rangeStart, lt: rangeEnd },
+      status: { in: ["scheduled", "confirmed"] },
+    },
+    select: {
+      startsAt: true,
+      endsAt: true,
+      instructorId: true,
+    },
+  });
+
+  // Build a map of busy times per instructor per date
+  const busyMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
+  for (const appt of existingAppointments) {
+    const apptParts = getZonedDateParts(appt.startsAt);
+    const dateKey = `${appt.instructorId ?? "none"}_${apptParts.year}-${apptParts.month}-${apptParts.day}`;
+    if (!busyMap.has(dateKey)) busyMap.set(dateKey, []);
+    const apptStartParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: AUTOSCUOLA_TIMEZONE,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).formatToParts(appt.startsAt);
+    const apptEndParts = appt.endsAt
+      ? new Intl.DateTimeFormat("en-US", {
+          timeZone: AUTOSCUOLA_TIMEZONE,
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }).formatToParts(appt.endsAt)
+      : null;
+    const startMin =
+      parseInt(apptStartParts.find((p) => p.type === "hour")?.value ?? "0", 10) * 60 +
+      parseInt(apptStartParts.find((p) => p.type === "minute")?.value ?? "0", 10);
+    const endMin = apptEndParts
+      ? parseInt(apptEndParts.find((p) => p.type === "hour")?.value ?? "0", 10) * 60 +
+        parseInt(apptEndParts.find((p) => p.type === "minute")?.value ?? "0", 10)
+      : startMin + 60;
+    busyMap.get(dateKey)!.push({ startMin, endMin });
+  }
+
+  // For each date, compute merged available windows across all instructors
+  const days: Array<{ date: string; label: string; slots: string[] }> = [];
+  for (const date of dates) {
+    const availableRanges: Array<{ from: number; to: number }> = [];
+
+    for (const wa of weeklyAvailabilities) {
+      if (!wa.daysOfWeek.includes(date.dayOfWeek)) continue;
+      if (wa.endMinutes <= wa.startMinutes) continue;
+
+      const busyKey = `${wa.ownerId}_${date.year}-${date.month}-${date.day}`;
+      const busySlots = busyMap.get(busyKey) ?? [];
+
+      // Subtract busy slots from this instructor's availability
+      let freeRanges = [{ from: wa.startMinutes, to: wa.endMinutes }];
+      for (const busy of busySlots) {
+        const newRanges: Array<{ from: number; to: number }> = [];
+        for (const r of freeRanges) {
+          if (busy.endMin <= r.from || busy.startMin >= r.to) {
+            newRanges.push(r);
+          } else {
+            if (busy.startMin > r.from) newRanges.push({ from: r.from, to: busy.startMin });
+            if (busy.endMin < r.to) newRanges.push({ from: busy.endMin, to: r.to });
+          }
+        }
+        freeRanges = newRanges;
+      }
+
+      availableRanges.push(...freeRanges);
+    }
+
+    if (!availableRanges.length) continue;
+
+    // Merge overlapping ranges
+    availableRanges.sort((a, b) => a.from - b.from);
+    const merged: Array<{ from: number; to: number }> = [availableRanges[0]];
+    for (let i = 1; i < availableRanges.length; i++) {
+      const last = merged[merged.length - 1];
+      if (availableRanges[i].from <= last.to) {
+        last.to = Math.max(last.to, availableRanges[i].to);
+      } else {
+        merged.push(availableRanges[i]);
+      }
+    }
+
+    const slots = merged
+      .filter((r) => r.to - r.from >= 30)
+      .map((r) => `${formatMinutesAsTime(r.from)}-${formatMinutesAsTime(r.to)}`);
+
+    if (slots.length) {
+      const ymd = `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
+      days.push({ date: ymd, label: date.label, slots });
+    }
+  }
+
+  if (!days.length) {
+    return { message: "Nessuna disponibilita' nel periodo richiesto.", days: [] };
+  }
+
+  return {
+    message: `Disponibilita' trovata per ${days.length} giorni.`,
+    days,
+  };
+}
+
 export async function cleanupAutoscuolaVoiceRetention({
   now = new Date(),
   prisma = defaultPrisma,

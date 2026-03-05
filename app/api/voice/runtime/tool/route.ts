@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   appendVoiceCallTurn,
+  checkVoiceAvailability,
   createVoiceCallbackTask,
   getVoiceCompanyConfig,
   getVoiceStudentByPhone,
@@ -21,6 +22,7 @@ const payloadSchema = z.object({
     "create_callback",
     "log_turn",
     "search_knowledge",
+    "check_availability",
   ]),
   input: z.record(z.string(), z.any()).optional(),
 });
@@ -133,6 +135,13 @@ export async function POST(request: Request) {
         confidence,
       });
       return NextResponse.json({ success: true, data: { turn } });
+    }
+
+    if (tool === "check_availability") {
+      const fromDate = typeof input?.fromDate === "string" ? input.fromDate : "";
+      const toDate = typeof input?.toDate === "string" ? input.toDate : "";
+      const availability = await checkVoiceAvailability({ companyId, fromDate, toDate });
+      return NextResponse.json({ success: true, data: availability });
     }
 
     if (tool === "search_knowledge") {
