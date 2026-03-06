@@ -21,21 +21,20 @@ export async function GET(request: Request) {
     );
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: mobileToken.userId },
-  });
+  const [user, memberships] = await Promise.all([
+    prisma.user.findUnique({ where: { id: mobileToken.userId } }),
+    prisma.companyMember.findMany({
+      where: { userId: mobileToken.userId },
+      include: { company: { include: { services: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
   if (!user) {
     return NextResponse.json(
       { success: false, message: "Utente non trovato." },
       { status: 404 },
     );
   }
-
-  const memberships = await prisma.companyMember.findMany({
-    where: { userId: user.id },
-    include: { company: { include: { services: true } } },
-    orderBy: { createdAt: "asc" },
-  });
 
   const companies = await Promise.all(
     memberships.map(async (entry) => {

@@ -331,6 +331,27 @@ export async function findBestAutoscuolaSlot(
     vehicleAvailabilities.map((availability) => [availability.ownerId, availability]),
   );
 
+  // Batch-fetch all appointments for the full search range in one query
+  // instead of one query per day inside the loop (N+1 elimination)
+  const fullRangeStart = new Date(
+    toTimeZoneDate(preferredDateParts, 0, 0).getTime() - 60 * 60 * 1000,
+  );
+  const fullRangeEnd = toTimeZoneDate(addDaysToDateParts(preferredDateParts, maxDays + 1), 0, 0);
+  const allAppointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId: input.companyId,
+      status: { notIn: ["cancelled"] },
+      startsAt: { gte: fullRangeStart, lt: fullRangeEnd },
+    },
+    select: {
+      instructorId: true,
+      vehicleId: true,
+      studentId: true,
+      startsAt: true,
+      endsAt: true,
+    },
+  });
+
   for (let offset = 0; offset <= maxDays; offset += 1) {
     const dayParts = addDaysToDateParts(preferredDateParts, offset);
     const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
@@ -339,21 +360,10 @@ export async function findBestAutoscuolaSlot(
     const rangeStart = toTimeZoneDate(dayParts, 0, 0);
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(dayParts, 1), 0, 0);
     const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-    const appointments = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId: input.companyId,
-        status: { notIn: ["cancelled"] },
-        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-      },
-      select: {
-        instructorId: true,
-        vehicleId: true,
-        studentId: true,
-        startsAt: true,
-        endsAt: true,
-      },
-    });
-    const appointmentMaps = buildAppointmentMaps(appointments);
+    const dayAppointments = allAppointments.filter(
+      (a) => a.startsAt >= appointmentScanStart && a.startsAt < rangeEnd,
+    );
+    const appointmentMaps = buildAppointmentMaps(dayAppointments);
     const studentIntervals = appointmentMaps.intervals.get(input.studentId);
 
     const window = {

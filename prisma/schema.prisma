@@ -439,6 +439,8 @@ model AutoscuolaCase {
   @@index([companyId])
   @@index([studentId])
   @@index([status])
+  @@index([companyId, pinkSheetExpiresAt])
+  @@index([companyId, medicalExpiresAt])
 }
 
 model AutoscuolaAppointment {
@@ -813,6 +815,8 @@ model AutoscuolaPaymentInstallment {
 
   @@index([planId])
   @@index([dueDate])
+  @@index([planId, status, dueDate])
+  @@index([status, dueDate])
 }
 
 model AutoscuolaStudentPaymentProfile {

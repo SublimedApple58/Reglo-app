@@ -1,5 +1,6 @@
 "use server";
 
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { getActiveCompanyContext } from "@/lib/company-context";
@@ -35,6 +36,7 @@ export async function getHomeOverview() {
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthStartIso = monthStart.toISOString();
 
     const [
       documentsCompletedMonth,
@@ -43,44 +45,49 @@ export async function getHomeOverview() {
       pendingDocuments,
       recentDocuments,
       recentRuns,
-    ] = await prisma.$transaction([
-      prisma.documentRequest.count({
-        where: {
-          companyId: membership.companyId,
-          status: "completed",
-          completedAt: { gte: monthStart },
-        },
-      }),
-      prisma.workflowRun.count({
-        where: {
-          companyId: membership.companyId,
-          status: "completed",
-          finishedAt: { gte: monthStart },
-        },
-      }),
-      prisma.workflow.count({
-        where: { companyId: membership.companyId, status: "active" },
-      }),
-      prisma.documentRequest.count({
-        where: {
-          companyId: membership.companyId,
-          status: { not: "completed" },
-          updatedAt: { gte: monthStart },
-        },
-      }),
-      prisma.documentRequest.findMany({
-        where: { companyId: membership.companyId, updatedAt: { gte: monthStart } },
-        include: { template: { select: { name: true } } },
-        orderBy: { updatedAt: "desc" },
-        take: 5,
-      }),
-      prisma.workflowRun.findMany({
-        where: { companyId: membership.companyId, createdAt: { gte: monthStart } },
-        include: { workflow: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-        take: 5,
-      }),
-    ]);
+    ] = await unstable_cache(
+      () =>
+        prisma.$transaction([
+          prisma.documentRequest.count({
+            where: {
+              companyId: membership.companyId,
+              status: "completed",
+              completedAt: { gte: monthStart },
+            },
+          }),
+          prisma.workflowRun.count({
+            where: {
+              companyId: membership.companyId,
+              status: "completed",
+              finishedAt: { gte: monthStart },
+            },
+          }),
+          prisma.workflow.count({
+            where: { companyId: membership.companyId, status: "active" },
+          }),
+          prisma.documentRequest.count({
+            where: {
+              companyId: membership.companyId,
+              status: { not: "completed" },
+              updatedAt: { gte: monthStart },
+            },
+          }),
+          prisma.documentRequest.findMany({
+            where: { companyId: membership.companyId, updatedAt: { gte: monthStart } },
+            include: { template: { select: { name: true } } },
+            orderBy: { updatedAt: "desc" },
+            take: 5,
+          }),
+          prisma.workflowRun.findMany({
+            where: { companyId: membership.companyId, createdAt: { gte: monthStart } },
+            include: { workflow: { select: { name: true } } },
+            orderBy: { createdAt: "desc" },
+            take: 5,
+          }),
+        ]),
+      [`home-overview-${membership.companyId}-${monthStartIso}`],
+      { revalidate: 60, tags: [`home-overview-${membership.companyId}`] },
+    )();
 
     const data: HomeOverview = {
       companyName: company.name,

@@ -652,6 +652,7 @@ export async function getAutoscuolaDeadlines() {
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 500,
     });
 
     const items = cases.flatMap((item) => {
@@ -1106,6 +1107,7 @@ export async function getAutoscuolaCases() {
         },
       },
       orderBy: { createdAt: "desc" },
+      take: 500,
     });
 
     return {
