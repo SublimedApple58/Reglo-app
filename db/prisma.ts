@@ -58,6 +58,6 @@ declare global {
 
 export const prisma = global.__regloPrisma ?? createPrisma();
 
-if (process.env.NODE_ENV !== 'production') {
-  global.__regloPrisma = prisma;
-}
+// Cache the client on global in all environments so HMR in development and
+// module re-evaluation in any environment don't create extra client instances.
+global.__regloPrisma = prisma;

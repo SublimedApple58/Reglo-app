@@ -413,26 +413,44 @@ const toStudentProfile = (user: UserSnapshot, createdAt: Date) => {
   };
 };
 
+const STUDENT_USER_SELECT = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+} as const;
+
 const listDirectoryStudents = async (companyId: string) => {
   const members = await prisma.companyMember.findMany({
     where: {
       companyId,
       autoscuolaRole: "STUDENT",
     },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-        },
-      },
-    },
+    include: { user: { select: STUDENT_USER_SELECT } },
     orderBy: { createdAt: "desc" },
+    take: 500,
   });
 
   return members.map((member) => toStudentProfile(member.user, member.createdAt));
+};
+
+const buildStudentSearchWhere = (companyId: string, search?: string) => {
+  const term = (search ?? "").trim();
+  return {
+    companyId,
+    autoscuolaRole: "STUDENT" as const,
+    ...(term
+      ? {
+          user: {
+            OR: [
+              { name: { contains: term, mode: "insensitive" as const } },
+              { email: { contains: term, mode: "insensitive" as const } },
+              { phone: { contains: term } },
+            ],
+          },
+        }
+      : {}),
+  };
 };
 
 const listAutoscuolaInstructorsReadOnly = async (companyId: string) =>
@@ -695,10 +713,13 @@ export async function getAutoscuolaStudents(search?: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
-    const students = (await listDirectoryStudents(companyId)).filter((student) =>
-      matchesStudentQuery(student, search),
-    );
-    return { success: true, data: students };
+    const members = await prisma.companyMember.findMany({
+      where: buildStudentSearchWhere(companyId, search),
+      include: { user: { select: STUDENT_USER_SELECT } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    return { success: true, data: members.map((m) => toStudentProfile(m.user, m.createdAt)) };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -804,9 +825,13 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const companyId = membership.companyId;
-    const students = (await listDirectoryStudents(companyId)).filter((student) =>
-      matchesStudentQuery(student, search),
-    );
+    const members = await prisma.companyMember.findMany({
+      where: buildStudentSearchWhere(companyId, search),
+      include: { user: { select: STUDENT_USER_SELECT } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    const students = members.map((m) => toStudentProfile(m.user, m.createdAt));
     if (!students.length) return { success: true, data: [] };
 
     const studentIds = students.map((student) => student.id);
@@ -825,6 +850,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           createdAt: true,
           updatedAt: true,
         },
+        take: 2000,
       }),
       prisma.autoscuolaAppointment.findMany({
         where: {
@@ -840,6 +866,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           startsAt: true,
           endsAt: true,
         },
+        take: 5000,
       }),
     ]);
 
@@ -1186,7 +1213,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
     const limit =
       typeof input?.limit === "number" && Number.isFinite(input.limit)
         ? Math.max(1, Math.min(500, Math.trunc(input.limit)))
-        : undefined;
+        : 300; // safe default — prevents unbounded fetches when caller omits limit
 
     const where: {
       companyId: string;

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { auth } from "@/auth";
 import { headers } from "next/headers";
 import { prisma } from "@/db/prisma";
@@ -6,7 +7,9 @@ import { getMobileToken, parseBearerToken } from "@/lib/mobile-auth";
 export const ACTIVE_COMPANY_REQUIRED = "ACTIVE_COMPANY_REQUIRED";
 export const NO_COMPANY_FOUND = "NO_COMPANY_FOUND";
 
-export async function getActiveCompanyContext() {
+// React.cache() deduplicates calls within a single request — every server action
+// that calls requireServiceAccess -> getActiveCompanyContext hits the DB only once.
+export const getActiveCompanyContext = cache(async function getActiveCompanyContext() {
   const headerList = await headers();
   const authHeader = headerList.get("authorization");
   const bearer = parseBearerToken(authHeader);
@@ -82,4 +85,4 @@ export async function getActiveCompanyContext() {
     activeCompanyId,
     memberships,
   };
-}
+});
