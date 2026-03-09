@@ -400,6 +400,26 @@ export async function provisionAutoscuolaVoiceLine(
   }
 }
 
+export async function getCompanyStudentPlatforms(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+    const invites = await prisma.companyInvite.findMany({
+      where: { companyId, role: "member" },
+      select: {
+        id: true,
+        email: true,
+        platform: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    return { success: true as const, data: invites };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function backofficeSignIn(input: z.infer<typeof backofficeSignInSchema>) {
   try {
     const payload = backofficeSignInSchema.parse(input);

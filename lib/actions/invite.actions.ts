@@ -22,9 +22,8 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
 
-const buildMobileInviteUrl = (token: string, platform?: "ios" | "android") => {
-  const base = `${SERVER_URL}/api/mobile/invites/${token}/open`;
-  return platform ? `${base}?platform=${platform}` : base;
+const buildMobileInviteUrl = (token: string) => {
+  return `${SERVER_URL}/api/mobile/invites/${token}/open`;
 };
 
 export async function createCompanyInvite(
@@ -81,7 +80,7 @@ export async function createCompanyInvite(
     const invite = existingInvite
       ? await prisma.companyInvite.update({
           where: { id: existingInvite.id },
-          data: { role: payload.role, expiresAt },
+          data: { role: payload.role, expiresAt, platform: payload.platform ?? null },
         })
       : await prisma.companyInvite.create({
           data: {
@@ -90,6 +89,7 @@ export async function createCompanyInvite(
             role: payload.role,
             token: randomUUID(),
             status: 'pending',
+            platform: payload.platform ?? null,
             expiresAt,
             invitedById: userId,
           },
@@ -106,7 +106,7 @@ export async function createCompanyInvite(
 
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${invite.token}`;
     const mobileInviteUrl = autoscuolaService
-      ? buildMobileInviteUrl(invite.token, payload.platform)
+      ? buildMobileInviteUrl(invite.token)
       : null;
 
     await sendCompanyInviteEmail({

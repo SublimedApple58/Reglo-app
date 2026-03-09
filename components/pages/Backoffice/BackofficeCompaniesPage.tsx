@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { Loader2, Search, Zap } from "lucide-react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { Loader2, Search, Smartphone, Zap } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  getCompanyStudentPlatforms,
   provisionAutoscuolaVoiceLine,
   updateCompanyService,
 } from "@/lib/actions/backoffice.actions";
@@ -80,6 +81,20 @@ function ServiceCard({
     ...DEFAULT_SERVICE_LIMITS[serviceKey],
     ...(service?.limits ?? {}),
   });
+
+  type StudentRow = { id: string; email: string; platform: string | null; status: string; createdAt: string };
+  const [students, setStudents] = useState<StudentRow[] | null>(null);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+
+  useEffect(() => {
+    if (serviceKey !== "AUTOSCUOLE") return;
+    setStudentsLoading(true);
+    getCompanyStudentPlatforms(companyId).then((res) => {
+      if (res.success) {
+        setStudents(res.data.map((s) => ({ ...s, createdAt: s.createdAt.toISOString() })));
+      }
+    }).finally(() => setStudentsLoading(false));
+  }, [companyId, serviceKey]);
 
   const fields = limitFields[serviceKey];
   const voiceFeatureEnabled = Boolean(limits.voiceFeatureEnabled);
@@ -188,6 +203,7 @@ function ServiceCard({
           ))}
         </div>
       ) : serviceKey === "AUTOSCUOLE" ? (
+        <>
         <div className="space-y-3 rounded-2xl border border-white/60 bg-white/75 p-3">
           <label className="flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-foreground">Voice AI disponibile</span>
@@ -266,6 +282,62 @@ function ServiceCard({
             </Button>
           )}
         </div>
+
+        {/* Student platforms section */}
+        <div className="space-y-2 rounded-2xl border border-white/60 bg-white/75 p-3">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <Smartphone className="h-3.5 w-3.5" />
+            Allievi invitati
+          </div>
+          {studentsLoading ? (
+            <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Caricamento…
+            </div>
+          ) : !students || students.length === 0 ? (
+            <p className="py-1 text-xs text-muted-foreground">Nessun allievo invitato.</p>
+          ) : (
+            <div className="max-h-48 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-white/60 text-left text-muted-foreground">
+                    <th className="pb-1 pr-3 font-medium">Email</th>
+                    <th className="pb-1 pr-3 font-medium">Piattaforma</th>
+                    <th className="pb-1 font-medium">Stato</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.map((student) => (
+                    <tr key={student.id} className="border-b border-white/30 last:border-0">
+                      <td className="py-1 pr-3 text-foreground">{student.email}</td>
+                      <td className="py-1 pr-3">
+                        {student.platform === "ios" ? (
+                          <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">iOS</span>
+                        ) : student.platform === "android" ? (
+                          <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">Android</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-1">
+                        <span className={
+                          student.status === "accepted"
+                            ? "text-emerald-600"
+                            : student.status === "pending"
+                            ? "text-amber-600"
+                            : "text-muted-foreground"
+                        }>
+                          {student.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        </>
       ) : (
         <p className="text-xs text-muted-foreground">
           Nessun limite specifico per questo modulo.

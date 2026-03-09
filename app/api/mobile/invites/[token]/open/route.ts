@@ -13,13 +13,10 @@ const escapeHtml = (value: string) =>
     .replace(/'/g, "&#39;");
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  const url = new URL(request.url);
-  const platform = url.searchParams.get("platform"); // "ios" | "android" | null
-
   const safeToken = encodeURIComponent(token);
   const scheme = MOBILE_DEEP_LINK_SCHEME.replace(/:\/*$/, "");
   const deepLink = `${scheme}://invite/${safeToken}`;
@@ -27,23 +24,6 @@ export async function GET(
 
   const safeDeepLink = escapeHtml(deepLink);
   const safeWebFallback = escapeHtml(webFallback);
-
-  const appStoreUrl = process.env.MOBILE_APP_STORE_URL ?? null;
-  const playStoreUrl = process.env.MOBILE_PLAY_STORE_URL ?? null;
-
-  const storeUrl =
-    platform === "ios" ? appStoreUrl
-    : platform === "android" ? playStoreUrl
-    : null;
-
-  const storeLabel =
-    platform === "ios" ? "Scarica su App Store"
-    : platform === "android" ? "Scarica su Google Play"
-    : null;
-
-  const storeLinkHtml = storeUrl && storeLabel
-    ? `<p style="margin-top:12px"><a href="${escapeHtml(storeUrl)}" style="display:inline-block;background:#324d7a;color:#fff;padding:10px 20px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px">${storeLabel}</a></p>`
-    : "";
 
   const html = `<!doctype html>
 <html lang="it">
@@ -82,7 +62,6 @@ export async function GET(
       <h1>Stiamo aprendo l'app Reglo...</h1>
       <p>Se non si apre automaticamente, usa il link qui sotto.</p>
       <p><a href="${safeDeepLink}">Apri app</a></p>
-      ${storeLinkHtml}
       <p>Oppure continua da web:</p>
       <p><a href="${safeWebFallback}">Apri invito su web</a></p>
     </div>
