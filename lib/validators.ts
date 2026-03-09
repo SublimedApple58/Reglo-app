@@ -202,6 +202,7 @@ export const createCompanyInviteSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   email: z.string().email('Invalid email address'),
   role: z.enum(['member', 'admin']),
+  platform: z.enum(['ios', 'android']).optional(),
 });
 
 export const acceptCompanyInviteSchema = z.object({

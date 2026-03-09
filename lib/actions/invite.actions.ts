@@ -22,8 +22,9 @@ import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 const INVITE_TTL_DAYS = 7;
 
-const buildMobileInviteUrl = (token: string) => {
-  return `${SERVER_URL}/api/mobile/invites/${token}/open`;
+const buildMobileInviteUrl = (token: string, platform?: "ios" | "android") => {
+  const base = `${SERVER_URL}/api/mobile/invites/${token}/open`;
+  return platform ? `${base}?platform=${platform}` : base;
 };
 
 export async function createCompanyInvite(
@@ -105,7 +106,7 @@ export async function createCompanyInvite(
 
     const inviteUrl = `${SERVER_URL}/${routing.defaultLocale}/invite/${invite.token}`;
     const mobileInviteUrl = autoscuolaService
-      ? buildMobileInviteUrl(invite.token)
+      ? buildMobileInviteUrl(invite.token, payload.platform)
       : null;
 
     await sendCompanyInviteEmail({
@@ -554,5 +555,33 @@ export async function acceptCompanyInviteAndRegister(
       throw error;
     }
     return { success: false, message: formatError(error) };
+  }
+}
+
+
+export async function inviteAutoscuolaStudent(input: {
+  email: string;
+  platform?: "ios" | "android";
+}) {
+  try {
+    const session = await auth();
+    const userId = session?.user?.id;
+    if (!userId) throw new Error("Non autenticato.");
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId },
+      select: { companyId: true, role: true },
+    });
+    if (!membership) throw new Error("Nessuna company trovata.");
+    if (membership.role !== "admin") throw new Error("Solo gli admin possono invitare allievi.");
+
+    return createCompanyInvite({
+      companyId: membership.companyId,
+      email: input.email.trim().toLowerCase(),
+      role: "member",
+      platform: input.platform,
+    });
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }

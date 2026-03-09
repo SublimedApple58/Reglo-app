@@ -2,12 +2,20 @@
 
 import Link from "next/link";
 import React from "react";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Loader2, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Drawer,
   DrawerClose,
@@ -18,6 +26,14 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -27,6 +43,7 @@ import {
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
 } from "@/lib/actions/autoscuole.actions";
+import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -179,6 +196,11 @@ export function AutoscuoleStudentsPage({
   const [creditsInput, setCreditsInput] = React.useState("1");
   const creditsRequestRef = React.useRef(0);
 
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "">("");
+  const [inviteSending, setInviteSending] = React.useState(false);
+
   const load = React.useCallback(async () => {
     setLoading(true);
     const res = await getAutoscuolaStudentsWithProgress(search);
@@ -273,6 +295,32 @@ export function AutoscuoleStudentsPage({
     [creditsInput, creditsSaving, loadCredits, selectedStudentId, toast],
   );
 
+  const handleInvite = React.useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const email = inviteEmail.trim();
+      if (!email) {
+        toast.error({ description: "Inserisci un indirizzo email." });
+        return;
+      }
+      setInviteSending(true);
+      const res = await inviteAutoscuolaStudent({
+        email,
+        platform: invitePlatform || undefined,
+      });
+      setInviteSending(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Invito non riuscito." });
+        return;
+      }
+      toast.success({ title: "Invito inviato", description: `Email inviata a ${email}.` });
+      setInviteEmail("");
+      setInvitePlatform("");
+      setInviteOpen(false);
+    },
+    [inviteEmail, invitePlatform, toast],
+  );
+
   React.useEffect(() => {
     load();
   }, [load]);
@@ -289,14 +337,6 @@ export function AutoscuoleStudentsPage({
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong space-y-4 p-4">
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground">
-              Fonte unica: Directory utenti (ruolo Allievo).
-            </p>
-            <p>
-              Per aggiungere, rimuovere o aggiornare un allievo usa la Directory. Questa lista si sincronizza automaticamente.
-            </p>
-          </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Cerca allievi"
@@ -304,14 +344,71 @@ export function AutoscuoleStudentsPage({
               onChange={(event) => setSearch(event.target.value)}
               className="max-w-sm border-white/60 bg-white/80"
             />
+            <Button onClick={() => setInviteOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Invita allievo
+            </Button>
             <Button asChild variant="outline">
               <Link href={`/${locale}/admin/users`}>
                 <ExternalLink className="mr-2 h-4 w-4" />
-                Apri Directory utenti
+                Directory utenti
               </Link>
             </Button>
           </div>
         </div>
+
+        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Invita allievo</DialogTitle>
+              <DialogDescription>
+                Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleInvite} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="invite-email">Email</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  placeholder="allievo@esempio.com"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Piattaforma</Label>
+                <Select
+                  value={invitePlatform}
+                  onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona piattaforma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Non specificata</SelectItem>
+                    <SelectItem value="ios">iOS (iPhone)</SelectItem>
+                    <SelectItem value="android">Android</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Usato per mostrare il link corretto all&apos;app store nell&apos;email.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
+                  {inviteSending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="mr-2 h-4 w-4" />
+                  )}
+                  {inviteSending ? "Invio in corso…" : "Invia invito"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <div className="glass-panel glass-strong p-4">
           <Table>
