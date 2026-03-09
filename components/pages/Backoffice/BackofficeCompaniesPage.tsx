@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Search } from "lucide-react";
+import { Loader2, Search, Zap } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { updateCompanyService } from "@/lib/actions/backoffice.actions";
+import {
+  provisionAutoscuolaVoiceLine,
+  updateCompanyService,
+} from "@/lib/actions/backoffice.actions";
 import {
   DEFAULT_SERVICE_LIMITS,
   SERVICE_KEYS,
@@ -71,6 +74,7 @@ function ServiceCard({
 }) {
   const toast = useFeedbackToast();
   const [isPending, startTransition] = useTransition();
+  const [isProvisioning, startProvisioning] = useTransition();
   const [status, setStatus] = useState(service?.status ?? "active");
   const [limits, setLimits] = useState<ServiceLimits>({
     ...DEFAULT_SERVICE_LIMITS[serviceKey],
@@ -85,6 +89,31 @@ function ServiceCard({
       : "not_started";
   const voiceLineRef =
     typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
+
+  const handleProvision = () => {
+    startProvisioning(async () => {
+      const res = await provisionAutoscuolaVoiceLine({ companyId });
+      if (!res.success) {
+        toast.error({
+          description: res.message ?? "Provisioning fallito.",
+        });
+        setLimits((prev) => ({
+          ...prev,
+          voiceProvisioningStatus: "error" as ServiceLimits["voiceProvisioningStatus"],
+        }));
+        return;
+      }
+      toast.success({
+        description: `Numero acquistato: ${res.data.phoneNumber}`,
+      });
+      setLimits((prev) => ({
+        ...prev,
+        voiceFeatureEnabled: true,
+        voiceProvisioningStatus: "ready" as ServiceLimits["voiceProvisioningStatus"],
+        voiceLineRef: res.data.lineId,
+      }));
+    });
+  };
 
   const handleSave = () => {
     startTransition(async () => {
@@ -220,6 +249,22 @@ function ServiceCard({
               />
             </div>
           </div>
+          {voiceProvisioningStatus !== "ready" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full gap-2"
+              onClick={handleProvision}
+              disabled={isProvisioning}
+            >
+              {isProvisioning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Zap className="h-3.5 w-3.5" />
+              )}
+              {isProvisioning ? "Acquisto numero in corso…" : "Provisiona automaticamente"}
+            </Button>
+          )}
         </div>
       ) : (
         <p className="text-xs text-muted-foreground">
