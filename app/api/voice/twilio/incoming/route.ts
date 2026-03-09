@@ -73,12 +73,19 @@ const isWithinOfficeHours = (
 const buildFallbackTwiml = ({
   message,
   handoffPhone,
+  silent = false,
 }: {
   message: string;
   handoffPhone?: string | null;
+  silent?: boolean;
 }) => {
-  const safeMessage = escapeXml(message);
   const safePhone = handoffPhone?.trim() ? escapeXml(handoffPhone.trim()) : null;
+  if (silent) {
+    return safePhone
+      ? `<?xml version="1.0" encoding="UTF-8"?><Response><Dial>${safePhone}</Dial></Response>`
+      : `<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`;
+  }
+  const safeMessage = escapeXml(message);
   if (safePhone) {
     return `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="it-IT">${safeMessage}</Say><Dial>${safePhone}</Dial></Response>`;
   }
@@ -166,9 +173,9 @@ export async function POST(request: Request) {
   if (!isWithinOfficeHours(lineContext.settings.voiceOfficeHours)) {
     return xml(
       buildFallbackTwiml({
-        message:
-          "La segreteria automatica è al momento chiusa. Ti trasferisco alla segreteria.",
+        message: "",
         handoffPhone: lineContext.settings.voiceHandoffPhone,
+        silent: true,
       }),
     );
   }
