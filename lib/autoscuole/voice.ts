@@ -599,6 +599,63 @@ export async function createVoiceCallbackTask({
   });
 }
 
+export async function createVoiceBookingRequest({
+  companyId,
+  studentId,
+  desiredDate,
+  prisma = defaultPrisma,
+}: {
+  companyId: string;
+  studentId: string;
+  desiredDate: string; // YYYY-MM-DD or ISO
+  prisma?: PrismaClientLike;
+}) {
+  const parsed = new Date(desiredDate);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Data richiesta non valida.");
+  }
+
+  // Verify student belongs to this company
+  const member = await prisma.companyMember.findFirst({
+    where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
+    select: { userId: true },
+  });
+  if (!member) {
+    throw new Error("Allievo non trovato in questa autoscuola.");
+  }
+
+  const existing = await prisma.autoscuolaBookingRequest.findFirst({
+    where: {
+      companyId,
+      studentId,
+      status: "pending",
+      desiredDate: { gte: new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) },
+    },
+    select: { id: true, desiredDate: true, status: true, createdAt: true },
+  });
+  if (existing) {
+    return {
+      id: existing.id,
+      desiredDate: existing.desiredDate.toISOString(),
+      status: existing.status,
+      createdAt: existing.createdAt.toISOString(),
+      alreadyExisted: true,
+    };
+  }
+
+  const booking = await prisma.autoscuolaBookingRequest.create({
+    data: { companyId, studentId, desiredDate: parsed, status: "pending" },
+    select: { id: true, desiredDate: true, status: true, createdAt: true },
+  });
+  return {
+    id: booking.id,
+    desiredDate: booking.desiredDate.toISOString(),
+    status: booking.status,
+    createdAt: booking.createdAt.toISOString(),
+    alreadyExisted: false,
+  };
+}
+
 export async function verifyVoiceStudentDob({
   companyId,
   phoneNumber,
@@ -1091,12 +1148,14 @@ export async function checkVoiceAvailability({
     },
   });
 
-  // Build a map of busy times per instructor per date
+  // Build a map of busy times:
+  // - per instructor per date (for appointments with instructorId)
+  // - per date for all instructors (for appointments with no instructorId)
   const busyMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
+  const busyAllMap = new Map<string, Array<{ startMin: number; endMin: number }>>();
   for (const appt of existingAppointments) {
     const apptParts = getZonedDateParts(appt.startsAt);
-    const dateKey = `${appt.instructorId ?? "none"}_${apptParts.year}-${apptParts.month}-${apptParts.day}`;
-    if (!busyMap.has(dateKey)) busyMap.set(dateKey, []);
+    const dateStr = `${apptParts.year}-${apptParts.month}-${apptParts.day}`;
     const apptStartParts = new Intl.DateTimeFormat("en-US", {
       timeZone: AUTOSCUOLA_TIMEZONE,
       hour: "2-digit",
@@ -1118,20 +1177,33 @@ export async function checkVoiceAvailability({
       ? parseInt(apptEndParts.find((p) => p.type === "hour")?.value ?? "0", 10) * 60 +
         parseInt(apptEndParts.find((p) => p.type === "minute")?.value ?? "0", 10)
       : startMin + 60;
-    busyMap.get(dateKey)!.push({ startMin, endMin });
+    const slot = { startMin, endMin };
+    if (appt.instructorId) {
+      const dateKey = `${appt.instructorId}_${dateStr}`;
+      if (!busyMap.has(dateKey)) busyMap.set(dateKey, []);
+      busyMap.get(dateKey)!.push(slot);
+    } else {
+      // No instructor assigned — treat as blocking all instructors for that time
+      if (!busyAllMap.has(dateStr)) busyAllMap.set(dateStr, []);
+      busyAllMap.get(dateStr)!.push(slot);
+    }
   }
 
   // For each date, compute merged available windows across all instructors
   const days: Array<{ date: string; label: string; slots: string[] }> = [];
   for (const date of dates) {
     const availableRanges: Array<{ from: number; to: number }> = [];
+    const dateStr = `${date.year}-${date.month}-${date.day}`;
 
     for (const wa of weeklyAvailabilities) {
       if (!wa.daysOfWeek.includes(date.dayOfWeek)) continue;
       if (wa.endMinutes <= wa.startMinutes) continue;
 
-      const busyKey = `${wa.ownerId}_${date.year}-${date.month}-${date.day}`;
-      const busySlots = busyMap.get(busyKey) ?? [];
+      const busyKey = `${wa.ownerId}_${dateStr}`;
+      const busySlots = [
+        ...(busyMap.get(busyKey) ?? []),
+        ...(busyAllMap.get(dateStr) ?? []), // appointments with no instructor block all
+      ];
 
       // Subtract busy slots from this instructor's availability
       let freeRanges = [{ from: wa.startMinutes, to: wa.endMinutes }];

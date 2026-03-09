@@ -2835,3 +2835,59 @@ export async function updateAutoscuolaCaseStatus(
     return { success: false, message: formatError(error) };
   }
 }
+
+export async function getVoiceCallbackTasks(status?: "pending" | "done" | "all") {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const statusFilter =
+      !status || status === "all"
+        ? undefined
+        : status === "done"
+          ? { in: ["done", "cancelled"] }
+          : { notIn: ["done", "cancelled"] };
+
+    const tasks = await prisma.autoscuolaVoiceCallbackTask.findMany({
+      where: {
+        companyId,
+        ...(statusFilter ? { status: statusFilter } : {}),
+      },
+      include: {
+        student: { select: { id: true, name: true, email: true, phone: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+
+    return {
+      success: true,
+      data: tasks.map((t) => ({
+        id: t.id,
+        phoneNumber: t.phoneNumber,
+        reason: t.reason,
+        status: t.status,
+        attemptCount: t.attemptCount,
+        nextAttemptAt: t.nextAttemptAt?.toISOString() ?? null,
+        createdAt: t.createdAt.toISOString(),
+        student: t.student
+          ? { id: t.student.id, name: t.student.name, email: t.student.email, phone: t.student.phone }
+          : null,
+      })),
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function markVoiceCallbackTaskDone(taskId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    await prisma.autoscuolaVoiceCallbackTask.updateMany({
+      where: { id: taskId, companyId: membership.companyId },
+      data: { status: "done" },
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}

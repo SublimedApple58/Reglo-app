@@ -18,6 +18,8 @@ import {
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
+  getVoiceCallbackTasks,
+  markVoiceCallbackTaskDone,
 } from "@/lib/actions/autoscuole.actions";
 import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
 import {
@@ -185,6 +187,41 @@ export function AutoscuoleResourcesPage({
     Record<string, AvailabilityRange[]>
   >({});
 
+  type CallbackTask = {
+    id: string;
+    phoneNumber: string;
+    reason: string;
+    status: string;
+    attemptCount: number;
+    nextAttemptAt: string | null;
+    createdAt: string;
+    student: { id: string; name: string | null; email: string; phone: string | null } | null;
+  };
+  const [callbackTasks, setCallbackTasks] = React.useState<CallbackTask[]>([]);
+  const [loadingCallbacks, setLoadingCallbacks] = React.useState(false);
+  const [markingDone, setMarkingDone] = React.useState<string | null>(null);
+
+  const loadCallbacks = React.useCallback(async () => {
+    setLoadingCallbacks(true);
+    const res = await getVoiceCallbackTasks("pending");
+    if (res.success && res.data) {
+      setCallbackTasks(res.data as CallbackTask[]);
+    }
+    setLoadingCallbacks(false);
+  }, []);
+
+  const handleMarkDone = React.useCallback(
+    async (taskId: string) => {
+      setMarkingDone(taskId);
+      const res = await markVoiceCallbackTaskDone(taskId);
+      if (res.success) {
+        setCallbackTasks((prev) => prev.filter((t) => t.id !== taskId));
+      }
+      setMarkingDone(null);
+    },
+    [],
+  );
+
   const loadResources = React.useCallback(async () => {
     const [instructorRes, vehicleRes] = await Promise.all([
       getAutoscuolaInstructors(),
@@ -236,7 +273,8 @@ export function AutoscuoleResourcesPage({
 
   React.useEffect(() => {
     loadResources();
-  }, [loadResources]);
+    loadCallbacks();
+  }, [loadResources, loadCallbacks]);
 
   React.useEffect(() => {
     let active = true;
@@ -1176,6 +1214,63 @@ export function AutoscuoleResourcesPage({
             ))}
             {!vehicles.length ? <EmptyCard label="Nessun veicolo disponibile." /> : null}
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-foreground">Richiamata (segretaria virtuale)</h3>
+            <div className="flex items-center gap-2">
+              {loadingCallbacks ? (
+                <span className="text-xs text-muted-foreground">Aggiornamento...</span>
+              ) : null}
+              <Button variant="ghost" size="sm" onClick={loadCallbacks} disabled={loadingCallbacks}>
+                Aggiorna
+              </Button>
+            </div>
+          </div>
+          {callbackTasks.length === 0 ? (
+            <div className="rounded-2xl border border-white/60 bg-white/70 px-4 py-6 text-center text-sm text-muted-foreground">
+              {loadingCallbacks ? "Caricamento..." : "Nessuna richiesta di richiamata in sospeso."}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {callbackTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">
+                        {task.student?.name ?? task.phoneNumber}
+                      </span>
+                      {task.student?.name ? (
+                        <span className="text-xs text-muted-foreground">{task.phoneNumber}</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {task.reason}{" "}
+                      &middot;{" "}
+                      {new Date(task.createdAt).toLocaleDateString("it-IT", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleMarkDone(task.id)}
+                    disabled={markingDone === task.id}
+                  >
+                    {markingDone === task.id ? "..." : "Fatto"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </ClientPageWrapper>

@@ -36,7 +36,7 @@ const signPayload = (raw) => {
   return { timestamp, signature };
 };
 
-const callTool = async (payload) => {
+const callTool = async (payload, { timeoutMs = 0 } = {}) => {
   if (!apiBaseUrl) {
     throw new Error("REGLO_API_BASE_URL non configurata.");
   }
@@ -46,7 +46,8 @@ const callTool = async (payload) => {
 
   const raw = JSON.stringify(payload);
   const { timestamp, signature } = signPayload(raw);
-  const response = await fetch(`${apiBaseUrl}/api/voice/runtime/tool`, {
+
+  const fetchPromise = fetch(`${apiBaseUrl}/api/voice/runtime/tool`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -54,8 +55,16 @@ const callTool = async (payload) => {
       "x-reglo-runtime-signature": signature,
     },
     body: raw,
-  });
-  return response.json();
+  }).then((r) => r.json());
+
+  if (!timeoutMs) return fetchPromise;
+
+  return Promise.race([
+    fetchPromise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`callTool timeout after ${timeoutMs}ms`)), timeoutMs),
+    ),
+  ]);
 };
 
 const safeJsonParse = (raw, fallback = null) => {
@@ -93,7 +102,9 @@ const buildSessionInstructions = (state, customInstructions = "") => {
 
   if (state.voiceBookingEnabled) {
     parts.push(
+      "- find_student + verify_student_dob: identifica e verifica l'allievo prima di prenotare.",
       "- check_availability: per controllare le disponibilita' di lezioni. USALO SEMPRE quando chiedono disponibilita'. Riporta i risultati in modo sintetico.",
+      "- create_booking_request: USALO per creare la prenotazione dopo aver verificato l'allievo e mostrato le disponibilita'. Richiede studentId e desiredDate (YYYY-MM-DD).",
     );
   }
 
@@ -189,6 +200,26 @@ const buildRealtimeTools = (state) => {
           },
         },
       },
+      {
+        type: "function",
+        name: "create_booking_request",
+        description:
+          "Crea una richiesta di prenotazione lezione per un allievo gia' verificato. Richiede studentId (dall'esito di verify_student_dob) e desiredDate (YYYY-MM-DD).",
+        parameters: {
+          type: "object",
+          properties: {
+            studentId: {
+              type: "string",
+              description: "ID allievo ottenuto dopo verifica identita'.",
+            },
+            desiredDate: {
+              type: "string",
+              description: "Data desiderata per la lezione (YYYY-MM-DD).",
+            },
+          },
+          required: ["studentId", "desiredDate"],
+        },
+      },
     );
   }
 
@@ -274,7 +305,7 @@ const handleFunctionCall = async ({ state, name, callId, rawArguments }) => {
   const input = typeof rawArguments === "string" ? safeJsonParse(rawArguments, {}) : {};
   const baseAllowed = ["search_knowledge", "create_callback"];
   const allowed = state.voiceBookingEnabled
-    ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability"]
+    ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability", "create_booking_request"]
     : baseAllowed;
   const tool = allowed.includes(name) ? name : null;
   if (!tool) {
@@ -364,24 +395,8 @@ const setupOpenAiSocket = (state) => {
       }
     }, WS_KEEPALIVE_INTERVAL_MS);
 
-    let customInstructions = "";
-    try {
-      const configResult = await callTool({
-        companyId: state.companyId,
-        tool: "get_config",
-        input: {},
-      });
-      if (configResult.success && configResult.data?.voiceInstructions) {
-        customInstructions = configResult.data.voiceInstructions;
-      }
-    } catch (error) {
-      process.stdout.write(
-        `[voice-runtime] get_config failed: ${
-          error instanceof Error ? error.message : "unknown"
-        }\n`,
-      );
-    }
-
+    // Send session config and greeting immediately — do NOT wait for get_config
+    // to avoid silence on cold starts or slow API responses.
     sendToOpenAi(state, {
       type: "session.update",
       session: {
@@ -391,7 +406,7 @@ const setupOpenAiSocket = (state) => {
         output_audio_format: "g711_ulaw",
         turn_detection: { type: "server_vad" },
         input_audio_transcription: { model: "whisper-1" },
-        instructions: buildSessionInstructions(state, customInstructions),
+        instructions: buildSessionInstructions(state, ""),
         tools: buildRealtimeTools(state),
         tool_choice: "auto",
       },
@@ -411,6 +426,31 @@ const setupOpenAiSocket = (state) => {
         )}, buongiorno. Mi dica." Non aggiungere altro.`,
       },
     });
+
+    // Load custom instructions in the background and update session if present.
+    // 4-second timeout so a slow API never blocks the call.
+    try {
+      const configResult = await callTool(
+        { companyId: state.companyId, tool: "get_config", input: {} },
+        { timeoutMs: 4000 },
+      );
+      const customInstructions =
+        configResult.success && configResult.data?.voiceInstructions
+          ? configResult.data.voiceInstructions
+          : "";
+      if (customInstructions && socket.readyState === WebSocket.OPEN) {
+        sendToOpenAi(state, {
+          type: "session.update",
+          session: { instructions: buildSessionInstructions(state, customInstructions) },
+        });
+      }
+    } catch (error) {
+      process.stdout.write(
+        `[voice-runtime] get_config failed: ${
+          error instanceof Error ? error.message : "unknown"
+        }\n`,
+      );
+    }
   });
 
   socket.on("message", async (raw) => {
