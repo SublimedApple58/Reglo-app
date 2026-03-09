@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   appendVoiceCallTurn,
   checkVoiceAvailability,
+  createVoiceAppointment,
   createVoiceBookingRequest,
   createVoiceCallbackTask,
   getVoiceCompanyConfig,
@@ -22,6 +23,7 @@ const payloadSchema = z.object({
     "verify_student_dob",
     "create_callback",
     "create_booking_request",
+    "create_appointment",
     "log_turn",
     "search_knowledge",
     "check_availability",
@@ -157,6 +159,20 @@ export async function POST(request: Request) {
       }
       const booking = await createVoiceBookingRequest({ companyId, studentId, desiredDate });
       return NextResponse.json({ success: true, data: { booking } });
+    }
+
+    if (tool === "create_appointment") {
+      const studentId = typeof input?.studentId === "string" ? input.studentId : "";
+      const date = typeof input?.date === "string" ? input.date : "";
+      const startTime = typeof input?.startTime === "string" ? input.startTime : "";
+      if (!studentId || !date || !startTime) {
+        return NextResponse.json(
+          { success: false, message: "studentId, date e startTime sono obbligatori." },
+          { status: 400 },
+        );
+      }
+      const appointment = await createVoiceAppointment({ companyId, studentId, date, startTime });
+      return NextResponse.json({ success: true, data: { appointment } });
     }
 
     if (tool === "search_knowledge") {

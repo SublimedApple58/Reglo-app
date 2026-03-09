@@ -102,17 +102,18 @@ const buildSessionInstructions = (state, customInstructions = "") => {
 
   if (state.voiceBookingEnabled) {
     parts.push(
+      "PRONUNCIA ORARI: usa sempre il campo 'spoken' restituito da check_availability. Es: 'alle 9', 'alle 10 e mezza'. MAI leggere orari in formato HH:MM.",
       "FLUSSO PRENOTAZIONE LEZIONE — seguilo ESATTAMENTE in questo ordine:",
       "PASSO 1: quando lo studente chiede di prenotare, di': 'Dimmi il tuo numero di cellulare.' Poi chiama find_student col numero.",
       "PASSO 2: se find_student non trova nessuno di': 'Non ti trovo in archivio. Vuoi che ti richiamiamo?' e usa create_callback. FINE.",
       "PASSO 3: se find_student trova lo studente, di' SOLO il nome e cognome trovato e chiedi: 'Sei tu?' Aspetta conferma.",
       "PASSO 4: se nega o e' incerto, di': 'Non posso procedere. Vuoi che ti richiamiamo?' FINE.",
-      "PASSO 5: se conferma, chiedi: 'Che giorno vuoi prenotare?' (accetta anche risposte vaghe tipo 'domani', 'giovedi', 'la settimana prossima').",
-      "PASSO 6: chiama check_availability per il giorno/periodo indicato.",
-      "PASSO 7: proponi UN SOLO slot, il primo disponibile. Esempio: 'Ho disponibile giovedi 12 marzo dalle 10:00. Ti va?' NON elencare tutti gli slot.",
-      "PASSO 8: se lo studente dice 'no', 'un'altra proposta', 'hai altro', 'non mi va': proponi il secondo slot disponibile (o il primo del giorno successivo). Ripeti fino a esaurimento opzioni.",
-      "PASSO 9: se lo studente conferma uno slot, chiama create_booking_request con studentId (dall'esito find_student) e desiredDate (YYYY-MM-DD del giorno proposto).",
-      "PASSO 10: dopo create_booking_request di': 'Perfetto, richiesta inviata. La scuola ti confirma l'orario esatto a breve.' FINE.",
+      "PASSO 5: se conferma, chiedi: 'Che giorno vuoi prenotare?' (accetta risposte vaghe: 'domani', 'giovedi', 'la settimana prossima').",
+      "PASSO 6: chiama check_availability per il giorno indicato (fromDate=toDate=quel giorno).",
+      "PASSO 7: proponi UN SOLO slot usando il campo spoken. Esempio: 'Ho disponibile giovedi 12 marzo alle 9. Ti va?' NON elencare tutti gli slot.",
+      "PASSO 8: se lo studente dice 'no', 'un altra proposta', 'hai altro': proponi il secondo slot. Se esauriti i slot del giorno, prova il giorno successivo. Ripeti.",
+      "PASSO 9: se lo studente conferma, chiama create_appointment con studentId (dall'esito find_student), date (YYYY-MM-DD), startTime (HH:MM dello slot accettato).",
+      "PASSO 10: dopo create_appointment di': 'Perfetto, lezione prenotata per [giorno] alle [ora]. A presto!' FINE.",
       "REGOLA CRITICA: non saltare passi, non chiedere la data di nascita, non elencare piu' slot in un colpo solo.",
     );
   }
@@ -200,9 +201,9 @@ const buildRealtimeTools = (state) => {
       },
       {
         type: "function",
-        name: "create_booking_request",
+        name: "create_appointment",
         description:
-          "PASSO 9 conferma: crea la richiesta di prenotazione dopo che lo studente ha accettato uno slot proposto. Usa lo studentId restituito da find_student e la data dello slot accettato.",
+          "PASSO 9: prenota la lezione direttamente sull'agenda dopo che lo studente ha accettato lo slot proposto. Usa studentId da find_student, date e startTime dello slot confermato.",
         parameters: {
           type: "object",
           properties: {
@@ -210,12 +211,16 @@ const buildRealtimeTools = (state) => {
               type: "string",
               description: "ID allievo dall'esito di find_student.",
             },
-            desiredDate: {
+            date: {
               type: "string",
-              description: "Data dello slot accettato dallo studente (YYYY-MM-DD).",
+              description: "Data della lezione (YYYY-MM-DD).",
+            },
+            startTime: {
+              type: "string",
+              description: "Orario inizio lezione in formato HH:MM (es. 09:00, 14:30).",
             },
           },
-          required: ["studentId", "desiredDate"],
+          required: ["studentId", "date", "startTime"],
         },
       },
     );
@@ -303,7 +308,7 @@ const handleFunctionCall = async ({ state, name, callId, rawArguments }) => {
   const input = typeof rawArguments === "string" ? safeJsonParse(rawArguments, {}) : {};
   const baseAllowed = ["search_knowledge", "create_callback"];
   const allowed = state.voiceBookingEnabled
-    ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability", "create_booking_request"]
+    ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability", "create_appointment"]
     : baseAllowed;
   const tool = allowed.includes(name) ? name : null;
   if (!tool) {

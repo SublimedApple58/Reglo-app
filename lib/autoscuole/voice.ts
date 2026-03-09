@@ -656,6 +656,66 @@ export async function createVoiceBookingRequest({
   };
 }
 
+export async function createVoiceAppointment({
+  companyId,
+  studentId,
+  date,
+  startTime,
+  durationMinutes = 60,
+  prisma = defaultPrisma,
+}: {
+  companyId: string;
+  studentId: string;
+  date: string;      // YYYY-MM-DD in Europe/Rome local time
+  startTime: string; // HH:MM in Europe/Rome local time
+  durationMinutes?: number;
+  prisma?: PrismaClientLike;
+}) {
+  // Validate inputs
+  if (!date.match(/^\d{4}-\d{2}-\d{2}$/)) throw new Error("Formato data non valido (YYYY-MM-DD).");
+  const timeParts = startTime.match(/^(\d{1,2}):(\d{2})$/);
+  if (!timeParts) throw new Error("Formato orario non valido (HH:MM).");
+  const hh = parseInt(timeParts[1], 10);
+  const mm = parseInt(timeParts[2], 10);
+
+  // Verify student belongs to this company
+  const member = await prisma.companyMember.findFirst({
+    where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
+    select: { userId: true },
+  });
+  if (!member) throw new Error("Allievo non trovato in questa autoscuola.");
+
+  // Convert Rome local time to UTC
+  const startsAt = romeLocalToUtc(date, hh, mm);
+  const endsAt = new Date(startsAt.getTime() + durationMinutes * 60000);
+
+  const appointment = await prisma.autoscuolaAppointment.create({
+    data: {
+      companyId,
+      studentId,
+      type: "urbano",
+      startsAt,
+      endsAt,
+      status: "scheduled",
+    },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      type: true,
+    },
+  });
+
+  return {
+    id: appointment.id,
+    startsAt: appointment.startsAt.toISOString(),
+    endsAt: appointment.endsAt?.toISOString() ?? null,
+    status: appointment.status,
+    type: appointment.type,
+  };
+}
+
 export async function verifyVoiceStudentDob({
   companyId,
   phoneNumber,
@@ -1056,6 +1116,35 @@ const formatMinutesAsTime = (minutes: number) => {
   return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
 };
 
+// Returns spoken Italian label for a slot start (e.g. 540 → "alle 9", 570 → "alle 9 e mezza")
+const minutesToSpoken = (totalMinutes: number): string => {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (m === 0) return `alle ${h}`;
+  if (m === 30) return `alle ${h} e mezza`;
+  return `alle ${h}:${m.toString().padStart(2, "0")}`;
+};
+
+// Convert a date (YYYY-MM-DD) + HH:MM in Europe/Rome local time → UTC Date
+const romeLocalToUtc = (dateStr: string, hh: number, mm: number): Date => {
+  const [yr, mo, dy] = dateStr.split("-").map(Number);
+  // Naive UTC guess (ignores timezone offset)
+  const naiveUtcMs = Date.UTC(yr, mo - 1, dy, hh, mm, 0);
+  // Find what Rome time this naive UTC corresponds to
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const romeParts = fmt.formatToParts(new Date(naiveUtcMs));
+  const romeH = parseInt(romeParts.find((p) => p.type === "hour")?.value ?? "0", 10);
+  const romeM = parseInt(romeParts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  // Correct by the difference
+  const diffMin = (hh - romeH) * 60 + (mm - romeM);
+  return new Date(naiveUtcMs + diffMin * 60000);
+};
+
 const getZonedDateParts = (date: Date) => {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: AUTOSCUOLA_TIMEZONE,
@@ -1189,8 +1278,10 @@ export async function checkVoiceAvailability({
     }
   }
 
-  // For each date, compute merged available windows across all instructors
-  const days: Array<{ date: string; label: string; slots: string[] }> = [];
+  const LESSON_DURATION_MIN = 60; // default lesson duration in minutes
+
+  // For each date, compute merged available windows then split into lesson-length slots
+  const days: Array<{ date: string; label: string; slots: Array<{ startTime: string; spoken: string }> }> = [];
   for (const date of dates) {
     const availableRanges: Array<{ from: number; to: number }> = [];
     const dateStr = `${date.year}-${date.month}-${date.day}`;
@@ -1237,9 +1328,16 @@ export async function checkVoiceAvailability({
       }
     }
 
-    const slots = merged
-      .filter((r) => r.to - r.from >= 30)
-      .map((r) => `${formatMinutesAsTime(r.from)}-${formatMinutesAsTime(r.to)}`);
+    // Split merged ranges into individual lesson-length slots
+    const slots: Array<{ startTime: string; spoken: string }> = [];
+    for (const range of merged) {
+      for (let start = range.from; start + LESSON_DURATION_MIN <= range.to; start += LESSON_DURATION_MIN) {
+        slots.push({
+          startTime: formatMinutesAsTime(start),
+          spoken: minutesToSpoken(start),
+        });
+      }
+    }
 
     if (slots.length) {
       const ymd = `${date.year}-${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`;
@@ -1253,6 +1351,7 @@ export async function checkVoiceAvailability({
 
   return {
     message: `Disponibilita' trovata per ${days.length} giorni.`,
+    lessonDurationMinutes: LESSON_DURATION_MIN,
     days,
   };
 }
