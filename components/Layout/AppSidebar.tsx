@@ -16,6 +16,7 @@ import {
   WalletCards,
   ChevronsUpDown,
   Plus,
+  PhoneCall,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -132,6 +133,11 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     url: "autoscuole?tab=payments",
     icon: WalletCards,
     tabKey: "payments",
+  },
+  {
+    title: "Segretaria",
+    url: "autoscuole/voice",
+    icon: PhoneCall,
   },
 ];
 
