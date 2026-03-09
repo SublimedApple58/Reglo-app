@@ -3,7 +3,6 @@
 import React from "react";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
@@ -194,13 +193,7 @@ function SectionCard({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function AutoscuoleVoicePage({
-  hideNav = false,
-  tabs,
-}: {
-  hideNav?: boolean;
-  tabs?: React.ReactNode;
-} = {}) {
+export function AutoscuoleVoicePage() {
   const toast = useFeedbackToast();
   const [saving, setSaving] = React.useState(false);
 
@@ -373,9 +366,6 @@ export function AutoscuoleVoicePage({
       contentWidthClassName="max-w-[1200px]"
     >
       <div className="w-full space-y-5">
-        {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
-
         {/* ── Hero status card ─────────────────────────────────────────── */}
         <div className="glass-panel glass-strong overflow-hidden p-0">
           {/* Top strip */}
