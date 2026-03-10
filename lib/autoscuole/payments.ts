@@ -2012,7 +2012,8 @@ export async function processAutoscuolaInvoiceFinalization({
     where: {
       paymentRequired: true,
       OR: [
-        { invoiceId: null },
+        // invoiceId null ma non già completato senza FIC
+        { invoiceId: null, invoiceStatus: { not: "issued_stripe" } },
         { invoiceStatus: { in: ["pending", "failed", "pending_fic"] } },
       ],
       status: {
@@ -2085,17 +2086,29 @@ export async function processAutoscuolaInvoiceFinalization({
       });
       issued += 1;
     } catch (error) {
-      const pendingFic = isFicNotReadyError(error);
+      const ficNotConfigured = isFicNotReadyError(error);
       const failureMessage =
         error instanceof Error ? error.message : "Errore sconosciuto durante emissione fattura.";
-      await prisma.autoscuolaAppointment.update({
-        where: { id: appointment.id },
-        data: {
-          invoiceStatus: pendingFic ? "pending_fic" : "failed",
-        },
-      });
 
-      if (!pendingFic) {
+      if (ficNotConfigured) {
+        // FIC non connesso o non configurato, ma il pagamento Stripe è già incassato.
+        // Completiamo il flusso senza documento FIC: la ricevuta Stripe è disponibile
+        // tramite getMobileAppointmentPaymentDocument() come fallback.
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: {
+            invoiceStatus: "issued_stripe",
+            paymentStatus: "paid",
+          },
+        });
+        issued += 1;
+      } else {
+        // Errore FIC reale (API error, token scaduto non recuperabile, ecc.) → failed
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { invoiceStatus: "failed" },
+        });
+
         const recentLog = await prisma.autoscuolaAppointmentPayment.findFirst({
           where: {
             appointmentId: appointment.id,
@@ -2131,8 +2144,6 @@ export async function processAutoscuolaInvoiceFinalization({
             },
           });
         }
-      }
-      if (!pendingFic) {
         console.error("Autoscuola FIC invoice error", error);
       }
     }
