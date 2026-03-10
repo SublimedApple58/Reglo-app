@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Loader2, Search, Smartphone, Zap } from "lucide-react";
+import { Loader2, Search, Smartphone } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -33,8 +33,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  assignAutoscuolaVoiceLine,
   getCompanyStudentPlatforms,
-  provisionAutoscuolaVoiceLine,
+  unassignAutoscuolaVoiceLine,
   updateCompanyService,
 } from "@/lib/actions/backoffice.actions";
 import {
@@ -77,12 +78,18 @@ function ServiceCard({
 }) {
   const toast = useFeedbackToast();
   const [isPending, startTransition] = useTransition();
-  const [isProvisioning, startProvisioning] = useTransition();
+  const [isAssigning, startAssigning] = useTransition();
+  const [isUnassigning, startUnassigning] = useTransition();
   const [status, setStatus] = useState(service?.status ?? "active");
   const [limits, setLimits] = useState<ServiceLimits>({
     ...DEFAULT_SERVICE_LIMITS[serviceKey],
     ...(service?.limits ?? {}),
   });
+
+  // Manual voice line assignment form
+  const [assignDisplayNumber, setAssignDisplayNumber] = useState("");
+  const [assignTwilioNumber, setAssignTwilioNumber] = useState("");
+  const [assignTwilioSid, setAssignTwilioSid] = useState("");
 
   type StudentRow = { id: string; email: string; platform: string | null; status: string; createdAt: string };
   const [students, setStudents] = useState<StudentRow[] | null>(null);
@@ -112,27 +119,48 @@ function ServiceCard({
   const voiceLineRef =
     typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
 
-  const handleProvision = () => {
-    startProvisioning(async () => {
-      const res = await provisionAutoscuolaVoiceLine({ companyId });
-      if (!res.success) {
-        toast.error({
-          description: res.message ?? "Provisioning fallito.",
-        });
-        setLimits((prev) => ({
-          ...prev,
-          voiceProvisioningStatus: "error" as ServiceLimits["voiceProvisioningStatus"],
-        }));
+  const handleAssign = () => {
+    startAssigning(async () => {
+      const res = await assignAutoscuolaVoiceLine({
+        companyId,
+        displayNumber: assignDisplayNumber.trim(),
+        twilioNumber: assignTwilioNumber.trim(),
+        twilioPhoneSid: assignTwilioSid.trim(),
+        routingMode: "twilio",
+      });
+      if (!res.success || !res.data) {
+        toast.error({ description: (!res.success && res.message) ? res.message : "Assegnazione fallita." });
         return;
       }
-      toast.success({
-        description: `Numero acquistato: ${res.data.phoneNumber}`,
-      });
+      toast.success({ description: "Linea assegnata correttamente." });
+      const lineId = res.data.lineId;
       setLimits((prev) => ({
         ...prev,
         voiceFeatureEnabled: true,
         voiceProvisioningStatus: "ready" as ServiceLimits["voiceProvisioningStatus"],
-        voiceLineRef: res.data.lineId,
+        voiceLineRef: lineId,
+      }));
+      setAssignDisplayNumber("");
+      setAssignTwilioNumber("");
+      setAssignTwilioSid("");
+    });
+  };
+
+  const handleUnassign = () => {
+    startUnassigning(async () => {
+      const res = await unassignAutoscuolaVoiceLine({ companyId });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Scollegamento fallito." });
+        return;
+      }
+      toast.success({ description: "Linea scollegata." });
+      setLimits((prev) => ({
+        ...prev,
+        voiceFeatureEnabled: false,
+        voiceProvisioningStatus: "not_started" as ServiceLimits["voiceProvisioningStatus"],
+        voiceLineRef: null,
+        voiceAssistantEnabled: false,
+        voiceBookingEnabled: false,
       }));
     });
   };
@@ -223,70 +251,69 @@ function ServiceCard({
                   voiceProvisioningStatus: Boolean(checked)
                     ? (typeof prev.voiceProvisioningStatus === "string"
                         ? prev.voiceProvisioningStatus
-                        : "provisioning")
+                        : "not_started")
                     : "not_started",
-                  voiceLineRef: Boolean(checked) ? prev.voiceLineRef ?? "" : null,
+                  voiceLineRef: Boolean(checked) ? (prev.voiceLineRef ?? null) : null,
                 }))
               }
             />
           </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Provisioning
-              </p>
-              <Select
-                value={String(voiceProvisioningStatus)}
-                onValueChange={(value) =>
-                  setLimits((prev) => ({
-                    ...prev,
-                    voiceProvisioningStatus:
-                      value as ServiceLimits["voiceProvisioningStatus"],
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="not_started">Not started</SelectItem>
-                  <SelectItem value="provisioning">Provisioning</SelectItem>
-                  <SelectItem value="ready">Ready</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Line reference
-              </p>
-              <Input
-                value={voiceLineRef}
-                placeholder="UUID linea assegnata"
-                onChange={(event) =>
-                  setLimits((prev) => ({
-                    ...prev,
-                    voiceLineRef: event.target.value || null,
-                  }))
-                }
-              />
-            </div>
-          </div>
-          {voiceProvisioningStatus !== "ready" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full gap-2"
-              onClick={handleProvision}
-              disabled={isProvisioning}
-            >
-              {isProvisioning ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Zap className="h-3.5 w-3.5" />
-              )}
-              {isProvisioning ? "Acquisto numero in corso…" : "Provisiona automaticamente"}
-            </Button>
+
+          {voiceFeatureEnabled && (
+            voiceProvisioningStatus === "ready" ? (
+              <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-semibold text-emerald-700">Linea attiva</p>
+                  <p className="font-mono text-[10px] text-muted-foreground break-all">{voiceLineRef}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 text-xs"
+                  onClick={handleUnassign}
+                  disabled={isUnassigning}
+                >
+                  {isUnassigning && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                  {isUnassigning ? "…" : "Scollega"}
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Assegna linea manualmente
+                </p>
+                <Input
+                  value={assignDisplayNumber}
+                  placeholder="Numero display (es. +39 02 1234567)"
+                  onChange={(e) => setAssignDisplayNumber(e.target.value)}
+                />
+                <Input
+                  value={assignTwilioNumber}
+                  placeholder="Numero Twilio E.164 (es. +390212345678)"
+                  onChange={(e) => setAssignTwilioNumber(e.target.value)}
+                />
+                <Input
+                  value={assignTwilioSid}
+                  placeholder="Twilio Phone SID (es. PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)"
+                  onChange={(e) => setAssignTwilioSid(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleAssign}
+                  disabled={
+                    isAssigning ||
+                    !assignDisplayNumber.trim() ||
+                    !assignTwilioNumber.trim() ||
+                    !assignTwilioSid.trim()
+                  }
+                >
+                  {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  {isAssigning ? "Assegnazione in corso…" : "Assegna linea"}
+                </Button>
+              </div>
+            )
           )}
         </div>
 
