@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Bell, CalendarDays, ClipboardList, CalendarSearch } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, CalendarSearch, Check } from "lucide-react";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
@@ -709,88 +709,107 @@ export function AutoscuoleResourcesPage({
           title="Policy tipi guida"
           description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
         >
-          <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
-                <span>Abilita policy tipi guida</span>
-                <Checkbox
-                  checked={lessonPolicyEnabled}
-                  onCheckedChange={(checked) => setLessonPolicyEnabled(Boolean(checked))}
-                />
-              </label>
-              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
-                <span>Richiedi almeno 1 guida per tipo</span>
-                <Checkbox
-                  checked={lessonRequiredTypesEnabled}
-                  onCheckedChange={(checked) => setLessonRequiredTypesEnabled(Boolean(checked))}
-                />
-              </label>
+          <div className="space-y-5">
+            {/* Global toggles */}
+            <div className="space-y-2">
+              <PolicySwitch
+                checked={lessonPolicyEnabled}
+                onChange={() => setLessonPolicyEnabled((v) => !v)}
+                label="Abilita policy tipi guida"
+                description="Attiva le regole di copertura e orario per i tipi di guida"
+              />
+              <PolicySwitch
+                checked={lessonRequiredTypesEnabled}
+                onChange={() => setLessonRequiredTypesEnabled((v) => !v)}
+                label="Richiedi almeno 1 guida per tipo"
+                description="Ogni allievo deve completare almeno una guida per ogni tipo selezionato"
+              />
             </div>
 
-            <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
-              <div className="text-xs font-medium text-muted-foreground">Tipi obbligatori</div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                {LESSON_TYPE_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
-                    className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs"
-                  >
-                    <span>{option.label}</span>
-                    <Checkbox
-                      checked={lessonRequiredTypes.includes(option.value)}
-                      onCheckedChange={() => toggleRequiredType(option.value)}
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3">
+            {/* Per-type cards — unified required + limit in one card */}
+            <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
-                Limiti per tipo guida (giorni + fascia oraria)
+                Configura per tipo di guida
               </div>
-              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 {LESSON_TYPE_OPTIONS.map((option) => {
                   const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
+                  const isRequired = lessonRequiredTypes.includes(option.value);
+                  const hasLimit = constraint.enabled;
                   return (
                     <div
                       key={option.value}
-                      className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3"
+                      className={cn(
+                        "rounded-2xl border bg-white/70 p-3 transition-all duration-200",
+                        hasLimit ? "border-[#324D7A]/25" : "border-white/60",
+                      )}
                     >
-                      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-                        <span className="font-medium text-foreground">{option.label}</span>
-                        <Checkbox
-                          checked={constraint.enabled}
-                          onCheckedChange={() => toggleConstraintEnabled(option.value)}
-                        />
-                      </label>
-                      {constraint.enabled ? (
-                        <>
-                          <div className="grid grid-cols-4 gap-2">
+                      {/* Header: name + pill actions */}
+                      <div className="mb-3 flex items-center gap-2">
+                        <span className="flex-1 text-sm font-semibold text-foreground">
+                          {option.label}
+                        </span>
+                        {/* Obbligatorio pill */}
+                        <button
+                          type="button"
+                          onClick={() => toggleRequiredType(option.value)}
+                          aria-label={`Segna ${option.label} come obbligatorio`}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-150",
+                            isRequired
+                              ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/60"
+                              : "bg-black/5 text-muted-foreground hover:bg-black/10",
+                          )}
+                        >
+                          {isRequired && <Check className="size-2.5" />}
+                          Obbl.
+                        </button>
+                      </div>
+
+                      {/* Limite orario toggle row */}
+                      <button
+                        type="button"
+                        onClick={() => toggleConstraintEnabled(option.value)}
+                        aria-label={`Limite orario per ${option.label}`}
+                        className={cn(
+                          "flex w-full cursor-pointer items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all duration-150",
+                          hasLimit
+                            ? "bg-[#324D7A]/10 text-foreground"
+                            : "bg-white/50 text-muted-foreground hover:bg-white/80",
+                        )}
+                      >
+                        <span className="font-medium">Limite orario</span>
+                        <InlineSwitch checked={hasLimit} />
+                      </button>
+
+                      {/* Expanded: days + time window */}
+                      {hasLimit && (
+                        <div className="mt-3 space-y-2.5 border-t border-white/50 pt-2.5">
+                          <div className="flex flex-wrap gap-1">
                             {WEEKDAY_OPTIONS.map((day) => (
                               <button
                                 key={`${option.value}-${day.value}`}
                                 type="button"
                                 onClick={() => toggleConstraintDay(option.value, day.value)}
                                 className={cn(
-                                  "cursor-pointer rounded-full border px-2 py-1 text-[11px] transition",
+                                  "cursor-pointer rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all duration-150",
                                   constraint.daysOfWeek.includes(day.value)
-                                    ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
-                                    : "border-white/70 bg-white/85 text-muted-foreground hover:text-foreground",
+                                    ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                                    : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
                                 )}
                               >
                                 {day.label}
                               </button>
                             ))}
                           </div>
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 gap-1.5">
                             <Select
                               value={String(constraint.startMinutes)}
                               onValueChange={(value) =>
                                 updateConstraintWindow(option.value, "startMinutes", value)
                               }
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="h-7 text-xs">
                                 <SelectValue placeholder="Inizio" />
                               </SelectTrigger>
                               <SelectContent>
@@ -810,7 +829,7 @@ export function AutoscuoleResourcesPage({
                                 updateConstraintWindow(option.value, "endMinutes", value)
                               }
                             >
-                              <SelectTrigger>
+                              <SelectTrigger className="h-7 text-xs">
                                 <SelectValue placeholder="Fine" />
                               </SelectTrigger>
                               <SelectContent>
@@ -825,10 +844,6 @@ export function AutoscuoleResourcesPage({
                               </SelectContent>
                             </Select>
                           </div>
-                        </>
-                      ) : (
-                        <div className="text-[11px] text-muted-foreground">
-                          Nessun limite attivo per questo tipo.
                         </div>
                       )}
                     </div>
@@ -928,6 +943,59 @@ function ConfigSection({
         </div>
       </div>
       {children}
+    </div>
+  );
+}
+
+function PolicySwitch({
+  checked,
+  onChange,
+  label,
+  description,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={onChange}
+      className={cn(
+        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-all duration-150",
+        checked
+          ? "border-[#324D7A]/30 bg-[#324D7A]/8 hover:bg-[#324D7A]/10"
+          : "border-white/60 bg-white/70 hover:bg-white/90",
+      )}
+    >
+      <div>
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        {description && (
+          <div className="text-xs text-muted-foreground">{description}</div>
+        )}
+      </div>
+      <InlineSwitch checked={checked} />
+    </button>
+  );
+}
+
+function InlineSwitch({ checked }: { checked: boolean }) {
+  return (
+    <div
+      className={cn(
+        "relative flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200",
+        checked ? "bg-[#324D7A]" : "bg-black/20",
+      )}
+    >
+      <div
+        className={cn(
+          "absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+          checked ? "translate-x-[18px]" : "translate-x-[2px]",
+        )}
+      />
     </div>
   );
 }
