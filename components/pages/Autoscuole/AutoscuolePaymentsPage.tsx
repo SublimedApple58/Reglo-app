@@ -345,6 +345,19 @@ export function AutoscuolePaymentsPage({
     loadPage();
   }, [loadPage]);
 
+  // If the bootstrap returned a stale syncError (last DB-persisted sync failed but
+  // Stripe may be fine now), silently re-sync in the background so the error
+  // banner disappears automatically without requiring a manual "aggiorna stato".
+  React.useEffect(() => {
+    if (!stripeStatus?.syncError) return;
+    fetch("/api/autoscuole/payments/stripe-connect/status?sync=1", { cache: "no-store" })
+      .then((res) => res.json() as Promise<{ success?: boolean; data?: StripeConnectStatus }>)
+      .then((payload) => {
+        if (payload.success && payload.data) setStripeStatus(payload.data);
+      })
+      .catch(() => undefined); // stay silent — user can retry manually if still broken
+  }, [stripeStatus?.syncError]);
+
   React.useEffect(() => {
     if (loading) return;
     const handle = setTimeout(() => {
