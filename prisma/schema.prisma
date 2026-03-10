@@ -262,17 +262,18 @@ model CompanyMember {
 }
 
 model CompanyInvite {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId   String   @db.Uuid
-  email       String
-  role        String   @default("member")
-  token       String   @unique
-  status      String   @default("pending")
-  platform    String?
-  expiresAt   DateTime @db.Timestamp(6)
-  invitedById String?  @db.Uuid
-  createdAt   DateTime @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  email          String
+  role           String   @default("member")
+  autoscuolaRole String?
+  token          String   @unique
+  status         String   @default("pending")
+  platform       String?
+  expiresAt      DateTime @db.Timestamp(6)
+  invitedById    String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt
 
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   invitedBy User?   @relation("CompanyInviteInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)

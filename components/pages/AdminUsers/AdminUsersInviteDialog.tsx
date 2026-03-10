@@ -25,22 +25,40 @@ import {
 import { createCompanyInvite } from "@/lib/actions/invite.actions";
 import { companyAtom } from "@/atoms/company.store";
 
+type AutoscuolaRole = "OWNER" | "INSTRUCTOR" | "STUDENT";
+
 type AdminUsersInviteDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pre-fill the autoscuola role and lock it (used from shortcuts like "Nuovo istruttore") */
+  initialAutoscuolaRole?: AutoscuolaRole;
 };
 
 export function AdminUsersInviteDialog({
   open,
   onOpenChange,
+  initialAutoscuolaRole,
 }: AdminUsersInviteDialogProps): React.ReactElement {
   const company = useAtomValue(companyAtom);
   const toast = useFeedbackToast();
+
+  const isAutoscuola = company?.services?.some(
+    (s) => s.key === "AUTOSCUOLE" && s.status === "active"
+  ) ?? false;
+
   const [inviteForm, setInviteForm] = React.useState({
     email: "",
     role: "member",
+    autoscuolaRole: (initialAutoscuolaRole ?? "STUDENT") as AutoscuolaRole,
   });
   const [isInviteSending, setIsInviteSending] = React.useState(false);
+
+  // Sync autoscuolaRole if initialAutoscuolaRole prop changes (e.g. dialog reused)
+  React.useEffect(() => {
+    if (initialAutoscuolaRole) {
+      setInviteForm((prev) => ({ ...prev, autoscuolaRole: initialAutoscuolaRole }));
+    }
+  }, [initialAutoscuolaRole]);
 
   const companyId = company?.id ?? null;
   const isAdmin = company?.role === "admin";
@@ -70,13 +88,18 @@ export function AdminUsersInviteDialog({
         companyId,
         email,
         role: inviteForm.role as "member" | "admin",
+        ...(isAutoscuola && { autoscuolaRole: inviteForm.autoscuolaRole }),
       });
 
       if (!res.success) {
         throw new Error(res.message ?? "Invito non riuscito.");
       }
 
-      setInviteForm((prev) => ({ ...prev, email: "" }));
+      setInviteForm((prev) => ({
+        ...prev,
+        email: "",
+        autoscuolaRole: initialAutoscuolaRole ?? "STUDENT",
+      }));
       toast.success({
         title: "Invito inviato",
         description: "L'email di invito e' stata inviata.",
@@ -96,7 +119,11 @@ export function AdminUsersInviteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Invita membri</DialogTitle>
+          <DialogTitle>
+            {initialAutoscuolaRole === "INSTRUCTOR"
+              ? "Invita istruttore"
+              : "Invita membri"}
+          </DialogTitle>
           <DialogDescription>
             Invia un invito per entrare nella tua company.
           </DialogDescription>
@@ -117,26 +144,69 @@ export function AdminUsersInviteDialog({
               }
             />
           </div>
-          <div className="space-y-2">
-            <Label>Ruolo</Label>
-            <Select
-              value={inviteForm.role}
-              onValueChange={(value) =>
-                setInviteForm((prev) => ({
-                  ...prev,
-                  role: value,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona ruolo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+
+          {/* System role — hidden when locked to instructor shortcut */}
+          {!initialAutoscuolaRole && (
+            <div className="space-y-2">
+              <Label>Ruolo</Label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(value) =>
+                  setInviteForm((prev) => ({
+                    ...prev,
+                    role: value,
+                    // Keep autoscuola role in sync with system role default
+                    autoscuolaRole:
+                      value === "admin" ? "OWNER" : prev.autoscuolaRole,
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona ruolo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="member">Member</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {/* Autoscuola role — only for autoscuola companies */}
+          {isAutoscuola && (
+            <div className="space-y-2">
+              <Label>Ruolo autoscuola</Label>
+              {initialAutoscuolaRole ? (
+                // Locked pre-filled value, just show it read-only
+                <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-muted-foreground">
+                  {initialAutoscuolaRole === "INSTRUCTOR"
+                    ? "Istruttore"
+                    : initialAutoscuolaRole === "OWNER"
+                      ? "Titolare"
+                      : "Allievo"}
+                </div>
+              ) : (
+                <Select
+                  value={inviteForm.autoscuolaRole}
+                  onValueChange={(value) =>
+                    setInviteForm((prev) => ({
+                      ...prev,
+                      autoscuolaRole: value as AutoscuolaRole,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona ruolo autoscuola" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="STUDENT">Allievo</SelectItem>
+                    <SelectItem value="INSTRUCTOR">Istruttore</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="submit"

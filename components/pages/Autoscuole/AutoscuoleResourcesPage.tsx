@@ -28,6 +28,7 @@ import {
   setAutoscuolaInstructorWeeklyAvailability,
   deleteAutoscuolaInstructorWeeklyAvailability,
 } from "@/lib/actions/autoscuole.actions";
+import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
 import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
 import {
   Dialog,
@@ -193,6 +194,9 @@ export function AutoscuoleResourcesPage({
   const [vehicleAvailability, setVehicleAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
+
+  // ── Invite instructor dialog
+  const [inviteInstructorOpen, setInviteInstructorOpen] = React.useState(false);
 
   // ── Create vehicle dialog
   const [createVehicleOpen, setCreateVehicleOpen] = React.useState(false);
@@ -1185,9 +1189,19 @@ export function AutoscuoleResourcesPage({
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground">Istruttori</h3>
-            {loading ? (
-              <span className="text-xs text-muted-foreground">Aggiornamento...</span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {loading ? (
+                <span className="text-xs text-muted-foreground">Aggiornamento...</span>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setInviteInstructorOpen(true)}
+                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
+              >
+                <Plus className="size-3.5" />
+                Invita istruttore
+              </button>
+            </div>
           </div>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             {instructors.map((instructor) => (
@@ -1301,6 +1315,13 @@ export function AutoscuoleResourcesPage({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* ── Invite instructor dialog */}
+        <AdminUsersInviteDialog
+          open={inviteInstructorOpen}
+          onOpenChange={setInviteInstructorOpen}
+          initialAutoscuolaRole="INSTRUCTOR"
+        />
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">

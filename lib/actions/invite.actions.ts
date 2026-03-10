@@ -6,7 +6,7 @@ import { sendCompanyInviteEmail } from '@/email';
 import { routing } from '@/i18n/routing';
 import { SERVER_URL } from '@/lib/constants';
 import { formatError } from '@/lib/utils';
-import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
+import { getDefaultAutoscuolaRole, type AutoscuolaRole } from '@/lib/autoscuole/roles';
 import {
   acceptCompanyInviteSchema,
   acceptCompanyInvitePasswordSchema,
@@ -80,13 +80,19 @@ export async function createCompanyInvite(
     const invite = existingInvite
       ? await prisma.companyInvite.update({
           where: { id: existingInvite.id },
-          data: { role: payload.role, expiresAt, platform: payload.platform ?? null },
+          data: {
+            role: payload.role,
+            autoscuolaRole: payload.autoscuolaRole ?? null,
+            expiresAt,
+            platform: payload.platform ?? null,
+          },
         })
       : await prisma.companyInvite.create({
           data: {
             companyId: payload.companyId,
             email,
             role: payload.role,
+            autoscuolaRole: payload.autoscuolaRole ?? null,
             token: randomUUID(),
             status: 'pending',
             platform: payload.platform ?? null,
@@ -382,7 +388,7 @@ export async function acceptCompanyInvite(
           companyId: invite.companyId,
           userId,
           role: invite.role,
-          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
+          autoscuolaRole: (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role),
         },
       });
     }
@@ -452,7 +458,7 @@ export async function acceptCompanyInviteWithPassword(
           companyId: invite.companyId,
           userId: user.id,
           role: invite.role,
-          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
+          autoscuolaRole: (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role),
         },
       });
     }
@@ -531,7 +537,7 @@ export async function acceptCompanyInviteAndRegister(
           companyId: invite.companyId,
           userId: user.id,
           role: invite.role,
-          autoscuolaRole: getDefaultAutoscuolaRole(invite.role),
+          autoscuolaRole: (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role),
         },
       });
 
