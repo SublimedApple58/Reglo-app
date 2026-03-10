@@ -2893,6 +2893,166 @@ export async function markVoiceCallbackTaskDone(taskId: string) {
   }
 }
 
+// ─── Instructor weekly availability helpers ───────────────────────────────────
+
+export async function getAutoscuolaInstructorWeeklyAvailabilities() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const availabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
+      where: {
+        companyId: membership.companyId,
+        ownerType: "instructor",
+      },
+    });
+    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number }> =
+      {};
+    for (const availability of availabilities) {
+      map[availability.ownerId] = {
+        daysOfWeek: availability.daysOfWeek,
+        startMinutes: availability.startMinutes,
+        endMinutes: availability.endMinutes,
+      };
+    }
+    return { success: true as const, data: map };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const setInstructorWeeklyAvailabilitySchema = z.object({
+  instructorId: z.string().uuid(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)),
+  startMinutes: z.number().int().min(0).max(1410),
+  endMinutes: z.number().int().min(30).max(1440),
+});
+
+export async function setAutoscuolaInstructorWeeklyAvailability(
+  input: z.infer<typeof setInstructorWeeklyAvailabilitySchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = setInstructorWeeklyAvailabilitySchema.parse(input);
+    const companyId = membership.companyId;
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: payload.instructorId, companyId },
+    });
+    if (!instructor) {
+      return { success: false as const, message: "Istruttore non trovato." };
+    }
+
+    const daysOfWeek = Array.from(new Set(payload.daysOfWeek)).sort((a, b) => a - b);
+    if (!daysOfWeek.length) {
+      return { success: false as const, message: "Seleziona almeno un giorno." };
+    }
+    if (payload.endMinutes <= payload.startMinutes) {
+      return { success: false as const, message: "Intervallo orario non valido." };
+    }
+
+    const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
+      where: {
+        companyId_ownerType_ownerId: {
+          companyId,
+          ownerType: "instructor",
+          ownerId: payload.instructorId,
+        },
+      },
+      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes },
+      create: {
+        companyId,
+        ownerType: "instructor",
+        ownerId: payload.instructorId,
+        daysOfWeek,
+        startMinutes: payload.startMinutes,
+        endMinutes: payload.endMinutes,
+      },
+    });
+
+    // Reposition appointments now outside the new availability window
+    const SLOT_MINUTES = 30;
+    const futureAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: payload.instructorId,
+        startsAt: { gt: new Date() },
+        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+
+    const impactedIds = futureAppointments
+      .filter((appointment) => {
+        const end =
+          appointment.endsAt ??
+          new Date(appointment.startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+        const aptDayOfWeek = appointment.startsAt.getDay();
+        if (!daysOfWeek.includes(aptDayOfWeek)) return true;
+        const aptStartMinutes = appointment.startsAt.getHours() * 60 + appointment.startsAt.getMinutes();
+        const aptEndMinutes = end.getHours() * 60 + end.getMinutes();
+        return aptStartMinutes < payload.startMinutes || aptEndMinutes > payload.endMinutes;
+      })
+      .map((a) => a.id);
+
+    if (impactedIds.length) {
+      await cancelAndQueueOperationalRepositionByResource({
+        companyId,
+        appointmentIds: impactedIds,
+        reason: "availability_changed",
+        actorUserId: membership.userId,
+      });
+    }
+
+    await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
+
+    return { success: true as const, data: { daysOfWeek: availability.daysOfWeek, startMinutes: availability.startMinutes, endMinutes: availability.endMinutes } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function deleteAutoscuolaInstructorWeeklyAvailability(instructorId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: instructorId, companyId },
+    });
+    if (!instructor) {
+      return { success: false as const, message: "Istruttore non trovato." };
+    }
+
+    await prisma.autoscuolaWeeklyAvailability.deleteMany({
+      where: { companyId, ownerType: "instructor", ownerId: instructorId },
+    });
+
+    const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId,
+        startsAt: { gt: new Date() },
+        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+      },
+      select: { id: true },
+    });
+
+    if (impactedAppointments.length) {
+      await cancelAndQueueOperationalRepositionByResource({
+        companyId,
+        appointmentIds: impactedAppointments.map((a) => a.id),
+        reason: "availability_changed",
+        actorUserId: membership.userId,
+      });
+    }
+
+    await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 // ─── Vehicle weekly availability helpers ──────────────────────────────────────
 
 export async function getAutoscuolaVehicleWeeklyAvailabilities() {

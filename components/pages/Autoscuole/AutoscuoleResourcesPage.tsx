@@ -24,6 +24,9 @@ import {
   getAutoscuolaVehicleWeeklyAvailabilities,
   setAutoscuolaVehicleWeeklyAvailability,
   deleteAutoscuolaVehicleWeeklyAvailability,
+  getAutoscuolaInstructorWeeklyAvailabilities,
+  setAutoscuolaInstructorWeeklyAvailability,
+  deleteAutoscuolaInstructorWeeklyAvailability,
 } from "@/lib/actions/autoscuole.actions";
 import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
 import {
@@ -41,6 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 
 type ResourceOption = { id: string; name: string };
+type InstructorDetail = { id: string; name: string; status: string };
 type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number };
 type AvailabilitySlot = {
@@ -168,11 +172,21 @@ export function AutoscuoleResourcesPage({
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
-  const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
+  const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
+  const [instructorWeeklyAvailability, setInstructorWeeklyAvailability] = React.useState<
+    Record<string, VehicleWeeklyAvailability>
+  >({});
   const [vehicles, setVehicles] = React.useState<VehicleDetail[]>([]);
   const [vehicleWeeklyAvailability, setVehicleWeeklyAvailability] = React.useState<
     Record<string, VehicleWeeklyAvailability>
   >({});
+
+  // ── Instructor availability dialog
+  const [availInstructor, setAvailInstructor] = React.useState<InstructorDetail | null>(null);
+  const [instrDays, setInstrDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
+  const [instrStartMinutes, setInstrStartMinutes] = React.useState(9 * 60);
+  const [instrEndMinutes, setInstrEndMinutes] = React.useState(18 * 60);
+  const [savingInstrAvailability, setSavingInstrAvailability] = React.useState(false);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -200,16 +214,20 @@ export function AutoscuoleResourcesPage({
   const [savingAvailability, setSavingAvailability] = React.useState(false);
 
   const loadResources = React.useCallback(async () => {
-    const [instructorRes, vehicleRes, weeklyAvailabilityRes] = await Promise.all([
+    const [instructorRes, vehicleRes, instrWeeklyRes, vehicleWeeklyRes] = await Promise.all([
       getAutoscuolaInstructors(),
       getAutoscuolaVehicles(),
+      getAutoscuolaInstructorWeeklyAvailabilities(),
       getAutoscuolaVehicleWeeklyAvailabilities(),
     ]);
 
     if (instructorRes.success && instructorRes.data) {
       setInstructors(
-        instructorRes.data.map((item) => ({ id: item.id, name: item.name })),
+        instructorRes.data.map((item) => ({ id: item.id, name: item.name, status: item.status })),
       );
+    }
+    if (instrWeeklyRes.success && instrWeeklyRes.data) {
+      setInstructorWeeklyAvailability(instrWeeklyRes.data);
     }
     if (vehicleRes.success && vehicleRes.data) {
       setVehicles(
@@ -221,8 +239,8 @@ export function AutoscuoleResourcesPage({
         })),
       );
     }
-    if (weeklyAvailabilityRes.success && weeklyAvailabilityRes.data) {
-      setVehicleWeeklyAvailability(weeklyAvailabilityRes.data);
+    if (vehicleWeeklyRes.success && vehicleWeeklyRes.data) {
+      setVehicleWeeklyAvailability(vehicleWeeklyRes.data);
     }
   }, []);
 
@@ -547,6 +565,73 @@ export function AutoscuoleResourcesPage({
         : [...current, duration];
       return next.sort((a, b) => a - b);
     });
+  };
+
+  // ── Instructor availability handlers ──────────────────────────────────────
+
+  const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
+    const current = instructorWeeklyAvailability[instructor.id];
+    setAvailInstructor(instructor);
+    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
+    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+  };
+
+  const toggleInstrDay = (day: number) => {
+    setInstrDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    );
+  };
+
+  const handleSaveInstructorAvailability = async () => {
+    if (!availInstructor) return;
+    if (!instrDays.length) {
+      toast.error({ description: "Seleziona almeno un giorno." });
+      return;
+    }
+    if (instrEndMinutes <= instrStartMinutes) {
+      toast.error({ description: "L'orario di fine deve essere dopo quello di inizio." });
+      return;
+    }
+    setSavingInstrAvailability(true);
+    const res = await setAutoscuolaInstructorWeeklyAvailability({
+      instructorId: availInstructor.id,
+      daysOfWeek: instrDays,
+      startMinutes: instrStartMinutes,
+      endMinutes: instrEndMinutes,
+    });
+    setSavingInstrAvailability(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+      return;
+    }
+    setInstructorWeeklyAvailability((prev) => ({
+      ...prev,
+      [availInstructor.id]: res.data!,
+    }));
+    setAvailInstructor(null);
+    toast.success({ description: "Disponibilità salvata." });
+    loadAvailability(date);
+  };
+
+  const handleDeleteInstructorAvailability = async () => {
+    if (!availInstructor) return;
+    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo istruttore?")) return;
+    setSavingInstrAvailability(true);
+    const res = await deleteAutoscuolaInstructorWeeklyAvailability(availInstructor.id);
+    setSavingInstrAvailability(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere la disponibilità." });
+      return;
+    }
+    setInstructorWeeklyAvailability((prev) => {
+      const next = { ...prev };
+      delete next[availInstructor.id];
+      return next;
+    });
+    setAvailInstructor(null);
+    toast.success({ description: "Disponibilità rimossa." });
+    loadAvailability(date);
   };
 
   // ── Vehicle management handlers ───────────────────────────────────────────
@@ -1106,10 +1191,12 @@ export function AutoscuoleResourcesPage({
           </div>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             {instructors.map((instructor) => (
-              <AvailabilityCard
+              <InstructorCard
                 key={instructor.id}
-                title={instructor.name}
+                instructor={instructor}
+                weeklyAvailability={instructorWeeklyAvailability[instructor.id] ?? null}
                 ranges={instructorAvailability[instructor.id] ?? []}
+                onEditAvailability={() => openInstructorAvailabilityDialog(instructor)}
               />
             ))}
             {!instructors.length ? (
@@ -1117,6 +1204,103 @@ export function AutoscuoleResourcesPage({
             ) : null}
           </div>
         </section>
+
+        {/* ── Instructor availability dialog */}
+        <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Disponibilità settimanale — {availInstructor?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEKDAY_OPTIONS.map((day) => (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => toggleInstrDay(day.value)}
+                      className={cn(
+                        "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                        instrDays.includes(day.value)
+                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Orario</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-muted-foreground">Inizio</div>
+                    <Select
+                      value={String(instrStartMinutes)}
+                      onValueChange={(v) => setInstrStartMinutes(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {START_TIME_OPTIONS.map((m) => (
+                          <SelectItem key={`instr-start-${m}`} value={String(m)}>
+                            {formatMinutes(m)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-muted-foreground">Fine</div>
+                    <Select
+                      value={String(instrEndMinutes)}
+                      onValueChange={(v) => setInstrEndMinutes(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {END_TIME_OPTIONS.map((m) => (
+                          <SelectItem key={`instr-end-${m}`} value={String(m)}>
+                            {formatMinutes(m)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                onClick={handleDeleteInstructorAvailability}
+                disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]}
+                className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
+              >
+                Rimuovi disponibilità
+              </button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setAvailInstructor(null)}
+                  disabled={savingInstrAvailability}
+                >
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleSaveInstructorAvailability}
+                  disabled={savingInstrAvailability || !instrDays.length || instrEndMinutes <= instrStartMinutes}
+                >
+                  {savingInstrAvailability ? "Salvataggio..." : "Salva"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
@@ -1424,6 +1608,87 @@ function InlineSwitch({ checked }: { checked: boolean }) {
           checked ? "translate-x-[18px]" : "translate-x-[2px]",
         )}
       />
+    </div>
+  );
+}
+
+function InstructorCard({
+  instructor,
+  weeklyAvailability,
+  ranges,
+  onEditAvailability,
+}: {
+  instructor: InstructorDetail;
+  weeklyAvailability: VehicleWeeklyAvailability | null;
+  ranges: AvailabilityRange[];
+  onEditAvailability: () => void;
+}) {
+  const totalMinutes = ranges.reduce((sum, range) => sum + diffMinutes(range.end, range.start), 0);
+  const isInactive = instructor.status === "inactive";
+
+  return (
+    <div className={cn("glass-panel glass-strong space-y-2 p-4", isInactive && "opacity-60")}>
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">{instructor.name}</span>
+            {isInactive && (
+              <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+                Inattivo
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onEditAvailability}
+          title="Modifica disponibilità"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+        >
+          <Clock className="size-3.5" />
+        </button>
+      </div>
+
+      {/* Weekly availability summary */}
+      {weeklyAvailability ? (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>
+            {formatMinutes(weeklyAvailability.startMinutes)}–{formatMinutes(weeklyAvailability.endMinutes)}
+          </span>
+          <span>·</span>
+          <span>
+            {weeklyAvailability.daysOfWeek
+              .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+        </div>
+      ) : (
+        <div className="text-[11px] text-muted-foreground/60 italic">Nessuna disponibilità settimanale</div>
+      )}
+
+      {/* Today's slots */}
+      <div className="flex items-center justify-between border-t border-white/40 pt-2">
+        <div className="flex flex-wrap gap-1.5">
+          {ranges.map((range) => (
+            <span
+              key={`${range.start.toISOString()}-${range.end.toISOString()}`}
+              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
+            >
+              {formatTime(range.start)}–{formatTime(range.end)}
+            </span>
+          ))}
+          {!ranges.length ? (
+            <span className="text-xs text-muted-foreground">Nessuno slot oggi.</span>
+          ) : null}
+        </div>
+        {totalMinutes > 0 && (
+          <div className="shrink-0 pl-2 text-xs text-muted-foreground">
+            {Math.round(totalMinutes)} min
+          </div>
+        )}
+      </div>
     </div>
   );
 }
