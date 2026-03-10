@@ -33,6 +33,7 @@ import {
   prepareAppointmentPaymentSnapshot,
   refundLessonCreditIfEligible,
 } from "@/lib/autoscuole/payments";
+import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 import {
   LESSON_ALL_ALLOWED_TYPES,
   getCompatibleLessonTypesForInterval,
@@ -2889,5 +2890,113 @@ export async function markVoiceCallbackTaskDone(taskId: string) {
     return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+// ─── Test receipt helpers ─────────────────────────────────────────────────────
+
+export async function getAutoscuolaStudentsList() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const members = await prisma.companyMember.findMany({
+      where: { companyId: membership.companyId, role: { not: "admin" } },
+      select: { user: { select: { id: true, name: true, email: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    return {
+      success: true as const,
+      data: members
+        .filter((m) => m.user != null)
+        .map((m) => ({
+          id: m.user!.id,
+          name: m.user!.name ?? m.user!.email ?? "Senza nome",
+          email: m.user!.email ?? "",
+        })),
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const generateTestPaymentReceiptSchema = z.object({
+  studentId: z.string().uuid(),
+  amount: z.number().positive().max(9999),
+  lessonType: z.string().min(1).max(50).default("urbano"),
+});
+
+export async function generateTestPaymentReceipt(
+  input: z.infer<typeof generateTestPaymentReceiptSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = generateTestPaymentReceiptSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const [student, company] = await Promise.all([
+      prisma.user.findFirst({
+        where: { id: payload.studentId },
+        select: { name: true, email: true },
+      }),
+      prisma.company.findFirst({
+        where: { id: companyId },
+        select: { name: true },
+      }),
+    ]);
+
+    if (!student) throw new Error("Allievo non trovato.");
+    if (!company) throw new Error("Autoscuola non trovata.");
+
+    const startsAt = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
+    const endsAt = new Date(startsAt.getTime() + 30 * 60 * 1000);
+    const appointmentId = randomUUID();
+
+    // Create a test appointment so the student sees it in the mobile app
+    await prisma.$transaction(async (tx) => {
+      await tx.autoscuolaAppointment.create({
+        data: {
+          id: appointmentId,
+          companyId,
+          studentId: payload.studentId,
+          type: payload.lessonType,
+          startsAt,
+          endsAt,
+          status: "completed",
+          paymentRequired: true,
+          paymentStatus: "paid",
+          priceAmount: payload.amount,
+          penaltyAmount: 0,
+          paidAmount: payload.amount,
+          invoiceStatus: "issued_stripe",
+          notes: "[TEST] Ricevuta di prova generata dall'admin",
+        },
+      });
+      await tx.autoscuolaAppointmentPayment.create({
+        data: {
+          companyId,
+          studentId: payload.studentId,
+          appointmentId,
+          phase: "invoice",
+          status: "succeeded",
+          amount: Math.round(payload.amount * 100),
+          paidAt: new Date(),
+        },
+      });
+    });
+
+    const receiptUrl = await generateAndUploadReceipt({
+      appointmentId,
+      companyName: company.name,
+      studentName: student.name ?? student.email ?? "Studente",
+      studentEmail: student.email ?? "",
+      lessonType: payload.lessonType,
+      startsAt,
+      paidAmount: payload.amount,
+      paidAt: new Date(),
+    });
+
+    return { success: true as const, data: { receiptUrl, appointmentId } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }

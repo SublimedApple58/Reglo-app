@@ -24,6 +24,10 @@ import {
 import {
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
+import {
+  getAutoscuolaStudentsList,
+  generateTestPaymentReceipt,
+} from "@/lib/actions/autoscuole.actions";
 
 type PaymentOverview = {
   totalRequired: number;
@@ -196,6 +200,16 @@ export function AutoscuolePaymentsPage({
   const [ficPaymentMethodId, setFicPaymentMethodId] = React.useState<string>("");
   const [pushEnabled, setPushEnabled] = React.useState(true);
   const [emailEnabled, setEmailEnabled] = React.useState(true);
+
+  // ── Test receipt modal state
+  const [testOpen, setTestOpen] = React.useState(false);
+  const [testStudents, setTestStudents] = React.useState<{ id: string; name: string; email: string }[]>([]);
+  const [testStudentsLoading, setTestStudentsLoading] = React.useState(false);
+  const [testStudentId, setTestStudentId] = React.useState("");
+  const [testAmount, setTestAmount] = React.useState("25");
+  const [testLessonType, setTestLessonType] = React.useState("urbano");
+  const [testGenerating, setTestGenerating] = React.useState(false);
+  const [testReceiptUrl, setTestReceiptUrl] = React.useState<string | null>(null);
 
   const loadFicOptions = React.useCallback(async (force = false) => {
     if (ficOptionsLoaded && !force) return;
@@ -513,6 +527,46 @@ export function AutoscuolePaymentsPage({
     }
   };
 
+  // ── Test receipt handlers
+  const openTestModal = async () => {
+    setTestReceiptUrl(null);
+    setTestStudentId("");
+    setTestAmount("25");
+    setTestLessonType("urbano");
+    setTestOpen(true);
+    if (testStudents.length === 0) {
+      setTestStudentsLoading(true);
+      try {
+        const res = await getAutoscuolaStudentsList();
+        if (res.success) setTestStudents(res.data);
+      } finally {
+        setTestStudentsLoading(false);
+      }
+    }
+  };
+
+  const handleGenerateTestReceipt = async () => {
+    const amount = parseFloat(testAmount.replace(",", "."));
+    if (!testStudentId) return toast.error({ description: "Seleziona un allievo." });
+    if (!amount || amount <= 0) return toast.error({ description: "Inserisci un importo valido." });
+    setTestGenerating(true);
+    try {
+      const res = await generateTestPaymentReceipt({
+        studentId: testStudentId,
+        amount,
+        lessonType: testLessonType,
+      });
+      if (!res.success) throw new Error(res.message);
+      setTestReceiptUrl(res.data.receiptUrl);
+    } catch (error) {
+      toast.error({
+        description: error instanceof Error ? error.message : "Errore generazione ricevuta.",
+      });
+    } finally {
+      setTestGenerating(false);
+    }
+  };
+
   const stripeReady = stripeStatus?.ready === true;
   const stripeStatusLabel = stripeReady
     ? "Attivo"
@@ -764,7 +818,18 @@ export function AutoscuolePaymentsPage({
         <div className="glass-panel glass-strong space-y-3 p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Operativo pagamenti guide</h3>
-            {loading ? <span className="text-xs text-muted-foreground">Caricamento...</span> : null}
+            <div className="flex items-center gap-3">
+              {loading ? <span className="text-xs text-muted-foreground">Caricamento...</span> : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={openTestModal}
+                className="gap-1.5 text-xs"
+              >
+                🧪 Prova ricevuta
+              </Button>
+            </div>
           </div>
 
           <div className="max-h-[540px] overflow-auto">
@@ -972,6 +1037,134 @@ export function AutoscuolePaymentsPage({
             </div>
           ) : (
             <div className="py-4 text-sm text-muted-foreground">Nessun dettaglio disponibile.</div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Test receipt modal */}
+      <Dialog open={testOpen} onOpenChange={(open) => { setTestOpen(open); if (!open) setTestReceiptUrl(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>🧪</span>
+              Prova Ricevuta Pagamento
+            </DialogTitle>
+          </DialogHeader>
+
+          {testReceiptUrl ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                  <span>✅</span>
+                  Ricevuta generata con successo!
+                </div>
+                <p className="mt-1 text-xs text-emerald-700">
+                  L&apos;allievo può ora visualizzarla nell&apos;app mobile dalla sezione pagamenti.
+                </p>
+              </div>
+
+              <a
+                href={testReceiptUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1E3A5F] px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
+                Apri ricevuta PDF ↗
+              </a>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-800">
+                <span className="font-semibold">Nota:</span> è stato creato un appuntamento di prova
+                visibile nella lista pagamenti (con nota &quot;[TEST]&quot;).
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setTestReceiptUrl(null)}
+              >
+                Genera un&apos;altra
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Crea una guida di prova con pagamento completato e genera la ricevuta PDF che l&apos;allievo
+                vedrà nell&apos;app.
+              </p>
+
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-muted-foreground">Allievo *</div>
+                <Select
+                  value={testStudentId}
+                  onValueChange={setTestStudentId}
+                  disabled={testStudentsLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={testStudentsLoading ? "Caricamento allievi..." : "Seleziona allievo"}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {testStudents.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        <span className="font-medium">{s.name}</span>
+                        {s.email ? <span className="ml-1 text-muted-foreground">{s.email}</span> : null}
+                      </SelectItem>
+                    ))}
+                    {!testStudentsLoading && testStudents.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">
+                        Nessun allievo trovato.
+                      </div>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Importo (€) *</div>
+                  <input
+                    className="h-10 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-foreground outline-none focus:border-foreground/25"
+                    value={testAmount}
+                    onChange={(e) => setTestAmount(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="25.00"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-muted-foreground">Tipo guida</div>
+                  <Select value={testLessonType} onValueChange={setTestLessonType}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[
+                        { value: "urbano", label: "Urbano" },
+                        { value: "extraurbano", label: "Extraurbano" },
+                        { value: "notturna", label: "Notturna" },
+                        { value: "autostrada", label: "Autostrada" },
+                        { value: "manovre", label: "Manovre" },
+                        { value: "guida", label: "Guida" },
+                      ].map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                className="w-full"
+                onClick={handleGenerateTestReceipt}
+                disabled={testGenerating || !testStudentId}
+              >
+                {testGenerating ? "Generazione in corso..." : "Genera ricevuta"}
+              </Button>
+            </div>
           )}
         </DialogContent>
       </Dialog>
