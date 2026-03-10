@@ -5,8 +5,6 @@ import {
   Workflow,
   LayoutDashboard,
   Settings,
-  Bot,
-  HeartHandshake,
   Users,
   FolderKanban,
   ClipboardCheck,
@@ -159,17 +157,6 @@ const configurationItems: SidebarItem[] = [
     title: "Settings",
     url: "settings",
     icon: Settings,
-  },
-  {
-    title: "Assistant",
-    url: "assistant",
-    icon: Bot,
-    service: "AI_ASSISTANT" as ServiceKey,
-  },
-  {
-    title: "Ask support",
-    url: "help",
-    icon: HeartHandshake,
   },
 ];
 

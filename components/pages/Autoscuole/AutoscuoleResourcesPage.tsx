@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Bell, CalendarDays, ClipboardList, CalendarSearch, Check } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, CalendarSearch, Check, Plus, Pencil, Clock, Car } from "lucide-react";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
@@ -19,8 +19,21 @@ import {
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
+  createAutoscuolaVehicle,
+  updateAutoscuolaVehicle,
+  getAutoscuolaVehicleWeeklyAvailabilities,
+  setAutoscuolaVehicleWeeklyAvailability,
+  deleteAutoscuolaVehicleWeeklyAvailability,
 } from "@/lib/actions/autoscuole.actions";
 import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   getAutoscuolaSettings,
   updateAutoscuolaSettings,
@@ -28,6 +41,8 @@ import {
 import { cn } from "@/lib/utils";
 
 type ResourceOption = { id: string; name: string };
+type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
+type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number };
 type AvailabilitySlot = {
   id: string;
   ownerId: string;
@@ -154,7 +169,10 @@ export function AutoscuoleResourcesPage({
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
-  const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
+  const [vehicles, setVehicles] = React.useState<VehicleDetail[]>([]);
+  const [vehicleWeeklyAvailability, setVehicleWeeklyAvailability] = React.useState<
+    Record<string, VehicleWeeklyAvailability>
+  >({});
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -162,10 +180,30 @@ export function AutoscuoleResourcesPage({
     Record<string, AvailabilityRange[]>
   >({});
 
+  // ── Create vehicle dialog
+  const [createVehicleOpen, setCreateVehicleOpen] = React.useState(false);
+  const [newVehicleName, setNewVehicleName] = React.useState("");
+  const [newVehiclePlate, setNewVehiclePlate] = React.useState("");
+  const [creatingVehicle, setCreatingVehicle] = React.useState(false);
+
+  // ── Edit vehicle dialog
+  const [editVehicle, setEditVehicle] = React.useState<VehicleDetail | null>(null);
+  const [editVehicleName, setEditVehicleName] = React.useState("");
+  const [editVehiclePlate, setEditVehiclePlate] = React.useState("");
+  const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
+
+  // ── Availability edit dialog
+  const [availVehicle, setAvailVehicle] = React.useState<VehicleDetail | null>(null);
+  const [availDays, setAvailDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
+  const [availStartMinutes, setAvailStartMinutes] = React.useState(9 * 60);
+  const [availEndMinutes, setAvailEndMinutes] = React.useState(18 * 60);
+  const [savingAvailability, setSavingAvailability] = React.useState(false);
+
   const loadResources = React.useCallback(async () => {
-    const [instructorRes, vehicleRes] = await Promise.all([
+    const [instructorRes, vehicleRes, weeklyAvailabilityRes] = await Promise.all([
       getAutoscuolaInstructors(),
       getAutoscuolaVehicles(),
+      getAutoscuolaVehicleWeeklyAvailabilities(),
     ]);
 
     if (instructorRes.success && instructorRes.data) {
@@ -174,7 +212,17 @@ export function AutoscuoleResourcesPage({
       );
     }
     if (vehicleRes.success && vehicleRes.data) {
-      setVehicles(vehicleRes.data.map((item) => ({ id: item.id, name: item.name })));
+      setVehicles(
+        vehicleRes.data.map((item) => ({
+          id: item.id,
+          name: item.name,
+          plate: item.plate ?? null,
+          status: item.status,
+        })),
+      );
+    }
+    if (weeklyAvailabilityRes.success && weeklyAvailabilityRes.data) {
+      setVehicleWeeklyAvailability(weeklyAvailabilityRes.data);
     }
   }, []);
 
@@ -499,6 +547,181 @@ export function AutoscuoleResourcesPage({
         : [...current, duration];
       return next.sort((a, b) => a - b);
     });
+  };
+
+  // ── Vehicle management handlers ───────────────────────────────────────────
+
+  const openCreateVehicle = () => {
+    setNewVehicleName("");
+    setNewVehiclePlate("");
+    setCreateVehicleOpen(true);
+  };
+
+  const handleCreateVehicle = async () => {
+    const name = newVehicleName.trim();
+    if (!name) {
+      toast.error({ description: "Inserisci il nome del veicolo." });
+      return;
+    }
+    setCreatingVehicle(true);
+    const res = await createAutoscuolaVehicle({
+      name,
+      plate: newVehiclePlate.trim() || undefined,
+    });
+    setCreatingVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile creare il veicolo." });
+      return;
+    }
+    setVehicles((prev) => [
+      ...prev,
+      { id: res.data!.id, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status },
+    ]);
+    setCreateVehicleOpen(false);
+    toast.success({ description: `Veicolo "${res.data.name}" aggiunto.` });
+  };
+
+  const openEditVehicle = (vehicle: VehicleDetail) => {
+    setEditVehicle(vehicle);
+    setEditVehicleName(vehicle.name);
+    setEditVehiclePlate(vehicle.plate ?? "");
+  };
+
+  const handleSaveEditVehicle = async () => {
+    if (!editVehicle) return;
+    const name = editVehicleName.trim();
+    if (!name) {
+      toast.error({ description: "Inserisci il nome del veicolo." });
+      return;
+    }
+    setSavingEditVehicle(true);
+    const res = await updateAutoscuolaVehicle({
+      vehicleId: editVehicle.id,
+      name,
+      plate: editVehiclePlate.trim() || null,
+    });
+    setSavingEditVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare il veicolo." });
+      return;
+    }
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === editVehicle.id
+          ? { ...v, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status }
+          : v,
+      ),
+    );
+    setEditVehicle(null);
+    toast.success({ description: "Veicolo aggiornato." });
+  };
+
+  const handleDeactivateVehicle = async () => {
+    if (!editVehicle) return;
+    if (!window.confirm(`Disattivare "${editVehicle.name}"? Gli appuntamenti futuri verranno riprogrammati.`)) return;
+    setSavingEditVehicle(true);
+    const res = await updateAutoscuolaVehicle({
+      vehicleId: editVehicle.id,
+      status: "inactive",
+    });
+    setSavingEditVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile disattivare il veicolo." });
+      return;
+    }
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === editVehicle.id ? { ...v, status: "inactive" } : v,
+      ),
+    );
+    setEditVehicle(null);
+    toast.success({ description: "Veicolo disattivato." });
+  };
+
+  const handleReactivateVehicle = async () => {
+    if (!editVehicle) return;
+    setSavingEditVehicle(true);
+    const res = await updateAutoscuolaVehicle({
+      vehicleId: editVehicle.id,
+      status: "active",
+    });
+    setSavingEditVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile riattivare il veicolo." });
+      return;
+    }
+    setVehicles((prev) =>
+      prev.map((v) =>
+        v.id === editVehicle.id ? { ...v, status: "active" } : v,
+      ),
+    );
+    setEditVehicle(null);
+    toast.success({ description: "Veicolo riattivato." });
+  };
+
+  const openAvailabilityDialog = (vehicle: VehicleDetail) => {
+    const current = vehicleWeeklyAvailability[vehicle.id];
+    setAvailVehicle(vehicle);
+    setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+    setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
+    setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+  };
+
+  const toggleAvailDay = (day: number) => {
+    setAvailDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    );
+  };
+
+  const handleSaveAvailability = async () => {
+    if (!availVehicle) return;
+    if (!availDays.length) {
+      toast.error({ description: "Seleziona almeno un giorno." });
+      return;
+    }
+    if (availEndMinutes <= availStartMinutes) {
+      toast.error({ description: "L'orario di fine deve essere dopo quello di inizio." });
+      return;
+    }
+    setSavingAvailability(true);
+    const res = await setAutoscuolaVehicleWeeklyAvailability({
+      vehicleId: availVehicle.id,
+      daysOfWeek: availDays,
+      startMinutes: availStartMinutes,
+      endMinutes: availEndMinutes,
+    });
+    setSavingAvailability(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+      return;
+    }
+    setVehicleWeeklyAvailability((prev) => ({
+      ...prev,
+      [availVehicle.id]: res.data!,
+    }));
+    setAvailVehicle(null);
+    toast.success({ description: "Disponibilità salvata." });
+    loadAvailability(date);
+  };
+
+  const handleDeleteAvailability = async () => {
+    if (!availVehicle) return;
+    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo veicolo?")) return;
+    setSavingAvailability(true);
+    const res = await deleteAutoscuolaVehicleWeeklyAvailability(availVehicle.id);
+    setSavingAvailability(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere la disponibilità." });
+      return;
+    }
+    setVehicleWeeklyAvailability((prev) => {
+      const next = { ...prev };
+      delete next[availVehicle.id];
+      return next;
+    });
+    setAvailVehicle(null);
+    toast.success({ description: "Disponibilità rimossa." });
+    loadAvailability(date);
   };
 
   return (
@@ -898,21 +1121,226 @@ export function AutoscuoleResourcesPage({
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold text-foreground">Veicoli</h3>
-            {loading ? (
-              <span className="text-xs text-muted-foreground">Aggiornamento...</span>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {loading ? (
+                <span className="text-xs text-muted-foreground">Aggiornamento...</span>
+              ) : null}
+              <button
+                type="button"
+                onClick={openCreateVehicle}
+                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
+              >
+                <Plus className="size-3.5" />
+                Nuovo veicolo
+              </button>
+            </div>
           </div>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
             {vehicles.map((vehicle) => (
-              <AvailabilityCard
+              <VehicleCard
                 key={vehicle.id}
-                title={vehicle.name}
+                vehicle={vehicle}
+                weeklyAvailability={vehicleWeeklyAvailability[vehicle.id] ?? null}
                 ranges={vehicleAvailability[vehicle.id] ?? []}
+                onEdit={() => openEditVehicle(vehicle)}
+                onEditAvailability={() => openAvailabilityDialog(vehicle)}
               />
             ))}
             {!vehicles.length ? <EmptyCard label="Nessun veicolo disponibile." /> : null}
           </div>
         </section>
+
+        {/* ── Create vehicle dialog */}
+        <Dialog open={createVehicleOpen} onOpenChange={setCreateVehicleOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Nuovo veicolo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
+                <Input
+                  placeholder="es. Fiat 500"
+                  value={newVehicleName}
+                  onChange={(e) => setNewVehicleName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
+                <Input
+                  placeholder="es. AB123CD"
+                  value={newVehiclePlate}
+                  onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateVehicleOpen(false)} disabled={creatingVehicle}>
+                Annulla
+              </Button>
+              <Button onClick={handleCreateVehicle} disabled={creatingVehicle || !newVehicleName.trim()}>
+                {creatingVehicle ? "Creazione..." : "Crea veicolo"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Edit vehicle dialog */}
+        <Dialog open={Boolean(editVehicle)} onOpenChange={(open) => !open && setEditVehicle(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Modifica veicolo</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
+                <Input
+                  placeholder="es. Fiat 500"
+                  value={editVehicleName}
+                  onChange={(e) => setEditVehicleName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
+                <Input
+                  placeholder="es. AB123CD"
+                  value={editVehiclePlate}
+                  onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
+                />
+              </div>
+              {editVehicle && (
+                <div className="pt-1">
+                  {editVehicle.status === "active" ? (
+                    <button
+                      type="button"
+                      onClick={handleDeactivateVehicle}
+                      disabled={savingEditVehicle}
+                      className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-50"
+                    >
+                      Disattiva veicolo
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleReactivateVehicle}
+                      disabled={savingEditVehicle}
+                      className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline disabled:opacity-50"
+                    >
+                      Riattiva veicolo
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditVehicle(null)} disabled={savingEditVehicle}>
+                Annulla
+              </Button>
+              <Button onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
+                {savingEditVehicle ? "Salvataggio..." : "Salva"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Availability edit dialog */}
+        <Dialog open={Boolean(availVehicle)} onOpenChange={(open) => !open && setAvailVehicle(null)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Disponibilità settimanale — {availVehicle?.name}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEKDAY_OPTIONS.map((day) => (
+                    <button
+                      key={day.value}
+                      type="button"
+                      onClick={() => toggleAvailDay(day.value)}
+                      className={cn(
+                        "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                        availDays.includes(day.value)
+                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                      )}
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Orario</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-muted-foreground">Inizio</div>
+                    <Select
+                      value={String(availStartMinutes)}
+                      onValueChange={(v) => setAvailStartMinutes(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {START_TIME_OPTIONS.map((m) => (
+                          <SelectItem key={`avail-start-${m}`} value={String(m)}>
+                            {formatMinutes(m)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[11px] text-muted-foreground">Fine</div>
+                    <Select
+                      value={String(availEndMinutes)}
+                      onValueChange={(v) => setAvailEndMinutes(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {END_TIME_OPTIONS.map((m) => (
+                          <SelectItem key={`avail-end-${m}`} value={String(m)}>
+                            {formatMinutes(m)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
+              <button
+                type="button"
+                onClick={handleDeleteAvailability}
+                disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]}
+                className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
+              >
+                Rimuovi disponibilità
+              </button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setAvailVehicle(null)}
+                  disabled={savingAvailability}
+                >
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleSaveAvailability}
+                  disabled={savingAvailability || !availDays.length || availEndMinutes <= availStartMinutes}
+                >
+                  {savingAvailability ? "Salvataggio..." : "Salva"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </ClientPageWrapper>
   );
@@ -996,6 +1424,106 @@ function InlineSwitch({ checked }: { checked: boolean }) {
           checked ? "translate-x-[18px]" : "translate-x-[2px]",
         )}
       />
+    </div>
+  );
+}
+
+function VehicleCard({
+  vehicle,
+  weeklyAvailability,
+  ranges,
+  onEdit,
+  onEditAvailability,
+}: {
+  vehicle: VehicleDetail;
+  weeklyAvailability: VehicleWeeklyAvailability | null;
+  ranges: AvailabilityRange[];
+  onEdit: () => void;
+  onEditAvailability: () => void;
+}) {
+  const totalMinutes = ranges.reduce((sum, range) => sum + diffMinutes(range.end, range.start), 0);
+  const isInactive = vehicle.status === "inactive";
+
+  return (
+    <div className={cn("glass-panel glass-strong space-y-2 p-4", isInactive && "opacity-60")}>
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span className="truncate text-sm font-semibold text-foreground">{vehicle.name}</span>
+            {isInactive && (
+              <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
+                Inattivo
+              </span>
+            )}
+          </div>
+          {vehicle.plate && (
+            <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+              <Car className="size-3" />
+              {vehicle.plate}
+            </div>
+          )}
+        </div>
+        {/* Action icons */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={onEditAvailability}
+            title="Modifica disponibilità"
+            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+          >
+            <Clock className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Modifica veicolo"
+            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Weekly availability summary */}
+      {weeklyAvailability ? (
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span>
+            {formatMinutes(weeklyAvailability.startMinutes)}–{formatMinutes(weeklyAvailability.endMinutes)}
+          </span>
+          <span>·</span>
+          <span>
+            {weeklyAvailability.daysOfWeek
+              .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
+              .filter(Boolean)
+              .join(", ")}
+          </span>
+        </div>
+      ) : (
+        <div className="text-[11px] text-muted-foreground/60 italic">Nessuna disponibilità settimanale</div>
+      )}
+
+      {/* Today's slots */}
+      <div className="flex items-center justify-between border-t border-white/40 pt-2">
+        <div className="flex flex-wrap gap-1.5">
+          {ranges.map((range) => (
+            <span
+              key={`${range.start.toISOString()}-${range.end.toISOString()}`}
+              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
+            >
+              {formatTime(range.start)}–{formatTime(range.end)}
+            </span>
+          ))}
+          {!ranges.length ? (
+            <span className="text-xs text-muted-foreground">Nessuno slot oggi.</span>
+          ) : null}
+        </div>
+        {totalMinutes > 0 && (
+          <div className="shrink-0 pl-2 text-xs text-muted-foreground">
+            {Math.round(totalMinutes)} min
+          </div>
+        )}
+      </div>
     </div>
   );
 }
