@@ -123,7 +123,7 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     tabKey: "agenda",
   },
   {
-    title: "Settings",
+    title: "Configurazione",
     url: "autoscuole?tab=settings",
     icon: SlidersHorizontal,
     tabKey: "settings",
@@ -463,7 +463,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           )}
         </div>
         {/* <Separator style={{ width: "90%", marginInline: "auto" }} /> */}
-        {isCompanyContextReady && !isAutoscuoleOnlyCompany ? (
+        {isCompanyContextReady ? (
           <SidebarGroup className="px-1">
             <SidebarGroupContent>
               <SidebarMenu>

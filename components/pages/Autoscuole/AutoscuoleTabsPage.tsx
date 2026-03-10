@@ -54,7 +54,7 @@ const TAB_ITEMS: TabItem[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "students", label: "Allievi" },
   { key: "agenda", label: "Agenda" },
-  { key: "settings", label: "Settings" },
+  { key: "settings", label: "Configurazione" },
   { key: "payments", label: "Pagamenti" },
 ];
 

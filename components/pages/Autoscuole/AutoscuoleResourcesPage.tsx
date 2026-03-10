@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Bell, CalendarDays, ClipboardList, CalendarSearch } from "lucide-react";
 
 import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
 import { AutoscuoleNav } from "./AutoscuoleNav";
@@ -24,6 +25,7 @@ import {
   getAutoscuolaSettings,
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
+import { cn } from "@/lib/utils";
 
 type ResourceOption = { id: string; name: string };
 type AvailabilitySlot = {
@@ -501,8 +503,8 @@ export function AutoscuoleResourcesPage({
 
   return (
     <ClientPageWrapper
-      title="Autoscuole"
-      subTitle="Settings operativi: disponibilità, policy e reminder"
+      title="Configurazione"
+      subTitle="Disponibilità, prenotazioni, reminder e policy per la tua autoscuola"
       hideHero
       contentWidthClassName="max-w-[1600px]"
     >
@@ -510,129 +512,60 @@ export function AutoscuoleResourcesPage({
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-4 p-4">
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              Disponibilità del giorno
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Seleziona una data per vedere gli slot disponibili.
-            </p>
-          </div>
-          <div className="w-[280px]">
-            <DatePicker value={date} onChange={setDate} />
-          </div>
-        </div>
+        {/* Row 1: Prenotazioni + Reminder e notifiche */}
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Prenotazioni */}
+          <ConfigSection
+            icon={CalendarDays}
+            title="Prenotazioni"
+            description="Durate, attori e settimane di disponibilità visibili in app."
+          >
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Settimane di disponibilità
+                </div>
+                <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Settimane" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
+                      <SelectItem key={weeks} value={String(weeks)}>
+                        {weeks} settimane
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-        <div className="glass-panel glass-strong space-y-3 p-4">
-          <div>
-            <div className="text-sm font-semibold text-foreground">
-              Reminder pre-guida
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Definisci con quanto preavviso inviare promemoria a allievo e istruttore.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Settimane disponibilità</div>
-              <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Settimane" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
-                    <SelectItem key={weeks} value={String(weeks)}>
-                      {weeks} settimane
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Reminder allievo</div>
-              <Select value={studentReminderMinutes} onValueChange={setStudentReminderMinutes}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Minuti" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REMINDER_OPTIONS.map((minutes) => (
-                    <SelectItem key={minutes} value={String(minutes)}>
-                      {minutes} minuti
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Reminder istruttore</div>
-              <Select value={instructorReminderMinutes} onValueChange={setInstructorReminderMinutes}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Minuti" />
-                </SelectTrigger>
-                <SelectContent>
-                  {REMINDER_OPTIONS.map((minutes) => (
-                    <SelectItem key={minutes} value={String(minutes)}>
-                      {minutes} minuti
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid gap-3 md:grid-cols-3">
-            <ChannelGroup
-              title="Slot fill"
-              value={slotFillChannels}
-              onToggle={(channel) =>
-                toggleChannel(channel, setSlotFillChannels)
-              }
-            />
-            <ChannelGroup
-              title="Reminder allievo"
-              value={studentReminderChannels}
-              onToggle={(channel) =>
-                toggleChannel(channel, setStudentReminderChannels)
-              }
-            />
-            <ChannelGroup
-              title="Reminder istruttore"
-              value={instructorReminderChannels}
-              onToggle={(channel) =>
-                toggleChannel(channel, setInstructorReminderChannels)
-              }
-            />
-          </div>
-          <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
-            <div className="text-xs font-medium text-muted-foreground">
-              Durata prenotazione allievo
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {BOOKING_DURATION_OPTIONS.map((duration) => {
-                const active = bookingSlotDurations.includes(duration);
-                return (
-                  <button
-                    key={duration}
-                    type="button"
-                    onClick={() => toggleBookingDuration(duration)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                      active
-                        ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
-                        : "border-white/70 bg-white/85 text-muted-foreground"
-                    }`}
-                  >
-                    {duration} min
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3">
-            <div className="text-xs font-medium text-muted-foreground">
-              Prenotazioni da app
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-1">
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Durata prenotazione allievo
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {BOOKING_DURATION_OPTIONS.map((duration) => {
+                    const active = bookingSlotDurations.includes(duration);
+                    return (
+                      <button
+                        key={duration}
+                        type="button"
+                        onClick={() => toggleBookingDuration(duration)}
+                        className={cn(
+                          "cursor-pointer rounded-full border px-3 py-1.5 text-xs transition",
+                          active
+                            ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                            : "border-white/70 bg-white/85 text-muted-foreground hover:bg-white hover:text-foreground",
+                        )}
+                      >
+                        {duration} min
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
                 <div className="text-xs font-medium text-muted-foreground">
                   Chi può prenotare
                 </div>
@@ -654,8 +587,9 @@ export function AutoscuoleResourcesPage({
                   </SelectContent>
                 </Select>
               </div>
+
               {appBookingActors === "instructors" || appBookingActors === "both" ? (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="text-xs font-medium text-muted-foreground">
                     Modalità istruttore
                   </div>
@@ -679,139 +613,249 @@ export function AutoscuoleResourcesPage({
                 </div>
               ) : null}
             </div>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={handleSaveSettings} disabled={savingSettings}>
-              {savingSettings ? "Salvataggio..." : "Salva impostazioni"}
-            </Button>
-          </div>
+          </ConfigSection>
+
+          {/* Reminder e notifiche */}
+          <ConfigSection
+            icon={Bell}
+            title="Reminder e notifiche"
+            description="Quando e su quali canali inviare promemoria a allievi e istruttori."
+          >
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Reminder allievo
+                  </div>
+                  <Select
+                    value={studentReminderMinutes}
+                    onValueChange={setStudentReminderMinutes}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Minuti" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REMINDER_OPTIONS.map((minutes) => (
+                        <SelectItem key={minutes} value={String(minutes)}>
+                          {minutes} minuti prima
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Reminder istruttore
+                  </div>
+                  <Select
+                    value={instructorReminderMinutes}
+                    onValueChange={setInstructorReminderMinutes}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Minuti" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REMINDER_OPTIONS.map((minutes) => (
+                        <SelectItem key={minutes} value={String(minutes)}>
+                          {minutes} minuti prima
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <ChannelGroup
+                  title="Slot fill"
+                  value={slotFillChannels}
+                  onToggle={(channel) =>
+                    toggleChannel(channel, setSlotFillChannels)
+                  }
+                />
+                <ChannelGroup
+                  title="Reminder allievo"
+                  value={studentReminderChannels}
+                  onToggle={(channel) =>
+                    toggleChannel(channel, setStudentReminderChannels)
+                  }
+                />
+                <ChannelGroup
+                  title="Reminder istruttore"
+                  value={instructorReminderChannels}
+                  onToggle={(channel) =>
+                    toggleChannel(channel, setInstructorReminderChannels)
+                  }
+                />
+              </div>
+            </div>
+          </ConfigSection>
         </div>
 
-        <div className="glass-panel glass-strong space-y-4 p-4">
-          <div>
-            <div className="text-sm font-semibold text-foreground">Regole tipi guida</div>
-            <p className="text-xs text-muted-foreground">
-              Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
-              <span>Abilita policy tipi guida</span>
-              <Checkbox
-                checked={lessonPolicyEnabled}
-                onCheckedChange={(checked) => setLessonPolicyEnabled(Boolean(checked))}
-              />
-            </label>
-            <label className="flex items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
-              <span>Richiedi almeno 1 guida per tipo</span>
-              <Checkbox
-                checked={lessonRequiredTypesEnabled}
-                onCheckedChange={(checked) => setLessonRequiredTypesEnabled(Boolean(checked))}
-              />
-            </label>
-          </div>
+        {/* Save button */}
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="min-w-[180px]"
+          >
+            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+          </Button>
+        </div>
 
-          <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
-            <div className="text-xs font-medium text-muted-foreground">Tipi obbligatori</div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {LESSON_TYPE_OPTIONS.map((option) => (
-                <label
-                  key={option.value}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs"
-                >
-                  <span>{option.label}</span>
-                  <Checkbox
-                    checked={lessonRequiredTypes.includes(option.value)}
-                    onCheckedChange={() => toggleRequiredType(option.value)}
-                  />
-                </label>
-              ))}
+        {/* Policy tipi guida */}
+        <ConfigSection
+          icon={ClipboardList}
+          title="Policy tipi guida"
+          description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
+        >
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
+                <span>Abilita policy tipi guida</span>
+                <Checkbox
+                  checked={lessonPolicyEnabled}
+                  onCheckedChange={(checked) => setLessonPolicyEnabled(Boolean(checked))}
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-xs text-foreground">
+                <span>Richiedi almeno 1 guida per tipo</span>
+                <Checkbox
+                  checked={lessonRequiredTypesEnabled}
+                  onCheckedChange={(checked) => setLessonRequiredTypesEnabled(Boolean(checked))}
+                />
+              </label>
             </div>
-          </div>
 
-          <div className="space-y-3">
-            <div className="text-xs font-medium text-muted-foreground">
-              Limiti per tipo guida (giorni + fascia oraria)
-            </div>
-            <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
-              {LESSON_TYPE_OPTIONS.map((option) => {
-                const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
-                return (
-                  <div
+            <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
+              <div className="text-xs font-medium text-muted-foreground">Tipi obbligatori</div>
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {LESSON_TYPE_OPTIONS.map((option) => (
+                  <label
                     key={option.value}
-                    className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3"
+                    className="flex cursor-pointer items-center justify-between gap-2 rounded-xl border border-white/60 bg-white/80 px-3 py-2 text-xs"
                   >
-                    <label className="flex items-center justify-between gap-2 text-xs">
-                      <span className="font-medium text-foreground">{option.label}</span>
-                      <Checkbox
-                        checked={constraint.enabled}
-                        onCheckedChange={() => toggleConstraintEnabled(option.value)}
-                      />
-                    </label>
-                    {constraint.enabled ? (
-                      <>
-                        <div className="grid grid-cols-4 gap-2">
-                          {WEEKDAY_OPTIONS.map((day) => (
-                            <button
-                              key={`${option.value}-${day.value}`}
-                              type="button"
-                              onClick={() => toggleConstraintDay(option.value, day.value)}
-                              className={`rounded-full border px-2 py-1 text-[11px] transition ${
-                                constraint.daysOfWeek.includes(day.value)
-                                  ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
-                                  : "border-white/70 bg-white/85 text-muted-foreground"
-                              }`}
-                            >
-                              {day.label}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Select
-                            value={String(constraint.startMinutes)}
-                            onValueChange={(value) =>
-                              updateConstraintWindow(option.value, "startMinutes", value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Inizio" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {START_TIME_OPTIONS.map((minutes) => (
-                                <SelectItem key={`${option.value}-start-${minutes}`} value={String(minutes)}>
-                                  {formatMinutes(minutes)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={String(constraint.endMinutes)}
-                            onValueChange={(value) =>
-                              updateConstraintWindow(option.value, "endMinutes", value)
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Fine" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {END_TIME_OPTIONS.map((minutes) => (
-                                <SelectItem key={`${option.value}-end-${minutes}`} value={String(minutes)}>
-                                  {formatMinutes(minutes)}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="text-[11px] text-muted-foreground">
-                        Nessun limite attivo per questo tipo.
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                    <span>{option.label}</span>
+                    <Checkbox
+                      checked={lessonRequiredTypes.includes(option.value)}
+                      onCheckedChange={() => toggleRequiredType(option.value)}
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
+
+            <div className="space-y-3">
+              <div className="text-xs font-medium text-muted-foreground">
+                Limiti per tipo guida (giorni + fascia oraria)
+              </div>
+              <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
+                {LESSON_TYPE_OPTIONS.map((option) => {
+                  const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
+                  return (
+                    <div
+                      key={option.value}
+                      className="space-y-3 rounded-2xl border border-white/60 bg-white/70 p-3"
+                    >
+                      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+                        <span className="font-medium text-foreground">{option.label}</span>
+                        <Checkbox
+                          checked={constraint.enabled}
+                          onCheckedChange={() => toggleConstraintEnabled(option.value)}
+                        />
+                      </label>
+                      {constraint.enabled ? (
+                        <>
+                          <div className="grid grid-cols-4 gap-2">
+                            {WEEKDAY_OPTIONS.map((day) => (
+                              <button
+                                key={`${option.value}-${day.value}`}
+                                type="button"
+                                onClick={() => toggleConstraintDay(option.value, day.value)}
+                                className={cn(
+                                  "cursor-pointer rounded-full border px-2 py-1 text-[11px] transition",
+                                  constraint.daysOfWeek.includes(day.value)
+                                    ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
+                                    : "border-white/70 bg-white/85 text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                {day.label}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <Select
+                              value={String(constraint.startMinutes)}
+                              onValueChange={(value) =>
+                                updateConstraintWindow(option.value, "startMinutes", value)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Inizio" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {START_TIME_OPTIONS.map((minutes) => (
+                                  <SelectItem
+                                    key={`${option.value}-start-${minutes}`}
+                                    value={String(minutes)}
+                                  >
+                                    {formatMinutes(minutes)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={String(constraint.endMinutes)}
+                              onValueChange={(value) =>
+                                updateConstraintWindow(option.value, "endMinutes", value)
+                              }
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Fine" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {END_TIME_OPTIONS.map((minutes) => (
+                                  <SelectItem
+                                    key={`${option.value}-end-${minutes}`}
+                                    value={String(minutes)}
+                                  >
+                                    {formatMinutes(minutes)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-[11px] text-muted-foreground">
+                          Nessun limite attivo per questo tipo.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </ConfigSection>
+
+        {/* Disponibilità del giorno */}
+        <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-4 p-5">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
+              <CalendarSearch className="size-4 text-foreground/70" />
+            </div>
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Disponibilità del giorno
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Seleziona una data per vedere gli slot disponibili di istruttori e veicoli.
+              </p>
+            </div>
+          </div>
+          <div className="w-[280px]">
+            <DatePicker value={date} onChange={setDate} />
           </div>
         </div>
 
@@ -854,9 +898,37 @@ export function AutoscuoleResourcesPage({
             {!vehicles.length ? <EmptyCard label="Nessun veicolo disponibile." /> : null}
           </div>
         </section>
-
       </div>
     </ClientPageWrapper>
+  );
+}
+
+function ConfigSection({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="glass-panel glass-strong space-y-4 p-5">
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
+          <Icon className="size-4 text-foreground/70" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-foreground">{title}</div>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -962,7 +1034,7 @@ function ChannelGroup({
         {CHANNEL_OPTIONS.map((channel) => (
           <label
             key={channel.value}
-            className="flex items-center justify-between gap-2 text-xs text-foreground"
+            className="flex cursor-pointer items-center justify-between gap-2 text-xs text-foreground"
           >
             <span>{channel.label}</span>
             <Checkbox

@@ -10,7 +10,7 @@ const navItems = [
   { label: "Dashboard", href: "/user/autoscuole" },
   { label: "Allievi", href: "/user/autoscuole/students" },
   { label: "Agenda", href: "/user/autoscuole/agenda" },
-  { label: "Settings", href: "/user/autoscuole/settings" },
+  { label: "Configurazione", href: "/user/autoscuole/settings" },
   { label: "Pagamenti", href: "/user/autoscuole/payments" },
 ];
 
