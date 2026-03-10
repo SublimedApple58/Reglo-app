@@ -198,7 +198,7 @@ export function AutoscuoleStudentsPage({
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
-  const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "">("");
+  const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "none">("none");
   const [inviteSending, setInviteSending] = React.useState(false);
 
   const load = React.useCallback(async () => {
@@ -306,7 +306,7 @@ export function AutoscuoleStudentsPage({
       setInviteSending(true);
       const res = await inviteAutoscuolaStudent({
         email,
-        platform: invitePlatform || undefined,
+        platform: invitePlatform === "none" ? undefined : invitePlatform,
       });
       setInviteSending(false);
       if (!res.success) {
@@ -315,7 +315,7 @@ export function AutoscuoleStudentsPage({
       }
       toast.success({ title: "Invito inviato", description: `Email inviata a ${email}.` });
       setInviteEmail("");
-      setInvitePlatform("");
+      setInvitePlatform("none");
       setInviteOpen(false);
     },
     [inviteEmail, invitePlatform, toast],
@@ -381,13 +381,13 @@ export function AutoscuoleStudentsPage({
                 <Label>Piattaforma</Label>
                 <Select
                   value={invitePlatform}
-                  onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "")}
+                  onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleziona piattaforma" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Non specificata</SelectItem>
+                    <SelectItem value="none">Non specificata</SelectItem>
                     <SelectItem value="ios">iOS (iPhone)</SelectItem>
                     <SelectItem value="android">Android</SelectItem>
                   </SelectContent>
