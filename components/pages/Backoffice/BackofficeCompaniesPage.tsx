@@ -87,6 +87,7 @@ function ServiceCard({
   });
 
   // Manual voice line assignment form
+  const [assignRoutingMode, setAssignRoutingMode] = useState<"sip" | "twilio">("sip");
   const [assignDisplayNumber, setAssignDisplayNumber] = useState("");
   const [assignTwilioNumber, setAssignTwilioNumber] = useState("");
   const [assignTwilioSid, setAssignTwilioSid] = useState("");
@@ -125,8 +126,9 @@ function ServiceCard({
         companyId,
         displayNumber: assignDisplayNumber.trim(),
         twilioNumber: assignTwilioNumber.trim(),
-        twilioPhoneSid: assignTwilioSid.trim(),
-        routingMode: "twilio",
+        // SIP mode (Messagenet): no Twilio SID — action auto-generates "sip:{number}"
+        twilioPhoneSid: assignRoutingMode === "twilio" ? assignTwilioSid.trim() : undefined,
+        routingMode: assignRoutingMode,
       });
       if (!res.success || !res.data) {
         toast.error({ description: (!res.success && res.message) ? res.message : "Assegnazione fallita." });
@@ -282,6 +284,24 @@ function ServiceCard({
                 <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
                   Assegna linea manualmente
                 </p>
+                {/* Routing mode toggle */}
+                <div className="flex rounded-lg border border-white/60 bg-white/60 p-0.5 text-xs">
+                  {(["sip", "twilio"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setAssignRoutingMode(mode)}
+                      className={cn(
+                        "flex-1 rounded-md px-2 py-1 font-medium transition-colors",
+                        assignRoutingMode === mode
+                          ? "bg-[#324D7A] text-white"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {mode === "sip" ? "SIP / Messagenet" : "Twilio diretto"}
+                    </button>
+                  ))}
+                </div>
                 <Input
                   value={assignDisplayNumber}
                   placeholder="Numero display (es. +39 02 1234567)"
@@ -289,14 +309,16 @@ function ServiceCard({
                 />
                 <Input
                   value={assignTwilioNumber}
-                  placeholder="Numero Twilio E.164 (es. +390212345678)"
+                  placeholder="Numero E.164 (es. +390212345678)"
                   onChange={(e) => setAssignTwilioNumber(e.target.value)}
                 />
-                <Input
-                  value={assignTwilioSid}
-                  placeholder="Twilio Phone SID (es. PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)"
-                  onChange={(e) => setAssignTwilioSid(e.target.value)}
-                />
+                {assignRoutingMode === "twilio" && (
+                  <Input
+                    value={assignTwilioSid}
+                    placeholder="Twilio Phone SID (es. PNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx)"
+                    onChange={(e) => setAssignTwilioSid(e.target.value)}
+                  />
+                )}
                 <Button
                   size="sm"
                   variant="outline"
@@ -306,7 +328,7 @@ function ServiceCard({
                     isAssigning ||
                     !assignDisplayNumber.trim() ||
                     !assignTwilioNumber.trim() ||
-                    !assignTwilioSid.trim()
+                    (assignRoutingMode === "twilio" && !assignTwilioSid.trim())
                   }
                 >
                   {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}

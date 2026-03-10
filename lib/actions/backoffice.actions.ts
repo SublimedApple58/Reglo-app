@@ -32,7 +32,8 @@ const assignAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
   displayNumber: z.string().trim().min(5),
   twilioNumber: z.string().trim().min(5),
-  twilioPhoneSid: z.string().trim().min(6),
+  // For SIP mode (e.g. Messagenet) there is no Twilio SID — auto-generated as "sip:{number}"
+  twilioPhoneSid: z.string().trim().min(1).optional(),
   routingMode: z.enum(["twilio", "sip"]).default("twilio"),
 });
 
@@ -152,9 +153,12 @@ export async function assignAutoscuolaVoiceLine(
   try {
     await requireGlobalAdmin();
     const payload = assignAutoscuolaVoiceLineSchema.parse(input);
+    // For SIP mode (Messagenet/third-party) there is no Twilio SID.
+    // Use a synthetic "sip:{number}" identifier so the unique constraint is satisfied.
+    const effectiveSid = payload.twilioPhoneSid || `sip:${payload.twilioNumber}`;
 
     const line = await prisma.autoscuolaVoiceLine.upsert({
-      where: { twilioPhoneSid: payload.twilioPhoneSid },
+      where: { twilioPhoneSid: effectiveSid },
       update: {
         companyId: payload.companyId,
         displayNumber: payload.displayNumber,
@@ -166,7 +170,7 @@ export async function assignAutoscuolaVoiceLine(
         companyId: payload.companyId,
         displayNumber: payload.displayNumber,
         twilioNumber: payload.twilioNumber,
-        twilioPhoneSid: payload.twilioPhoneSid,
+        twilioPhoneSid: effectiveSid,
         status: "ready",
         routingMode: payload.routingMode,
       },

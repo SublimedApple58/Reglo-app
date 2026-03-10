@@ -117,7 +117,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const incomingNumber = payload.To || payload.Called || payload.CalledVia || null;
+  // SIP Domain calls arrive with a SIP URI in To/Called (e.g. sip:+390212345678@reglo.sip.us1.twilio.com)
+  // Extract the phone number (user part) so the existing DB lookup works unchanged.
+  const rawIncoming = payload.To || payload.Called || payload.CalledVia || null;
+  const sipMatch = rawIncoming?.match(/^sips?:([^@;,\s]+)/);
+  const incomingNumber = sipMatch ? sipMatch[1] : rawIncoming;
   const fromNumber = payload.From || "";
   const callSid = payload.CallSid || "";
   if (!callSid) {
