@@ -2976,9 +2976,9 @@ export async function generateTestPaymentReceipt(
           companyId,
           studentId: payload.studentId,
           appointmentId,
-          phase: "invoice",
+          phase: "settlement",       // mapped to "Saldo" in the mobile app
           status: "succeeded",
-          amount: Math.round(payload.amount * 100),
+          amount: payload.amount,    // Decimal in EUR, not cents
           paidAt: new Date(),
         },
       });
