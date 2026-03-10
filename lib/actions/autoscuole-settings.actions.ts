@@ -880,7 +880,19 @@ export async function updateAutoscuolaSettings(
     if (payload.voiceAssistantEnabled !== undefined && !nextVoiceFeatureEnabled) {
       throw new Error("Feature segretaria AI non abilitata dal backoffice.");
     }
-    if (nextVoiceFeatureEnabled && nextVoiceAssistantEnabled) {
+    // Validate voice settings only when explicitly changing voice-related fields,
+    // so that saving booking/reminder settings doesn't fail due to voice state.
+    const isChangingVoiceSettings =
+      payload.voiceAssistantEnabled !== undefined ||
+      payload.voiceBookingEnabled !== undefined ||
+      payload.voiceOfficeHours !== undefined ||
+      payload.voiceHandoffPhone !== undefined ||
+      payload.voiceAllowedActions !== undefined ||
+      payload.voiceInstructions !== undefined ||
+      payload.voiceLegalGreetingEnabled !== undefined ||
+      payload.voiceRecordingEnabled !== undefined ||
+      payload.voiceTranscriptionEnabled !== undefined;
+    if (isChangingVoiceSettings && nextVoiceFeatureEnabled && nextVoiceAssistantEnabled) {
       if (!nextVoiceLineRef || nextVoiceProvisioningStatus !== "ready") {
         throw new Error(
           "Linea voce non pronta. Contatta Reglo backoffice per completare provisioning.",
