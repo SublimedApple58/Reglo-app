@@ -52,6 +52,8 @@ export type BackofficeCompanyRow = {
   name: string;
   createdAt: string;
   services: CompanyServiceInfo[];
+  androidStudents: number;
+  iosStudents: number;
 };
 
 const limitFields: Record<
@@ -85,6 +87,7 @@ function ServiceCard({
   type StudentRow = { id: string; email: string; platform: string | null; status: string; createdAt: string };
   const [students, setStudents] = useState<StudentRow[] | null>(null);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState<"all" | "android" | "ios">("all");
 
   useEffect(() => {
     if (serviceKey !== "AUTOSCUOLE") return;
@@ -95,6 +98,10 @@ function ServiceCard({
       }
     }).finally(() => setStudentsLoading(false));
   }, [companyId, serviceKey]);
+
+  const filteredStudents = students?.filter((s) =>
+    platformFilter === "all" ? true : s.platform === platformFilter
+  ) ?? [];
 
   const fields = limitFields[serviceKey];
   const voiceFeatureEnabled = Boolean(limits.voiceFeatureEnabled);
@@ -285,9 +292,36 @@ function ServiceCard({
 
         {/* Student platforms section */}
         <div className="space-y-2 rounded-2xl border border-white/60 bg-white/75 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            <Smartphone className="h-3.5 w-3.5" />
-            Allievi invitati
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <Smartphone className="h-3.5 w-3.5" />
+              Allievi invitati
+              {students && students.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                  {students.length}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1">
+              {(["all", "android", "ios"] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setPlatformFilter(f)}
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors",
+                    platformFilter === f
+                      ? f === "android"
+                        ? "bg-green-600 text-white"
+                        : f === "ios"
+                        ? "bg-blue-600 text-white"
+                        : "bg-foreground text-background"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  )}
+                >
+                  {f === "all" ? "Tutti" : f === "android" ? "Android" : "iOS"}
+                </button>
+              ))}
+            </div>
           </div>
           {studentsLoading ? (
             <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
@@ -296,6 +330,8 @@ function ServiceCard({
             </div>
           ) : !students || students.length === 0 ? (
             <p className="py-1 text-xs text-muted-foreground">Nessun allievo invitato.</p>
+          ) : filteredStudents.length === 0 ? (
+            <p className="py-1 text-xs text-muted-foreground">Nessun allievo con questa piattaforma.</p>
           ) : (
             <div className="max-h-48 overflow-y-auto">
               <table className="w-full text-xs">
@@ -307,7 +343,7 @@ function ServiceCard({
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map((student) => (
+                  {filteredStudents.map((student) => (
                     <tr key={student.id} className="border-b border-white/30 last:border-0">
                       <td className="py-1 pr-3 text-foreground">{student.email}</td>
                       <td className="py-1 pr-3">
@@ -404,6 +440,7 @@ export default function BackofficeCompaniesPage({
                 <TableHead>Company</TableHead>
                 <TableHead>Creata</TableHead>
                 <TableHead>Servizi attivi</TableHead>
+                <TableHead>Allievi</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
@@ -419,6 +456,23 @@ export default function BackofficeCompaniesPage({
                     </TableCell>
                     <TableCell>
                       {company.services.filter((service) => service.status === "active").length} / {SERVICE_KEYS.length}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {company.androidStudents > 0 && (
+                          <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">
+                            Android {company.androidStudents}
+                          </span>
+                        )}
+                        {company.iosStudents > 0 && (
+                          <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">
+                            iOS {company.iosStudents}
+                          </span>
+                        )}
+                        {company.androidStudents === 0 && company.iosStudents === 0 && (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button
@@ -436,7 +490,7 @@ export default function BackofficeCompaniesPage({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                     Nessuna company trovata.
                   </TableCell>
                 </TableRow>

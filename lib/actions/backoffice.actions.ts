@@ -54,25 +54,47 @@ export type BackofficeCompany = {
   name: string;
   createdAt: string;
   services: ReturnType<typeof normalizeCompanyServices>;
+  androidStudents: number;
+  iosStudents: number;
 };
 
 export async function getBackofficeCompanies() {
   try {
     await requireGlobalAdmin();
 
-    const companies = await prisma.company.findMany({
-      include: { services: true },
-      orderBy: { createdAt: "desc" },
-    });
+    const [companies, platformCounts] = await Promise.all([
+      prisma.company.findMany({
+        include: { services: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.companyInvite.groupBy({
+        by: ["companyId", "platform"],
+        where: { role: "member" },
+        _count: { id: true },
+      }),
+    ]);
+
+    const platformMap = new Map<string, { android: number; ios: number }>();
+    for (const row of platformCounts) {
+      const entry = platformMap.get(row.companyId) ?? { android: 0, ios: 0 };
+      if (row.platform === "android") entry.android = row._count.id;
+      if (row.platform === "ios") entry.ios = row._count.id;
+      platformMap.set(row.companyId, entry);
+    }
 
     return {
       success: true,
-      data: companies.map((company) => ({
-        id: company.id,
-        name: company.name,
-        createdAt: company.createdAt.toISOString(),
-        services: normalizeCompanyServices(company.services),
-      })) satisfies BackofficeCompany[],
+      data: companies.map((company) => {
+        const counts = platformMap.get(company.id) ?? { android: 0, ios: 0 };
+        return {
+          id: company.id,
+          name: company.name,
+          createdAt: company.createdAt.toISOString(),
+          services: normalizeCompanyServices(company.services),
+          androidStudents: counts.android,
+          iosStudents: counts.ios,
+        };
+      }) satisfies BackofficeCompany[],
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
