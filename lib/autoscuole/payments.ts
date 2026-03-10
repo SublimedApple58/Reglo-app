@@ -6,6 +6,7 @@ import { sendDynamicEmail } from "@/email";
 import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { getAutoscuolaStripeDestinationAccountId } from "@/lib/autoscuole/stripe-connect";
+import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
 
@@ -2361,6 +2362,11 @@ export async function getMobileAppointmentPaymentDocument({
       id: true,
       invoiceId: true,
       invoiceStatus: true,
+      type: true,
+      startsAt: true,
+      paidAmount: true,
+      company: { select: { name: true } },
+      student: { select: { name: true, email: true } },
       payments: {
         where: { status: "succeeded" },
         select: {
@@ -2406,6 +2412,42 @@ export async function getMobileAppointmentPaymentDocument({
     return null;
   };
 
+  // For all completed payments (with or without FIC) we generate a branded
+  // Reglo receipt PDF — the student always receives a receipt, never the
+  // FIC accounting invoice (which is for the driving school's bookkeeping).
+  const completedStatus = normalizeStatus(appointment.invoiceStatus);
+  if (completedStatus === "issued" || completedStatus === "issued_stripe") {
+    try {
+      const latestPayment = appointment.payments[0] ?? null;
+      const paidAt = latestPayment?.paidAt ?? latestPayment?.createdAt ?? null;
+
+      const receiptUrl = await generateAndUploadReceipt({
+        appointmentId: appointment.id,
+        companyName: appointment.company.name,
+        studentName: appointment.student.name ?? appointment.student.email,
+        studentEmail: appointment.student.email,
+        lessonType: appointment.type,
+        startsAt: appointment.startsAt,
+        paidAmount: Number(appointment.paidAmount),
+        paidAt,
+      });
+
+      return {
+        documentType: "receipt" as const,
+        label: "Ricevuta pagamento",
+        viewUrl: receiptUrl,
+        shareMode: "file" as const,
+        shareUrl: receiptUrl,
+        invoiceId: appointment.invoiceId,
+        invoiceStatus: appointment.invoiceStatus,
+        source: "reglo" as const,
+      };
+    } catch {
+      // Receipt generation failed — fall through to legacy fallbacks below
+    }
+  }
+
+  // Legacy fallback 1: FIC invoice URL (only reached if Reglo receipt generation failed)
   if (appointment.invoiceId && normalizeStatus(appointment.invoiceStatus) === "issued") {
     try {
       const { token, entityId } = await getFicConnection({
