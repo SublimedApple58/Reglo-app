@@ -42,11 +42,6 @@ import { UserAvatarFallback } from "@/components/ui/user-avatar-fallback";
 type TabKey = "account" | "company" | "integrations";
 type TabItem = { label: string; value: TabKey };
 
-const pronounOptions = ["Lei/Lei", "Lui/Lui", "Loro/Loro"];
-const genderOptions = ["Donna", "Uomo", "Non-binario", "Preferisco non dirlo"];
-const languageOptions = ["Italiano", "English", "Deutsch"];
-const dataRegionOptions = ["EU-West", "US-East", "APAC-Singapore"];
-const sessionTimeoutOptions = ["15", "30", "45", "60"];
 const integrations = [
   {
     id: "slack",
@@ -96,20 +91,10 @@ export function SettingsPage(): React.ReactElement {
   const [accountForm, setAccountForm] = useState({
     firstName: "",
     lastName: "",
-    pronouns: pronounOptions[0],
-    gender: genderOptions[0],
-    language: languageOptions[0],
-  });
-
-  const [notificationPrefs, setNotificationPrefs] = useState({
-    weeklyDigest: true,
-    criticalAlerts: true,
-    mentions: false,
   });
 
   const [companyForm, setCompanyForm] = useState({
     companyName: "Reglo S.r.l.",
-    dataRegion: dataRegionOptions[0],
   });
   const [disconnectingProvider, setDisconnectingProvider] = useState<string | null>(null);
   const [ficEntities, setFicEntities] = useState<Array<{ value: string; label: string }>>(
@@ -121,12 +106,6 @@ export function SettingsPage(): React.ReactElement {
   const [ficSavingEntity, setFicSavingEntity] = useState(false);
   const [ficManualEntityId, setFicManualEntityId] = useState("");
   const [ficManualEntityName, setFicManualEntityName] = useState("");
-
-  const [sessionAccess, setSessionAccess] = useState({
-    logSessions: true,
-    blockUnknownDevices: true,
-    sessionTimeout: sessionTimeoutOptions[2],
-  });
 
   const companyId = company?.id ?? null;
   const companyRole = company?.role ?? null;
@@ -610,85 +589,6 @@ export function SettingsPage(): React.ReactElement {
                         }
                       />
                     </div>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <SelectField
-                        label="Pronomi"
-                        value={accountForm.pronouns}
-                        options={pronounOptions}
-                        onChange={(value) =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            pronouns: value,
-                          }))
-                        }
-                      />
-                      <SelectField
-                        label="Genere"
-                        value={accountForm.gender}
-                        options={genderOptions}
-                        onChange={(value) =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            gender: value,
-                          }))
-                        }
-                      />
-                      <SelectField
-                        label="Lingua"
-                        value={accountForm.language}
-                        options={languageOptions}
-                        onChange={(value) =>
-                          setAccountForm((prev) => ({
-                            ...prev,
-                            language: value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="glass-panel glass-strong">
-                  <CardHeader>
-                    <CardTitle>Notifiche personali</CardTitle>
-                    <CardDescription>
-                      Preferenze di notifica salvate con la CTA unica.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <ToggleRow
-                      title="Digest settimanale"
-                      description="Riepilogo ogni lunedì alle 9:00."
-                      checked={notificationPrefs.weeklyDigest}
-                      onChange={(value) =>
-                        setNotificationPrefs((prev) => ({
-                          ...prev,
-                          weeklyDigest: value,
-                        }))
-                      }
-                    />
-                    <ToggleRow
-                      title="Alert critici"
-                      description="Sempre attivi per incidenti e SLA."
-                      checked={notificationPrefs.criticalAlerts}
-                      onChange={(value) =>
-                        setNotificationPrefs((prev) => ({
-                          ...prev,
-                          criticalAlerts: value,
-                        }))
-                      }
-                    />
-                    <ToggleRow
-                      title="Menzioni dirette"
-                      description="Notifiche quando vieni taggato."
-                      checked={notificationPrefs.mentions}
-                      onChange={(value) =>
-                        setNotificationPrefs((prev) => ({
-                          ...prev,
-                          mentions: value,
-                        }))
-                      }
-                    />
                   </CardContent>
                 </Card>
 
@@ -783,59 +683,6 @@ export function SettingsPage(): React.ReactElement {
                             setCompanyForm((prev) => ({
                               ...prev,
                               companyName: event.target.value,
-                            }))
-                          }
-                        />
-                        <SelectField
-                          label="Data region"
-                          value={companyForm.dataRegion}
-                          options={dataRegionOptions}
-                          onChange={(value) =>
-                            setCompanyForm((prev) => ({
-                              ...prev,
-                              dataRegion: value,
-                            }))
-                          }
-                        />
-                      </CardContent>
-                    </Card>
-
-                    <Card className="glass-panel glass-strong">
-                      <CardHeader>
-                        <CardTitle>Sessioni &amp; Accessi</CardTitle>
-                        <CardDescription>
-                          Policy di accesso e monitoraggio sessioni.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="space-y-3">
-                        <CheckboxRow
-                          label="Logga nuove sessioni e invia recap"
-                          checked={sessionAccess.logSessions}
-                          onChange={(value) =>
-                            setSessionAccess((prev) => ({
-                              ...prev,
-                              logSessions: value,
-                            }))
-                          }
-                        />
-                        <CheckboxRow
-                          label="Blocca device non riconosciuti"
-                          checked={sessionAccess.blockUnknownDevices}
-                          onChange={(value) =>
-                            setSessionAccess((prev) => ({
-                              ...prev,
-                              blockUnknownDevices: value,
-                            }))
-                          }
-                        />
-                        <SelectField
-                          label="Session timeout (min)"
-                          value={sessionAccess.sessionTimeout}
-                          options={sessionTimeoutOptions}
-                          onChange={(value) =>
-                            setSessionAccess((prev) => ({
-                              ...prev,
-                              sessionTimeout: value,
                             }))
                           }
                         />
