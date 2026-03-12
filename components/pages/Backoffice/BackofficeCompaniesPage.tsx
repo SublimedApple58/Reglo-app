@@ -241,7 +241,7 @@ function ServiceCard({
         </div>
       ) : serviceKey === "AUTOSCUOLE" ? (
         <>
-        <div className="space-y-3 rounded-2xl border border-white/60 bg-white/75 p-3">
+        <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3">
           <label className="flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-foreground">Voice AI disponibile</span>
             <Checkbox
@@ -285,7 +285,7 @@ function ServiceCard({
                   Assegna linea manualmente
                 </p>
                 {/* Routing mode toggle */}
-                <div className="flex rounded-lg border border-white/60 bg-white/60 p-0.5 text-xs">
+                <div className="flex rounded-lg border border-gray-200 bg-white p-0.5 text-xs">
                   {(["sip", "twilio"] as const).map((mode) => (
                     <button
                       key={mode}
@@ -294,7 +294,7 @@ function ServiceCard({
                       className={cn(
                         "flex-1 rounded-md px-2 py-1 font-medium transition-colors",
                         assignRoutingMode === mode
-                          ? "bg-[#324D7A] text-white"
+                          ? "bg-primary text-white"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -340,7 +340,7 @@ function ServiceCard({
         </div>
 
         {/* Student platforms section */}
-        <div className="space-y-2 rounded-2xl border border-white/60 bg-white/75 p-3">
+        <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               <Smartphone className="h-3.5 w-3.5" />
@@ -385,7 +385,7 @@ function ServiceCard({
             <div className="max-h-48 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-white/60 text-left text-muted-foreground">
+                  <tr className="border-b border-gray-200 text-left text-muted-foreground">
                     <th className="pb-1 pr-3 font-medium">Email</th>
                     <th className="pb-1 pr-3 font-medium">Piattaforma</th>
                     <th className="pb-1 font-medium">Stato</th>
@@ -551,7 +551,7 @@ export default function BackofficeCompaniesPage({
 
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,820px)] data-[vaul-drawer-direction=right]:sm:max-w-3xl h-full">
-          <DrawerHeader className="border-b border-white/60 bg-white/80 backdrop-blur">
+          <DrawerHeader className="border-b border-gray-200 bg-white">
             <DrawerTitle>Gestisci company</DrawerTitle>
             <DrawerDescription>
               {selected?.name ?? "Company"}
@@ -576,7 +576,7 @@ export default function BackofficeCompaniesPage({
                 : null}
             </div>
           </div>
-          <DrawerFooter className="border-t border-white/60 bg-white/90 backdrop-blur">
+          <DrawerFooter className="border-t border-gray-200 bg-white">
             <DrawerClose asChild>
               <Button variant="outline">Chiudi</Button>
             </DrawerClose>

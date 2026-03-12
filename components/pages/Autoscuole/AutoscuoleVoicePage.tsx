@@ -143,7 +143,7 @@ function ToggleRow({
 }) {
   return (
     <label
-      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/70 px-3 py-2.5 transition hover:bg-white/90 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
+      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5 transition hover:bg-gray-50 ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
     >
       <div className="min-w-0">
         <div className="text-xs font-medium text-foreground">{label}</div>
@@ -176,8 +176,8 @@ function SectionCard({
   return (
     <div className="glass-panel glass-strong space-y-4 p-5">
       <div className="flex items-start gap-3">
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#324D7A]/10">
-          <Icon className="size-4 text-[#324D7A]" />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#EC4899]/10">
+          <Icon className="size-4 text-primary" />
         </div>
         <div>
           <div className="text-sm font-semibold text-foreground">{title}</div>
@@ -369,10 +369,10 @@ export function AutoscuoleVoicePage() {
         {/* ── Hero status card ─────────────────────────────────────────── */}
         <div className="glass-panel glass-strong overflow-hidden p-0">
           {/* Top strip */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/60 px-6 py-5">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 px-6 py-5">
             <div className="flex items-center gap-4">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#324D7A]/10">
-                <PhoneCall className="size-6 text-[#324D7A]" />
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[#EC4899]/10">
+                <PhoneCall className="size-6 text-primary" />
               </div>
               <div>
                 <div className="text-lg font-bold text-foreground">Segretaria Virtuale</div>
@@ -396,8 +396,8 @@ export function AutoscuoleVoicePage() {
           </div>
 
           {/* Info row */}
-          <div className="grid gap-px bg-white/30 sm:grid-cols-3">
-            <div className="bg-white/50 px-6 py-4">
+          <div className="grid gap-px bg-gray-50 sm:grid-cols-3">
+            <div className="bg-gray-50 px-6 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Linea telefonica
               </div>
@@ -405,19 +405,19 @@ export function AutoscuoleVoicePage() {
                 {voiceLineRef || <span className="text-muted-foreground">—</span>}
               </div>
             </div>
-            <div className="bg-white/50 px-6 py-4">
+            <div className="bg-gray-50 px-6 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Numero handoff
               </div>
               <input
                 value={voiceHandoffPhone ?? ""}
                 onChange={(e) => setVoiceHandoffPhone(e.target.value || null)}
-                className="mt-1 h-8 w-full rounded-lg border border-white/70 bg-white/80 px-2.5 text-sm outline-none transition focus:border-[#324D7A] focus:bg-white"
+                className="mt-1 h-8 w-full rounded-lg border border-gray-200 bg-white px-2.5 text-sm outline-none transition focus:border-[#ec4899] focus:bg-white"
                 placeholder="+39..."
                 disabled={!voiceFeatureEnabled}
               />
             </div>
-            <div className="bg-white/50 px-6 py-4">
+            <div className="bg-gray-50 px-6 py-4">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Assistente vocale
               </div>
@@ -529,8 +529,8 @@ export function AutoscuoleVoicePage() {
                     }
                     className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition ${
                       active
-                        ? "border-[#324D7A] bg-[#324D7A]/12 text-[#324D7A]"
-                        : "border-white/70 bg-white/80 text-muted-foreground hover:border-[#324D7A]/40"
+                        ? "border-primary bg-primary/12 text-primary"
+                        : "border-gray-200 bg-white text-muted-foreground hover:border-primary/40"
                     } disabled:cursor-not-allowed disabled:opacity-50`}
                   >
                     {day.label}
@@ -598,13 +598,13 @@ export function AutoscuoleVoicePage() {
                   onClick={() => toggleAction(option.value)}
                   className={`rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
                     active
-                      ? "border-[#324D7A] bg-[#324D7A]/10 shadow-sm"
-                      : "border-white/70 bg-white/70 hover:border-[#324D7A]/30 hover:bg-white/90"
+                      ? "border-primary bg-[#EC4899]/10 shadow-sm"
+                      : "border-gray-200 bg-white hover:border-primary/30 hover:bg-gray-50"
                   }`}
                 >
                   <div
                     className={`text-xs font-semibold ${
-                      active ? "text-[#324D7A]" : "text-foreground"
+                      active ? "text-primary" : "text-foreground"
                     }`}
                   >
                     {option.label}
@@ -629,7 +629,7 @@ export function AutoscuoleVoicePage() {
             onChange={(e) => setVoiceInstructions(e.target.value)}
             disabled={!voiceFeatureEnabled}
             rows={5}
-            className="w-full resize-none rounded-xl border border-white/70 bg-white/80 p-3.5 text-xs leading-relaxed outline-none transition focus:border-[#324D7A] focus:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full resize-none rounded-xl border border-gray-200 bg-white p-3.5 text-xs leading-relaxed outline-none transition focus:border-[#ec4899] focus:bg-white disabled:cursor-not-allowed disabled:opacity-50"
             placeholder="Esempio: Questa autoscuola offre guide a Milano. Il numero per urgenze è +39 02 123456. Il costo di una guida da 1h è €50. Non promettere sconti. Usa sempre un tono cordiale ma professionale."
           />
         </SectionCard>
@@ -652,8 +652,8 @@ export function AutoscuoleVoicePage() {
         <div className="glass-panel glass-strong space-y-4 p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#324D7A]/10">
-                <Phone className="size-4 text-[#324D7A]" />
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#EC4899]/10">
+                <Phone className="size-4 text-primary" />
               </div>
               <div>
                 <div className="text-sm font-semibold text-foreground">Richiamata in sospeso</div>
@@ -675,7 +675,7 @@ export function AutoscuoleVoicePage() {
           </div>
 
           {callbackTasks.length === 0 ? (
-            <div className="rounded-xl border border-white/60 bg-white/50 px-4 py-8 text-center">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-8 text-center">
               <Phone className="mx-auto mb-2 size-6 text-muted-foreground/40" />
               <p className="text-sm text-muted-foreground">
                 {loadingCallbacks ? "Caricamento..." : "Nessuna richiesta di richiamata in sospeso"}
@@ -686,7 +686,7 @@ export function AutoscuoleVoicePage() {
               {callbackTasks.map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between gap-3 rounded-xl border border-white/60 bg-white/60 px-4 py-3 transition hover:bg-white/80"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 transition hover:bg-gray-50"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

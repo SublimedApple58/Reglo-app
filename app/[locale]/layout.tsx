@@ -4,9 +4,16 @@ import type { Metadata } from 'next';
 import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { Toaster } from '@/components/ui/toaster';
+import { Inter } from 'next/font/google';
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  display: 'swap',
+});
 
 const fontVars = {
-  "--font-geist-sans": "'Space Grotesk', system-ui, -apple-system, Segoe UI, sans-serif",
+  "--font-geist-sans": inter.style.fontFamily,
 } as React.CSSProperties;
 
 export const metadata: Metadata = {

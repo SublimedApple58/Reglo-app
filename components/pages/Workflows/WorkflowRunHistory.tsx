@@ -176,7 +176,7 @@ export function WorkflowRunHistory({
                     <TableCell>
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          "inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                           run.status === "completed" && "text-emerald-700",
                           run.status === "failed" && "text-rose-700",
                           run.status === "running" && "text-sky-700",
@@ -229,7 +229,7 @@ export function WorkflowRunHistory({
         direction="right"
       >
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,820px)] data-[vaul-drawer-direction=right]:sm:max-w-4xl h-full">
-          <DrawerHeader className="border-b border-white/60 bg-white/80 backdrop-blur">
+          <DrawerHeader className="border-b border-gray-200 bg-white">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <DrawerTitle>Dettagli run</DrawerTitle>

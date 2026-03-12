@@ -36,7 +36,7 @@ const SignUpPage = async (props: {
         <Link href='/' className='inline-flex items-center gap-3'>
           <RegloMark />
           <div>
-            <p className='text-sm font-semibold text-[#324e7a]'>Reglo</p>
+            <p className='text-sm font-semibold text-foreground'>Reglo</p>
             <p className='text-xs text-muted-foreground'>Workspace Suite</p>
           </div>
         </Link>
@@ -45,7 +45,7 @@ const SignUpPage = async (props: {
           <p className='text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground'>
             Welcome to Reglo
           </p>
-          <h1 className='text-3xl font-semibold text-[#324e7a]'>
+          <h1 className='text-3xl font-semibold text-foreground'>
             Crea il tuo workspace e porta l&apos;automazione al livello successivo.
           </h1>
           <p className='text-sm text-muted-foreground'>
@@ -62,18 +62,18 @@ const SignUpPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='glass-card flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
+              className='flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
             >
-              <item.icon className='h-4 w-4 text-[#324e7a]' />
+              <item.icon className='h-4 w-4 text-foreground' />
               <span>{item.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <Card className='glass-panel glass-strong'>
+      <Card>
         <CardHeader className='space-y-2'>
-          <CardTitle className='text-center text-2xl text-[#324e7a]'>
+          <CardTitle className='text-center text-2xl text-foreground'>
             Crea account
           </CardTitle>
           <CardDescription className='text-center'>

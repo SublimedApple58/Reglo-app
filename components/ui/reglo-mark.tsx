@@ -9,7 +9,7 @@ export function RegloMark({ className, glyphClassName }: RegloMarkProps) {
   return (
     <span
       className={cn(
-        "inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#5fc4c4] via-[#4f8ac4] to-[#324e7a] shadow-md",
+        "inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-[#f472b6] via-[#ec4899] to-[#db2777] shadow-md",
         className,
       )}
       aria-hidden

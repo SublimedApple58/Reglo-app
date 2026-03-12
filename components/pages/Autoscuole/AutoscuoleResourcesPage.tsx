@@ -866,8 +866,8 @@ export function AutoscuoleResourcesPage({
                         className={cn(
                           "cursor-pointer rounded-full border px-3 py-1.5 text-xs transition",
                           active
-                            ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
-                            : "border-white/70 bg-white/85 text-muted-foreground hover:bg-white hover:text-foreground",
+                            ? "border-primary bg-[#EC4899]/10 text-foreground"
+                            : "border-gray-200 bg-white text-muted-foreground hover:bg-white hover:text-foreground",
                         )}
                       >
                         {duration} min
@@ -1052,8 +1052,8 @@ export function AutoscuoleResourcesPage({
                     <div
                       key={option.value}
                       className={cn(
-                        "rounded-2xl border bg-white/70 p-3 transition-all duration-200",
-                        hasLimit ? "border-[#324D7A]/25" : "border-white/60",
+                        "rounded-2xl border bg-white p-3 transition-all duration-200",
+                        hasLimit ? "border-primary" : "border-gray-200",
                       )}
                     >
                       {/* Header: name + pill actions */}
@@ -1086,8 +1086,8 @@ export function AutoscuoleResourcesPage({
                         className={cn(
                           "flex w-full cursor-pointer items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all duration-150",
                           hasLimit
-                            ? "bg-[#324D7A]/10 text-foreground"
-                            : "bg-white/50 text-muted-foreground hover:bg-white/80",
+                            ? "bg-[#EC4899]/10 text-foreground"
+                            : "bg-gray-50 text-muted-foreground hover:bg-white",
                         )}
                       >
                         <span className="font-medium">Limite orario</span>
@@ -1096,7 +1096,7 @@ export function AutoscuoleResourcesPage({
 
                       {/* Expanded: days + time window */}
                       {hasLimit && (
-                        <div className="mt-3 space-y-2.5 border-t border-white/50 pt-2.5">
+                        <div className="mt-3 space-y-2.5 border-t border-gray-200 pt-2.5">
                           <div className="flex flex-wrap gap-1">
                             {WEEKDAY_OPTIONS.map((day) => (
                               <button
@@ -1106,8 +1106,8 @@ export function AutoscuoleResourcesPage({
                                 className={cn(
                                   "cursor-pointer rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all duration-150",
                                   constraint.daysOfWeek.includes(day.value)
-                                    ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                                    : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                                    ? "border-primary bg-[#EC4899]/10 text-foreground"
+                                    : "border-gray-200 bg-white text-muted-foreground hover:bg-white hover:text-foreground",
                                 )}
                               >
                                 {day.label}
@@ -1169,7 +1169,7 @@ export function AutoscuoleResourcesPage({
         {/* Disponibilità del giorno */}
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
+            <div className="flex-shrink-0 rounded-xl bg-gray-50 p-2 shadow-sm ring-1 ring-gray-200">
               <CalendarSearch className="size-4 text-foreground/70" />
             </div>
             <div>
@@ -1196,7 +1196,7 @@ export function AutoscuoleResourcesPage({
               <button
                 type="button"
                 onClick={() => setInviteInstructorOpen(true)}
-                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
+                className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-[#EC4899]/10 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-[#EC4899]/20"
               >
                 <Plus className="size-3.5" />
                 Invita istruttore
@@ -1237,8 +1237,8 @@ export function AutoscuoleResourcesPage({
                       className={cn(
                         "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
                         instrDays.includes(day.value)
-                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                          ? "border-primary bg-[#EC4899]/10 text-foreground"
+                          : "border-gray-200 bg-white text-muted-foreground hover:bg-white hover:text-foreground",
                       )}
                     >
                       {day.label}
@@ -1333,7 +1333,7 @@ export function AutoscuoleResourcesPage({
               <button
                 type="button"
                 onClick={openCreateVehicle}
-                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
+                className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-[#EC4899]/10 px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-[#EC4899]/20"
               >
                 <Plus className="size-3.5" />
                 Nuovo veicolo
@@ -1468,8 +1468,8 @@ export function AutoscuoleResourcesPage({
                       className={cn(
                         "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
                         availDays.includes(day.value)
-                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                          ? "border-primary bg-[#EC4899]/10 text-foreground"
+                          : "border-gray-200 bg-white text-muted-foreground hover:bg-white hover:text-foreground",
                       )}
                     >
                       {day.label}
@@ -1565,7 +1565,7 @@ function ConfigSection({
   return (
     <div className="glass-panel glass-strong space-y-4 p-5">
       <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
+        <div className="flex-shrink-0 rounded-xl bg-gray-50 p-2 shadow-sm ring-1 ring-gray-200">
           <Icon className="size-4 text-foreground/70" />
         </div>
         <div>
@@ -1600,8 +1600,8 @@ function PolicySwitch({
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-all duration-150",
         checked
-          ? "border-[#324D7A]/30 bg-[#324D7A]/8 hover:bg-[#324D7A]/10"
-          : "border-white/60 bg-white/70 hover:bg-white/90",
+          ? "border-primary/30 bg-[#EC4899]/10 hover:bg-[#EC4899]/15"
+          : "border-gray-200 bg-white hover:bg-gray-50",
       )}
     >
       <div>
@@ -1620,7 +1620,7 @@ function InlineSwitch({ checked }: { checked: boolean }) {
     <div
       className={cn(
         "relative flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200",
-        checked ? "bg-[#324D7A]" : "bg-black/20",
+        checked ? "bg-primary" : "bg-black/20",
       )}
     >
       <div
@@ -1665,7 +1665,7 @@ function InstructorCard({
           type="button"
           onClick={onEditAvailability}
           title="Modifica disponibilità"
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-muted-foreground transition hover:bg-white hover:text-foreground"
         >
           <Clock className="size-3.5" />
         </button>
@@ -1690,12 +1690,12 @@ function InstructorCard({
       )}
 
       {/* Today's slots */}
-      <div className="flex items-center justify-between border-t border-white/40 pt-2">
+      <div className="flex items-center justify-between border-t border-gray-200 pt-2">
         <div className="flex flex-wrap gap-1.5">
           {ranges.map((range) => (
             <span
               key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
+              className="rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] text-foreground"
             >
               {formatTime(range.start)}–{formatTime(range.end)}
             </span>
@@ -1756,7 +1756,7 @@ function VehicleCard({
             type="button"
             onClick={onEditAvailability}
             title="Modifica disponibilità"
-            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+            className="flex size-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-muted-foreground transition hover:bg-white hover:text-foreground"
           >
             <Clock className="size-3.5" />
           </button>
@@ -1764,7 +1764,7 @@ function VehicleCard({
             type="button"
             onClick={onEdit}
             title="Modifica veicolo"
-            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
+            className="flex size-7 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-muted-foreground transition hover:bg-white hover:text-foreground"
           >
             <Pencil className="size-3.5" />
           </button>
@@ -1790,12 +1790,12 @@ function VehicleCard({
       )}
 
       {/* Today's slots */}
-      <div className="flex items-center justify-between border-t border-white/40 pt-2">
+      <div className="flex items-center justify-between border-t border-gray-200 pt-2">
         <div className="flex flex-wrap gap-1.5">
           {ranges.map((range) => (
             <span
               key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
+              className="rounded-full border border-gray-200 bg-white px-2.5 py-0.5 text-[11px] text-foreground"
             >
               {formatTime(range.start)}–{formatTime(range.end)}
             </span>
@@ -1834,7 +1834,7 @@ function AvailabilityCard({
         {ranges.map((range) => (
           <span
             key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-            className="rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs text-foreground"
+            className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-foreground"
           >
             {formatTime(range.start)} - {formatTime(range.end)}
           </span>
@@ -1910,7 +1910,7 @@ function ChannelGroup({
   onToggle: (channel: ChannelValue) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
+    <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
       <div className="text-xs font-medium text-muted-foreground">{title}</div>
       <div className="space-y-2">
         {CHANNEL_OPTIONS.map((channel) => (

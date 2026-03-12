@@ -1239,11 +1239,6 @@ export function WorkflowEditor(): React.ReactElement {
   return (
     <ClientPageWrapper title={workflowName} parentTitle="Workflows" enableBackNavigation>
       <div className="relative flex h-full flex-col gap-4">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-20 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/35 blur-3xl animate-[float-slow_16s_ease-in-out_infinite]" />
-          <div className="absolute bottom-8 left-16 h-64 w-64 rounded-full bg-[#60579e]/18 blur-3xl animate-[float-slower_20s_ease-in-out_infinite]" />
-          <div className="absolute top-40 left-1/2 h-32 w-32 -translate-x-1/2 rounded-full bg-[#e5e4f0]/60 blur-2xl animate-[float-slow_14s_ease-in-out_infinite]" />
-        </div>
         <WorkflowHeader
           onRun={handleRun}
           onSave={handleSave}
@@ -1361,7 +1356,7 @@ export function WorkflowEditor(): React.ReactElement {
             ) : null}
             <div
               ref={flowWrapperRef}
-              className="flex-1 rounded-2xl bg-white/45 backdrop-blur"
+              className="flex-1 rounded-2xl bg-gray-50"
             >
               <ReactFlow
                 nodes={nodes}
@@ -1400,7 +1395,7 @@ export function WorkflowEditor(): React.ReactElement {
               onOpenPreview={() => setAiPreviewOpen(true)}
             />
           ) : (
-            <div className="glass-panel glass-strong flex w-80 shrink-0 flex-col gap-3 p-4 text-sm text-muted-foreground">
+            <div className="glass-panel flex w-80 shrink-0 flex-col gap-3 p-4 text-sm text-muted-foreground">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                 AI Assistant
               </p>

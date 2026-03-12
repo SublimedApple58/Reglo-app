@@ -17,7 +17,7 @@ export function UserAvatarFallback({
   return (
     <AvatarFallback
       className={cn(
-        "rounded-lg border border-white/60 bg-[radial-gradient(circle_at_24%_18%,#6a89bd_0%,#3f5f92_45%,#324d7a_100%)] text-white shadow-[0_10px_24px_-16px_rgba(18,31,56,0.9),inset_0_1px_0_rgba(255,255,255,0.45)]",
+        "rounded-lg border border-pink-200 bg-[radial-gradient(circle_at_24%_18%,#f472b6_0%,#ec4899_45%,#db2777_100%)] text-white shadow-[0_10px_24px_-16px_rgba(219,39,119,0.5)]",
         className,
       )}
     >

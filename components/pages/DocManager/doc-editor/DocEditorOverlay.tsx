@@ -102,9 +102,9 @@ export function DocEditorOverlay({
           <div
             key={field.id}
             className={cn(
-              "group absolute cursor-move rounded-lg border shadow-sm backdrop-blur",
+              "group absolute cursor-move rounded-lg border shadow-sm",
               isTextBlock
-                ? "border-white/70 bg-white/85 text-foreground"
+                ? "border-gray-200 bg-white text-foreground"
                 : "border-primary/30 bg-primary/10 text-[11px] font-semibold text-primary/80",
             )}
             style={resolveFieldStyle(field)}
@@ -169,7 +169,7 @@ export function DocEditorOverlay({
             )}
             {field.type === "textarea" || isTextBlock ? (
               <span
-                className="absolute bottom-1 right-1 h-3 w-3 cursor-nwse-resize rounded-sm border border-primary/50 bg-white/90"
+                className="absolute bottom-1 right-1 h-3 w-3 cursor-nwse-resize rounded-sm border border-primary/50 bg-white"
                 onMouseDown={(event) => onStartResize(field, event)}
                 aria-hidden="true"
               />
