@@ -103,11 +103,11 @@ export function AssistantPage(): React.ReactElement {
       subTitle="Prompt rapidi, comandi smart e suggerimenti contestuali."
     >
       <div className="grid gap-4 xl:grid-cols-[2.1fr_1fr]">
-        <Card className="glass-panel glass-strong relative overflow-hidden">
+        <Card className="glass-panel relative overflow-hidden">
           <CardHeader className="relative flex flex-row items-start justify-between gap-3">
             <div>
               <CardTitle className="flex items-center gap-2 text-base">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/70 shadow-inner">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100 shadow-inner">
                   <Sparkles className="h-4 w-4 text-primary" />
                 </span>
                 Reglo Assistant
@@ -116,12 +116,12 @@ export function AssistantPage(): React.ReactElement {
                 Prompt rapido, comandi smart e suggerimenti contestuali.
               </CardDescription>
             </div>
-            <Badge variant="outline" className="border-white/60 bg-white/70 text-xs">
+            <Badge variant="outline" className="border-pink-200 bg-pink-50/50 text-xs">
               Beta
             </Badge>
           </CardHeader>
           <CardContent className="relative space-y-4">
-            <div className="relative rounded-3xl border border-white/40 bg-white/60 shadow-inner backdrop-blur">
+            <div className="relative rounded-3xl border border-pink-200 bg-pink-50/30 shadow-inner">
               <div
                 ref={listRef}
                 className="max-h-[380px] space-y-3 overflow-y-auto px-4 pb-4 pt-6"
@@ -142,14 +142,14 @@ export function AssistantPage(): React.ReactElement {
                 </AnimatePresence>
 
                 {!messages.length && (
-                  <div className="flex items-center gap-3 rounded-2xl border border-white/50 bg-white/70 px-3 py-2 text-sm text-muted-foreground shadow-sm">
+                  <div className="flex items-center gap-3 rounded-2xl border border-pink-200 bg-white px-3 py-2 text-sm text-muted-foreground shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
                     <MessageCircle className="h-4 w-4 text-primary" />
                     Nessun messaggio ancora. Inizia con un comando o una domanda.
                   </div>
                 )}
               </div>
 
-              <div className="space-y-3 border-t border-white/40 bg-white/70 px-4 py-4">
+              <div className="space-y-3 border-t border-pink-200 bg-white px-4 py-4">
                 {!input.trim() && (
                   <div className="space-y-2">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -163,7 +163,7 @@ export function AssistantPage(): React.ReactElement {
                           whileTap={{ scale: 0.98 }}
                           onMouseDown={(event) => event.preventDefault()}
                           onClick={() => handleQuickInsert(question)}
-                          className="rounded-full border border-white/50 bg-white/70 px-3 py-2 text-left text-sm text-foreground/80 transition hover:border-primary/40 hover:text-foreground"
+                          className="rounded-full border border-pink-200 bg-white px-3 py-2 text-left text-sm text-foreground/80 transition hover:border-primary/40 hover:text-foreground"
                         >
                           {question}
                         </motion.button>
@@ -179,7 +179,7 @@ export function AssistantPage(): React.ReactElement {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       placeholder='Scrivi un prompt o "/" per i comandi rapidi'
-                      className="min-h-[110px] w-full border-white/50 bg-white/80 pr-20 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
+                      className="min-h-[110px] w-full border-pink-200 bg-white pr-20 text-sm shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50"
                       rows={3}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" && !event.shiftKey) {
@@ -198,7 +198,7 @@ export function AssistantPage(): React.ReactElement {
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                     <span>Invio per inviare, Shift+Invio per nuova linea</span>
-                    <Badge variant="outline" className="border-white/60 bg-white/70 text-[10px]">
+                    <Badge variant="outline" className="border-yellow-200 bg-[#FACC15]/10 text-[10px]">
                       Mock agent
                     </Badge>
                   </div>
@@ -226,7 +226,7 @@ export function AssistantPage(): React.ReactElement {
         </Card>
 
         <div className="space-y-4">
-          <Card className="glass-panel glass-strong">
+          <Card className="glass-panel">
             <CardHeader>
               <CardTitle className="text-base">Comandi disponibili</CardTitle>
               <CardDescription>Gli stessi mostrati con &ldquo;/&rdquo;.</CardDescription>
@@ -235,7 +235,7 @@ export function AssistantPage(): React.ReactElement {
               {slashCommands.map((item) => (
                 <div
                   key={item.command}
-                  className="flex items-start justify-between rounded-2xl border border-white/50 bg-white/70 px-3 py-2 shadow-sm"
+                  className="flex items-start justify-between rounded-2xl border border-pink-200 bg-white px-3 py-2 shadow-[0_4px_20px_rgba(236,72,153,0.08)]"
                 >
                   <div>
                     <p className="font-mono text-sm text-primary">{item.command}</p>
@@ -254,7 +254,7 @@ export function AssistantPage(): React.ReactElement {
             </CardContent>
           </Card>
 
-          <Card className="glass-panel glass-strong">
+          <Card className="glass-panel">
             <CardHeader>
               <CardTitle className="text-base">Note conversazione</CardTitle>
               <CardDescription>
@@ -263,7 +263,7 @@ export function AssistantPage(): React.ReactElement {
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
-                className="min-h-[120px] border-white/50 bg-white/80"
+                className="min-h-[120px] border-pink-200 bg-white"
                 placeholder="Es. chiedi riepilogo ordini, ricordati di allegare PDF..."
               />
               <Separator />

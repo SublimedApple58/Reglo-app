@@ -33,10 +33,10 @@ const emailFooterLogo = EMAIL_FOOTER_LOGO?.trim()
   ? EMAIL_FOOTER_LOGO
   : `${SERVER_URL.replace(/\/$/, '')}/assets/exented_logo.png`;
 
-const PRIMARY = "#324D7A";
-const ACCENT = "#AFE2D4";
-const BG = "#F2FBF8";
-const BORDER = "#D8ECE7";
+const PRIMARY = "#EC4899";
+const ACCENT = "#FACC15";
+const BG = "#F9FAFB";
+const BORDER = "#E5E7EB";
 
 const buildEmailBody = (content: string) => {
   const escaped = escapeHtml(content).replace(/\r?\n/g, "<br/>");

@@ -25,8 +25,8 @@ export default function CompanyInviteEmail({
   mobileInviteUrl,
   invitedByName,
 }: CompanyInviteEmailProps) {
-  const primary = '#324D7A';
-  const accent = '#AFE2D4';
+  const primary = '#EC4899';
+  const accent = '#FACC15';
   const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'https://app.reglo.it';
   const footerLogo =
     process.env.EMAIL_FOOTER_LOGO ||
@@ -37,11 +37,11 @@ export default function CompanyInviteEmail({
       <Preview>Invite to join {companyName}</Preview>
       <Tailwind>
         <Head />
-        <Body className="font-sans" style={{ backgroundColor: '#F2FBF8' }}>
+        <Body className="font-sans" style={{ backgroundColor: '#F9FAFB' }}>
           <Container className="max-w-xl">
             <Section
               className="rounded-[28px] overflow-hidden border"
-              style={{ borderColor: '#D8ECE7', backgroundColor: '#ffffff' }}
+              style={{ borderColor: '#E5E7EB', backgroundColor: '#ffffff' }}
             >
               <Section className="px-6 py-5" style={{ backgroundColor: primary }}>
                 <Text className="m-0 text-white text-xs font-semibold uppercase tracking-[0.2em]">
@@ -90,7 +90,7 @@ export default function CompanyInviteEmail({
                   </Section>
                 ) : null}
 
-                <Section className="mt-6 pt-6 border-t" style={{ borderColor: '#D8ECE7' }}>
+                <Section className="mt-6 pt-6 border-t" style={{ borderColor: '#E5E7EB' }}>
                   <Img
                     src={footerLogo}
                     width="400"

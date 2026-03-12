@@ -473,7 +473,7 @@ export function PublicDocFillPage({
         </div>
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-white/95 backdrop-blur sm:hidden">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t bg-white sm:hidden">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 py-3">
           {isCompleted ? (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">

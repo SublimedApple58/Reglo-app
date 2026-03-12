@@ -115,7 +115,7 @@ export function DocumentCanvas({
         <div
           ref={setRefs}
           className={cn(
-            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-white/70 bg-white/80 shadow-[0_20px_55px_-45px_rgba(50,78,122,0.45)]",
+            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-pink-200 bg-white shadow-[0_20px_55px_-45px_rgba(236,72,153,0.18)]",
             scrollClassName,
           )}
           style={{
@@ -123,7 +123,7 @@ export function DocumentCanvas({
             maxHeight: maxHeight ? `${maxHeight}px` : undefined,
           }}
         >
-          <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-white/70 bg-white/85 px-3 py-2 text-xs text-muted-foreground shadow-sm backdrop-blur">
+          <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-pink-200 bg-gradient-to-r from-pink-50/50 via-white to-yellow-50/50 px-3 py-2 text-xs text-muted-foreground shadow-sm">
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -166,7 +166,7 @@ export function DocumentCanvas({
                   }
                 }}
                 inputMode="numeric"
-                className="h-7 w-14 rounded-md border border-white/70 bg-white/90 px-2 text-center text-xs shadow-inner"
+                className="h-7 w-14 rounded-md border border-pink-200 bg-white px-2 text-center text-xs shadow-inner"
               />
               <span className="text-xs text-muted-foreground">
                 / {pageCount || 1}

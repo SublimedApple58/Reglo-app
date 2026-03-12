@@ -13,7 +13,7 @@ export function PageLoadingState({
   return (
     <div
       className={cn(
-        "glass-panel flex min-h-[220px] w-full items-center justify-center p-6",
+        "rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50/50 to-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] flex min-h-[220px] w-full items-center justify-center p-6",
         className,
       )}
     >
@@ -39,12 +39,12 @@ export function PageEmptyState({
   return (
     <div
       className={cn(
-        "glass-panel flex min-h-[240px] w-full items-center justify-center p-6",
+        "rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50/50 to-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] flex min-h-[240px] w-full items-center justify-center p-6",
         className,
       )}
     >
       <div className="max-w-md space-y-3 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/75 bg-white/85 shadow-sm">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-pink-200 bg-pink-50 shadow-sm">
           <Inbox className="h-5 w-5 text-primary" />
         </div>
         <p className="text-base font-semibold text-foreground">{title}</p>
@@ -75,7 +75,7 @@ export function PageErrorState({
   return (
     <div
       className={cn(
-        "glass-panel flex min-h-[240px] w-full items-center justify-center p-6",
+        "rounded-2xl border border-pink-200 bg-gradient-to-br from-pink-50/50 to-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] flex min-h-[240px] w-full items-center justify-center p-6",
         className,
       )}
     >

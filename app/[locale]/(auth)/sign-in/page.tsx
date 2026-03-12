@@ -48,9 +48,9 @@ const SignInPage = async (props: {
     if (!memberships.length) {
       return (
         <div className="flex min-h-[60vh] items-center justify-center">
-          <Card className="glass-panel glass-strong max-w-lg">
+          <Card className="max-w-lg">
             <CardHeader className="space-y-2">
-              <CardTitle className="text-center text-2xl text-[#324e7a]">
+              <CardTitle className="text-center text-2xl text-foreground">
                 Accesso non disponibile
               </CardTitle>
               <CardDescription className="text-center">
@@ -106,7 +106,7 @@ const SignInPage = async (props: {
         <Link href='/' className='inline-flex items-center gap-3'>
           <RegloMark />
           <div>
-            <p className='text-sm font-semibold text-[#324e7a]'>Reglo</p>
+            <p className='text-sm font-semibold text-foreground'>Reglo</p>
             <p className='text-xs text-muted-foreground'>Workspace Suite</p>
           </div>
         </Link>
@@ -115,7 +115,7 @@ const SignInPage = async (props: {
           <p className='text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground'>
             Welcome back
           </p>
-          <h1 className='text-3xl font-semibold text-[#324e7a]'>
+          <h1 className='text-3xl font-semibold text-foreground'>
             Entra in Reglo e riprendi il flusso.
           </h1>
           <p className='text-sm text-muted-foreground'>
@@ -132,12 +132,12 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='glass-card px-4 py-3'
+              className='rounded-xl border border-pink-200 bg-white/80 px-4 py-3 shadow-sm'
             >
               <p className='text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground'>
                 {item.label}
               </p>
-              <p className='text-sm font-semibold text-[#324e7a]'>
+              <p className='text-sm font-semibold text-foreground'>
                 {item.value}
               </p>
             </div>
@@ -152,18 +152,18 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='glass-card flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
+              className='flex items-center gap-3 rounded-lg bg-pink-50/60 px-3 py-2 text-sm text-muted-foreground'
             >
-              <item.icon className='h-4 w-4 text-[#324e7a]' />
+              <item.icon className='h-4 w-4 text-primary' />
               <span>{item.label}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <Card className='glass-panel glass-strong'>
+      <Card>
         <CardHeader className='space-y-2'>
-          <CardTitle className='text-center text-2xl text-[#324e7a]'>
+          <CardTitle className='text-center text-2xl text-foreground'>
             {translation('title')}
           </CardTitle>
           <CardDescription className='text-center'>

@@ -8,17 +8,17 @@ export function LogicMergeNode({ data, selected }: NodeProps<LogicNodeData>) {
   return (
     <div
       className={cn(
-        "relative min-w-[160px] rounded-xl border border-dashed bg-[#f6faf9] px-3 py-2 text-[#324e7a] shadow-sm",
-        selected && "ring-2 ring-[#a9d9d1]",
+        "relative min-w-[160px] rounded-xl border border-dashed bg-[#f6faf9] px-3 py-2 text-foreground shadow-sm",
+        selected && "ring-2 ring-primary",
       )}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-[#324e7a] shadow-sm">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-foreground shadow-sm">
             <GitMerge className="h-3.5 w-3.5" />
           </span>
         </div>
-        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[#324e7a]">
+        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-foreground">
           END IF
         </span>
       </div>
@@ -40,7 +40,7 @@ export function LogicMergeNode({ data, selected }: NodeProps<LogicNodeData>) {
         type="source"
         position={Position.Bottom}
         id="out"
-        className="h-2.5 w-2.5 -translate-x-1/2 border-2 border-white bg-[#324e7a]"
+        className="h-2.5 w-2.5 -translate-x-1/2 border-2 border-white bg-[#EC4899]"
         style={{ left: "50%" }}
       />
     </div>

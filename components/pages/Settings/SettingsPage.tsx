@@ -509,10 +509,6 @@ export function SettingsPage(): React.ReactElement {
       subTitle="Gestisci account, company e integrazioni della tua area di lavoro."
     >
       <div className="relative space-y-6">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
-          <div className="absolute bottom-12 left-8 h-44 w-44 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
-        </div>
         <div className="flex flex-col gap-3">
           <RegloTabs
             items={tabItems.map((item) => ({ key: item.value, label: item.label }))}
@@ -537,7 +533,7 @@ export function SettingsPage(): React.ReactElement {
               className="space-y-4"
             >
               <form onSubmit={handleAccountSave} className="space-y-4">
-                <Card className="glass-panel glass-strong">
+                <Card className="">
                   <CardHeader>
                     <CardTitle>Profile photo</CardTitle>
                     <CardDescription>
@@ -578,7 +574,7 @@ export function SettingsPage(): React.ReactElement {
                     </div>
                   </CardContent>
                 </Card>
-                <Card className="glass-panel glass-strong">
+                <Card className="">
                   <CardHeader>
                     <CardTitle>Account</CardTitle>
                     <CardDescription>
@@ -648,7 +644,7 @@ export function SettingsPage(): React.ReactElement {
                   </CardContent>
                 </Card>
 
-                <Card className="glass-panel glass-strong">
+                <Card className="">
                   <CardHeader>
                     <CardTitle>Notifiche personali</CardTitle>
                     <CardDescription>
@@ -713,7 +709,7 @@ export function SettingsPage(): React.ReactElement {
             >
               {activeTab === "company" ? (
                 <div className="space-y-4">
-                  <Card className="glass-panel glass-strong">
+                  <Card className="">
                     <CardHeader>
                       <CardTitle>Company logo</CardTitle>
                       <CardDescription>
@@ -767,7 +763,7 @@ export function SettingsPage(): React.ReactElement {
                   </Card>
 
                   <form onSubmit={handleCompanySave} className="space-y-4">
-                    <Card className="glass-panel glass-strong">
+                    <Card className="">
                       <CardHeader>
                         <CardTitle>Company</CardTitle>
                         <CardDescription>
@@ -800,7 +796,7 @@ export function SettingsPage(): React.ReactElement {
                       </CardContent>
                     </Card>
 
-                    <Card className="glass-panel glass-strong">
+                    <Card className="">
                       <CardHeader>
                         <CardTitle>Sessioni &amp; Accessi</CardTitle>
                         <CardDescription>
@@ -855,7 +851,7 @@ export function SettingsPage(): React.ReactElement {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <Card className="glass-panel glass-strong">
+                  <Card className="">
                     <CardHeader>
                       <CardTitle>Integrazioni</CardTitle>
                       <CardDescription>
@@ -883,7 +879,7 @@ export function SettingsPage(): React.ReactElement {
                       return (
                         <Card
                           key={integration.id}
-                          className="glass-panel flex h-full flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
+                          className="flex h-full flex-col transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg"
                         >
                           <CardHeader>
                             <div className="flex items-center justify-between gap-3">
@@ -904,7 +900,7 @@ export function SettingsPage(): React.ReactElement {
                               </p>
                             )}
                             {providerKey === "fatture-in-cloud" && isConnected ? (
-                              <div className="space-y-2 rounded-xl border border-white/60 bg-white/65 p-3 shadow-inner">
+                              <div className="space-y-2 rounded-xl border border-pink-200 bg-pink-50/50 p-3 shadow-inner">
                                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                                   Azienda FIC
                                 </p>
@@ -938,7 +934,7 @@ export function SettingsPage(): React.ReactElement {
                                   }}
                                   disabled={ficEntityLoading || ficSavingEntity}
                                 >
-                                    <SelectTrigger className="border-white/60 bg-white/80">
+                                    <SelectTrigger className="border-pink-200 bg-white">
                                       <SelectValue
                                         placeholder={
                                           ficEntityLoading
@@ -963,7 +959,7 @@ export function SettingsPage(): React.ReactElement {
                                         setFicManualEntityId(event.target.value)
                                       }
                                       placeholder="Incolla l'ID azienda FIC"
-                                      className="border-white/60 bg-white/80"
+                                      className="border-pink-200 bg-white"
                                     />
                                     <Input
                                       value={ficManualEntityName}
@@ -971,7 +967,7 @@ export function SettingsPage(): React.ReactElement {
                                         setFicManualEntityName(event.target.value)
                                       }
                                       placeholder="Nome azienda (opzionale)"
-                                      className="border-white/60 bg-white/80"
+                                      className="border-pink-200 bg-white"
                                     />
                                     <Button
                                       type="button"
@@ -1094,7 +1090,7 @@ function LabeledInput({
   return (
     <div className="space-y-2">
       <LabelMini>{label}</LabelMini>
-      <Input className="border-white/60 bg-white/80" {...props} />
+      <Input className="border-pink-200 bg-white" {...props} />
     </div>
   );
 }
@@ -1113,10 +1109,10 @@ function BadgeMini({
   return (
     <span
       className={cn(
-        "rounded-full border px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur",
+        "rounded-full border px-3 py-1 text-xs font-semibold shadow-sm",
         variant === "accent"
           ? "border-emerald-200/70 bg-emerald-50/70 text-emerald-700"
-          : "border-white/60 bg-white/70 text-muted-foreground",
+          : "border-pink-200 bg-pink-50/50 text-muted-foreground",
       )}
     >
       {children}
@@ -1136,7 +1132,7 @@ function ToggleRow({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-white/60 bg-white/70 px-3 py-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <div className="flex items-start justify-between gap-3 rounded-xl border border-pink-200 bg-pink-50/50 px-3 py-3 shadow-[0_4px_20px_rgba(236,72,153,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div>
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -1186,7 +1182,7 @@ function CheckboxRow({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 rounded-lg border border-white/60 bg-white/70 px-3 py-2 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+    <label className="flex items-start gap-3 rounded-lg border border-pink-200 bg-pink-50/50 px-3 py-2 shadow-[0_4px_20px_rgba(236,72,153,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <Checkbox checked={checked} onCheckedChange={() => onChange(!checked)} />
       <span className="text-sm text-foreground">{label}</span>
     </label>
@@ -1208,7 +1204,7 @@ function SelectField({
     <div className="space-y-2">
       <LabelMini>{label}</LabelMini>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="w-full border-white/60 bg-white/80">
+        <SelectTrigger className="w-full border-pink-200 bg-white">
           <SelectValue placeholder={label} />
         </SelectTrigger>
         <SelectContent>

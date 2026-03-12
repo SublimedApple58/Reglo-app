@@ -115,7 +115,7 @@ export function AdminUsersTable({
 
   return (
     <>
-      <div className="glass-panel glass-strong mt-4 p-4">
+      <div className="glass-panel mt-4 p-4">
         <Table>
           <TableHeader>
             <TableRow>
@@ -180,7 +180,7 @@ export function AdminUsersTable({
                       <Badge
                         variant="secondary"
                         className={cn(
-                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          "rounded-full border border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                           isAdmin ? "text-emerald-700" : "text-slate-600",
                         )}
                       >
@@ -191,7 +191,7 @@ export function AdminUsersTable({
                       <Badge
                         variant="secondary"
                         className={cn(
-                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          "rounded-full border border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                           user.autoscuolaRole === "OWNER"
                             ? "text-sky-700"
                             : user.autoscuolaRole === "INSTRUCTOR"
@@ -210,7 +210,7 @@ export function AdminUsersTable({
                       <Badge
                         variant="outline"
                         className={cn(
-                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          "rounded-full border border-gray-200 bg-gray-50 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                           isInvited ? "text-amber-700" : "text-emerald-700",
                         )}
                       >
@@ -305,7 +305,7 @@ export function AdminUsersTable({
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
-              <DrawerFooter className="sticky bottom-0 border-t border-white/60 bg-white/90 backdrop-blur flex-col gap-3 px-6 py-4">
+              <DrawerFooter className="sticky bottom-0 border-t border-gray-200 bg-white flex-col gap-3 px-6 py-4">
                 <DrawerClose asChild>
                   <Button
                     variant="outline"
@@ -340,7 +340,7 @@ export function AdminUsersTable({
                   />
                 ) : null}
               </div>
-              <DrawerFooter className="sticky bottom-0 border-t border-white/60 bg-white/90 backdrop-blur flex-col gap-3 px-6 py-4">
+              <DrawerFooter className="sticky bottom-0 border-t border-gray-200 bg-white flex-col gap-3 px-6 py-4">
                 <Button
                   type="submit"
                   form={formId}

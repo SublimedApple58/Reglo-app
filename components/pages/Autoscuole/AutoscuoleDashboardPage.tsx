@@ -152,10 +152,10 @@ export function AutoscuoleDashboardPage({
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
-        <section className="glass-panel glass-strong p-6">
+        <section className="glass-panel glass-strong bg-gradient-to-br from-pink-50 via-white to-yellow-50 border border-pink-200 p-6">
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-pink-400">
                 Centro operativo
               </p>
               <h2 className="text-xl font-semibold text-foreground">
@@ -165,7 +165,7 @@ export function AutoscuoleDashboardPage({
                 Vista rapida su guide, pratiche e incassi.
               </p>
             </div>
-            <div className="glass-card px-4 py-3 min-w-[220px]">
+            <div className="glass-card border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] px-4 py-3 min-w-[220px]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                 Oggi
               </p>
@@ -182,36 +182,36 @@ export function AutoscuoleDashboardPage({
               value={overview?.studentsCount ?? 0}
               loading={loading}
               icon={<Users className="h-4 w-4" />}
-              accent="bg-[#a9d9d1]"
+              accent="bg-[#EC4899]/10"
             />
             <MetricCard
               title="Pratiche attive"
               value={overview?.activeCasesCount ?? 0}
               loading={loading}
               icon={<ClipboardList className="h-4 w-4" />}
-              accent="bg-[#c9d9f2]"
+              accent="bg-[#FACC15]/15"
             />
             <MetricCard
               title="Guide prossimi 7 giorni"
               value={overview?.upcomingAppointmentsCount ?? 0}
               loading={loading}
               icon={<CalendarCheck className="h-4 w-4" />}
-              accent="bg-[#e1ecfb]"
+              accent="bg-pink-100"
             />
             <MetricCard
               title="Rate scadute"
               value={overview?.overdueInstallmentsCount ?? 0}
               loading={loading}
               icon={<AlertTriangle className="h-4 w-4" />}
-              accent="bg-[#f7e9d5]"
+              accent="bg-[#FACC15]/20"
             />
           </div>
         </section>
 
         <section className="grid gap-5 xl:grid-cols-[1.15fr_1fr]">
-          <div className="glass-panel glass-strong p-6 space-y-4">
+          <div className="glass-panel glass-strong border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-6 space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-pink-400">
                 Focus operativo
               </p>
               <h3 className="mt-1 text-lg font-semibold">Cosa presidiare adesso</h3>
@@ -238,9 +238,9 @@ export function AutoscuoleDashboardPage({
                 ))}
           </div>
 
-          <div className="glass-panel glass-strong p-6 space-y-4">
+          <div className="glass-panel glass-strong border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-6 space-y-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-pink-400">
                 Azioni rapide
               </p>
               <h3 className="mt-1 text-lg font-semibold">Navigazione autoscuola</h3>
@@ -250,7 +250,7 @@ export function AutoscuoleDashboardPage({
                 <Link
                   key={item.key}
                   href={item.href}
-                  className="glass-card glass-soft group rounded-2xl border border-border/50 p-4 transition hover:-translate-y-0.5 hover:border-[#324d7a]/35"
+                  className="glass-card glass-soft group rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-4 transition hover:-translate-y-0.5 hover:border-primary/35"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
@@ -259,11 +259,11 @@ export function AutoscuoleDashboardPage({
                         {item.description}
                       </p>
                     </div>
-                    <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#324d7a]/10 text-[#324d7a]">
+                    <span className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-full bg-[#EC4899]/10 text-primary">
                       <item.icon className="h-4 w-4" />
                     </span>
                   </div>
-                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-[#324d7a]">
+                  <div className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
                     Apri sezione
                     <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                   </div>
@@ -273,9 +273,9 @@ export function AutoscuoleDashboardPage({
           </div>
         </section>
 
-        <section className="glass-panel glass-strong p-6">
+        <section className="glass-panel glass-strong bg-pink-50/50 border border-pink-200 p-6">
           <div className="flex items-center gap-2">
-            <CarFront className="h-4 w-4 text-[#324d7a]" />
+            <CarFront className="h-4 w-4 text-primary" />
             <p className="text-sm text-muted-foreground">
               Obiettivo operativo Reglo Autoscuole: saturare la disponibilità istruttori/veicoli e ridurre i buchi agenda.
             </p>
@@ -300,7 +300,7 @@ function MetricCard({
   accent: string;
 }) {
   return (
-    <div className="glass-card glass-strong p-4">
+    <div className="glass-card glass-strong border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">

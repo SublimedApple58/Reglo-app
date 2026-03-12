@@ -27,7 +27,7 @@ export function RegloTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "glass-panel glass-strong w-full overflow-visible p-2",
+        "w-full overflow-visible rounded-2xl border border-pink-200 bg-gradient-to-r from-pink-50/80 to-white p-2 shadow-[0_4px_20px_rgba(236,72,153,0.08)]",
         className,
       )}
     >
@@ -44,8 +44,8 @@ export function RegloTabs<T extends string>({
               className={cn(
                 "reglo-focus-ring reglo-interactive shrink-0 rounded-full border px-4 py-2 text-sm font-semibold",
                 isActive
-                  ? "border-[#324D7A] bg-[#324D7A] text-white shadow-[0_12px_24px_-14px_rgba(50,77,122,0.72)]"
-                  : "border-white/80 bg-white/78 text-[#324D7A] hover:-translate-y-0.5 hover:border-[#AFE2D4] hover:bg-[#AFE2D4]/45 hover:shadow-[0_10px_18px_-14px_rgba(50,77,122,0.42)]",
+                  ? "border-primary bg-primary text-white shadow-[0_12px_24px_-14px_rgba(236,72,153,0.4)]"
+                  : "border-pink-200 bg-white text-[#6B7280] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-pink-50 hover:text-foreground",
               )}
             >
               {item.label}

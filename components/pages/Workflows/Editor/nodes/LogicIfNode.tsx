@@ -8,20 +8,20 @@ export function LogicIfNode({ data, selected }: NodeProps<LogicNodeData>) {
   return (
     <div
       className={cn(
-        "relative min-w-[220px] rounded-2xl border bg-[#e9f2f2] px-4 py-3 text-[#324e7a] shadow-md",
-        selected && "ring-2 ring-[#a9d9d1]",
+        "relative min-w-[220px] rounded-2xl border bg-[#fce7f3] px-4 py-3 text-foreground shadow-md",
+        selected && "ring-2 ring-primary",
       )}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-[#324e7a] shadow-sm">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 text-foreground shadow-sm">
             <GitBranch className="h-4 w-4" />
           </span>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             {data.meta ?? "Condizione"}
           </p>
         </div>
-        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-[#324e7a]">
+        <span className="rounded-full bg-white/80 px-2 py-0.5 text-[10px] font-semibold text-foreground">
           IF
         </span>
       </div>
@@ -34,7 +34,7 @@ export function LogicIfNode({ data, selected }: NodeProps<LogicNodeData>) {
         type="target"
         position={Position.Top}
         id="in"
-        className="h-2.5 w-2.5 -translate-x-1/2 border-2 border-white bg-[#324e7a]"
+        className="h-2.5 w-2.5 -translate-x-1/2 border-2 border-white bg-[#EC4899]"
         style={{ left: "50%" }}
       />
       <Handle

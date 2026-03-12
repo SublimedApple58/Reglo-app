@@ -8,7 +8,7 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
       data-slot="table-container"
-      className="glass-panel relative w-full overflow-x-auto"
+      className="rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] relative w-full overflow-x-auto"
     >
       <table
         data-slot="table"
@@ -23,7 +23,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b [&_tr]:border-white/60", className)}
+      className={cn("[&_tr]:border-b [&_tr]:border-pink-100", className)}
       {...props}
     />
   );
@@ -44,7 +44,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t border-white/60 bg-white/80 font-medium [&>tr]:last:border-b-0",
+        "border-t border-pink-100 bg-pink-50/50 font-medium [&>tr]:last:border-b-0",
         className,
       )}
       {...props}
@@ -57,7 +57,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b border-white/50 transition-colors hover:bg-white/60 data-[state=selected]:bg-primary/10",
+        "border-b border-pink-100 transition-colors hover:bg-pink-50/50 data-[state=selected]:bg-primary/15",
         className,
       )}
       {...props}

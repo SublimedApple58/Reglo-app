@@ -16,29 +16,27 @@ import type {
 export const primaryNodeStyle = {
   borderRadius: 14,
   padding: "12px 16px",
-  border: "1px solid rgba(255, 255, 255, 0.7)",
-  background: "rgba(255, 255, 255, 0.85)",
-  color: "#324e7a",
+  border: "1px solid #E5E7EB",
+  background: "#ffffff",
+  color: "#111111",
   fontWeight: 600,
-  boxShadow: "0 18px 30px -24px rgba(50, 78, 122, 0.45)",
-  backdropFilter: "blur(10px)",
+  boxShadow: "0 18px 30px -24px rgba(0, 0, 0, 0.12)",
 };
 
 export const secondaryNodeStyle = {
   ...primaryNodeStyle,
-  background: "rgba(233, 242, 242, 0.85)",
-  border: "1px solid rgba(169, 217, 209, 0.45)",
+  background: "#F9FAFB",
+  border: "1px solid #E5E7EB",
 };
 
 export const startNodeStyle = {
   borderRadius: 18,
   padding: "14px 18px",
-  border: "1px solid rgba(50, 78, 122, 0.35)",
-  background:
-    "linear-gradient(135deg, rgba(50, 78, 122, 0.92), rgba(96, 87, 158, 0.85))",
+  border: "1px solid rgba(236, 72, 153, 0.35)",
+  background: "linear-gradient(135deg, #EC4899, #DB2777)",
   color: "#f8fafc",
   fontWeight: 700,
-  boxShadow: "0 22px 38px -26px rgba(50, 78, 122, 0.6)",
+  boxShadow: "0 22px 38px -26px rgba(236, 72, 153, 0.4)",
 };
 
 export const endNodeStyle = {

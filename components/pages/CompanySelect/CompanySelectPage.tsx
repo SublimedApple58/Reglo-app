@@ -83,12 +83,12 @@ export function CompanySelectPage({
   };
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col gap-6 px-6 py-10">
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col gap-6 px-6 py-10 bg-gradient-to-br from-pink-50 via-white to-yellow-50 rounded-3xl">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
           Company
         </p>
-        <h1 className="text-3xl font-semibold text-[#324e7a]">
+        <h1 className="text-3xl font-semibold text-foreground">
           Scegli la company da aprire
         </h1>
         <p className="text-sm text-muted-foreground">
@@ -98,7 +98,7 @@ export function CompanySelectPage({
 
       <div className="grid gap-4 md:grid-cols-2">
         {companies.map((company) => (
-          <Card key={company.id} className="glass-panel glass-strong">
+          <Card key={company.id} className="border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
             <CardHeader className="space-y-1">
               <CardTitle className="text-lg">{company.name}</CardTitle>
               <CardDescription className="text-xs">
@@ -117,11 +117,11 @@ export function CompanySelectPage({
         ))}
       </div>
 
-      <Card className="glass-panel glass-strong border-dashed border-primary/25">
+      <Card className="border-dashed border-[#FACC15]/50 bg-yellow-50/30">
         <CardContent className="flex flex-col items-start gap-3 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-xl bg-white shadow-sm">
-              <Building2 className="h-5 w-5 text-muted-foreground" />
+            <div className="flex size-10 items-center justify-center rounded-xl bg-[#FACC15]/20 shadow-sm">
+              <Building2 className="h-5 w-5 text-yellow-700" />
             </div>
             <div>
               <p className="text-sm font-medium">Crea una nuova company</p>

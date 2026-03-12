@@ -10,21 +10,21 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow-[0_12px_26px_-18px_rgba(50,78,122,0.58)] hover:bg-primary/92 hover:-translate-y-0.5",
+          "bg-primary text-white hover:bg-[#DB2777] hover:-translate-y-0.5 transition-all",
         destructive:
-          "bg-destructive text-white shadow-[0_10px_24px_-16px_rgba(217,75,71,0.5)] hover:bg-destructive/92 hover:-translate-y-0.5 focus-visible:ring-destructive/25 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "bg-destructive text-white hover:bg-destructive/92 hover:-translate-y-0.5 focus-visible:ring-destructive/25 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border border-white/75 bg-white/78 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_8px_20px_-16px_rgba(50,78,122,0.35)] hover:-translate-y-0.5 hover:bg-white dark:bg-input/30 dark:border-input dark:hover:bg-input/50",
+          "border-2 border-pink-200 bg-white text-foreground hover:border-pink-400 hover:bg-pink-50/50 hover:shadow-[0_8px_24px_rgba(236,72,153,0.12)] hover:-translate-y-0.5 transition-all",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-[0_10px_22px_-16px_rgba(175,226,212,0.75)] hover:-translate-y-0.5 hover:bg-secondary/88",
+          "bg-[#FACC15] text-foreground hover:bg-[#EAB308] hover:-translate-y-0.5 transition-all",
         ghost:
-          "text-foreground/85 hover:bg-accent/65 hover:text-accent-foreground dark:hover:bg-accent/50",
+          "text-[#6B7280] hover:bg-pink-50/60 hover:text-primary",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 px-6 has-[>svg]:px-4",
+        default: "h-9 px-7 py-2 font-bold has-[>svg]:px-3",
+        sm: "h-8 gap-1.5 px-5 has-[>svg]:px-2.5",
+        lg: "h-10 px-8 has-[>svg]:px-4",
         icon: "size-9",
       },
     },
