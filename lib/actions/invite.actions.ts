@@ -378,6 +378,9 @@ export async function acceptCompanyInvite(
       throw new Error('Invite email does not match the signed-in user');
     }
 
+    const resolvedAutoscuolaRole =
+      (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role);
+
     const existingMember = await prisma.companyMember.findFirst({
       where: { companyId: invite.companyId, userId },
     });
@@ -388,8 +391,13 @@ export async function acceptCompanyInvite(
           companyId: invite.companyId,
           userId,
           role: invite.role,
-          autoscuolaRole: (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role),
+          autoscuolaRole: resolvedAutoscuolaRole,
         },
+      });
+    } else {
+      await prisma.companyMember.update({
+        where: { companyId_userId: { companyId: invite.companyId, userId } },
+        data: { role: invite.role, autoscuolaRole: resolvedAutoscuolaRole },
       });
     }
 
@@ -448,6 +456,9 @@ export async function acceptCompanyInviteWithPassword(
       throw new Error('Invalid password');
     }
 
+    const resolvedAutoscuolaRole2 =
+      (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role);
+
     const existingMember = await prisma.companyMember.findFirst({
       where: { companyId: invite.companyId, userId: user.id },
     });
@@ -458,8 +469,13 @@ export async function acceptCompanyInviteWithPassword(
           companyId: invite.companyId,
           userId: user.id,
           role: invite.role,
-          autoscuolaRole: (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role),
+          autoscuolaRole: resolvedAutoscuolaRole2,
         },
+      });
+    } else {
+      await prisma.companyMember.update({
+        where: { companyId_userId: { companyId: invite.companyId, userId: user.id } },
+        data: { role: invite.role, autoscuolaRole: resolvedAutoscuolaRole2 },
       });
     }
 
