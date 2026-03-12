@@ -132,7 +132,7 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='px-4 py-3'
+              className='rounded-xl border border-pink-200 bg-white/80 px-4 py-3 shadow-sm'
             >
               <p className='text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground'>
                 {item.label}
@@ -152,9 +152,9 @@ const SignInPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
+              className='flex items-center gap-3 rounded-lg bg-pink-50/60 px-3 py-2 text-sm text-muted-foreground'
             >
-              <item.icon className='h-4 w-4 text-foreground' />
+              <item.icon className='h-4 w-4 text-primary' />
               <span>{item.label}</span>
             </div>
           ))}

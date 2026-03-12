@@ -1356,7 +1356,7 @@ export function WorkflowEditor(): React.ReactElement {
             ) : null}
             <div
               ref={flowWrapperRef}
-              className="flex-1 rounded-2xl bg-gray-50"
+              className="flex-1 rounded-2xl bg-pink-50/30 border border-pink-200"
             >
               <ReactFlow
                 nodes={nodes}

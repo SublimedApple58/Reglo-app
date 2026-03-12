@@ -62,9 +62,9 @@ const SignUpPage = async (props: {
           ].map((item) => (
             <div
               key={item.label}
-              className='flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
+              className='flex items-center gap-3 rounded-lg bg-pink-50/60 px-3 py-2 text-sm text-muted-foreground'
             >
-              <item.icon className='h-4 w-4 text-foreground' />
+              <item.icon className='h-4 w-4 text-primary' />
               <span>{item.label}</span>
             </div>
           ))}

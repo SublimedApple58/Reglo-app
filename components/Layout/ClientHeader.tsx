@@ -20,7 +20,7 @@ export function ClientHeader({
   const isMobile = useIsMobile();
 
   return (
-    <header className="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center border-b border-gray-200 bg-white transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
+    <header className="sticky top-0 z-30 flex h-(--header-height) shrink-0 items-center border-b border-border bg-white transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-2 px-3 lg:gap-3 lg:px-6">
         {isMobile && (
           <>

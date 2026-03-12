@@ -19,7 +19,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "reglo-focus-ring reglo-interactive flex h-10 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors hover:bg-gray-100/50 focus-visible:border-[#ec4899] disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "reglo-focus-ring reglo-interactive flex h-10 w-full items-center justify-between rounded-xl border border-pink-200 bg-pink-50/50 px-3 py-2 text-sm transition-colors hover:bg-pink-50 focus-visible:border-[#ec4899] disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
       className
     )}
     {...props}
@@ -75,7 +75,7 @@ const SelectContent = React.forwardRef<
   <SelectPrimitive.Content
     ref={ref}
     className={cn(
-      "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-gray-200 bg-white text-popover-foreground shadow-[0_24px_64px_rgba(0,0,0,0.08)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      "relative z-50 max-h-96 min-w-[8rem] overflow-hidden rounded-xl border border-pink-200 bg-white text-popover-foreground shadow-[0_24px_64px_rgba(236,72,153,0.1)] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
       position === "popper" &&
         "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
       className

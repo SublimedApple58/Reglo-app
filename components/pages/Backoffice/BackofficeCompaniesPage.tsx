@@ -241,7 +241,7 @@ function ServiceCard({
         </div>
       ) : serviceKey === "AUTOSCUOLE" ? (
         <>
-        <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3">
+        <div className="space-y-3 rounded-2xl border border-pink-200 bg-pink-50/30 p-3">
           <label className="flex items-center justify-between gap-2 text-xs">
             <span className="font-medium text-foreground">Voice AI disponibile</span>
             <Checkbox
@@ -285,7 +285,7 @@ function ServiceCard({
                   Assegna linea manualmente
                 </p>
                 {/* Routing mode toggle */}
-                <div className="flex rounded-lg border border-gray-200 bg-white p-0.5 text-xs">
+                <div className="flex rounded-lg border border-pink-200 bg-white p-0.5 text-xs">
                   {(["sip", "twilio"] as const).map((mode) => (
                     <button
                       key={mode}
@@ -340,7 +340,7 @@ function ServiceCard({
         </div>
 
         {/* Student platforms section */}
-        <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
+        <div className="space-y-2 rounded-2xl border border-yellow-200 bg-yellow-50/30 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               <Smartphone className="h-3.5 w-3.5" />
@@ -385,7 +385,7 @@ function ServiceCard({
             <div className="max-h-48 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-gray-200 text-left text-muted-foreground">
+                  <tr className="border-b border-pink-200 text-left text-muted-foreground">
                     <th className="pb-1 pr-3 font-medium">Email</th>
                     <th className="pb-1 pr-3 font-medium">Piattaforma</th>
                     <th className="pb-1 font-medium">Stato</th>
@@ -455,7 +455,7 @@ export default function BackofficeCompaniesPage({
 
   return (
     <div className="space-y-6">
-      <div className="glass-surface glass-strong p-6">
+      <div className="glass-surface glass-strong p-6 bg-gradient-to-br from-pink-50 via-white to-yellow-50 border border-pink-200">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           Backoffice Reglo
         </p>
@@ -467,7 +467,7 @@ export default function BackofficeCompaniesPage({
         </p>
       </div>
 
-      <div className="glass-panel glass-strong p-4">
+      <div className="glass-panel glass-strong p-4 border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Search className="h-4 w-4" />
@@ -551,7 +551,7 @@ export default function BackofficeCompaniesPage({
 
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,820px)] data-[vaul-drawer-direction=right]:sm:max-w-3xl h-full">
-          <DrawerHeader className="border-b border-gray-200 bg-white">
+          <DrawerHeader className="border-b border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50">
             <DrawerTitle>Gestisci company</DrawerTitle>
             <DrawerDescription>
               {selected?.name ?? "Company"}
@@ -576,7 +576,7 @@ export default function BackofficeCompaniesPage({
                 : null}
             </div>
           </div>
-          <DrawerFooter className="border-t border-gray-200 bg-white">
+          <DrawerFooter className="border-t border-pink-200 bg-white">
             <DrawerClose asChild>
               <Button variant="outline">Chiudi</Button>
             </DrawerClose>

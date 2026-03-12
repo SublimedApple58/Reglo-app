@@ -172,7 +172,7 @@ export default function HomePage(): React.ReactElement {
   return (
     <ClientPageWrapper title="Home" hideHero>
       <div className="relative space-y-5 overflow-x-clip">
-        <section className="relative overflow-hidden p-6 lg:p-7">
+        <section className="relative overflow-hidden rounded-3xl border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50 p-6 shadow-[0_4px_20px_rgba(236,72,153,0.08)] lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
             <div className="space-y-4">
               <span className="glass-chip">Workspace overview</span>
@@ -280,7 +280,7 @@ export default function HomePage(): React.ReactElement {
         </section>
 
         <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
-          <section className="relative p-5">
+          <section className="relative rounded-2xl border border-pink-200 bg-white p-5 shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -391,7 +391,7 @@ export default function HomePage(): React.ReactElement {
             </div>
           </section>
 
-          <section className="p-5">
+          <section className="rounded-2xl border border-yellow-200 bg-gradient-to-b from-yellow-50/60 to-white p-5 shadow-[0_4px_20px_rgba(250,204,21,0.08)]">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -411,7 +411,7 @@ export default function HomePage(): React.ReactElement {
                   onClick={action.onClick}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#EC4899]/10 text-foreground shadow-inner">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FACC15]/20 text-foreground">
                       {action.icon}
                     </span>
                     <div>
@@ -543,7 +543,7 @@ function InfoPill({
   return (
     <div className="glass-card flex items-center justify-between gap-3 px-3 py-2.5">
       <div className="flex items-center gap-2 text-sm text-foreground">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-50">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-pink-100">
           {icon}
         </span>
         <span>{label}</span>
@@ -555,7 +555,7 @@ function InfoPill({
 
 function MiniStat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-3 py-2 text-sm">
+    <div className="flex items-center justify-between rounded-xl border border-pink-200 bg-white px-3 py-2 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-semibold text-primary">{value}</span>
     </div>

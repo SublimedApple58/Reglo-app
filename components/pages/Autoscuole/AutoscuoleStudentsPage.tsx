@@ -336,13 +336,13 @@ export function AutoscuoleStudentsPage({
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel space-y-4 p-4">
+        <div className="glass-panel border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50 space-y-4 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Cerca allievi"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="max-w-sm border-gray-200 bg-white"
+              className="max-w-sm border-pink-200 bg-white"
             />
             <Button onClick={() => setInviteOpen(true)}>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -410,7 +410,7 @@ export function AutoscuoleStudentsPage({
           </DialogContent>
         </Dialog>
 
-        <div className="glass-panel p-4">
+        <div className="glass-panel border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-4">
           <Table>
             <TableHeader>
               <TableRow>
@@ -505,7 +505,7 @@ export function AutoscuoleStudentsPage({
         }}
       >
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,960px)] data-[vaul-drawer-direction=right]:sm:max-w-4xl h-full">
-          <DrawerHeader className="border-b border-gray-200 bg-white">
+          <DrawerHeader className="border-b border-pink-200 bg-gradient-to-r from-pink-50 via-white to-yellow-50">
             <DrawerTitle>Registro guide allievo</DrawerTitle>
             <DrawerDescription>
               {selectedStudent
@@ -523,8 +523,8 @@ export function AutoscuoleStudentsPage({
               </div>
             ) : register ? (
               <>
-                <section className="glass-panel space-y-3 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <section className="glass-panel border border-pink-200 space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-400">
                     Anagrafica
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -553,8 +553,8 @@ export function AutoscuoleStudentsPage({
                   </div>
                 </section>
 
-                <section className="glass-panel space-y-3 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <section className="glass-panel border border-pink-200 space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-400">
                     Crediti guida
                   </p>
                   {creditsLoading ? (
@@ -582,7 +582,7 @@ export function AutoscuoleStudentsPage({
                           step={1}
                           value={creditsInput}
                           onChange={(event) => setCreditsInput(event.target.value)}
-                          className="border-gray-200 bg-white"
+                          className="border-pink-200 bg-white"
                           placeholder="Crediti"
                         />
                         <Button
@@ -604,7 +604,7 @@ export function AutoscuoleStudentsPage({
                           {credits.ledger.slice(0, 8).map((entry) => (
                             <div
                               key={entry.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-gray-200 bg-white p-3"
+                              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-3"
                             >
                               <div className="space-y-1">
                                 <p className="text-sm font-medium text-foreground">
@@ -631,8 +631,8 @@ export function AutoscuoleStudentsPage({
                   )}
                 </section>
 
-                <section className="glass-panel space-y-3 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <section className="glass-panel border border-pink-200 space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-400">
                     Stato obbligo guide
                   </p>
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -661,8 +661,8 @@ export function AutoscuoleStudentsPage({
                   </Badge>
                 </section>
 
-                <section className="glass-panel space-y-3 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <section className="glass-panel border border-pink-200 space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-400">
                     Tipi guida completati
                   </p>
                   {register.byLessonType.length ? (
@@ -680,8 +680,8 @@ export function AutoscuoleStudentsPage({
                   )}
                 </section>
 
-                <section className="glass-panel space-y-3 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <section className="glass-panel border border-pink-200 space-y-3 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-pink-400">
                     Storico guide
                   </p>
                   {register.lessons.length ? (
@@ -689,7 +689,7 @@ export function AutoscuoleStudentsPage({
                       {register.lessons.map((lesson) => (
                         <div
                           key={lesson.id}
-                          className="rounded-2xl border border-gray-200 bg-white p-3"
+                          className="rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-3"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="text-sm font-semibold text-foreground">
@@ -725,7 +725,7 @@ export function AutoscuoleStudentsPage({
             )}
           </div>
 
-          <DrawerFooter className="border-t border-gray-200 bg-white">
+          <DrawerFooter className="border-t border-pink-200 bg-pink-50/30">
             <DrawerClose asChild>
               <Button variant="outline">Chiudi</Button>
             </DrawerClose>

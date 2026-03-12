@@ -45,36 +45,36 @@
 
 :root {
   --radius: 0.625rem;
-  --background: #F9FAFB;
-  --foreground: #111111;
+  --background: #ffffff;
+  --foreground: #1F2937;
   --card: #ffffff;
-  --card-foreground: #111111;
+  --card-foreground: #1F2937;
   --popover: #ffffff;
-  --popover-foreground: #111111;
+  --popover-foreground: #1F2937;
   --primary: #EC4899;
   --primary-foreground: #ffffff;
   --secondary: #FACC15;
-  --secondary-foreground: #111111;
+  --secondary-foreground: #1F2937;
   --muted: #F9FAFB;
-  --muted-foreground: #9CA3AF;
-  --accent: #F9FAFB;
-  --accent-foreground: #111111;
+  --muted-foreground: #6B7280;
+  --accent: #fef9c3;
+  --accent-foreground: #1F2937;
   --destructive: #d94b47;
   --border: #E5E7EB;
   --input: #E5E7EB;
   --ring: #EC4899;
   --chart-1: #EC4899;
   --chart-2: #FACC15;
-  --chart-3: #6B7280;
-  --chart-4: #F9FAFB;
+  --chart-3: #f472b6;
+  --chart-4: #fde68a;
   --chart-5: #fce7f3;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #111111;
+  --sidebar: #FFFBEB;
+  --sidebar-foreground: #1F2937;
   --sidebar-primary: #EC4899;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #fce7f3;
-  --sidebar-accent-foreground: #111111;
-  --sidebar-border: #E5E7EB;
+  --sidebar-accent: #FEF3C7;
+  --sidebar-accent-foreground: #1F2937;
+  --sidebar-border: #FDE68A;
   --sidebar-ring: #EC4899;
   --motion-fast: 160ms;
   --motion-base: 220ms;
@@ -138,8 +138,8 @@
   }
 
   .reglo-hover-lift:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 40px -30px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+    box-shadow: 0 16px 40px -20px rgba(236, 72, 153, 0.2);
   }
 
   .reglo-focus-ring {
@@ -147,23 +147,23 @@
   }
 
   .glass-surface {
-    @apply rounded-2xl border border-gray-100 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)];
+    @apply rounded-2xl border border-pink-200 bg-white/90 shadow-[0_4px_20px_rgba(236,72,153,0.08)];
   }
 
   .glass-panel {
-    @apply rounded-2xl border border-gray-100 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)];
+    @apply rounded-2xl border border-pink-200 bg-white/90 shadow-[0_4px_20px_rgba(236,72,153,0.08)];
   }
 
   .glass-card {
-    @apply rounded-2xl border border-gray-100 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.04)];
+    @apply rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)];
   }
 
   .glass-sidebar {
-    @apply border-r border-gray-200 bg-white;
+    @apply border-r border-[#FDE68A] bg-[#FFFBEB];
   }
 
   .glass-chip {
-    @apply rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9CA3AF];
+    @apply rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#6B7280];
   }
 
   .glass-strong {
@@ -171,7 +171,7 @@
   }
 
   .glass-divider {
-    @apply h-px w-full bg-gray-200;
+    @apply h-px w-full bg-pink-200;
   }
 
   .doc-richtext {

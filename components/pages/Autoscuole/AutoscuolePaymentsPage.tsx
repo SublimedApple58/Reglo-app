@@ -603,7 +603,7 @@ export function AutoscuolePaymentsPage({
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel space-y-4 p-5">
+        <div className="glass-panel border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50 space-y-4 p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Stripe incassi autoscuola</h3>
@@ -636,13 +636,13 @@ export function AutoscuolePaymentsPage({
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
+            <div className="rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-3">
               <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Stato</div>
               <div className={`mt-1 text-sm font-semibold ${stripeStatusClassName}`}>
                 {stripeLoading ? "Caricamento..." : stripeStatusLabel}
               </div>
             </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
+            <div className="rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-3">
               <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                 Account
               </div>
@@ -650,7 +650,7 @@ export function AutoscuolePaymentsPage({
                 {stripeStatus?.accountId ?? "-"}
               </div>
             </div>
-            <div className="rounded-2xl border border-gray-200 bg-white p-3">
+            <div className="rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-3">
               <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
                 Capacita
               </div>
@@ -679,7 +679,7 @@ export function AutoscuolePaymentsPage({
           ) : null}
         </div>
 
-        <div className="glass-panel space-y-4 p-5">
+        <div className="glass-panel border border-[#FACC15]/40 bg-gradient-to-br from-yellow-50/60 via-white to-pink-50/40 space-y-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">Pagamenti automatici</h3>
@@ -790,7 +790,7 @@ export function AutoscuolePaymentsPage({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-3">
+            <div className="space-y-2 rounded-2xl border border-[#FACC15]/40 bg-[#FACC15]/10 p-3">
               <div className="text-xs font-medium text-muted-foreground">Notifiche pagamento</div>
               <label className="flex items-center justify-between gap-2 text-xs text-foreground">
                 <span>Push</span>
@@ -828,7 +828,7 @@ export function AutoscuolePaymentsPage({
           <StatCard label="Parziali" value={overview?.partialCount ?? 0} />
         </div>
 
-        <div className="glass-panel space-y-3 p-4">
+        <div className="glass-panel border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)] space-y-3 p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">Operativo pagamenti guide</h3>
             <div className="flex items-center gap-3">
@@ -847,7 +847,7 @@ export function AutoscuolePaymentsPage({
 
           <div className="max-h-[540px] overflow-auto">
             <table className="w-full min-w-[1080px] text-sm">
-              <thead className="sticky top-0 z-10 bg-white">
+              <thead className="sticky top-0 z-10 bg-pink-50/50">
                 <tr className="text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
                   <th className="px-3 py-2">Data</th>
                   <th className="px-3 py-2">Allievo</th>
@@ -866,7 +866,7 @@ export function AutoscuolePaymentsPage({
                 {appointments.map((row) => {
                   const latestPayment = row.payments[0];
                   return (
-                    <tr key={row.id} className="border-t border-gray-200 text-foreground">
+                    <tr key={row.id} className="border-t border-pink-200 text-foreground">
                       <td className="px-3 py-2">{formatDateTime(row.startsAt)}</td>
                       <td className="px-3 py-2">
                         <div className="font-medium">{row.student.name || "-"}</div>
@@ -934,14 +934,14 @@ export function AutoscuolePaymentsPage({
           {detailsRow ? (
             <div className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Allievo</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">
                     {detailsRow.student?.name || "-"}
                   </div>
                   <div className="text-xs text-muted-foreground">{detailsRow.student?.email || "-"}</div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Guida</div>
                   <div className="mt-1 text-sm font-semibold text-foreground">
                     {formatDateTime(detailsRow.startsAt)}
@@ -951,7 +951,7 @@ export function AutoscuolePaymentsPage({
               </div>
 
               <div className="grid gap-3 sm:grid-cols-4">
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
                     Prezzo
                   </div>
@@ -959,7 +959,7 @@ export function AutoscuolePaymentsPage({
                     {formatMoney(detailsRow.priceAmount)}
                   </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
                     Penale
                   </div>
@@ -967,7 +967,7 @@ export function AutoscuolePaymentsPage({
                     {formatMoney(detailsRow.penaltyAmount)}
                   </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
                     Pagato
                   </div>
@@ -975,7 +975,7 @@ export function AutoscuolePaymentsPage({
                     {formatMoney(detailsRow.paidAmount)}
                   </div>
                 </div>
-                <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+                <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                   <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
                     Dovuto
                   </div>
@@ -985,7 +985,7 @@ export function AutoscuolePaymentsPage({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="rounded-xl border border-[#FACC15]/40 bg-[#FACC15]/10 p-3">
                 <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Stato fattura
                 </div>
@@ -1003,7 +1003,7 @@ export function AutoscuolePaymentsPage({
                     detailsRow.payments.map((payment) => (
                       <div
                         key={payment.id}
-                        className="rounded-xl border border-border/60 bg-muted/20 p-3"
+                        className="rounded-xl border border-pink-200 bg-pink-50/30 p-3"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
@@ -1041,7 +1041,7 @@ export function AutoscuolePaymentsPage({
                       </div>
                     ))
                   ) : (
-                    <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+                    <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3 text-sm text-muted-foreground">
                       Nessun tentativo registrato.
                     </div>
                   )}
@@ -1138,7 +1138,7 @@ export function AutoscuolePaymentsPage({
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Importo (€) *</div>
                   <input
-                    className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-foreground outline-none focus:border-foreground/25"
+                    className="h-10 w-full rounded-xl border border-pink-200 bg-white px-3 text-sm text-foreground outline-none focus:border-pink-400"
                     value={testAmount}
                     onChange={(e) => setTestAmount(e.target.value)}
                     inputMode="decimal"
@@ -1202,7 +1202,7 @@ function Field({
     <label className="space-y-1 text-xs font-medium text-muted-foreground">
       <span>{label}</span>
       <input
-        className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-foreground outline-none focus:border-foreground/25"
+        className="h-10 w-full rounded-xl border border-pink-200 bg-white px-3 text-sm text-foreground outline-none focus:border-pink-400"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
@@ -1214,8 +1214,8 @@ function Field({
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="glass-panel rounded-2xl p-4">
-      <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
+    <div className="glass-panel rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-4">
+      <div className="text-xs uppercase tracking-[0.14em] text-pink-400">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
     </div>
   );

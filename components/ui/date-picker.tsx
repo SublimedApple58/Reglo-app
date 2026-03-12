@@ -47,11 +47,11 @@ export function DatePicker({
   const days = buildCalendar();
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-3">
+    <div className="rounded-2xl border border-pink-200 bg-white p-3 shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
       <div className="flex items-center justify-between">
         <button
           type="button"
-          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-gray-50"
+          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-pink-50"
           onClick={() =>
             setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
           }
@@ -63,7 +63,7 @@ export function DatePicker({
         </div>
         <button
           type="button"
-          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-gray-50"
+          className="rounded-full px-2 py-1 text-xs text-muted-foreground hover:bg-pink-50"
           onClick={() =>
             setMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
           }
@@ -93,7 +93,7 @@ export function DatePicker({
               }}
               className={[
                 "h-9 rounded-lg text-sm",
-                day ? "hover:bg-gray-50 text-foreground" : "opacity-0",
+                day ? "hover:bg-pink-50 text-foreground" : "opacity-0",
                 isSelected ? "bg-primary text-white font-semibold" : "",
               ].join(" ")}
             >

@@ -431,14 +431,14 @@ export function AutoscuoleAgendaPage({
         {tabs}
         {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="glass-panel glass-strong border border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50 flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-[220px]">
               <Input
                 placeholder="Cerca appuntamenti"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="border-gray-200 bg-white"
+                className="border-pink-200 bg-white"
               />
             </div>
             <FilterTag
@@ -503,7 +503,7 @@ export function AutoscuoleAgendaPage({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2 rounded-full border border-gray-200 bg-white p-1">
+            <div className="flex items-center gap-2 rounded-full border border-pink-200 bg-white p-1">
               <Button
                 variant={viewMode === "week" ? "default" : "ghost"}
                 size="sm"
@@ -565,7 +565,7 @@ export function AutoscuoleAgendaPage({
               </div>
             )}
             {refreshing ? (
-              <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-full border border-pink-200 bg-pink-50/50 px-3 py-1 text-xs text-pink-400">
                 Aggiornamento...
               </span>
             ) : null}
@@ -576,7 +576,7 @@ export function AutoscuoleAgendaPage({
           </Button>
         </div>
 
-        <div className="glass-panel glass-strong p-4">
+        <div className="glass-panel glass-strong border border-pink-200 shadow-[0_4px_20px_rgba(236,72,153,0.08)] p-4">
           {loading ? (
             <Skeleton className="h-[420px] w-full" />
           ) : (
@@ -636,7 +636,7 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={day.toISOString()}
-                        className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
+                        className="relative overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-[0_4px_20px_rgba(236,72,153,0.08)]"
                         style={{ height: calendarHeight }}
                         onClick={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
@@ -721,7 +721,7 @@ export function AutoscuoleAgendaPage({
                                         <Badge
                                           variant="secondary"
                                           className={cn(
-                                            "shrink-0 border border-gray-200 bg-white font-medium text-foreground/80",
+                                            "shrink-0 border border-pink-200 bg-white font-medium text-foreground/80",
                                             isCompact
                                               ? "px-1.5 py-0 text-[9px]"
                                               : "px-2 py-0.5 text-[10px]",
@@ -744,13 +744,13 @@ export function AutoscuoleAgendaPage({
                                 align="start"
                                 side="right"
                                 sideOffset={12}
-                                className="w-72 rounded-2xl border border-gray-200 bg-white p-3 shadow-lg"
+                                className="w-72 rounded-2xl border border-pink-200 bg-white p-3 shadow-lg"
                               >
                                 <div className="space-y-2">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                     Evento
                                   </div>
-                                  <div className="rounded-xl border border-gray-200 bg-white p-3">
+                                  <div className="rounded-xl border border-pink-200 bg-pink-50/30 p-3">
                                     <div className="text-sm font-semibold text-foreground">
                                       {item.student.firstName} {item.student.lastName}
                                     </div>
@@ -1022,7 +1022,7 @@ export function AutoscuoleAgendaPage({
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3">
+            <div className="flex items-center justify-between rounded-2xl border border-pink-200 bg-pink-50/30 px-4 py-3">
               <span className="text-sm">Manda proposta</span>
               <Checkbox
                 checked={form.sendProposal}
@@ -1271,8 +1271,8 @@ function FilterTag({
       className={cn(
         "inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition",
         active
-          ? "border-gray-200 bg-white text-foreground shadow-sm"
-          : "border-dashed border-gray-200 bg-white text-muted-foreground hover:bg-gray-50",
+          ? "border-pink-200 bg-white text-foreground shadow-sm"
+          : "border-dashed border-pink-200 bg-white text-muted-foreground hover:bg-pink-50/50",
       )}
     >
       <SlidersHorizontal className="h-3.5 w-3.5" />

@@ -201,7 +201,7 @@ export function WorkflowSummaryDrawer({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,520px)] data-[vaul-drawer-direction=right]:sm:max-w-lg h-full">
-        <DrawerHeader className="border-b border-gray-200 bg-white">
+        <DrawerHeader className="border-b border-pink-200 bg-gradient-to-br from-pink-50 via-white to-yellow-50">
           <DrawerTitle>Dettagli workflow</DrawerTitle>
           <DrawerDescription>
             Rivedi le info principali e gestisci lo stato.
@@ -223,11 +223,11 @@ export function WorkflowSummaryDrawer({
                 <Input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
-                  className="rounded-full border-gray-200 bg-white"
+                  className="rounded-full border-pink-200 bg-white"
                 />
               </div>
 
-              <div className="grid gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="grid gap-3 rounded-2xl border border-pink-200 bg-white p-4 shadow-[0_4px_20px_rgba(236,72,153,0.08)]">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Trigger</span>
                   <span className="font-semibold text-foreground">{triggerLabel}</span>
@@ -241,7 +241,7 @@ export function WorkflowSummaryDrawer({
                     integrations.map((item) => (
                       <span
                         key={item}
-                        className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 font-semibold uppercase tracking-[0.14em]"
+                        className="inline-flex items-center rounded-full border border-pink-200 bg-pink-50/50 px-3 py-1 font-semibold uppercase tracking-[0.14em]"
                       >
                         {item}
                       </span>
@@ -259,7 +259,7 @@ export function WorkflowSummaryDrawer({
                 <div className="flex items-center gap-2">
                   <span
                     className={cn(
-                      "inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                      "inline-flex items-center rounded-full border border-pink-200 bg-pink-50/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                       status === "active" && "text-emerald-700",
                       status === "draft" && "text-slate-600",
                       status === "paused" && "text-amber-700",
@@ -274,7 +274,7 @@ export function WorkflowSummaryDrawer({
                     }
                     disabled={isDraft}
                   >
-                    <SelectTrigger className="h-9 min-w-[150px] rounded-full border-gray-200 bg-white">
+                    <SelectTrigger className="h-9 min-w-[150px] rounded-full border-pink-200 bg-white">
                       <SelectValue placeholder="Stato" />
                     </SelectTrigger>
                     <SelectContent>
@@ -315,7 +315,7 @@ export function WorkflowSummaryDrawer({
             </>
           )}
         </div>
-        <DrawerFooter className="sticky bottom-0 border-t border-gray-200 bg-white flex-col gap-3 px-6 py-4">
+        <DrawerFooter className="sticky bottom-0 border-t border-pink-200 bg-white flex-col gap-3 px-6 py-4">
           <Button
             type="button"
             className="w-full rounded-full"
