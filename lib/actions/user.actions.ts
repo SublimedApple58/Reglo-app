@@ -487,3 +487,59 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
     return { success: false, message: formatError(error) };
   }
 }
+
+// Create a user directly (no invite) and add them to the company
+export async function createCompanyUser(input: {
+  companyId: string;
+  name: string;
+  email: string;
+  password: string;
+  role: 'member' | 'admin';
+  autoscuolaRole: 'OWNER' | 'INSTRUCTOR' | 'STUDENT';
+}) {
+  try {
+    const session = await auth();
+    const callerId = session?.user?.id;
+    if (!callerId) throw new Error('Non autenticato.');
+
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId: callerId, companyId: input.companyId },
+    });
+    if (!membership || membership.role !== 'admin') {
+      throw new Error('Solo gli admin possono creare utenti.');
+    }
+
+    const email = input.email.trim().toLowerCase();
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) throw new Error('Esiste già un account con questa email.');
+
+    const hashedPassword = await hash(input.password);
+
+    await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: input.name.trim(),
+          email,
+          password: hashedPassword,
+          role: 'user',
+          activeCompanyId: input.companyId,
+        },
+      });
+
+      await tx.companyMember.create({
+        data: {
+          companyId: input.companyId,
+          userId: user.id,
+          role: input.role,
+          autoscuolaRole: input.autoscuolaRole,
+        },
+      });
+    });
+
+    revalidatePath('/admin/users');
+    return { success: true, message: 'Utente creato con successo.' };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}

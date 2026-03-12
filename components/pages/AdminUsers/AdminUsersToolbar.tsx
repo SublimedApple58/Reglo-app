@@ -10,10 +10,11 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MailPlus } from "lucide-react";
+import { MailPlus, UserPlus } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
+import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
 
 type AdminUsersToolbarProps = {
   totalRows: number;
@@ -27,6 +28,7 @@ export function AdminUsersToolbar({
   const [showInput, setShowInput] = React.useState(true);
   const [value, setValue] = React.useState(initialQuery ?? "");
   const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [createOpen, setCreateOpen] = React.useState(false);
   const company = useAtomValue(companyAtom);
   const router = useRouter();
   const pathname = usePathname();
@@ -67,10 +69,17 @@ export function AdminUsersToolbar({
               isAdmin
                 ? [
                     {
+                      id: "create-member",
+                      label: "Crea utente",
+                      icon: UserPlus,
+                      variant: "default",
+                      onClick: () => setCreateOpen(true),
+                    },
+                    {
                       id: "invite-member",
                       label: "Invita utente",
                       icon: MailPlus,
-                      variant: "default",
+                      variant: "outline" as const,
                       onClick: () => setInviteOpen(true),
                     },
                   ]
@@ -100,6 +109,7 @@ export function AdminUsersToolbar({
         </form>
       </div>
       <AdminUsersInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
+      <AdminUsersCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
     </>
   );
 }
