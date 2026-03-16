@@ -35,6 +35,8 @@ const slotSchema = z.object({
   ownerId: z.string().uuid(),
   startsAt: z.string(),
   endsAt: z.string(),
+  startsAt2: z.string().optional(),
+  endsAt2: z.string().optional(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
   weeks: z.number().int().min(1).max(12).optional(),
 });
@@ -287,7 +289,7 @@ const getSlotEnd = (start: Date, durationMinutes: number) => {
 
 const isWeeklyAvailabilityCovering = (
   availability:
-    | { daysOfWeek: number[]; startMinutes: number; endMinutes: number }
+    | { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null }
     | null
     | undefined,
   startsAt: Date,
@@ -296,13 +298,29 @@ const isWeeklyAvailabilityCovering = (
   if (!availability) return false;
   const dayOfWeek = dayOfWeekFromDate(startsAt);
   if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
-  if (availability.endMinutes <= availability.startMinutes) return false;
   const startMinutes = minutesFromDate(startsAt);
   const endMinutes = minutesFromDate(endsAt);
-  return (
+
+  // Check primary range
+  const inRange1 =
+    availability.endMinutes > availability.startMinutes &&
     startMinutes >= availability.startMinutes &&
-    endMinutes <= availability.endMinutes
-  );
+    endMinutes <= availability.endMinutes;
+  if (inRange1) return true;
+
+  // Check secondary range
+  if (
+    availability.startMinutes2 != null &&
+    availability.endMinutes2 != null &&
+    availability.endMinutes2 > availability.startMinutes2
+  ) {
+    const inRange2 =
+      startMinutes >= availability.startMinutes2 &&
+      endMinutes <= availability.endMinutes2;
+    if (inRange2) return true;
+  }
+
+  return false;
 };
 
 const hasAppointmentConflict = (
@@ -382,6 +400,21 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
       return { success: false, message: "Intervallo non valido." };
     }
 
+    let startMinutes2: number | null = null;
+    let endMinutes2: number | null = null;
+    if (payload.startsAt2 && payload.endsAt2) {
+      const start2 = new Date(payload.startsAt2);
+      const end2 = new Date(payload.endsAt2);
+      if (!Number.isNaN(start2.getTime()) && !Number.isNaN(end2.getTime())) {
+        startMinutes2 = minutesFromDate(start2);
+        endMinutes2 = minutesFromDate(end2);
+        if (endMinutes2 <= startMinutes2) {
+          startMinutes2 = null;
+          endMinutes2 = null;
+        }
+      }
+    }
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -394,6 +427,8 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
         daysOfWeek,
         startMinutes,
         endMinutes,
+        startMinutes2,
+        endMinutes2,
       },
       create: {
         companyId: membership.companyId,
@@ -402,6 +437,8 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
         daysOfWeek,
         startMinutes,
         endMinutes,
+        startMinutes2,
+        endMinutes2,
       },
     });
 
