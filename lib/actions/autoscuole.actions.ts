@@ -3324,9 +3324,9 @@ export async function generateTestPaymentReceipt(
 
 export async function getCompanyInviteCode() {
   try {
-    const { companyId } = await requireServiceAccess("AUTOSCUOLE");
+    const { activeCompanyId } = await requireServiceAccess("AUTOSCUOLE");
     const company = await prisma.company.findUnique({
-      where: { id: companyId },
+      where: { id: activeCompanyId },
       select: { inviteCode: true },
     });
     return { success: true as const, data: company?.inviteCode ?? null };
