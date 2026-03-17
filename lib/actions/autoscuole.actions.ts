@@ -563,7 +563,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         ? Math.max(1, Math.min(600, Math.trunc(input.limit)))
         : 500;
 
-    const [appointments, students, instructors, vehicles] = await Promise.all([
+    const [appointments, students, instructors, vehicles, instructorBlocks] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: {
           companyId,
@@ -618,6 +618,25 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       listDirectoryStudents(companyId),
       listAutoscuolaInstructorsReadOnly(companyId),
       listAutoscuolaVehiclesReadOnly(companyId),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId,
+          startsAt: { lt: to },
+          endsAt: { gt: from },
+          ...(input.instructorId ? { instructorId: input.instructorId } : {}),
+        },
+        select: {
+          id: true,
+          companyId: true,
+          instructorId: true,
+          startsAt: true,
+          endsAt: true,
+          reason: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { startsAt: "asc" },
+      }),
     ]);
 
     return {
@@ -631,6 +650,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         students,
         instructors,
         vehicles,
+        instructorBlocks,
         meta: {
           from,
           to,
@@ -3336,5 +3356,92 @@ export async function getCompanyInviteCode() {
     return { success: true as const, data: company?.inviteCode ?? null };
   } catch (error) {
     return { success: false as const, message: formatError(error), data: null };
+  }
+}
+
+// ─── Instructor Blocks ──────────────────────────────────────────────────────
+
+const createInstructorBlockSchema = z.object({
+  startsAt: z.string(),
+  endsAt: z.string(),
+  reason: z.string().optional(),
+});
+
+export async function createInstructorBlock(
+  input: z.infer<typeof createInstructorBlockSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = createInstructorBlockSchema.parse(input);
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: membership.userId,
+        status: { not: "inactive" },
+      },
+      select: { id: true },
+    });
+
+    if (!instructor) {
+      return { success: false as const, message: "Profilo istruttore non trovato." };
+    }
+
+    const block = await prisma.autoscuolaInstructorBlock.create({
+      data: {
+        companyId: membership.companyId,
+        instructorId: instructor.id,
+        startsAt: new Date(payload.startsAt),
+        endsAt: new Date(payload.endsAt),
+        reason: payload.reason ?? null,
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    return { success: true as const, data: block };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function deleteInstructorBlock(blockId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: membership.userId,
+        status: { not: "inactive" },
+      },
+      select: { id: true },
+    });
+
+    if (!instructor) {
+      return { success: false as const, message: "Profilo istruttore non trovato." };
+    }
+
+    const block = await prisma.autoscuolaInstructorBlock.findFirst({
+      where: {
+        id: blockId,
+        companyId: membership.companyId,
+        instructorId: instructor.id,
+      },
+    });
+
+    if (!block) {
+      return { success: false as const, message: "Blocco non trovato." };
+    }
+
+    await prisma.autoscuolaInstructorBlock.delete({
+      where: { id: blockId },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    return { success: true as const, data: { deleted: true } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }

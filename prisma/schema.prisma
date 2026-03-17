@@ -207,6 +207,7 @@ model Company {
   autoscuolaCases                AutoscuolaCase[]
   autoscuolaAppointments         AutoscuolaAppointment[]
   autoscuolaInstructors          AutoscuolaInstructor[]
+  autoscuolaInstructorBlocks     AutoscuolaInstructorBlock[]
   autoscuolaVehicles             AutoscuolaVehicle[]
   autoscuolaAvailabilitySlots    AutoscuolaAvailabilitySlot[]
   autoscuolaWeeklyAvailabilities AutoscuolaWeeklyAvailability[]
@@ -651,13 +652,31 @@ model AutoscuolaInstructor {
   createdAt DateTime @default(now()) @db.Timestamp(6)
   updatedAt DateTime @updatedAt
 
-  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user         User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company      Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user         User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments AutoscuolaAppointment[]
+  blocks       AutoscuolaInstructorBlock[]
 
   @@unique([companyId, userId])
   @@index([companyId])
   @@index([userId])
+}
+
+model AutoscuolaInstructorBlock {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @db.Uuid
+  instructorId String   @db.Uuid
+  startsAt     DateTime @db.Timestamp(6)
+  endsAt       DateTime @db.Timestamp(6)
+  reason       String?
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt
+
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, instructorId, startsAt])
+  @@index([instructorId, startsAt])
 }
 
 model AutoscuolaVehicle {
