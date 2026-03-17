@@ -497,31 +497,12 @@ export async function deleteAvailabilitySlots(input: z.infer<typeof deleteSlotsS
       },
     });
 
-    if (payload.ownerType === "instructor" || payload.ownerType === "vehicle") {
-      const ownerField =
-        payload.ownerType === "instructor"
-          ? { instructorId: payload.ownerId }
-          : { vehicleId: payload.ownerId };
-
-      const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId: membership.companyId,
-          startsAt: { gt: new Date() },
-          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
-          ...ownerField,
-        },
-        select: { id: true },
-      });
-
-      if (impactedAppointments.length) {
-        await cancelAndQueueOperationalRepositionByResource({
-          companyId: membership.companyId,
-          appointmentIds: impactedAppointments.map((item) => item.id),
-          reason: "availability_changed",
-          actorUserId: membership.userId,
-        });
-      }
-    }
+    // NOTE: We intentionally do NOT cancel future appointments here.
+    // This function is called as a "reset" step before createAvailabilitySlots,
+    // which will then check future appointments against the NEW availability
+    // and only cancel those that no longer fit. Cancelling here would
+    // destroy all appointments even when the user is just re-saving
+    // the same or similar availability.
 
     return { success: true, data: { count: deleted.count } };
   } catch (error) {
