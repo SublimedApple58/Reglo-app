@@ -1430,7 +1430,9 @@ export async function createAutoscuolaAppointment(
       return { success: false, message: "Operazione non consentita." };
     }
 
-    const shouldSendProposal = payload.sendProposal || isInstructorActor;
+    const shouldSendProposal =
+      payload.sendProposal ||
+      (isInstructorActor && governance.instructorBookingMode === "guided_proposal");
     const appointmentStatus = shouldSendProposal
       ? "proposal"
       : payload.status ?? "scheduled";
