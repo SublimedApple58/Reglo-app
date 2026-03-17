@@ -80,6 +80,7 @@ export async function GET(request: Request) {
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone ?? null,
         role: user.role,
       },
       activeCompanyId: user.activeCompanyId,

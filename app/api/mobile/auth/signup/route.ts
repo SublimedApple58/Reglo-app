@@ -83,6 +83,7 @@ export async function POST(request: Request) {
           id: createdUser.user.id,
           name: createdUser.user.name,
           email: createdUser.user.email,
+          phone: createdUser.user.phone ?? null,
           role: createdUser.user.role,
         },
         activeCompanyId: createdUser.company.id,

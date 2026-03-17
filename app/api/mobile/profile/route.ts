@@ -6,6 +6,7 @@ import { formatError } from "@/lib/utils";
 
 const updateProfileSchema = z.object({
   name: z.string().min(3),
+  phone: z.string().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -28,15 +29,17 @@ export async function PATCH(request: Request) {
 
     const payload = updateProfileSchema.parse(await request.json());
     const name = payload.name.trim();
+    const phone = payload.phone?.trim() || undefined;
 
     const user = await prisma.user.update({
       where: { id: mobileToken.userId },
-      data: { name },
+      data: { name, ...(phone !== undefined ? { phone } : {}) },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        phone: true,
       },
     });
 
