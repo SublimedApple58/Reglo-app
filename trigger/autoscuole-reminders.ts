@@ -2,6 +2,7 @@ import { schedules } from "@trigger.dev/sdk/v3";
 import { getPrisma } from "@/trigger/workflow-runner/prisma";
 import {
   processAutoscuolaAutoCompleteCheckedIn,
+  processAutoscuolaAutoPendingReview,
   processAutoscuolaConfiguredAppointmentReminders,
   processAutoscuolaAppointmentReminders,
   processAutoscuolaCaseDeadlines,
@@ -20,6 +21,7 @@ export const autoscuoleReminders = schedules.task({
     const prisma = await getPrisma();
     const now = new Date();
     await processAutoscuolaAutoCompleteCheckedIn({ prisma });
+    await processAutoscuolaAutoPendingReview({ prisma });
     await processAutoscuolaPenaltyCharges({ prisma });
     await processAutoscuolaLessonSettlement({ prisma });
     await processAutoscuolaPaymentRetries({ prisma });

@@ -2194,8 +2194,10 @@ export async function updateAutoscuolaAppointmentStatus(
         };
       }
 
+      const currentStatus = normalizeStatus(appointment.status);
       const now = new Date();
-      if (!isWithinInstructorStatusWindow(appointment, now)) {
+      // pending_review lessons can be acted on at any time (no time window)
+      if (currentStatus !== "pending_review" && !isWithinInstructorStatusWindow(appointment, now)) {
         if (now < new Date(appointment.startsAt.getTime() - 10 * 60 * 1000)) {
           return {
             success: false,
