@@ -557,8 +557,19 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     const slots = availabilities.flatMap((availability) => {
       if (!availability.daysOfWeek.includes(dayOfWeek)) return [];
       if (availability.endMinutes <= availability.startMinutes) return [];
-      const startMinutes = Math.ceil(availability.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
-      const lastStart = availability.endMinutes - SLOT_MINUTES;
+
+      // Collect time ranges: primary + optional secondary
+      const ranges: Array<{ from: number; to: number }> = [
+        { from: availability.startMinutes, to: availability.endMinutes },
+      ];
+      if (
+        availability.startMinutes2 != null &&
+        availability.endMinutes2 != null &&
+        availability.endMinutes2 > availability.startMinutes2
+      ) {
+        ranges.push({ from: availability.startMinutes2, to: availability.endMinutes2 });
+      }
+
       const ownerSlots: Array<{
         id: string;
         companyId: string;
@@ -570,24 +581,29 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
         createdAt: Date;
         updatedAt: Date;
       }> = [];
-      for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
-        const startsAt = toTimeZoneDate(
-          dayParts,
-          Math.floor(minutes / 60),
-          minutes % 60,
-        );
-        const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-        ownerSlots.push({
-          id: randomUUID(),
-          companyId: membership.companyId,
-          ownerType: availability.ownerType,
-          ownerId: availability.ownerId,
-          startsAt,
-          endsAt,
-          status: "open",
-          createdAt: startsAt,
-          updatedAt: startsAt,
-        });
+
+      for (const range of ranges) {
+        const startMinutes = Math.ceil(range.from / SLOT_MINUTES) * SLOT_MINUTES;
+        const lastStart = range.to - SLOT_MINUTES;
+        for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
+          const startsAt = toTimeZoneDate(
+            dayParts,
+            Math.floor(minutes / 60),
+            minutes % 60,
+          );
+          const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+          ownerSlots.push({
+            id: randomUUID(),
+            companyId: membership.companyId,
+            ownerType: availability.ownerType,
+            ownerId: availability.ownerId,
+            startsAt,
+            endsAt,
+            status: "open",
+            createdAt: startsAt,
+            updatedAt: startsAt,
+          });
+        }
       }
       return ownerSlots;
     });
