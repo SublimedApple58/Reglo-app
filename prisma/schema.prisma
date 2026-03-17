@@ -193,7 +193,8 @@ model Company {
   name      String
   logoKey   String?
   createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt
+  updatedAt   DateTime @updatedAt
+  inviteCode  String?  @unique
 
   members                        CompanyMember[]
   activeUsers                    User[]                                 @relation("UserActiveCompany")

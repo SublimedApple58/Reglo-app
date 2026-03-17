@@ -3321,3 +3321,16 @@ export async function generateTestPaymentReceipt(
     return { success: false as const, message: formatError(error) };
   }
 }
+
+export async function getCompanyInviteCode() {
+  try {
+    const { companyId } = await requireServiceAccess("AUTOSCUOLE");
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { inviteCode: true },
+    });
+    return { success: true as const, data: company?.inviteCode ?? null };
+  } catch (error) {
+    return { success: false as const, message: formatError(error), data: null };
+  }
+}

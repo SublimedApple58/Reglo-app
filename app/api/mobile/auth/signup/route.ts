@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { signUpFormSchema } from "@/lib/validators";
@@ -6,6 +7,15 @@ import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getDefaultAutoscuolaRole } from "@/lib/autoscuole/roles";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
+
+const INVITE_CODE_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateInviteCode(): string {
+  const bytes = crypto.randomBytes(6);
+  return Array.from(bytes)
+    .map((b) => INVITE_CODE_CHARSET[b % INVITE_CODE_CHARSET.length])
+    .join("");
+}
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +27,7 @@ export async function POST(request: Request) {
 
     const createdUser = await prisma.$transaction(async (tx) => {
       const company = await tx.company.create({
-        data: { name: parsed.companyName.trim() },
+        data: { name: parsed.companyName.trim(), inviteCode: generateInviteCode() },
       });
 
       const user = await tx.user.create({

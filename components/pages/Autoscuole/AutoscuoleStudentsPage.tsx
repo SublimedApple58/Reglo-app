@@ -42,6 +42,7 @@ import {
   getAutoscuolaStudentDrivingRegister,
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
+  getCompanyInviteCode,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -196,6 +197,8 @@ export function AutoscuoleStudentsPage({
   const [creditsInput, setCreditsInput] = React.useState("1");
   const creditsRequestRef = React.useRef(0);
 
+  const [inviteCode, setInviteCode] = React.useState<string | null>(null);
+
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "none">("none");
@@ -325,6 +328,12 @@ export function AutoscuoleStudentsPage({
     load();
   }, [load]);
 
+  React.useEffect(() => {
+    getCompanyInviteCode().then((res) => {
+      if (res.success && res.data) setInviteCode(res.data);
+    });
+  }, []);
+
   return (
     <ClientPageWrapper
       title="Autoscuole"
@@ -337,6 +346,26 @@ export function AutoscuoleStudentsPage({
         {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong space-y-4 p-4">
+          {inviteCode && (
+            <div className="flex items-center justify-between rounded-xl border border-pink-200 bg-pink-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-pink-700">Codice autoscuola:</span>
+                <span className="font-mono text-lg font-bold tracking-widest text-pink-900">
+                  {inviteCode}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteCode);
+                  toast.success({ description: "Codice copiato!" });
+                }}
+              >
+                Copia
+              </Button>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Input
               placeholder="Cerca allievi"
