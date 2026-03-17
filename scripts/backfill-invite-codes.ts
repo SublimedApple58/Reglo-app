@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-import crypto from "crypto";
+const { PrismaClient } = require("@prisma/client");
+const crypto = require("crypto");
 
 const prisma = new PrismaClient();
 
@@ -8,7 +8,7 @@ const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 function generateInviteCode(): string {
   const bytes = crypto.randomBytes(6);
   return Array.from(bytes)
-    .map((b) => CHARSET[b % CHARSET.length])
+    .map((b: number) => CHARSET[b % CHARSET.length])
     .join("");
 }
 

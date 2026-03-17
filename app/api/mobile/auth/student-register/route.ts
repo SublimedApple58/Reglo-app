@@ -57,6 +57,7 @@ export async function POST(request: Request) {
         data: {
           name: parsed.name,
           email: parsed.email.toLowerCase(),
+          phone: parsed.phone.trim(),
           password: passwordHash,
           role: "user",
           activeCompanyId: company.id,
