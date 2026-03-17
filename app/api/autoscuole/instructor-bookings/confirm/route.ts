@@ -10,6 +10,7 @@ export async function POST(request: Request) {
     instructorId: payload.instructorId,
     vehicleId: payload.vehicleId,
     type: payload.lessonType,
+    sendProposal: false,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
