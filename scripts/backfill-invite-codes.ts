@@ -6,9 +6,9 @@ const prisma = new PrismaClient();
 const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateInviteCode(): string {
-  const bytes = nodeCrypto.randomBytes(6);
-  return Array.from(bytes)
-    .map((b: number) => CHARSET[b % CHARSET.length])
+  const bytes: Buffer = nodeCrypto.randomBytes(6);
+  return Array.from(bytes as Uint8Array)
+    .map((b) => CHARSET[b % CHARSET.length])
     .join("");
 }
 
