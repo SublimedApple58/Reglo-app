@@ -7,6 +7,7 @@ import { getDefaultAutoscuolaRole, type AutoscuolaRole } from "@/lib/autoscuole/
 import { formatError } from "@/lib/utils";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-response";
+import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
 
 const acceptInviteSchema = z.object({
   mode: z.enum(["existing", "register"]),
@@ -203,6 +204,22 @@ export async function POST(
       });
 
       userId = createdUser.id;
+    }
+
+    // Auto-create AutoscuolaInstructor record if role is INSTRUCTOR
+    const resolvedRole =
+      (invite.autoscuolaRole as AutoscuolaRole | null) ??
+      getDefaultAutoscuolaRole(invite.role);
+    if (resolvedRole === "INSTRUCTOR") {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true, email: true },
+      });
+      await getOrCreateInstructorForUser({
+        companyId: invite.companyId,
+        userId,
+        name: user?.name ?? user?.email?.split("@")[0] ?? "Istruttore",
+      });
     }
 
     const tokenRes = await issueMobileToken({
