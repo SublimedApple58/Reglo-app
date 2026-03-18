@@ -167,11 +167,17 @@ const buildWeekOptions = (): WeekOption[] => {
   return options;
 };
 
-type OverrideInfo = {
-  weekStart: string;
-  daysOfWeek: number[];
+type DayScheduleEntry = {
+  dayOfWeek: number;
   startMinutes: number;
   endMinutes: number;
+  startMinutes2?: number | null;
+  endMinutes2?: number | null;
+};
+
+type OverrideInfo = {
+  weekStart: string;
+  schedule: DayScheduleEntry[];
 };
 
 export function AutoscuoleResourcesPage({
@@ -230,6 +236,8 @@ export function AutoscuoleResourcesPage({
   const [instrSelectedWeek, setInstrSelectedWeek] = React.useState<string | null>(null); // null = "Predefinito"
   const [instrOverrides, setInstrOverrides] = React.useState<OverrideInfo[]>([]);
   const weekOptions = React.useMemo(buildWeekOptions, []);
+  // Per-day schedule for override weeks: map dayOfWeek → { startMinutes, endMinutes }
+  const [instrDaySchedule, setInstrDaySchedule] = React.useState<DayScheduleEntry[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -261,6 +269,7 @@ export function AutoscuoleResourcesPage({
   // Week override state for vehicle dialog
   const [vehSelectedWeek, setVehSelectedWeek] = React.useState<string | null>(null);
   const [vehOverrides, setVehOverrides] = React.useState<OverrideInfo[]>([]);
+  const [vehDaySchedule, setVehDaySchedule] = React.useState<DayScheduleEntry[]>([]);
 
   const loadResources = React.useCallback(async () => {
     const [instructorRes, vehicleRes, instrWeeklyRes, vehicleWeeklyRes] = await Promise.all([
@@ -627,6 +636,7 @@ export function AutoscuoleResourcesPage({
     setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
     setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
     setInstrSelectedWeek(null);
+    setInstrDaySchedule([]);
     // Load overrides for this instructor
     getWeeklyAvailabilityOverrides({
       ownerType: "instructor",
@@ -636,9 +646,7 @@ export function AutoscuoleResourcesPage({
         setInstrOverrides(
           res.data.map((o) => ({
             weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
-            daysOfWeek: o.daysOfWeek,
-            startMinutes: o.startMinutes,
-            endMinutes: o.endMinutes,
+            schedule: (Array.isArray(o.schedule) ? o.schedule : []) as DayScheduleEntry[],
           })),
         );
       }
@@ -651,27 +659,34 @@ export function AutoscuoleResourcesPage({
     );
   };
 
+  /** Build default per-day schedule from the flat base availability */
+  const buildDefaultDaySchedule = (instructorId: string): DayScheduleEntry[] => {
+    const current = instructorWeeklyAvailability[instructorId];
+    if (!current) return WEEKDAY_OPTIONS.map((d) => ({ dayOfWeek: d.value, startMinutes: 9 * 60, endMinutes: 18 * 60 })).filter((d) => [1,2,3,4,5].includes(d.dayOfWeek));
+    return current.daysOfWeek.map((dow) => ({
+      dayOfWeek: dow,
+      startMinutes: current.startMinutes,
+      endMinutes: current.endMinutes,
+    }));
+  };
+
   const handleSelectInstrWeek = (weekStart: string | null) => {
     setInstrSelectedWeek(weekStart);
     if (!availInstructor) return;
     if (weekStart === null) {
-      // "Predefinito" selected — load the default
+      // "Predefinito" selected — load the flat default
       const current = instructorWeeklyAvailability[availInstructor.id];
       setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
       setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
       setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+      setInstrDaySchedule([]);
     } else {
-      // Specific week selected — load override if it exists, otherwise pre-fill from default
+      // Specific week selected — load override schedule or build from default
       const override = instrOverrides.find((o) => o.weekStart === weekStart);
       if (override) {
-        setInstrDays(override.daysOfWeek);
-        setInstrStartMinutes(override.startMinutes);
-        setInstrEndMinutes(override.endMinutes);
+        setInstrDaySchedule(override.schedule);
       } else {
-        const current = instructorWeeklyAvailability[availInstructor.id];
-        setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-        setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-        setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+        setInstrDaySchedule(buildDefaultDaySchedule(availInstructor.id));
       }
     }
   };
@@ -689,24 +704,26 @@ export function AutoscuoleResourcesPage({
     setSavingInstrAvailability(true);
 
     if (instrSelectedWeek) {
-      // Save as override for the specific week
+      // Save as override for the specific week with per-day schedule
+      if (!instrDaySchedule.length) {
+        toast.error({ description: "Configura almeno un giorno." });
+        setSavingInstrAvailability(false);
+        return;
+      }
       const res = await setWeeklyAvailabilityOverride({
         ownerType: "instructor",
         ownerId: availInstructor.id,
         weekStart: instrSelectedWeek,
-        daysOfWeek: instrDays,
-        startMinutes: instrStartMinutes,
-        endMinutes: instrEndMinutes,
+        schedule: instrDaySchedule,
       });
       setSavingInstrAvailability(false);
       if (!res.success) {
         toast.error({ description: res.message ?? "Impossibile salvare l'override." });
         return;
       }
-      // Update local override list
       setInstrOverrides((prev) => {
         const filtered = prev.filter((o) => o.weekStart !== instrSelectedWeek);
-        return [...filtered, { weekStart: instrSelectedWeek, daysOfWeek: instrDays, startMinutes: instrStartMinutes, endMinutes: instrEndMinutes }];
+        return [...filtered, { weekStart: instrSelectedWeek, schedule: instrDaySchedule }];
       });
       setAvailInstructor(null);
       toast.success({ description: "Override settimanale salvato." });
@@ -894,6 +911,7 @@ export function AutoscuoleResourcesPage({
     setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
     setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
     setVehSelectedWeek(null);
+    setVehDaySchedule([]);
     getWeeklyAvailabilityOverrides({
       ownerType: "vehicle",
       ownerId: vehicle.id,
@@ -902,9 +920,7 @@ export function AutoscuoleResourcesPage({
         setVehOverrides(
           res.data.map((o) => ({
             weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
-            daysOfWeek: o.daysOfWeek,
-            startMinutes: o.startMinutes,
-            endMinutes: o.endMinutes,
+            schedule: (Array.isArray(o.schedule) ? o.schedule : []) as DayScheduleEntry[],
           })),
         );
       }
@@ -917,6 +933,16 @@ export function AutoscuoleResourcesPage({
     );
   };
 
+  const buildDefaultVehDaySchedule = (vehicleId: string): DayScheduleEntry[] => {
+    const current = vehicleWeeklyAvailability[vehicleId];
+    if (!current) return [1,2,3,4,5].map((dow) => ({ dayOfWeek: dow, startMinutes: 9 * 60, endMinutes: 18 * 60 }));
+    return current.daysOfWeek.map((dow) => ({
+      dayOfWeek: dow,
+      startMinutes: current.startMinutes,
+      endMinutes: current.endMinutes,
+    }));
+  };
+
   const handleSelectVehWeek = (weekStart: string | null) => {
     setVehSelectedWeek(weekStart);
     if (!availVehicle) return;
@@ -925,17 +951,13 @@ export function AutoscuoleResourcesPage({
       setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
       setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
       setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+      setVehDaySchedule([]);
     } else {
       const override = vehOverrides.find((o) => o.weekStart === weekStart);
       if (override) {
-        setAvailDays(override.daysOfWeek);
-        setAvailStartMinutes(override.startMinutes);
-        setAvailEndMinutes(override.endMinutes);
+        setVehDaySchedule(override.schedule);
       } else {
-        const current = vehicleWeeklyAvailability[availVehicle.id];
-        setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-        setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
-        setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+        setVehDaySchedule(buildDefaultVehDaySchedule(availVehicle.id));
       }
     }
   };
@@ -953,13 +975,16 @@ export function AutoscuoleResourcesPage({
     setSavingAvailability(true);
 
     if (vehSelectedWeek) {
+      if (!vehDaySchedule.length) {
+        toast.error({ description: "Configura almeno un giorno." });
+        setSavingAvailability(false);
+        return;
+      }
       const res = await setWeeklyAvailabilityOverride({
         ownerType: "vehicle",
         ownerId: availVehicle.id,
         weekStart: vehSelectedWeek,
-        daysOfWeek: availDays,
-        startMinutes: availStartMinutes,
-        endMinutes: availEndMinutes,
+        schedule: vehDaySchedule,
       });
       setSavingAvailability(false);
       if (!res.success) {
@@ -968,7 +993,7 @@ export function AutoscuoleResourcesPage({
       }
       setVehOverrides((prev) => {
         const filtered = prev.filter((o) => o.weekStart !== vehSelectedWeek);
-        return [...filtered, { weekStart: vehSelectedWeek, daysOfWeek: availDays, startMinutes: availStartMinutes, endMinutes: availEndMinutes }];
+        return [...filtered, { weekStart: vehSelectedWeek, schedule: vehDaySchedule }];
       });
       setAvailVehicle(null);
       toast.success({ description: "Override settimanale salvato." });
@@ -1515,67 +1540,131 @@ export function AutoscuoleResourcesPage({
                   })}
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {WEEKDAY_OPTIONS.map((day) => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => toggleInstrDay(day.value)}
-                      className={cn(
-                        "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                        instrDays.includes(day.value)
-                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                      )}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Orario</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-muted-foreground">Inizio</div>
-                    <Select
-                      value={String(instrStartMinutes)}
-                      onValueChange={(v) => setInstrStartMinutes(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {START_TIME_OPTIONS.map((m) => (
-                          <SelectItem key={`instr-start-${m}`} value={String(m)}>
-                            {formatMinutes(m)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {/* ── Default mode: flat days + single time range ── */}
+              {!instrSelectedWeek && (
+                <>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAY_OPTIONS.map((day) => (
+                        <button
+                          key={day.value}
+                          type="button"
+                          onClick={() => toggleInstrDay(day.value)}
+                          className={cn(
+                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                            instrDays.includes(day.value)
+                              ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                              : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                          )}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-muted-foreground">Fine</div>
-                    <Select
-                      value={String(instrEndMinutes)}
-                      onValueChange={(v) => setInstrEndMinutes(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {END_TIME_OPTIONS.map((m) => (
-                          <SelectItem key={`instr-end-${m}`} value={String(m)}>
-                            {formatMinutes(m)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Orario</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground">Inizio</div>
+                        <Select
+                          value={String(instrStartMinutes)}
+                          onValueChange={(v) => setInstrStartMinutes(Number(v))}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {START_TIME_OPTIONS.map((m) => (
+                              <SelectItem key={`instr-start-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground">Fine</div>
+                        <Select
+                          value={String(instrEndMinutes)}
+                          onValueChange={(v) => setInstrEndMinutes(Number(v))}
+                        >
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {END_TIME_OPTIONS.map((m) => (
+                              <SelectItem key={`instr-end-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* ── Override mode: per-day schedule editor ── */}
+              {instrSelectedWeek && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Orario per giorno</div>
+                  <div className="space-y-1.5">
+                    {WEEKDAY_OPTIONS.map((day) => {
+                      const entry = instrDaySchedule.find((e) => e.dayOfWeek === day.value);
+                      const isActive = Boolean(entry);
+                      return (
+                        <div key={day.value} className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isActive) {
+                                setInstrDaySchedule((prev) => prev.filter((e) => e.dayOfWeek !== day.value));
+                              } else {
+                                setInstrDaySchedule((prev) => [...prev, { dayOfWeek: day.value, startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
+                              }
+                            }}
+                            className={cn(
+                              "w-10 shrink-0 rounded-full border px-1 py-0.5 text-xs font-medium transition-all",
+                              isActive
+                                ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                                : "border-white/70 bg-white/80 text-muted-foreground",
+                            )}
+                          >
+                            {day.label}
+                          </button>
+                          {isActive && entry && (
+                            <>
+                              <Select
+                                value={String(entry.startMinutes)}
+                                onValueChange={(v) => setInstrDaySchedule((prev) =>
+                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, startMinutes: Number(v) } : e),
+                                )}
+                              >
+                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {START_TIME_OPTIONS.map((m) => (
+                                    <SelectItem key={`id-s-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <span className="text-xs text-muted-foreground">–</span>
+                              <Select
+                                value={String(entry.endMinutes)}
+                                onValueChange={(v) => setInstrDaySchedule((prev) =>
+                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, endMinutes: Number(v) } : e),
+                                )}
+                              >
+                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {END_TIME_OPTIONS.map((m) => (
+                                    <SelectItem key={`id-e-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </>
+                          )}
+                          {!isActive && <span className="text-xs text-muted-foreground italic">spento</span>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
               {instrSelectedWeek ? (
@@ -1796,67 +1885,122 @@ export function AutoscuoleResourcesPage({
                   })}
                 </div>
               </div>
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {WEEKDAY_OPTIONS.map((day) => (
-                    <button
-                      key={day.value}
-                      type="button"
-                      onClick={() => toggleAvailDay(day.value)}
-                      className={cn(
-                        "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                        availDays.includes(day.value)
-                          ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                          : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                      )}
-                    >
-                      {day.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Orario</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-muted-foreground">Inizio</div>
-                    <Select
-                      value={String(availStartMinutes)}
-                      onValueChange={(v) => setAvailStartMinutes(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {START_TIME_OPTIONS.map((m) => (
-                          <SelectItem key={`avail-start-${m}`} value={String(m)}>
-                            {formatMinutes(m)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+              {!vehSelectedWeek && (
+                <>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAY_OPTIONS.map((day) => (
+                        <button
+                          key={day.value}
+                          type="button"
+                          onClick={() => toggleAvailDay(day.value)}
+                          className={cn(
+                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                            availDays.includes(day.value)
+                              ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                              : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                          )}
+                        >
+                          {day.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="text-[11px] text-muted-foreground">Fine</div>
-                    <Select
-                      value={String(availEndMinutes)}
-                      onValueChange={(v) => setAvailEndMinutes(Number(v))}
-                    >
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {END_TIME_OPTIONS.map((m) => (
-                          <SelectItem key={`avail-end-${m}`} value={String(m)}>
-                            {formatMinutes(m)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-muted-foreground">Orario</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground">Inizio</div>
+                        <Select value={String(availStartMinutes)} onValueChange={(v) => setAvailStartMinutes(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {START_TIME_OPTIONS.map((m) => (
+                              <SelectItem key={`avail-start-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[11px] text-muted-foreground">Fine</div>
+                        <Select value={String(availEndMinutes)} onValueChange={(v) => setAvailEndMinutes(Number(v))}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {END_TIME_OPTIONS.map((m) => (
+                              <SelectItem key={`avail-end-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+              {vehSelectedWeek && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Orario per giorno</div>
+                  <div className="space-y-1.5">
+                    {WEEKDAY_OPTIONS.map((day) => {
+                      const entry = vehDaySchedule.find((e) => e.dayOfWeek === day.value);
+                      const isActive = Boolean(entry);
+                      return (
+                        <div key={day.value} className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isActive) {
+                                setVehDaySchedule((prev) => prev.filter((e) => e.dayOfWeek !== day.value));
+                              } else {
+                                setVehDaySchedule((prev) => [...prev, { dayOfWeek: day.value, startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
+                              }
+                            }}
+                            className={cn(
+                              "w-10 shrink-0 rounded-full border px-1 py-0.5 text-xs font-medium transition-all",
+                              isActive
+                                ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                                : "border-white/70 bg-white/80 text-muted-foreground",
+                            )}
+                          >
+                            {day.label}
+                          </button>
+                          {isActive && entry && (
+                            <>
+                              <Select
+                                value={String(entry.startMinutes)}
+                                onValueChange={(v) => setVehDaySchedule((prev) =>
+                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, startMinutes: Number(v) } : e),
+                                )}
+                              >
+                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {START_TIME_OPTIONS.map((m) => (
+                                    <SelectItem key={`vd-s-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <span className="text-xs text-muted-foreground">–</span>
+                              <Select
+                                value={String(entry.endMinutes)}
+                                onValueChange={(v) => setVehDaySchedule((prev) =>
+                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, endMinutes: Number(v) } : e),
+                                )}
+                              >
+                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {END_TIME_OPTIONS.map((m) => (
+                                    <SelectItem key={`vd-e-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </>
+                          )}
+                          {!isActive && <span className="text-xs text-muted-foreground italic">spento</span>}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
+              )}
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
               {vehSelectedWeek ? (

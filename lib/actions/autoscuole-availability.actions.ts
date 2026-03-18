@@ -298,19 +298,54 @@ type AvailabilityRecord = {
 };
 
 /**
+ * A single day entry inside a weekly override schedule JSON.
+ */
+type DayScheduleEntry = {
+  dayOfWeek: number;
+  startMinutes: number;
+  endMinutes: number;
+  startMinutes2?: number | null;
+  endMinutes2?: number | null;
+};
+
+const parseSchedule = (raw: unknown): DayScheduleEntry[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (e): e is DayScheduleEntry =>
+      typeof e === "object" &&
+      e !== null &&
+      typeof e.dayOfWeek === "number" &&
+      typeof e.startMinutes === "number" &&
+      typeof e.endMinutes === "number",
+  );
+};
+
+/**
+ * Converts a per-day schedule entry into an AvailabilityRecord
+ * that existing pure functions (isWeeklyAvailabilityCovering, isOwnerAvailable) can consume.
+ */
+const dayEntryToAvailability = (entry: DayScheduleEntry): AvailabilityRecord => ({
+  daysOfWeek: [entry.dayOfWeek],
+  startMinutes: entry.startMinutes,
+  endMinutes: entry.endMinutes,
+  startMinutes2: entry.startMinutes2 ?? null,
+  endMinutes2: entry.endMinutes2 ?? null,
+});
+
+/**
  * Returns the Monday (ISO week start) for a given date in Europe/Rome timezone.
  */
 export const getWeekStart = (date: Date): Date => {
   const parts = getZonedParts(date);
   const weekday = WEEKDAY_TO_INDEX[parts.weekday] ?? 0; // 0=Sun..6=Sat
-  const daysBack = weekday === 0 ? 6 : weekday - 1; // Mon=0 back, Tue=1 back, ..., Sun=6 back
+  const daysBack = weekday === 0 ? 6 : weekday - 1;
   const monday = new Date(Date.UTC(parts.year, parts.month - 1, parts.day - daysBack));
   return monday;
 };
 
 /**
  * Resolves effective availability for a single owner on a given date.
- * If an override exists for that ISO week, returns the override; otherwise the default.
+ * If an override exists for that ISO week, extracts the specific day entry.
  */
 export const resolveEffectiveAvailability = async (
   companyId: string,
@@ -319,6 +354,7 @@ export const resolveEffectiveAvailability = async (
   date: Date,
 ): Promise<AvailabilityRecord | null> => {
   const weekStart = getWeekStart(date);
+  const dayOfWeek = getDayOfWeekFromDateParts(getZonedParts(date));
 
   const override = await prisma.autoscuolaWeeklyAvailabilityOverride.findUnique({
     where: {
@@ -330,7 +366,12 @@ export const resolveEffectiveAvailability = async (
       },
     },
   });
-  if (override) return override;
+  if (override) {
+    const entries = parseSchedule(override.schedule);
+    const dayEntry = entries.find((e) => e.dayOfWeek === dayOfWeek);
+    if (!dayEntry) return { daysOfWeek: [], startMinutes: 0, endMinutes: 0 }; // day is off
+    return dayEntryToAvailability(dayEntry);
+  }
 
   const base = await prisma.autoscuolaWeeklyAvailability.findFirst({
     where: { companyId, ownerType, ownerId },
@@ -338,9 +379,14 @@ export const resolveEffectiveAvailability = async (
   return base;
 };
 
+type OverrideRaw = { ownerId: string; weekStart: Date | string; schedule: unknown };
+
 /**
  * Batch-fetches overrides for multiple owners across a date range.
  * Returns a function (ownerId, date) => AvailabilityRecord | null.
+ *
+ * For overrides, resolves the specific day of week from the schedule JSON.
+ * For defaults, returns the flat base record.
  */
 export const buildAvailabilityResolver = async (
   companyId: string,
@@ -368,7 +414,7 @@ export const buildAvailabilityResolver = async (
             weekStart: { in: weekStarts },
           },
         })
-      : Promise.resolve([]),
+      : Promise.resolve([] as OverrideRaw[]),
     ownerIds.length
       ? prisma.autoscuolaWeeklyAvailability.findMany({
           where: { companyId, ownerType, ownerId: { in: ownerIds } },
@@ -377,10 +423,11 @@ export const buildAvailabilityResolver = async (
   ]);
 
   // Build override map: key = `${ownerId}:${weekStartMs}`
-  const overrideMap = new Map<string, AvailabilityRecord>();
+  // Stores the parsed DayScheduleEntry[] per override record
+  const overrideMap = new Map<string, DayScheduleEntry[]>();
   for (const o of overrides) {
     const key = `${o.ownerId}:${new Date(o.weekStart).getTime()}`;
-    overrideMap.set(key, o);
+    overrideMap.set(key, parseSchedule(o.schedule));
   }
   const defaultMap = new Map<string, AvailabilityRecord>();
   for (const d of defaults) {
@@ -388,10 +435,29 @@ export const buildAvailabilityResolver = async (
   }
 
   return {
+    /**
+     * Resolves availability for an owner on a specific date.
+     * If an override exists for that week, picks the day entry from the schedule.
+     * Otherwise falls back to the default.
+     */
     resolve(ownerId: string, date: Date): AvailabilityRecord | null {
       const ws = getWeekStart(date);
       const key = `${ownerId}:${ws.getTime()}`;
-      return overrideMap.get(key) ?? defaultMap.get(ownerId) ?? null;
+      const entries = overrideMap.get(key);
+      if (entries) {
+        const zoned = getZonedParts(date);
+        const dayOfWeek = WEEKDAY_TO_INDEX[zoned.weekday] ?? 0;
+        const dayEntry = entries.find((e) => e.dayOfWeek === dayOfWeek);
+        if (!dayEntry) return { daysOfWeek: [], startMinutes: 0, endMinutes: 0 }; // day off
+        return dayEntryToAvailability(dayEntry);
+      }
+      return defaultMap.get(ownerId) ?? null;
+    },
+    /** Check if an override exists for a given owner + week */
+    hasOverride(ownerId: string, date: Date): boolean {
+      const ws = getWeekStart(date);
+      const key = `${ownerId}:${ws.getTime()}`;
+      return overrideMap.has(key);
     },
     defaultMap,
   };
@@ -673,21 +739,44 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       where: overrideWhere,
     });
 
-    // Build a map of overridden owners
-    const overrideByOwner = new Map(
-      overrides.map((o) => [`${o.ownerType}:${o.ownerId}`, o]),
-    );
+    // Build a map: ownerKey → AvailabilityRecord resolved for this specific day
+    // For overrides: extract the day entry from the schedule JSON
+    // For defaults: use the flat record if the day is included
+    const overrideByOwner = new Map<string, AvailabilityRecord | null>();
+    for (const o of overrides) {
+      const key = `${o.ownerType}:${o.ownerId}`;
+      const entries = parseSchedule(o.schedule);
+      const dayEntry = entries.find((e) => e.dayOfWeek === dayOfWeek);
+      overrideByOwner.set(key, dayEntry ? dayEntryToAvailability(dayEntry) : null);
+    }
 
-    // Merge: use override if present, otherwise use base
-    const availabilities = baseAvailabilities.map((base) => {
+    // Merge: for owners with an override, use the resolved day entry; otherwise use base
+    type SlotAvailability = AvailabilityRecord & { ownerType: string; ownerId: string };
+    const availabilities: SlotAvailability[] = [];
+    const seenOwners = new Set<string>();
+
+    for (const base of baseAvailabilities) {
       const key = `${base.ownerType}:${base.ownerId}`;
-      return overrideByOwner.get(key) ?? base;
-    });
-    // Also add overrides for owners that have no base availability
-    for (const override of overrides) {
-      const key = `${override.ownerType}:${override.ownerId}`;
-      if (!baseAvailabilities.some((b) => `${b.ownerType}:${b.ownerId}` === key)) {
-        availabilities.push(override);
+      seenOwners.add(key);
+      const overrideEntry = overrideByOwner.get(key);
+      if (overrideByOwner.has(key)) {
+        // This owner has an override for this week
+        if (overrideEntry) {
+          availabilities.push({ ...overrideEntry, ownerType: base.ownerType, ownerId: base.ownerId });
+        }
+        // else: day is off in the override → skip (no slots)
+      } else {
+        availabilities.push({ ...base, ownerType: base.ownerType, ownerId: base.ownerId });
+      }
+    }
+    // Add override-only owners (no base record)
+    for (const o of overrides) {
+      const key = `${o.ownerType}:${o.ownerId}`;
+      if (!seenOwners.has(key)) {
+        const entry = overrideByOwner.get(key);
+        if (entry) {
+          availabilities.push({ ...entry, ownerType: o.ownerType, ownerId: o.ownerId });
+        }
       }
     }
 
@@ -755,15 +844,19 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
 
 // ── Weekly availability override CRUD ─────────────────────
 
+const dayScheduleEntrySchema = z.object({
+  dayOfWeek: z.number().int().min(0).max(6),
+  startMinutes: z.number().int().min(0).max(1410),
+  endMinutes: z.number().int().min(30).max(1440),
+  startMinutes2: z.number().int().min(0).max(1410).optional().nullable(),
+  endMinutes2: z.number().int().min(30).max(1440).optional().nullable(),
+});
+
 const setOverrideSchema = z.object({
   ownerType: z.enum(["instructor", "vehicle"]),
   ownerId: z.string().uuid(),
-  weekStart: z.string(), // ISO date string for the Monday
-  daysOfWeek: z.array(z.number().int().min(0).max(6)),
-  startMinutes: z.number().int().min(0).max(1410),
-  endMinutes: z.number().int().min(30).max(1440),
-  startMinutes2: z.number().int().min(0).max(1410).optional(),
-  endMinutes2: z.number().int().min(30).max(1440).optional(),
+  weekStart: z.string(), // ISO date string for the Monday (YYYY-MM-DD)
+  schedule: z.array(dayScheduleEntrySchema).min(1, "Almeno un giorno richiesto."),
 });
 
 export async function setWeeklyAvailabilityOverride(
@@ -774,33 +867,30 @@ export async function setWeeklyAvailabilityOverride(
     const payload = setOverrideSchema.parse(input);
     const companyId = membership.companyId;
 
-    const daysOfWeek = Array.from(new Set(payload.daysOfWeek)).sort((a, b) => a - b);
-    if (!daysOfWeek.length) {
-      return { success: false as const, message: "Seleziona almeno un giorno." };
+    // Validate each entry
+    for (const entry of payload.schedule) {
+      if (entry.endMinutes <= entry.startMinutes) {
+        return { success: false as const, message: `Intervallo non valido per giorno ${entry.dayOfWeek}.` };
+      }
+      if (entry.startMinutes2 != null && entry.endMinutes2 != null && entry.endMinutes2 <= entry.startMinutes2) {
+        return { success: false as const, message: `Secondo intervallo non valido per giorno ${entry.dayOfWeek}.` };
+      }
     }
-    if (payload.endMinutes <= payload.startMinutes) {
-      return { success: false as const, message: "Intervallo orario non valido." };
-    }
+
+    // Deduplicate by dayOfWeek (last wins)
+    const byDay = new Map<number, (typeof payload.schedule)[number]>();
+    for (const e of payload.schedule) byDay.set(e.dayOfWeek, e);
+    const schedule = Array.from(byDay.values());
 
     const weekStart = new Date(payload.weekStart + "T00:00:00Z");
     if (Number.isNaN(weekStart.getTime())) {
       return { success: false as const, message: "Data settimana non valida." };
     }
 
-    // Enforce max 12 weeks in the future
     const maxWeekStart = new Date();
     maxWeekStart.setDate(maxWeekStart.getDate() + 12 * 7);
     if (weekStart.getTime() > maxWeekStart.getTime()) {
       return { success: false as const, message: "Override massimo 12 settimane in avanti." };
-    }
-
-    let startMinutes2: number | null = null;
-    let endMinutes2: number | null = null;
-    if (payload.startMinutes2 != null && payload.endMinutes2 != null) {
-      if (payload.endMinutes2 > payload.startMinutes2) {
-        startMinutes2 = payload.startMinutes2;
-        endMinutes2 = payload.endMinutes2;
-      }
     }
 
     const override = await prisma.autoscuolaWeeklyAvailabilityOverride.upsert({
@@ -812,17 +902,13 @@ export async function setWeeklyAvailabilityOverride(
           weekStart,
         },
       },
-      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes, startMinutes2, endMinutes2 },
+      update: { schedule },
       create: {
         companyId,
         ownerType: payload.ownerType,
         ownerId: payload.ownerId,
         weekStart,
-        daysOfWeek,
-        startMinutes: payload.startMinutes,
-        endMinutes: payload.endMinutes,
-        startMinutes2,
-        endMinutes2,
+        schedule,
       },
     });
 
@@ -843,10 +929,14 @@ export async function setWeeklyAvailabilityOverride(
       select: { id: true, startsAt: true, endsAt: true },
     });
 
+    const parsedSchedule = parseSchedule(override.schedule);
     const impactedIds = weekAppointments
       .filter((a) => {
         const end = a.endsAt ?? getSlotEnd(a.startsAt, SLOT_MINUTES);
-        return !isWeeklyAvailabilityCovering(override, a.startsAt, end);
+        const dow = dayOfWeekFromDate(a.startsAt);
+        const dayEntry = parsedSchedule.find((e) => e.dayOfWeek === dow);
+        if (!dayEntry) return true; // day is off in the override → conflict
+        return !isWeeklyAvailabilityCovering(dayEntryToAvailability(dayEntry), a.startsAt, end);
       })
       .map((a) => a.id);
 
@@ -896,7 +986,6 @@ export async function deleteWeeklyAvailabilityOverride(
     });
 
     // After deleting the override, the week falls back to the default.
-    // Check if any appointments in this week conflict with the default availability.
     const baseAvailability = await prisma.autoscuolaWeeklyAvailability.findFirst({
       where: { companyId, ownerType: payload.ownerType, ownerId: payload.ownerId },
     });
@@ -962,7 +1051,6 @@ export async function getWeeklyAvailabilityOverrides(
       ownerId: payload.ownerId,
     };
 
-    // Filter out overrides more than 2 weeks in the past
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
     const fromDate = payload.from ? new Date(payload.from + "T00:00:00Z") : twoWeeksAgo;

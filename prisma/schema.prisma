@@ -715,19 +715,18 @@ model AutoscuolaWeeklyAvailability {
   @@index([ownerType, ownerId])
 }
 
+/// Per-day schedule override for a specific week.
+/// `schedule` is a JSON array: [{ dayOfWeek, startMinutes, endMinutes, startMinutes2?, endMinutes2? }]
+/// Days absent from the array are "off" for that week.
 model AutoscuolaWeeklyAvailabilityOverride {
-  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId     String   @db.Uuid
-  ownerType     String
-  ownerId       String   @db.Uuid
-  weekStart     DateTime @db.Date
-  daysOfWeek    Int[]
-  startMinutes  Int
-  endMinutes    Int
-  startMinutes2 Int?
-  endMinutes2   Int?
-  createdAt     DateTime @default(now()) @db.Timestamp(6)
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  ownerType String
+  ownerId   String   @db.Uuid
+  weekStart DateTime @db.Date
+  schedule  Json     @db.Json
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 

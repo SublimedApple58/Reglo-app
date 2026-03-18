@@ -5,11 +5,7 @@ CREATE TABLE "AutoscuolaWeeklyAvailabilityOverride" (
     "ownerType" TEXT NOT NULL,
     "ownerId" UUID NOT NULL,
     "weekStart" DATE NOT NULL,
-    "daysOfWeek" INTEGER[],
-    "startMinutes" INTEGER NOT NULL,
-    "endMinutes" INTEGER NOT NULL,
-    "startMinutes2" INTEGER,
-    "endMinutes2" INTEGER,
+    "schedule" JSON NOT NULL,
     "createdAt" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
