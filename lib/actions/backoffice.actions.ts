@@ -293,3 +293,24 @@ export async function backofficeSignIn(input: z.infer<typeof backofficeSignInSch
     return { success: false, message: formatError(error) };
   }
 }
+
+export async function deleteCompany(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+
+    const company = await prisma.company.findUnique({
+      where: { id: companyId },
+      select: { id: true, name: true },
+    });
+
+    if (!company) {
+      return { success: false as const, message: "Company non trovata." };
+    }
+
+    await prisma.company.delete({ where: { id: companyId } });
+
+    return { success: true as const, data: { name: company.name } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}

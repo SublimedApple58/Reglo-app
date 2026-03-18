@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { Loader2, Search, Smartphone } from "lucide-react";
+import { Loader2, Search, Smartphone, Trash2 } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/table";
 import {
   assignAutoscuolaVoiceLine,
+  deleteCompany,
   getCompanyStudentPlatforms,
   unassignAutoscuolaVoiceLine,
   updateCompanyService,
@@ -441,17 +442,33 @@ export default function BackofficeCompaniesPage({
 }: {
   companies: BackofficeCompanyRow[];
 }) {
+  const toast = useFeedbackToast();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<BackofficeCompanyRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [localCompanies, setLocalCompanies] = useState(companies);
+
+  const handleDelete = async (company: BackofficeCompanyRow) => {
+    if (!window.confirm(`Eliminare definitivamente "${company.name}"? Questa azione è irreversibile.`)) return;
+    setDeletingId(company.id);
+    const res = await deleteCompany(company.id);
+    setDeletingId(null);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Errore durante l'eliminazione." });
+      return;
+    }
+    toast.success({ description: `Company "${company.name}" eliminata.` });
+    setLocalCompanies((prev) => prev.filter((c) => c.id !== company.id));
+  };
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
-    if (!term) return companies;
-    return companies.filter((company) =>
+    if (!term) return localCompanies;
+    return localCompanies.filter((company) =>
       company.name.toLowerCase().includes(term),
     );
-  }, [companies, query]);
+  }, [localCompanies, query]);
 
   return (
     <div className="space-y-6">
@@ -524,16 +541,31 @@ export default function BackofficeCompaniesPage({
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          setSelected(company);
-                          setDrawerOpen(true);
-                        }}
-                      >
-                        Gestisci
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelected(company);
+                            setDrawerOpen(true);
+                          }}
+                        >
+                          Gestisci
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-500 hover:bg-red-50 hover:text-red-600"
+                          onClick={() => handleDelete(company)}
+                          disabled={deletingId === company.id}
+                        >
+                          {deletingId === company.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
