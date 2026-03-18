@@ -637,17 +637,34 @@ export function AutoscuoleResourcesPage({
     setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
     setInstrSelectedWeek(null);
     setInstrDaySchedule([]);
-    // Load overrides for this instructor
+    // Load daily overrides for this instructor and group them by week
     getWeeklyAvailabilityOverrides({
       ownerType: "instructor",
       ownerId: instructor.id,
     }).then((res) => {
       if (res.success && res.data) {
+        // Group daily overrides by ISO week start (Monday)
+        const byWeek = new Map<string, DayScheduleEntry[]>();
+        for (const o of res.data) {
+          const d = new Date(o.date);
+          const ws = getWeekStart(d);
+          const key = ws.toISOString().slice(0, 10);
+          const list = byWeek.get(key) ?? [];
+          const dayOfWeek = d.getUTCDay();
+          const ranges = Array.isArray(o.ranges) ? o.ranges as Array<{ startMinutes: number; endMinutes: number }> : [];
+          const first = ranges[0];
+          const second = ranges[1];
+          list.push({
+            dayOfWeek,
+            startMinutes: first?.startMinutes ?? 0,
+            endMinutes: first?.endMinutes ?? 0,
+            startMinutes2: second?.startMinutes ?? null,
+            endMinutes2: second?.endMinutes ?? null,
+          });
+          byWeek.set(key, list);
+        }
         setInstrOverrides(
-          res.data.map((o) => ({
-            weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
-            schedule: (Array.isArray(o.schedule) ? o.schedule : []) as DayScheduleEntry[],
-          })),
+          Array.from(byWeek.entries()).map(([weekStart, schedule]) => ({ weekStart, schedule })),
         );
       }
     });
@@ -912,16 +929,33 @@ export function AutoscuoleResourcesPage({
     setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
     setVehSelectedWeek(null);
     setVehDaySchedule([]);
+    // Load daily overrides for this vehicle and group them by week
     getWeeklyAvailabilityOverrides({
       ownerType: "vehicle",
       ownerId: vehicle.id,
     }).then((res) => {
       if (res.success && res.data) {
+        const byWeek = new Map<string, DayScheduleEntry[]>();
+        for (const o of res.data) {
+          const d = new Date(o.date);
+          const ws = getWeekStart(d);
+          const key = ws.toISOString().slice(0, 10);
+          const list = byWeek.get(key) ?? [];
+          const dayOfWeek = d.getUTCDay();
+          const ranges = Array.isArray(o.ranges) ? o.ranges as Array<{ startMinutes: number; endMinutes: number }> : [];
+          const first = ranges[0];
+          const second = ranges[1];
+          list.push({
+            dayOfWeek,
+            startMinutes: first?.startMinutes ?? 0,
+            endMinutes: first?.endMinutes ?? 0,
+            startMinutes2: second?.startMinutes ?? null,
+            endMinutes2: second?.endMinutes ?? null,
+          });
+          byWeek.set(key, list);
+        }
         setVehOverrides(
-          res.data.map((o) => ({
-            weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
-            schedule: (Array.isArray(o.schedule) ? o.schedule : []) as DayScheduleEntry[],
-          })),
+          Array.from(byWeek.entries()).map(([weekStart, schedule]) => ({ weekStart, schedule })),
         );
       }
     });

@@ -134,7 +134,7 @@ const overlaps = (
 
 const isOwnerAvailable = (
   availability:
-    | { daysOfWeek: number[]; startMinutes: number; endMinutes: number }
+    | { daysOfWeek: number[]; ranges: Array<{ startMinutes: number; endMinutes: number }> }
     | null
     | undefined,
   dayOfWeek: number,
@@ -143,8 +143,9 @@ const isOwnerAvailable = (
 ) => {
   if (!availability) return false;
   if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
-  if (availability.endMinutes <= availability.startMinutes) return false;
-  return startMinutes >= availability.startMinutes && endMinutes <= availability.endMinutes;
+  return availability.ranges.some(
+    (r) => r.endMinutes > r.startMinutes && startMinutes >= r.startMinutes && endMinutes <= r.endMinutes,
+  );
 };
 
 const buildCandidateStarts = (

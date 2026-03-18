@@ -3021,10 +3021,9 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
         const end =
           appointment.endsAt ??
           new Date(appointment.startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-        // Use the override for this week if it exists, otherwise the new default
-        const effectiveAvail = resolver?.resolve(payload.instructorId, appointment.startsAt);
-        if (effectiveAvail && effectiveAvail !== availability) {
-          // This week has an override — skip conflict check against the new default
+        // If this date has a daily override, the override takes precedence
+        // over the new default — skip conflict check for overridden dates
+        if (resolver?.hasOverride(payload.instructorId, appointment.startsAt)) {
           return false;
         }
         const aptDayOfWeek = appointment.startsAt.getDay();

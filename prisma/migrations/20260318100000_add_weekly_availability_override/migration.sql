@@ -1,25 +1,35 @@
+-- Add ranges column to AutoscuolaWeeklyAvailability
+ALTER TABLE "AutoscuolaWeeklyAvailability" ADD COLUMN "ranges" JSON;
+
 -- CreateTable
-CREATE TABLE "AutoscuolaWeeklyAvailabilityOverride" (
+CREATE TABLE "AutoscuolaDailyAvailabilityOverride" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "companyId" UUID NOT NULL,
     "ownerType" TEXT NOT NULL,
     "ownerId" UUID NOT NULL,
-    "weekStart" DATE NOT NULL,
-    "schedule" JSON NOT NULL,
+    "date" DATE NOT NULL,
+    "ranges" JSON NOT NULL,
     "createdAt" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "AutoscuolaWeeklyAvailabilityOverride_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "AutoscuolaDailyAvailabilityOverride_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE INDEX "AutoscuolaWeeklyAvailabilityOverride_companyId_ownerType_own_idx" ON "AutoscuolaWeeklyAvailabilityOverride"("companyId", "ownerType", "ownerId");
+CREATE INDEX "AutoscuolaDailyAvailabilityOverride_companyId_ownerType_ownerId_idx" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId");
+CREATE INDEX "AutoscuolaDailyAvailabilityOverride_ownerId_date_idx" ON "AutoscuolaDailyAvailabilityOverride"("ownerId", "date");
+CREATE UNIQUE INDEX "AutoscuolaDailyAvailabilityOverride_companyId_ownerType_ownerId_date_key" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId", "date");
 
--- CreateIndex
-CREATE INDEX "AutoscuolaWeeklyAvailabilityOverride_ownerId_weekStart_idx" ON "AutoscuolaWeeklyAvailabilityOverride"("ownerId", "weekStart");
+ALTER TABLE "AutoscuolaDailyAvailabilityOverride" ADD CONSTRAINT "AutoscuolaDailyAvailabilityOverride_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- CreateIndex
-CREATE UNIQUE INDEX "AutoscuolaWeeklyAvailabilityOverride_companyId_ownerType_own_key" ON "AutoscuolaWeeklyAvailabilityOverride"("companyId", "ownerType", "ownerId", "weekStart");
-
--- AddForeignKey
-ALTER TABLE "AutoscuolaWeeklyAvailabilityOverride" ADD CONSTRAINT "AutoscuolaWeeklyAvailabilityOverride_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Backfill ranges from existing flat columns
+UPDATE "AutoscuolaWeeklyAvailability"
+SET "ranges" = CASE
+  WHEN "startMinutes2" IS NOT NULL AND "endMinutes2" IS NOT NULL
+  THEN json_build_array(
+    json_build_object('startMinutes', "startMinutes", 'endMinutes', "endMinutes"),
+    json_build_object('startMinutes', "startMinutes2", 'endMinutes', "endMinutes2")
+  )
+  ELSE json_build_array(
+    json_build_object('startMinutes', "startMinutes", 'endMinutes', "endMinutes")
+  )
+END
+WHERE "ranges" IS NULL;

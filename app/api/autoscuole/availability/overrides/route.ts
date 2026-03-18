@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import {
-  setWeeklyAvailabilityOverride,
-  deleteWeeklyAvailabilityOverride,
-  getWeeklyAvailabilityOverrides,
+  setDailyAvailabilityOverride,
+  deleteDailyAvailabilityOverride,
+  getDailyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
 
 export async function GET(request: Request) {
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!ownerType || !ownerId) {
     return NextResponse.json({ success: false, message: "ownerType and ownerId are required" }, { status: 400 });
   }
-  const res = await getWeeklyAvailabilityOverrides({
+  const res = await getDailyAvailabilityOverrides({
     ownerType,
     ownerId,
     from: searchParams.get("from") ?? undefined,
@@ -23,12 +23,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = await request.json();
-  const res = await setWeeklyAvailabilityOverride(payload);
+  const res = await setDailyAvailabilityOverride(payload);
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
 
 export async function DELETE(request: Request) {
   const payload = await request.json();
-  const res = await deleteWeeklyAvailabilityOverride(payload);
+  const res = await deleteDailyAvailabilityOverride(payload);
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
