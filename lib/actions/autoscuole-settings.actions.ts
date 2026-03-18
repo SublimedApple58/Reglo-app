@@ -38,6 +38,7 @@ const PAYMENT_CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
 const PAYMENT_PENALTY_PRESETS = [25, 50, 75, 100] as const;
 const PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 const DEFAULT_AUTO_PAYMENTS_ENABLED = false;
+const DEFAULT_LESSON_CREDIT_FLOW_ENABLED = false;
 const DEFAULT_LESSON_PRICE_30 = 25;
 const DEFAULT_LESSON_PRICE_60 = 50;
 const DEFAULT_PENALTY_CUTOFF_HOURS = 24;
@@ -206,6 +207,7 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderChannels: channelListSchema.optional(),
     instructorReminderChannels: channelListSchema.optional(),
     autoPaymentsEnabled: z.boolean().optional(),
+    lessonCreditFlowEnabled: z.boolean().optional(),
     lessonPrice30: z.number().positive().max(999).optional(),
     lessonPrice60: z.number().positive().max(999).optional(),
     penaltyCutoffHoursPreset: z
@@ -403,6 +405,7 @@ export type AutoscuolaSettingsData = {
   studentReminderChannels: string[];
   instructorReminderChannels: string[];
   autoPaymentsEnabled: boolean;
+  lessonCreditFlowEnabled: boolean;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHoursPreset: (typeof PAYMENT_CUTOFF_PRESETS)[number];
@@ -479,6 +482,10 @@ const resolveAutoscuolaSettingsData = (
     typeof limits.autoPaymentsEnabled === "boolean"
       ? limits.autoPaymentsEnabled
       : DEFAULT_AUTO_PAYMENTS_ENABLED;
+  const lessonCreditFlowEnabled =
+    typeof limits.lessonCreditFlowEnabled === "boolean"
+      ? limits.lessonCreditFlowEnabled
+      : DEFAULT_LESSON_CREDIT_FLOW_ENABLED;
   const lessonPrice30 =
     typeof limits.lessonPrice30 === "number"
       ? limits.lessonPrice30
@@ -589,6 +596,7 @@ const resolveAutoscuolaSettingsData = (
     studentReminderChannels,
     instructorReminderChannels,
     autoPaymentsEnabled,
+    lessonCreditFlowEnabled,
     lessonPrice30,
     lessonPrice60,
     penaltyCutoffHoursPreset,
@@ -786,6 +794,12 @@ export async function updateAutoscuolaSettings(
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
+    const previousLessonCreditFlowEnabled =
+      typeof limits.lessonCreditFlowEnabled === "boolean"
+        ? limits.lessonCreditFlowEnabled
+        : DEFAULT_LESSON_CREDIT_FLOW_ENABLED;
+    const nextLessonCreditFlowEnabled =
+      payload.lessonCreditFlowEnabled ?? previousLessonCreditFlowEnabled;
     const nextLessonPrice30 = payload.lessonPrice30 ?? previousLessonPrice30;
     const nextLessonPrice60 = payload.lessonPrice60 ?? previousLessonPrice60;
     const nextPenaltyCutoffHoursPreset =
@@ -925,6 +939,7 @@ export async function updateAutoscuolaSettings(
       instructorReminderChannels:
         payload.instructorReminderChannels ?? previousInstructorReminderChannels,
       autoPaymentsEnabled: nextAutoPaymentsEnabled,
+      lessonCreditFlowEnabled: nextLessonCreditFlowEnabled,
       lessonPrice30: nextLessonPrice30,
       lessonPrice60: nextLessonPrice60,
       penaltyCutoffHoursPreset: nextPenaltyCutoffHoursPreset,
@@ -990,6 +1005,7 @@ export async function updateAutoscuolaSettings(
         studentReminderChannels: nextLimits.studentReminderChannels,
         instructorReminderChannels: nextLimits.instructorReminderChannels,
         autoPaymentsEnabled: nextLimits.autoPaymentsEnabled,
+        lessonCreditFlowEnabled: nextLimits.lessonCreditFlowEnabled,
         lessonPrice30: nextLimits.lessonPrice30,
         lessonPrice60: nextLimits.lessonPrice60,
         penaltyCutoffHoursPreset: nextLimits.penaltyCutoffHoursPreset,

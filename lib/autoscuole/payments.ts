@@ -24,6 +24,7 @@ type PaymentChannel = "push" | "email";
 
 type AutoscuolaPaymentConfig = {
   enabled: boolean;
+  lessonCreditFlowEnabled: boolean;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHours: (typeof AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS)[number];
@@ -581,6 +582,7 @@ export async function getAutoscuolaPaymentConfig({
   const limits = (service?.limits ?? {}) as Record<string, unknown>;
   return {
     enabled: Boolean(limits.autoPaymentsEnabled),
+    lessonCreditFlowEnabled: Boolean(limits.lessonCreditFlowEnabled),
     lessonPrice30: normalizePrice(limits.lessonPrice30, 25),
     lessonPrice60: normalizePrice(limits.lessonPrice60, 50),
     penaltyCutoffHours: normalizeCutoffPreset(limits.penaltyCutoffHoursPreset),
@@ -1179,7 +1181,7 @@ export async function prepareAppointmentPaymentSnapshot({
   const lessonPrice = duration >= 60 ? config.lessonPrice60 : config.lessonPrice30;
   const penaltyAmount = roundAmount((lessonPrice * config.penaltyPercent) / 100);
   const penaltyCutoffAt = new Date(startsAt.getTime() - config.penaltyCutoffHours * 60 * 60 * 1000);
-  if (!config.enabled) {
+  if (!config.enabled && !config.lessonCreditFlowEnabled) {
     return {
       paymentRequired: false,
       paymentStatus: "not_required",
@@ -1217,11 +1219,25 @@ export async function prepareAppointmentPaymentSnapshot({
       paymentRequired: false,
       paymentStatus: "not_required",
       priceAmount: toDecimal(lessonPrice),
-      penaltyAmount: toDecimal(0),
+      penaltyAmount: toDecimal(penaltyAmount),
       penaltyCutoffAt,
       paidAmount: toDecimal(0),
       invoiceStatus: "not_required",
       creditApplied: true,
+    };
+  }
+
+  // Credit flow only (no Stripe): no credit available, no payment required
+  if (!config.enabled && config.lessonCreditFlowEnabled) {
+    return {
+      paymentRequired: false,
+      paymentStatus: "not_required",
+      priceAmount: toDecimal(lessonPrice),
+      penaltyAmount: toDecimal(penaltyAmount),
+      penaltyCutoffAt,
+      paidAmount: toDecimal(0),
+      invoiceStatus: null,
+      creditApplied: false,
     };
   }
 
@@ -2247,6 +2263,7 @@ export async function getMobileStudentPaymentProfile({
 
   return {
     autoPaymentsEnabled: config.enabled,
+    lessonCreditFlowEnabled: config.lessonCreditFlowEnabled,
     hasPaymentMethod: Boolean(paymentMethodSummary),
     paymentMethod: paymentMethodSummary,
     blockedByInsoluti: outstanding.length > 0,

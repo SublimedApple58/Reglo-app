@@ -73,6 +73,7 @@ type PaymentAppointment = {
 type PaymentsBootstrapPayload = {
   settings: {
     autoPaymentsEnabled?: boolean;
+    lessonCreditFlowEnabled?: boolean;
     lessonPrice30?: number;
     lessonPrice60?: number;
     penaltyCutoffHoursPreset?: number;
@@ -192,6 +193,7 @@ export function AutoscuolePaymentsPage({
   const [detailsRow, setDetailsRow] = React.useState<PaymentAppointment | null>(null);
 
   const [autoPaymentsEnabled, setAutoPaymentsEnabled] = React.useState(false);
+  const [lessonCreditFlowEnabled, setLessonCreditFlowEnabled] = React.useState(false);
   const [lessonPrice30, setLessonPrice30] = React.useState("25");
   const [lessonPrice60, setLessonPrice60] = React.useState("50");
   const [penaltyCutoffHoursPreset, setPenaltyCutoffHoursPreset] = React.useState("24");
@@ -315,6 +317,7 @@ export function AutoscuolePaymentsPage({
 
       const settings = payload.data.settings ?? {};
       setAutoPaymentsEnabled(Boolean(settings.autoPaymentsEnabled));
+      setLessonCreditFlowEnabled(Boolean(settings.lessonCreditFlowEnabled));
       setLessonPrice30(String(settings.lessonPrice30 ?? 25));
       setLessonPrice60(String(settings.lessonPrice60 ?? 50));
       setPenaltyCutoffHoursPreset(String(settings.penaltyCutoffHoursPreset ?? 24));
@@ -482,6 +485,7 @@ export function AutoscuolePaymentsPage({
     try {
       const res = await updateAutoscuolaSettings({
         autoPaymentsEnabled,
+        lessonCreditFlowEnabled,
         lessonPrice30: parsedPrice30,
         lessonPrice60: parsedPrice60,
         penaltyCutoffHoursPreset: parsedCutoff as 1 | 2 | 4 | 6 | 12 | 24 | 48,
@@ -682,9 +686,25 @@ export function AutoscuolePaymentsPage({
         <div className="glass-panel glass-strong space-y-4 p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
+              <h3 className="text-sm font-semibold text-foreground">Crediti guida e penali</h3>
+              <p className="text-xs text-muted-foreground">
+                Gestisci crediti guida e penali per annullamenti tardivi, senza richiedere Stripe.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <Checkbox
+                checked={lessonCreditFlowEnabled}
+                onCheckedChange={(checked) => setLessonCreditFlowEnabled(Boolean(checked))}
+              />
+              Abilitato
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
               <h3 className="text-sm font-semibold text-foreground">Pagamenti automatici</h3>
               <p className="text-xs text-muted-foreground">
-                Prenotazione gratuita, penale al cutoff e saldo automatico a fine guida.
+                Addebito automatico tramite Stripe a fine guida e fatturazione FIC.
               </p>
             </div>
             <label className="flex items-center gap-2 text-sm text-foreground">
