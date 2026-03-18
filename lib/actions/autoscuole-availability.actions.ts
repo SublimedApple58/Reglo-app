@@ -323,7 +323,7 @@ const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinute
 /**
  * Returns the Monday (ISO week start) for a given date in Europe/Rome timezone.
  */
-export const getWeekStart = (date: Date): Date => {
+const getWeekStart = (date: Date): Date => {
   const parts = getZonedParts(date);
   const weekday = WEEKDAY_TO_INDEX[parts.weekday] ?? 0; // 0=Sun..6=Sat
   const daysBack = weekday === 0 ? 6 : weekday - 1;

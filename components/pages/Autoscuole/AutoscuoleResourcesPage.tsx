@@ -34,8 +34,14 @@ import {
   setWeeklyAvailabilityOverride,
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
-  getWeekStart,
 } from "@/lib/actions/autoscuole-availability.actions";
+
+/** Compute Monday (ISO week start) for a date */
+const getWeekStart = (date: Date): Date => {
+  const dow = date.getUTCDay(); // 0=Sun..6=Sat
+  const daysBack = dow === 0 ? 6 : dow - 1;
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() - daysBack));
+};
 import {
   Dialog,
   DialogContent,
