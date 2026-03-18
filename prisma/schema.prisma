@@ -728,8 +728,8 @@ model AutoscuolaDailyAvailabilityOverride {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
-  @@unique([companyId, ownerType, ownerId, date])
-  @@index([companyId, ownerType, ownerId])
+  @@unique([companyId, ownerType, ownerId, date], map: "AutoscuolaDailyAvailabilityOverride_company_owner_date_key")
+  @@index([companyId, ownerType, ownerId], map: "AutoscuolaDailyAvailabilityOverride_company_owner_idx")
   @@index([ownerId, date])
 }
 
