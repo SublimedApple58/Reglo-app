@@ -16,6 +16,7 @@ import {
   normalizeLessonType,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
+import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -490,30 +491,6 @@ const findOperationalCandidate = async ({
     return null;
   }
 
-  const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
-    prisma.autoscuolaWeeklyAvailability.findMany({
-      where: {
-        companyId,
-        ownerType: "instructor",
-        ownerId: { in: activeInstructorIds },
-      },
-    }),
-    prisma.autoscuolaWeeklyAvailability.findMany({
-      where: {
-        companyId,
-        ownerType: "vehicle",
-        ownerId: { in: activeVehicleIds },
-      },
-    }),
-  ]);
-
-  const instructorAvailabilityMap = new Map(
-    instructorAvailabilities.map((availability) => [availability.ownerId, availability]),
-  );
-  const vehicleAvailabilityMap = new Map(
-    vehicleAvailabilities.map((availability) => [availability.ownerId, availability]),
-  );
-
   const earliest = earliestStartsAt;
   const earliestParts = getZonedParts(earliest);
   const startDay: CalendarDateParts = {
@@ -523,6 +500,12 @@ const findOperationalCandidate = async ({
   };
   const rangeStart = toTimeZoneDate(startDay, 0, 0);
   const rangeEnd = toTimeZoneDate(addDaysToDateParts(startDay, REPOSITION_MAX_DAYS + 1), 0, 0);
+
+  // Build date-aware availability resolvers that account for per-week overrides
+  const [instructorResolver, vehicleResolver] = await Promise.all([
+    buildAvailabilityResolver(companyId, "instructor", activeInstructorIds, rangeStart, rangeEnd),
+    buildAvailabilityResolver(companyId, "vehicle", activeVehicleIds, rangeStart, rangeEnd),
+  ]);
 
   const appointments = await prisma.autoscuolaAppointment.findMany({
     where: {
@@ -614,7 +597,7 @@ const findOperationalCandidate = async ({
 
       const availableInstructors: Array<{ id: string; score: number }> = [];
       for (const ownerId of activeInstructorIds) {
-        const availability = instructorAvailabilityMap.get(ownerId);
+        const availability = instructorResolver.resolve(ownerId, start);
         if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
           continue;
         }
@@ -628,7 +611,7 @@ const findOperationalCandidate = async ({
 
       const availableVehicles: Array<{ id: string; score: number }> = [];
       for (const ownerId of activeVehicleIds) {
-        const availability = vehicleAvailabilityMap.get(ownerId);
+        const availability = vehicleResolver.resolve(ownerId, start);
         if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
           continue;
         }

@@ -8,7 +8,7 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
-import { broadcastWaitlistOffer } from "@/lib/actions/autoscuole-availability.actions";
+import { broadcastWaitlistOffer, buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   getBookingGovernanceForCompany,
@@ -2993,6 +2993,8 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
     });
 
     // Reposition appointments now outside the new availability window
+    // Date-aware: for each appointment, resolve the effective availability
+    // (override or default) for that specific week before checking conflicts.
     const SLOT_MINUTES = 30;
     const futureAppointments = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -3004,11 +3006,27 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       select: { id: true, startsAt: true, endsAt: true },
     });
 
+    const resolver = futureAppointments.length
+      ? await buildAvailabilityResolver(
+          companyId,
+          "instructor",
+          [payload.instructorId],
+          futureAppointments[0].startsAt,
+          futureAppointments[futureAppointments.length - 1].startsAt,
+        )
+      : null;
+
     const impactedIds = futureAppointments
       .filter((appointment) => {
         const end =
           appointment.endsAt ??
           new Date(appointment.startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+        // Use the override for this week if it exists, otherwise the new default
+        const effectiveAvail = resolver?.resolve(payload.instructorId, appointment.startsAt);
+        if (effectiveAvail && effectiveAvail !== availability) {
+          // This week has an override — skip conflict check against the new default
+          return false;
+        }
         const aptDayOfWeek = appointment.startsAt.getDay();
         if (!daysOfWeek.includes(aptDayOfWeek)) return true;
         const aptStartMinutes = appointment.startsAt.getHours() * 60 + appointment.startsAt.getMinutes();

@@ -210,7 +210,8 @@ model Company {
   autoscuolaInstructorBlocks     AutoscuolaInstructorBlock[]
   autoscuolaVehicles             AutoscuolaVehicle[]
   autoscuolaAvailabilitySlots    AutoscuolaAvailabilitySlot[]
-  autoscuolaWeeklyAvailabilities AutoscuolaWeeklyAvailability[]
+  autoscuolaWeeklyAvailabilities         AutoscuolaWeeklyAvailability[]
+  autoscuolaWeeklyAvailabilityOverrides  AutoscuolaWeeklyAvailabilityOverride[]
   autoscuolaBookingRequests      AutoscuolaBookingRequest[]
   autoscuolaWaitlistOffers       AutoscuolaWaitlistOffer[]
   autoscuolaDocuments            AutoscuolaDocument[]
@@ -712,6 +713,27 @@ model AutoscuolaWeeklyAvailability {
   @@unique([companyId, ownerType, ownerId])
   @@index([companyId])
   @@index([ownerType, ownerId])
+}
+
+model AutoscuolaWeeklyAvailabilityOverride {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String   @db.Uuid
+  ownerType     String
+  ownerId       String   @db.Uuid
+  weekStart     DateTime @db.Date
+  daysOfWeek    Int[]
+  startMinutes  Int
+  endMinutes    Int
+  startMinutes2 Int?
+  endMinutes2   Int?
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, ownerType, ownerId, weekStart])
+  @@index([companyId, ownerType, ownerId])
+  @@index([ownerId, weekStart])
 }
 
 model AutoscuolaAvailabilitySlot {

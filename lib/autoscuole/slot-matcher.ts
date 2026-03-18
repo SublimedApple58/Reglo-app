@@ -8,6 +8,7 @@ import {
   normalizeLessonType,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
+import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 
 const SLOT_MINUTES = 30;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -307,29 +308,14 @@ export async function findBestAutoscuolaSlot(
   const activeInstructorIds = activeInstructors.map((item) => item.id);
   const activeVehicleIds = activeVehicles.map((item) => item.id);
 
-  const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
-    prisma.autoscuolaWeeklyAvailability.findMany({
-      where: {
-        companyId: input.companyId,
-        ownerType: "instructor",
-        ownerId: { in: activeInstructorIds },
-      },
-    }),
-    prisma.autoscuolaWeeklyAvailability.findMany({
-      where: {
-        companyId: input.companyId,
-        ownerType: "vehicle",
-        ownerId: { in: activeVehicleIds },
-      },
-    }),
-  ]);
+  // Build date-aware availability resolvers that account for per-week overrides
+  const searchRangeStart = toTimeZoneDate(preferredDateParts, 0, 0);
+  const searchRangeEnd = toTimeZoneDate(addDaysToDateParts(preferredDateParts, maxDays + 1), 0, 0);
 
-  const instructorAvailabilityMap = new Map(
-    instructorAvailabilities.map((availability) => [availability.ownerId, availability]),
-  );
-  const vehicleAvailabilityMap = new Map(
-    vehicleAvailabilities.map((availability) => [availability.ownerId, availability]),
-  );
+  const [instructorResolver, vehicleResolver] = await Promise.all([
+    buildAvailabilityResolver(input.companyId, "instructor", activeInstructorIds, searchRangeStart, searchRangeEnd),
+    buildAvailabilityResolver(input.companyId, "vehicle", activeVehicleIds, searchRangeStart, searchRangeEnd),
+  ]);
 
   // Batch-fetch all appointments for the full search range in one query
   // instead of one query per day inside the loop (N+1 elimination)
@@ -428,7 +414,7 @@ export async function findBestAutoscuolaSlot(
 
       const availableInstructors: Array<{ id: string; score: number }> = [];
       for (const instructorId of activeInstructorIds) {
-        const availability = instructorAvailabilityMap.get(instructorId);
+        const availability = instructorResolver.resolve(instructorId, startDate);
         if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
           continue;
         }
@@ -442,7 +428,7 @@ export async function findBestAutoscuolaSlot(
 
       const availableVehicles: Array<{ id: string; score: number }> = [];
       for (const vehicleId of activeVehicleIds) {
-        const availability = vehicleAvailabilityMap.get(vehicleId);
+        const availability = vehicleResolver.resolve(vehicleId, startDate);
         if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
           continue;
         }

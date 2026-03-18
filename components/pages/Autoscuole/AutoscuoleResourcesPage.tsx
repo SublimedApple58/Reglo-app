@@ -29,7 +29,13 @@ import {
   deleteAutoscuolaInstructorWeeklyAvailability,
 } from "@/lib/actions/autoscuole.actions";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
-import { getAvailabilitySlots } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  getAvailabilitySlots,
+  setWeeklyAvailabilityOverride,
+  deleteWeeklyAvailabilityOverride,
+  getWeeklyAvailabilityOverrides,
+  getWeekStart,
+} from "@/lib/actions/autoscuole-availability.actions";
 import {
   Dialog,
   DialogContent,
@@ -137,6 +143,37 @@ const WEEKDAY_OPTIONS = [
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => index * 30);
 const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => (index + 1) * 30);
 
+type WeekOption = { label: string; weekStart: string }; // weekStart = YYYY-MM-DD of Monday
+
+const buildWeekOptions = (): WeekOption[] => {
+  const options: WeekOption[] = [];
+  const today = new Date();
+  // Get this week's Monday
+  const dayOfWeek = today.getDay(); // 0=Sun..6=Sat
+  const daysBack = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - daysBack);
+  monday.setHours(0, 0, 0, 0);
+
+  for (let i = 0; i < 12; i++) {
+    const weekMonday = new Date(monday);
+    weekMonday.setDate(monday.getDate() + i * 7);
+    const weekSunday = new Date(weekMonday);
+    weekSunday.setDate(weekMonday.getDate() + 6);
+    const label = `${weekMonday.getDate()}/${weekMonday.getMonth() + 1} – ${weekSunday.getDate()}/${weekSunday.getMonth() + 1}`;
+    const weekStart = `${weekMonday.getFullYear()}-${pad(weekMonday.getMonth() + 1)}-${pad(weekMonday.getDate())}`;
+    options.push({ label, weekStart });
+  }
+  return options;
+};
+
+type OverrideInfo = {
+  weekStart: string;
+  daysOfWeek: number[];
+  startMinutes: number;
+  endMinutes: number;
+};
+
 export function AutoscuoleResourcesPage({
   hideNav = false,
   tabs,
@@ -189,6 +226,10 @@ export function AutoscuoleResourcesPage({
   const [instrStartMinutes, setInstrStartMinutes] = React.useState(9 * 60);
   const [instrEndMinutes, setInstrEndMinutes] = React.useState(18 * 60);
   const [savingInstrAvailability, setSavingInstrAvailability] = React.useState(false);
+  // Week override state for instructor dialog
+  const [instrSelectedWeek, setInstrSelectedWeek] = React.useState<string | null>(null); // null = "Predefinito"
+  const [instrOverrides, setInstrOverrides] = React.useState<OverrideInfo[]>([]);
+  const weekOptions = React.useMemo(buildWeekOptions, []);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -217,6 +258,9 @@ export function AutoscuoleResourcesPage({
   const [availStartMinutes, setAvailStartMinutes] = React.useState(9 * 60);
   const [availEndMinutes, setAvailEndMinutes] = React.useState(18 * 60);
   const [savingAvailability, setSavingAvailability] = React.useState(false);
+  // Week override state for vehicle dialog
+  const [vehSelectedWeek, setVehSelectedWeek] = React.useState<string | null>(null);
+  const [vehOverrides, setVehOverrides] = React.useState<OverrideInfo[]>([]);
 
   const loadResources = React.useCallback(async () => {
     const [instructorRes, vehicleRes, instrWeeklyRes, vehicleWeeklyRes] = await Promise.all([
@@ -582,12 +626,54 @@ export function AutoscuoleResourcesPage({
     setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
     setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
     setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+    setInstrSelectedWeek(null);
+    // Load overrides for this instructor
+    getWeeklyAvailabilityOverrides({
+      ownerType: "instructor",
+      ownerId: instructor.id,
+    }).then((res) => {
+      if (res.success && res.data) {
+        setInstrOverrides(
+          res.data.map((o) => ({
+            weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
+            daysOfWeek: o.daysOfWeek,
+            startMinutes: o.startMinutes,
+            endMinutes: o.endMinutes,
+          })),
+        );
+      }
+    });
   };
 
   const toggleInstrDay = (day: number) => {
     setInstrDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
     );
+  };
+
+  const handleSelectInstrWeek = (weekStart: string | null) => {
+    setInstrSelectedWeek(weekStart);
+    if (!availInstructor) return;
+    if (weekStart === null) {
+      // "Predefinito" selected — load the default
+      const current = instructorWeeklyAvailability[availInstructor.id];
+      setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+      setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
+      setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+    } else {
+      // Specific week selected — load override if it exists, otherwise pre-fill from default
+      const override = instrOverrides.find((o) => o.weekStart === weekStart);
+      if (override) {
+        setInstrDays(override.daysOfWeek);
+        setInstrStartMinutes(override.startMinutes);
+        setInstrEndMinutes(override.endMinutes);
+      } else {
+        const current = instructorWeeklyAvailability[availInstructor.id];
+        setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+        setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
+        setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+      }
+    }
   };
 
   const handleSaveInstructorAvailability = async () => {
@@ -601,23 +687,73 @@ export function AutoscuoleResourcesPage({
       return;
     }
     setSavingInstrAvailability(true);
-    const res = await setAutoscuolaInstructorWeeklyAvailability({
-      instructorId: availInstructor.id,
-      daysOfWeek: instrDays,
-      startMinutes: instrStartMinutes,
-      endMinutes: instrEndMinutes,
+
+    if (instrSelectedWeek) {
+      // Save as override for the specific week
+      const res = await setWeeklyAvailabilityOverride({
+        ownerType: "instructor",
+        ownerId: availInstructor.id,
+        weekStart: instrSelectedWeek,
+        daysOfWeek: instrDays,
+        startMinutes: instrStartMinutes,
+        endMinutes: instrEndMinutes,
+      });
+      setSavingInstrAvailability(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile salvare l'override." });
+        return;
+      }
+      // Update local override list
+      setInstrOverrides((prev) => {
+        const filtered = prev.filter((o) => o.weekStart !== instrSelectedWeek);
+        return [...filtered, { weekStart: instrSelectedWeek, daysOfWeek: instrDays, startMinutes: instrStartMinutes, endMinutes: instrEndMinutes }];
+      });
+      setAvailInstructor(null);
+      toast.success({ description: "Override settimanale salvato." });
+    } else {
+      // Save as default
+      const res = await setAutoscuolaInstructorWeeklyAvailability({
+        instructorId: availInstructor.id,
+        daysOfWeek: instrDays,
+        startMinutes: instrStartMinutes,
+        endMinutes: instrEndMinutes,
+      });
+      setSavingInstrAvailability(false);
+      if (!res.success || !res.data) {
+        toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+        return;
+      }
+      setInstructorWeeklyAvailability((prev) => ({
+        ...prev,
+        [availInstructor.id]: res.data!,
+      }));
+      setAvailInstructor(null);
+      toast.success({ description: "Disponibilità salvata." });
+    }
+    loadAvailability(date);
+  };
+
+  const handleResetInstrOverride = async () => {
+    if (!availInstructor || !instrSelectedWeek) return;
+    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
+    setSavingInstrAvailability(true);
+    const res = await deleteWeeklyAvailabilityOverride({
+      ownerType: "instructor",
+      ownerId: availInstructor.id,
+      weekStart: instrSelectedWeek,
     });
     setSavingInstrAvailability(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere l'override." });
       return;
     }
-    setInstructorWeeklyAvailability((prev) => ({
-      ...prev,
-      [availInstructor.id]: res.data!,
-    }));
-    setAvailInstructor(null);
-    toast.success({ description: "Disponibilità salvata." });
+    setInstrOverrides((prev) => prev.filter((o) => o.weekStart !== instrSelectedWeek));
+    // Reset form to default
+    const current = instructorWeeklyAvailability[availInstructor.id];
+    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
+    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+    toast.success({ description: "Override rimosso, settimana tornata al predefinito." });
     loadAvailability(date);
   };
 
@@ -757,12 +893,51 @@ export function AutoscuoleResourcesPage({
     setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
     setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
     setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+    setVehSelectedWeek(null);
+    getWeeklyAvailabilityOverrides({
+      ownerType: "vehicle",
+      ownerId: vehicle.id,
+    }).then((res) => {
+      if (res.success && res.data) {
+        setVehOverrides(
+          res.data.map((o) => ({
+            weekStart: new Date(o.weekStart).toISOString().slice(0, 10),
+            daysOfWeek: o.daysOfWeek,
+            startMinutes: o.startMinutes,
+            endMinutes: o.endMinutes,
+          })),
+        );
+      }
+    });
   };
 
   const toggleAvailDay = (day: number) => {
     setAvailDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
     );
+  };
+
+  const handleSelectVehWeek = (weekStart: string | null) => {
+    setVehSelectedWeek(weekStart);
+    if (!availVehicle) return;
+    if (weekStart === null) {
+      const current = vehicleWeeklyAvailability[availVehicle.id];
+      setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+      setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
+      setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+    } else {
+      const override = vehOverrides.find((o) => o.weekStart === weekStart);
+      if (override) {
+        setAvailDays(override.daysOfWeek);
+        setAvailStartMinutes(override.startMinutes);
+        setAvailEndMinutes(override.endMinutes);
+      } else {
+        const current = vehicleWeeklyAvailability[availVehicle.id];
+        setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+        setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
+        setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+      }
+    }
   };
 
   const handleSaveAvailability = async () => {
@@ -776,23 +951,69 @@ export function AutoscuoleResourcesPage({
       return;
     }
     setSavingAvailability(true);
-    const res = await setAutoscuolaVehicleWeeklyAvailability({
-      vehicleId: availVehicle.id,
-      daysOfWeek: availDays,
-      startMinutes: availStartMinutes,
-      endMinutes: availEndMinutes,
+
+    if (vehSelectedWeek) {
+      const res = await setWeeklyAvailabilityOverride({
+        ownerType: "vehicle",
+        ownerId: availVehicle.id,
+        weekStart: vehSelectedWeek,
+        daysOfWeek: availDays,
+        startMinutes: availStartMinutes,
+        endMinutes: availEndMinutes,
+      });
+      setSavingAvailability(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile salvare l'override." });
+        return;
+      }
+      setVehOverrides((prev) => {
+        const filtered = prev.filter((o) => o.weekStart !== vehSelectedWeek);
+        return [...filtered, { weekStart: vehSelectedWeek, daysOfWeek: availDays, startMinutes: availStartMinutes, endMinutes: availEndMinutes }];
+      });
+      setAvailVehicle(null);
+      toast.success({ description: "Override settimanale salvato." });
+    } else {
+      const res = await setAutoscuolaVehicleWeeklyAvailability({
+        vehicleId: availVehicle.id,
+        daysOfWeek: availDays,
+        startMinutes: availStartMinutes,
+        endMinutes: availEndMinutes,
+      });
+      setSavingAvailability(false);
+      if (!res.success || !res.data) {
+        toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+        return;
+      }
+      setVehicleWeeklyAvailability((prev) => ({
+        ...prev,
+        [availVehicle.id]: res.data!,
+      }));
+      setAvailVehicle(null);
+      toast.success({ description: "Disponibilità salvata." });
+    }
+    loadAvailability(date);
+  };
+
+  const handleResetVehOverride = async () => {
+    if (!availVehicle || !vehSelectedWeek) return;
+    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
+    setSavingAvailability(true);
+    const res = await deleteWeeklyAvailabilityOverride({
+      ownerType: "vehicle",
+      ownerId: availVehicle.id,
+      weekStart: vehSelectedWeek,
     });
     setSavingAvailability(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere l'override." });
       return;
     }
-    setVehicleWeeklyAvailability((prev) => ({
-      ...prev,
-      [availVehicle.id]: res.data!,
-    }));
-    setAvailVehicle(null);
-    toast.success({ description: "Disponibilità salvata." });
+    setVehOverrides((prev) => prev.filter((o) => o.weekStart !== vehSelectedWeek));
+    const current = vehicleWeeklyAvailability[availVehicle.id];
+    setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+    setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
+    setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+    toast.success({ description: "Override rimosso, settimana tornata al predefinito." });
     loadAvailability(date);
   };
 
@@ -1250,11 +1471,50 @@ export function AutoscuoleResourcesPage({
 
         {/* ── Instructor availability dialog */}
         <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Disponibilità settimanale — {availInstructor?.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
+              {/* Week selector strip */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Settimana</div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectInstrWeek(null)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                      instrSelectedWeek === null
+                        ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                        : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                    )}
+                  >
+                    Predefinito
+                  </button>
+                  {weekOptions.map((wo) => {
+                    const hasOverride = instrOverrides.some((o) => o.weekStart === wo.weekStart);
+                    return (
+                      <button
+                        key={wo.weekStart}
+                        type="button"
+                        onClick={() => handleSelectInstrWeek(wo.weekStart)}
+                        className={cn(
+                          "relative shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                          instrSelectedWeek === wo.weekStart
+                            ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                            : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                        )}
+                      >
+                        {wo.label}
+                        {hasOverride && (
+                          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[#324D7A]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1318,14 +1578,25 @@ export function AutoscuoleResourcesPage({
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-              <button
-                type="button"
-                onClick={handleDeleteInstructorAvailability}
-                disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]}
-                className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
-              >
-                Rimuovi disponibilità
-              </button>
+              {instrSelectedWeek ? (
+                <button
+                  type="button"
+                  onClick={handleResetInstrOverride}
+                  disabled={savingInstrAvailability || !instrOverrides.some((o) => o.weekStart === instrSelectedWeek)}
+                  className="order-last text-xs text-amber-600 hover:text-amber-700 hover:underline disabled:opacity-40 sm:order-first"
+                >
+                  Ripristina predefinito
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDeleteInstructorAvailability}
+                  disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]}
+                  className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
+                >
+                  Rimuovi disponibilità
+                </button>
+              )}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -1481,11 +1752,50 @@ export function AutoscuoleResourcesPage({
 
         {/* ── Availability edit dialog */}
         <Dialog open={Boolean(availVehicle)} onOpenChange={(open) => !open && setAvailVehicle(null)}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Disponibilità settimanale — {availVehicle?.name}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-2">
+              {/* Week selector strip */}
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground">Settimana</div>
+                <div className="flex gap-1.5 overflow-x-auto pb-1">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectVehWeek(null)}
+                    className={cn(
+                      "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                      vehSelectedWeek === null
+                        ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                        : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                    )}
+                  >
+                    Predefinito
+                  </button>
+                  {weekOptions.map((wo) => {
+                    const hasOverride = vehOverrides.some((o) => o.weekStart === wo.weekStart);
+                    return (
+                      <button
+                        key={wo.weekStart}
+                        type="button"
+                        onClick={() => handleSelectVehWeek(wo.weekStart)}
+                        className={cn(
+                          "relative shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                          vehSelectedWeek === wo.weekStart
+                            ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
+                            : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
+                        )}
+                      >
+                        {wo.label}
+                        {hasOverride && (
+                          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[#324D7A]" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <div className="space-y-2">
                 <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1549,14 +1859,25 @@ export function AutoscuoleResourcesPage({
               </div>
             </div>
             <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-              <button
-                type="button"
-                onClick={handleDeleteAvailability}
-                disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]}
-                className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
-              >
-                Rimuovi disponibilità
-              </button>
+              {vehSelectedWeek ? (
+                <button
+                  type="button"
+                  onClick={handleResetVehOverride}
+                  disabled={savingAvailability || !vehOverrides.some((o) => o.weekStart === vehSelectedWeek)}
+                  className="order-last text-xs text-amber-600 hover:text-amber-700 hover:underline disabled:opacity-40 sm:order-first"
+                >
+                  Ripristina predefinito
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleDeleteAvailability}
+                  disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]}
+                  className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
+                >
+                  Rimuovi disponibilità
+                </button>
+              )}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
