@@ -171,6 +171,7 @@ export function AutoscuoleResourcesPage({
     createDefaultLessonConstraintMap(),
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
+  const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
@@ -297,6 +298,7 @@ export function AutoscuoleResourcesPage({
         return;
       }
       setAvailabilityWeeks(String(res.data.availabilityWeeks));
+      setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
       setStudentReminderMinutes(String(res.data.studentReminderMinutes));
       setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
       setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
@@ -433,6 +435,7 @@ export function AutoscuoleResourcesPage({
     setSavingSettings(true);
     const res = await updateAutoscuolaSettings({
       availabilityWeeks: parsedWeeks,
+      bookingMinStartDate: bookingMinStartDate || null,
       studentReminderMinutes:
         parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
       instructorReminderMinutes:
@@ -849,6 +852,32 @@ export function AutoscuoleResourcesPage({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">
+                  Prenotazioni aperte dal
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={bookingMinStartDate}
+                    onChange={(e) => setBookingMinStartDate(e.target.value)}
+                    className="max-w-[200px]"
+                  />
+                  {bookingMinStartDate ? (
+                    <button
+                      type="button"
+                      onClick={() => setBookingMinStartDate("")}
+                      className="text-xs text-muted-foreground hover:text-foreground transition"
+                    >
+                      Rimuovi
+                    </button>
+                  ) : null}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Gli allievi non potranno prenotare prima di questa data. Lascia vuoto per nessun limite.
+                </p>
               </div>
 
               <div className="space-y-2">

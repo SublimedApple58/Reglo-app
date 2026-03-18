@@ -201,6 +201,7 @@ const voiceOfficeHoursSchema = z
 const autoscuolaSettingsPatchSchema = z
   .object({
     availabilityWeeks: z.number().int().min(1).max(12).optional(),
+    bookingMinStartDate: z.string().nullable().optional(),
     studentReminderMinutes: reminderMinutesSchema.optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     slotFillChannels: channelListSchema.optional(),
@@ -399,6 +400,7 @@ const asPreset = <T extends readonly number[]>(
 
 export type AutoscuolaSettingsData = {
   availabilityWeeks: number;
+  bookingMinStartDate: string | null;
   studentReminderMinutes: number;
   instructorReminderMinutes: number;
   slotFillChannels: string[];
@@ -458,6 +460,10 @@ const resolveAutoscuolaSettingsData = (
     typeof limits.availabilityWeeks === "number"
       ? limits.availabilityWeeks
       : DEFAULT_AVAILABILITY_WEEKS;
+  const bookingMinStartDate =
+    typeof limits.bookingMinStartDate === "string" && limits.bookingMinStartDate.trim().length
+      ? limits.bookingMinStartDate.trim()
+      : null;
   const studentReminderMinutes =
     typeof limits.studentReminderMinutes === "number"
       ? limits.studentReminderMinutes
@@ -590,6 +596,7 @@ const resolveAutoscuolaSettingsData = (
 
   return {
     availabilityWeeks,
+    bookingMinStartDate,
     studentReminderMinutes,
     instructorReminderMinutes,
     slotFillChannels,
@@ -929,6 +936,9 @@ export async function updateAutoscuolaSettings(
     const nextLimits = {
       ...limits,
       availabilityWeeks: payload.availabilityWeeks ?? previousAvailabilityWeeks,
+      bookingMinStartDate: payload.bookingMinStartDate !== undefined
+        ? payload.bookingMinStartDate
+        : (typeof limits.bookingMinStartDate === "string" ? limits.bookingMinStartDate : null),
       studentReminderMinutes:
         payload.studentReminderMinutes ?? previousStudentReminderMinutes,
       instructorReminderMinutes:
@@ -999,6 +1009,7 @@ export async function updateAutoscuolaSettings(
       success: true,
       data: {
         availabilityWeeks: nextLimits.availabilityWeeks,
+        bookingMinStartDate: nextLimits.bookingMinStartDate ?? null,
         studentReminderMinutes: nextLimits.studentReminderMinutes,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         slotFillChannels: nextLimits.slotFillChannels,

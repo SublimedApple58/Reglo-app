@@ -641,6 +641,31 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return { success: false, message: "Non puoi prenotare una guida nel passato." };
     }
 
+    // Check booking min start date
+    const serviceForMinDate = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const serviceLimits = (serviceForMinDate?.limits ?? {}) as Record<string, unknown>;
+    const bookingMinStartDate = typeof serviceLimits.bookingMinStartDate === "string"
+      ? serviceLimits.bookingMinStartDate.trim()
+      : null;
+    if (bookingMinStartDate) {
+      const minDate = new Date(bookingMinStartDate);
+      minDate.setHours(0, 0, 0, 0);
+      if (preferredDate < minDate) {
+        const formatted = minDate.toLocaleDateString("it-IT", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        });
+        return {
+          success: false,
+          message: `Le prenotazioni sono aperte a partire dal ${formatted}.`,
+        };
+      }
+    }
+
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     const [activeInstructors, activeVehicles, studentAvailability, autoscuolaService] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
