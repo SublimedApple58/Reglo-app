@@ -148,9 +148,7 @@ export function DocumentsPage(): React.ReactElement {
         </div>
       </div>
 
-      <div className="glass-panel glass-strong p-4">
-        <TableDocuments />
-      </div>
+      <TableDocuments />
     </ClientPageWrapper>
   );
 }

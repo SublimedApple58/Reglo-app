@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { RegloMark } from '@/components/ui/reglo-mark';
 import { redirect } from 'next/navigation';
 import CredentialsSignInForm from './credentials-signin-form';
-import { Sparkles, ShieldCheck, Zap } from 'lucide-react';
+import { CalendarCheck, Car, Users, Phone } from 'lucide-react';
 import { prisma } from '@/db/prisma';
 import { signOutUser } from '@/lib/actions/user.actions';
 import { Button } from '@/components/ui/button';
@@ -50,7 +50,7 @@ const SignInPage = async (props: {
         <div className="flex min-h-[60vh] items-center justify-center">
           <Card className="glass-panel glass-strong max-w-lg">
             <CardHeader className="space-y-2">
-              <CardTitle className="text-center text-2xl text-[#324e7a]">
+              <CardTitle className="text-center text-2xl text-foreground">
                 Accesso non disponibile
               </CardTitle>
               <CardDescription className="text-center">
@@ -104,58 +104,47 @@ const SignInPage = async (props: {
     <div className='grid w-full items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]'>
       <div className='space-y-6'>
         <Link href='/' className='inline-flex items-center gap-3'>
-          <RegloMark />
+          <RegloMark size={44} />
           <div>
-            <p className='text-sm font-semibold text-[#324e7a]'>Reglo</p>
-            <p className='text-xs text-muted-foreground'>Workspace Suite</p>
+            <p className='text-sm font-semibold text-foreground'>Reglo</p>
+            <p className='text-xs text-muted-foreground'>Autoscuole</p>
           </div>
         </Link>
 
         <div className='space-y-3'>
           <p className='text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground'>
-            Welcome back
+            Bentornato
           </p>
-          <h1 className='text-3xl font-semibold text-[#324e7a]'>
-            Entra in Reglo e riprendi il flusso.
+          <h1 className='text-3xl font-semibold text-foreground'>
+            Gestisci la tua autoscuola in un unico posto.
           </h1>
           <p className='text-sm text-muted-foreground'>
-            Tutti i workflow, i documenti e i costi in un&apos;unica dashboard
-            pronta a ripartire con te.
+            Agenda guide, allievi, istruttori, pagamenti e segretaria vocale AI — tutto sotto controllo.
           </p>
         </div>
 
-        <div className='grid gap-3 sm:grid-cols-3'>
+        <div className='grid gap-3 sm:grid-cols-2'>
           {[
-            { label: 'Automazioni', value: 'Workflow pronti' },
-            { label: 'Doc Manager', value: 'Firma + invio rapidi' },
-            { label: 'Billing', value: 'Consumi sotto controllo' },
+            { label: 'Agenda', value: 'Guide e appuntamenti', icon: CalendarCheck },
+            { label: 'Allievi', value: 'Anagrafica e crediti', icon: Users },
+            { label: 'Veicoli', value: 'Disponibilità e flotta', icon: Car },
+            { label: 'Segretaria AI', value: 'Risponde per te', icon: Phone },
           ].map((item) => (
             <div
               key={item.label}
-              className='glass-card px-4 py-3'
+              className='flex items-center gap-3 rounded-xl border border-border bg-white px-4 py-3'
             >
-              <p className='text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground'>
-                {item.label}
-              </p>
-              <p className='text-sm font-semibold text-[#324e7a]'>
-                {item.value}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <div className='grid gap-3 sm:grid-cols-3'>
-          {[
-            { icon: Zap, label: 'Setup veloce' },
-            { icon: ShieldCheck, label: 'Sicurezza by design' },
-            { icon: Sparkles, label: 'Esperienza su misura' },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className='glass-card flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground'
-            >
-              <item.icon className='h-4 w-4 text-[#324e7a]' />
-              <span>{item.label}</span>
+              <span className='flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-yellow-50'>
+                <item.icon className='h-4 w-4 text-yellow-600' />
+              </span>
+              <div>
+                <p className='text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground'>
+                  {item.label}
+                </p>
+                <p className='text-sm font-medium text-foreground'>
+                  {item.value}
+                </p>
+              </div>
             </div>
           ))}
         </div>
@@ -163,11 +152,11 @@ const SignInPage = async (props: {
 
       <Card className='glass-panel glass-strong'>
         <CardHeader className='space-y-2'>
-          <CardTitle className='text-center text-2xl text-[#324e7a]'>
+          <CardTitle className='text-center text-2xl text-foreground'>
             {translation('title')}
           </CardTitle>
           <CardDescription className='text-center'>
-            Accedi per entrare nel tuo workspace
+            Accedi per gestire la tua autoscuola
           </CardDescription>
         </CardHeader>
         <CardContent className='space-y-4'>

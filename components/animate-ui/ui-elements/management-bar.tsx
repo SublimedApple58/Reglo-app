@@ -71,7 +71,7 @@ function ManagementBar({
   return (
     <div
       className={cn(
-        "glass-panel glass-strong flex w-full max-w-full flex-wrap items-center gap-y-2 p-2 md:w-fit",
+        "flex w-full max-w-full flex-wrap items-center gap-y-2 rounded-lg border border-border bg-white p-2 shadow-card md:w-fit",
         className,
       )}
     >

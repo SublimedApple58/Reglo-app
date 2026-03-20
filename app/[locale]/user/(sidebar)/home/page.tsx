@@ -173,16 +173,16 @@ export default function HomePage(): React.ReactElement {
     <ClientPageWrapper title="Home" hideHero>
       <div className="relative space-y-5 overflow-x-clip">
         <div className="pointer-events-none absolute inset-0 overflow-visible">
-          <div className="absolute -left-4 top-24 h-72 w-72 rounded-full bg-[#324D7A]/14 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
-          <div className="absolute right-1/3 top-40 h-44 w-44 rounded-full bg-[#DCE8F9]/70 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
-          <div className="absolute -top-16 right-10 h-52 w-52 rounded-full bg-[#324D7A]/10 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
+          <div className="absolute -left-4 top-24 h-72 w-72 rounded-full bg-primary/14 blur-3xl animate-[float-slower_18s_ease-in-out_infinite]" />
+          <div className="absolute right-1/3 top-40 h-44 w-44 rounded-full bg-accent/30 blur-2xl animate-[float-slow_16s_ease-in-out_infinite]" />
+          <div className="absolute -top-16 right-10 h-52 w-52 rounded-full bg-primary/10 blur-3xl animate-[float-slow_14s_ease-in-out_infinite]" />
         </div>
 
         <section className="glass-surface glass-strong relative overflow-hidden p-6 lg:p-7">
           <div className="grid gap-5 lg:grid-cols-[1.35fr_0.65fr]">
             <div className="space-y-4">
               <span className="glass-chip">Workspace overview</span>
-              <h1 className="text-2xl font-semibold text-[#324e7a] lg:text-[30px]">
+              <h1 className="text-2xl font-semibold text-foreground lg:text-[30px]">
                 Ciao, {greetingName}
               </h1>
               <p className="max-w-2xl text-sm text-muted-foreground">
@@ -223,8 +223,8 @@ export default function HomePage(): React.ReactElement {
 
             <div className="glass-card glass-strong flex flex-col gap-4 p-4">
               <div className="flex items-center gap-2">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#AFE2D4]/55">
-                  <ChartNoAxesColumnIncreasing className="h-4 w-4 text-[#324D7A]" />
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-accent/55">
+                  <ChartNoAxesColumnIncreasing className="h-4 w-4 text-foreground" />
                 </span>
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -255,7 +255,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.documentsCompletedMonth ?? 0}
               description="Mese corrente"
               isLoading={isLoading}
-              accent="bg-[#a9d9d1]"
+              accent="bg-accent"
               icon={<ClipboardCheck className="h-4 w-4" />}
             />
             <MetricCard
@@ -263,7 +263,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.workflowsCompletedMonth ?? 0}
               description="Mese corrente"
               isLoading={isLoading}
-              accent="bg-[#c9d9f2]"
+              accent="bg-primary/15"
               icon={<Workflow className="h-4 w-4" />}
             />
             <MetricCard
@@ -271,7 +271,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.activeWorkflows ?? 0}
               description="Attivi ora"
               isLoading={isLoading}
-              accent="bg-[#e1ecfb]"
+              accent="bg-primary/10"
               icon={<Sparkles className="h-4 w-4" />}
             />
             <MetricCard
@@ -279,7 +279,7 @@ export default function HomePage(): React.ReactElement {
               value={metrics?.pendingDocuments ?? 0}
               description="Da completare"
               isLoading={isLoading}
-              accent="bg-[#e9f2f2]"
+              accent="bg-accent/20"
               icon={<ReceiptText className="h-4 w-4" />}
             />
           </div>
@@ -417,7 +417,7 @@ export default function HomePage(): React.ReactElement {
                   onClick={action.onClick}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#a9d9d1]/45 text-[#324e7a] shadow-inner">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent/45 text-foreground shadow-inner">
                       {action.icon}
                     </span>
                     <div>
@@ -437,8 +437,8 @@ export default function HomePage(): React.ReactElement {
             <div className="glass-divider my-4" />
 
             <div className="glass-card glass-strong flex items-start gap-3 p-4">
-              <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-[#AFE2D4]/55">
-                <CircleCheckBig className="h-4 w-4 text-[#324D7A]" />
+              <span className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-accent/55">
+                <CircleCheckBig className="h-4 w-4 text-foreground" />
               </span>
               <div>
                 <p className="text-sm font-semibold text-foreground">Stato workspace</p>
@@ -522,7 +522,7 @@ function MetricCard({
             {isLoading ? (
               <Skeleton className="h-8 w-16" />
             ) : (
-              <p className="text-2xl font-semibold text-[#324e7a]">{value}</p>
+              <p className="text-2xl font-semibold text-foreground">{value}</p>
             )}
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>

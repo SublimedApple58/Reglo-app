@@ -3,8 +3,7 @@
 import React from "react";
 import { PencilLine, Plus, Save, Trash2 } from "lucide-react";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
@@ -27,6 +26,7 @@ import {
 } from "@/lib/actions/autoscuola-communications.actions";
 import { autoscuolaTemplateVariables } from "@/lib/autoscuole/variables";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type Rule = {
   id: string;
@@ -59,10 +59,8 @@ const emptyDraft = () => ({
 });
 
 export function AutoscuoleCommunicationsPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
@@ -93,15 +91,13 @@ export function AutoscuoleCommunicationsPage({
   }, [load]);
 
   return (
-    <ClientPageWrapper
+    <PageWrapper
       title="Autoscuole"
       subTitle="Comunicazioni automatiche con allievi e staff."
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
     >
-      <div className="w-full space-y-5">
+      <div className="relative w-full space-y-5">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
         <section className="glass-panel glass-strong p-6">
           <div className="flex items-start justify-between gap-3">
@@ -434,6 +430,6 @@ export function AutoscuoleCommunicationsPage({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }

@@ -37,19 +37,19 @@ export async function GET(
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         margin: 0;
         padding: 24px;
-        background: #f2fbf8;
-        color: #324d7a;
+        background: #FFFFFF;
+        color: #1F2937;
       }
       .card {
         max-width: 520px;
         margin: 48px auto;
         background: #ffffff;
-        border: 1px solid #d8ece7;
+        border: 1px solid #E5E7EB;
         border-radius: 20px;
         padding: 24px;
       }
       a {
-        color: #324d7a;
+        color: #EC4899;
         font-weight: 600;
       }
       p {

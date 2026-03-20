@@ -295,7 +295,7 @@ function ServiceCard({
                       className={cn(
                         "flex-1 rounded-md px-2 py-1 font-medium transition-colors",
                         assignRoutingMode === mode
-                          ? "bg-[#324D7A] text-white"
+                          ? "bg-primary text-white"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -484,7 +484,7 @@ export default function BackofficeCompaniesPage({
         </p>
       </div>
 
-      <div className="glass-panel glass-strong p-4">
+      <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Search className="h-4 w-4" />

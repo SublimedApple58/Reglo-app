@@ -1,10 +1,10 @@
 "use client";
 
 import React from "react";
-import { Plus, SlidersHorizontal } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -22,7 +22,7 @@ import {
   deleteAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
-import { Skeleton } from "@/components/ui/skeleton";
+import { AgendaSkeleton } from "@/components/ui/page-skeleton";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { FieldGroup } from "@/components/ui/field-group";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -99,10 +102,8 @@ type FilterOption = {
 };
 
 export function AutoscuoleAgendaPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
@@ -120,6 +121,8 @@ export function AutoscuoleAgendaPage({
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [createStep, setCreateStep] = React.useState(0);
+  const [creating, setCreating] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
@@ -134,6 +137,7 @@ export function AutoscuoleAgendaPage({
     duration: "30",
   });
   const [nowTick, setNowTick] = React.useState(() => Date.now());
+  const todayNormalized = React.useMemo(() => normalizeDay(new Date(nowTick)), [nowTick]);
   const bootstrapRequestRef = React.useRef(0);
 
   const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
@@ -258,8 +262,7 @@ export function AutoscuoleAgendaPage({
     return start < rangeEnd && end > rangeStart;
   });
 
-  const handleCreate = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleCreate = async () => {
     if (!form.studentId || !form.day || !form.time || !form.instructorId || !form.vehicleId) {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
@@ -269,6 +272,7 @@ export function AutoscuoleAgendaPage({
       toast.error({ description: "Data o orario non validi." });
       return;
     }
+    setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const res = await createAutoscuolaAppointment({
       studentId: form.studentId,
@@ -280,11 +284,13 @@ export function AutoscuoleAgendaPage({
       sendProposal: form.sendProposal,
     });
     if (!res.success) {
+      setCreating(false);
       toast.error({
         description: res.message ?? "Impossibile creare l'appuntamento.",
       });
       return;
     }
+    setCreating(false);
     setCreateOpen(false);
     setForm({
       studentId: "",
@@ -421,24 +427,26 @@ export function AutoscuoleAgendaPage({
   });
 
   return (
-    <ClientPageWrapper
-      title="Autoscuole"
+    <PageWrapper
+      title="Agenda"
       subTitle="Agenda guide ed esami."
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
     >
-      <div className="w-full space-y-5" data-testid="autoscuole-agenda-page">
+      <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
+        {loading ? (
+          <AgendaSkeleton />
+        ) : (
+          <>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4 shadow-card">
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-[220px]">
               <Input
                 placeholder="Cerca appuntamenti"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                className="border-white/60 bg-white/80"
+                className="border-border bg-white"
               />
             </div>
             <FilterTag
@@ -503,7 +511,7 @@ export function AutoscuoleAgendaPage({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2 rounded-full border border-white/60 bg-white/70 p-1">
+            <div className="flex items-center gap-1 rounded-full border border-border bg-gray-50 p-1">
               <Button
                 variant={viewMode === "week" ? "default" : "ghost"}
                 size="sm"
@@ -524,9 +532,10 @@ export function AutoscuoleAgendaPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  aria-label="Settimana precedente"
                   onClick={() => setWeekStart((prev) => addDays(prev, -7))}
                 >
-                  ←
+                  <ChevronLeft className="size-4" />
                 </Button>
                 <span className="min-w-[140px] text-center">
                   {formatRangeLabel(weekStart)}
@@ -534,9 +543,10 @@ export function AutoscuoleAgendaPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  aria-label="Settimana successiva"
                   onClick={() => setWeekStart((prev) => addDays(prev, 7))}
                 >
-                  →
+                  <ChevronRight className="size-4" />
                 </Button>
               </div>
             ) : (
@@ -544,9 +554,10 @@ export function AutoscuoleAgendaPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  aria-label="Giorno precedente"
                   onClick={() => setDayFocus((prev) => addDays(prev, -1))}
                 >
-                  ←
+                  <ChevronLeft className="size-4" />
                 </Button>
                 <span className="min-w-[140px] text-center">
                   {dayFocus.toLocaleDateString("it-IT", {
@@ -558,28 +569,26 @@ export function AutoscuoleAgendaPage({
                 <Button
                   variant="outline"
                   size="sm"
+                  aria-label="Giorno successivo"
                   onClick={() => setDayFocus((prev) => addDays(prev, 1))}
                 >
-                  →
+                  <ChevronRight className="size-4" />
                 </Button>
               </div>
             )}
             {refreshing ? (
-              <span className="rounded-full border border-white/70 bg-white/70 px-3 py-1 text-xs text-muted-foreground">
+              <span className="rounded-full border border-border bg-gray-50 px-3 py-1 text-xs text-muted-foreground">
                 Aggiornamento...
               </span>
             ) : null}
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
             Nuovo appuntamento
           </Button>
         </div>
 
-        <div className="glass-panel glass-strong p-4">
-          {loading ? (
-            <Skeleton className="h-[420px] w-full" />
-          ) : (
+        <div>
             <div
               className="overflow-x-auto overflow-y-hidden overscroll-y-none"
               onWheel={handleCalendarWheel}
@@ -593,15 +602,26 @@ export function AutoscuoleAgendaPage({
                   }`}
                 >
                   <div />
-                  {visibleDays.map((day) => (
-                    <div key={day.toISOString()} className="text-center font-semibold">
-                      {day.toLocaleDateString("it-IT", {
-                        weekday: "short",
-                        day: "2-digit",
-                        month: "short",
-                      })}
-                    </div>
-                  ))}
+                  {visibleDays.map((day) => {
+                    const isDayToday = day.getTime() === todayNormalized.getTime();
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className={cn(
+                          "rounded-lg py-1.5 text-center text-xs font-semibold transition-colors",
+                          isDayToday
+                            ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                            : "text-muted-foreground",
+                        )}
+                      >
+                        {day.toLocaleDateString("it-IT", {
+                          weekday: "short",
+                          day: "2-digit",
+                          month: "short",
+                        })}
+                      </div>
+                    );
+                  })}
                 </div>
                 <div
                   className={`grid gap-3 ${
@@ -620,10 +640,30 @@ export function AutoscuoleAgendaPage({
                         >
                           <div className="flex items-center gap-2">
                             <span className="min-w-[36px]">{`${pad(hour)}:00`}</span>
-                            <span className="h-px flex-1 bg-white/40" />
+                            <span className="h-px flex-1 bg-border" />
                           </div>
                         </div>
                       ))}
+                      {/* Current time label in the left column */}
+                      {(() => {
+                        const now = new Date(nowTick);
+                        const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                        const todayInView = visibleDays.some(
+                          (d) => d.getTime() === todayNormalized.getTime(),
+                        );
+                        if (!todayInView || mins < 0 || mins > totalMinutes) return null;
+                        return (
+                          <div
+                            className="absolute left-0 right-0 z-20 flex items-center"
+                            style={{ top: mins * PIXELS_PER_MINUTE }}
+                          >
+                            <span className="min-w-[36px] text-[10px] font-semibold tabular-nums text-red-500">
+                              {`${pad(now.getHours())}:${pad(now.getMinutes())}`}
+                            </span>
+                            <span className="h-[1.5px] flex-1 bg-red-500" />
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                   {visibleDays.map((day, dayIndex) => {
@@ -632,11 +672,18 @@ export function AutoscuoleAgendaPage({
                     const dayEnd = new Date(day);
                     dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
                     const dayAppointments = appointmentsByDay[dayIndex] ?? [];
+                    const isDayToday = day.getTime() === todayNormalized.getTime();
+                    const now = new Date(nowTick);
+                    const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                    const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
 
                     return (
                       <div
                         key={day.toISOString()}
-                        className="relative overflow-hidden rounded-2xl border border-white/60 bg-[linear-gradient(transparent_29px,rgba(255,255,255,0.55)_30px)] bg-[length:100%_30px] shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_14px_36px_-28px_rgba(50,78,122,0.55)]"
+                        className={cn(
+                          "relative cursor-pointer overflow-hidden rounded-[16px] border bg-white shadow-card",
+                          isDayToday ? "border-yellow-200" : "border-border",
+                        )}
                         style={{ height: calendarHeight }}
                         onClick={(event) => {
                           const rect = event.currentTarget.getBoundingClientRect();
@@ -652,18 +699,29 @@ export function AutoscuoleAgendaPage({
                             day: formatYmd(slotTime),
                             time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
                           }));
+                          setCreateStep(0);
                           setCreateOpen(true);
                         }}
                       >
                         {hourMarks.map((hour) => (
                           <div
                             key={hour}
-                            className="absolute left-0 right-0 h-px bg-white/30"
+                            className="absolute left-0 right-0 h-px bg-border/50"
                             style={{
                               top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE,
                             }}
                           />
                         ))}
+                        {/* Red "now" line */}
+                        {showNowLine && (
+                          <div
+                            className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
+                            style={{ top: nowMinutes * PIXELS_PER_MINUTE }}
+                          >
+                            <span className="size-2 shrink-0 rounded-full bg-red-500" />
+                            <span className="h-[1.5px] flex-1 bg-red-500" />
+                          </div>
+                        )}
                         {dayAppointments.map((item) => {
                           const start = toDate(item.startsAt);
                           const end = getAppointmentEnd(item);
@@ -689,7 +747,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   type="button"
                                   className={cn(
-                                    "absolute left-2 right-2 box-border flex flex-col overflow-hidden rounded-xl border text-left text-[11px] shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                                    "absolute left-2 right-2 z-10 box-border flex flex-col overflow-hidden rounded-xl border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
                                     isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
                                     isPendingAction ? "pointer-events-none opacity-75" : "",
                                     statusMeta.className,
@@ -702,10 +760,10 @@ export function AutoscuoleAgendaPage({
                                   {isPendingAction ? (
                                     <>
                                       <div className="flex items-center justify-between gap-2">
-                                        <div className="h-3 w-24 animate-pulse rounded-full bg-white/70" />
-                                        <div className="h-3 w-14 animate-pulse rounded-full bg-white/70" />
+                                        <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" />
+                                        <div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" />
                                       </div>
-                                      <div className="h-3 w-20 animate-pulse rounded-full bg-white/65" />
+                                      <div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" />
                                     </>
                                   ) : (
                                     <>
@@ -721,7 +779,7 @@ export function AutoscuoleAgendaPage({
                                         <Badge
                                           variant="secondary"
                                           className={cn(
-                                            "shrink-0 border border-white/70 bg-white/80 font-medium text-foreground/80",
+                                            "shrink-0 border border-border bg-white font-medium text-foreground/80",
                                             isCompact
                                               ? "px-1.5 py-0 text-[9px]"
                                               : "px-2 py-0.5 text-[10px]",
@@ -744,13 +802,13 @@ export function AutoscuoleAgendaPage({
                                 align="start"
                                 side="right"
                                 sideOffset={12}
-                                className="w-72 rounded-2xl border border-white/70 bg-white/95 p-3 shadow-[0_20px_55px_-35px_rgba(50,78,122,0.45)]"
+                                className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
                               >
                                 <div className="space-y-2">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                                     Evento
                                   </div>
-                                  <div className="rounded-xl border border-white/70 bg-white/80 p-3">
+                                  <div className="rounded-xl border border-border bg-white p-3">
                                     <div className="text-sm font-semibold text-foreground">
                                       {item.student.firstName} {item.student.lastName}
                                     </div>
@@ -846,8 +904,9 @@ export function AutoscuoleAgendaPage({
                 </div>
               </div>
             </div>
-          )}
         </div>
+          </>
+        )}
       </div>
 
       <Dialog
@@ -903,156 +962,276 @@ export function AutoscuoleAgendaPage({
       </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuovo appuntamento</DialogTitle>
-          </DialogHeader>
-          <form className="space-y-4" onSubmit={handleCreate}>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Giorno</div>
-              <DatePicker
-                value={form.day}
-                onChange={(value) => setForm((prev) => ({ ...prev, day: value }))}
-              />
+        <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
+          <DialogTitle className="sr-only">Nuovo appuntamento</DialogTitle>
+          {/* Step indicator */}
+          <div className="flex items-center gap-0 border-b border-border px-6 pt-5 pb-4">
+            {[
+              { icon: CalendarDays, label: "Quando" },
+              { icon: Users, label: "Chi" },
+              { icon: Send, label: "Conferma" },
+            ].map((s, i) => (
+              <React.Fragment key={i}>
+                {i > 0 && (
+                  <div className={cn("mx-2 h-px flex-1 transition-colors", i <= createStep ? "bg-yellow-300" : "bg-border")} />
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (i < createStep) setCreateStep(i);
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
+                    i === createStep
+                      ? "border-yellow-300 bg-yellow-50 text-yellow-700"
+                      : i < createStep
+                        ? "cursor-pointer border-yellow-200 bg-yellow-50/50 text-yellow-600"
+                        : "border-border bg-white text-muted-foreground",
+                  )}
+                >
+                  {i < createStep ? (
+                    <Check className="size-3" />
+                  ) : (
+                    <s.icon className="size-3" />
+                  )}
+                  {s.label}
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
+
+          <div>
+            {/* Step content area — fixed height for smooth transitions */}
+            <div className="relative min-h-[220px] px-6 py-5">
+              <AnimatePresence mode="wait" initial={false}>
+                {/* Step 1: Quando */}
+                {createStep === 0 && (
+                  <motion.div
+                    key="step-0"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.15 }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Quando</h4>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Scegli giorno, orario e durata della guida</p>
+                    </div>
+                    <FieldGroup label="Giorno" required>
+                      <DatePicker
+                        value={form.day}
+                        onChange={(value) => setForm((prev) => ({ ...prev, day: value }))}
+                      />
+                    </FieldGroup>
+                    <div className="grid grid-cols-2 gap-3">
+                      <FieldGroup label="Orario" required>
+                        <Select
+                          value={form.time}
+                          onValueChange={(value) => setForm((prev) => ({ ...prev, time: value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>{option}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                      <FieldGroup label="Durata">
+                        <Select
+                          value={form.duration}
+                          onValueChange={(value) => setForm((prev) => ({ ...prev, duration: value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Durata" /></SelectTrigger>
+                          <SelectContent>
+                            {SLOT_OPTIONS.map((option) => (
+                              <SelectItem key={option} value={option}>{option} min</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Step 2: Chi */}
+                {createStep === 1 && (
+                  <motion.div
+                    key="step-1"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.15 }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Dettagli</h4>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Tipo di guida, istruttore, allievo e veicolo</p>
+                    </div>
+                    <FieldGroup label="Tipo guida" required>
+                      <Select
+                        value={form.type}
+                        onValueChange={(value) => setForm((prev) => ({ ...prev, type: value }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Seleziona tipo" /></SelectTrigger>
+                        <SelectContent>
+                          {LESSON_TYPE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                    <FieldGroup label="Allievo" required>
+                      <Select
+                        value={form.studentId}
+                        onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Seleziona allievo" /></SelectTrigger>
+                        <SelectContent>
+                          {students.map((student) => (
+                            <SelectItem key={student.id} value={student.id}>
+                              {student.firstName} {student.lastName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                    <div className="grid grid-cols-2 gap-3">
+                      <FieldGroup label="Istruttore" required>
+                        <Select
+                          value={form.instructorId}
+                          onValueChange={(value) => setForm((prev) => ({ ...prev, instructorId: value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
+                          <SelectContent>
+                            {instructors.map((instructor) => (
+                              <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                      <FieldGroup label="Veicolo" required>
+                        <Select
+                          value={form.vehicleId}
+                          onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Veicolo" /></SelectTrigger>
+                          <SelectContent>
+                            {vehicles.map((vehicle) => (
+                              <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Step 3: Conferma */}
+                {createStep === 2 && (
+                  <motion.div
+                    key="step-2"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.15 }}
+                    className="space-y-4"
+                  >
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">Riepilogo</h4>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Controlla i dati e conferma</p>
+                    </div>
+                    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
+                      <SummaryRow label="Giorno" value={form.day || "—"} />
+                      <SummaryRow label="Orario" value={`${form.time} · ${form.duration} min`} />
+                      <SummaryRow label="Tipo" value={LESSON_TYPE_OPTIONS.find((o) => o.value === form.type)?.label ?? form.type} />
+                      <SummaryRow label="Allievo" value={
+                        students.find((s) => s.id === form.studentId)
+                          ? `${students.find((s) => s.id === form.studentId)!.firstName} ${students.find((s) => s.id === form.studentId)!.lastName}`
+                          : "—"
+                      } />
+                      <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
+                      <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />
+                    </div>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setForm((prev) => ({ ...prev, sendProposal: !prev.sendProposal }))}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm((prev) => ({ ...prev, sendProposal: !prev.sendProposal })); } }}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-left transition",
+                        form.sendProposal
+                          ? "border-yellow-200 bg-yellow-50"
+                          : "border-border bg-white",
+                      )}
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Invia come proposta</div>
+                        <div className="text-xs text-muted-foreground">L&apos;allievo potrà accettare o rifiutare</div>
+                      </div>
+                      <InlineToggle checked={form.sendProposal} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Orario</div>
-              <Select
-                value={form.time}
-                onValueChange={(value) => setForm((prev) => ({ ...prev, time: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona orario" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TIME_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+
+            {/* Footer — always visible */}
+            <div className="flex items-center justify-between border-t border-border px-6 py-4">
+              {createStep > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCreateStep((s) => s - 1)}
+                >
+                  <ChevronLeft className="mr-1 size-3.5" />
+                  Indietro
+                </Button>
+              ) : (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>
+                  Annulla
+                </Button>
+              )}
+
+              {createStep < 2 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    createStep === 0
+                      ? !form.day || !form.time
+                      : !form.studentId || !form.instructorId || !form.vehicleId
+                  }
+                  onClick={() => setCreateStep((s) => s + 1)}
+                >
+                  Avanti
+                  <ChevronRight className="ml-1 size-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    creating ||
+                    !form.studentId ||
+                    !form.day ||
+                    !form.time ||
+                    !form.instructorId ||
+                    !form.vehicleId
+                  }
+                  onClick={handleCreate}
+                >
+                  {creating ? "Salvataggio..." : form.sendProposal ? "Invia proposta" : "Conferma"}
+                </Button>
+              )}
             </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Durata</div>
-              <Select
-                value={form.duration}
-                onValueChange={(value) =>
-                  setForm((prev) => ({ ...prev, duration: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Durata" />
-                </SelectTrigger>
-                <SelectContent>
-                  {SLOT_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option} min
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-muted-foreground">Tipo guida</div>
-              <Select
-                value={form.type}
-                onValueChange={(value) =>
-                  setForm((prev) => ({ ...prev, type: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona tipo guida" />
-                </SelectTrigger>
-                <SelectContent>
-                  {LESSON_TYPE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Select
-              value={form.instructorId}
-              onValueChange={(value) =>
-                setForm((prev) => ({ ...prev, instructorId: value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona istruttore" />
-              </SelectTrigger>
-              <SelectContent>
-                {instructors.map((instructor) => (
-                  <SelectItem key={instructor.id} value={instructor.id}>
-                    {instructor.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={form.studentId}
-              onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona allievo" />
-              </SelectTrigger>
-              <SelectContent>
-                {students.map((student) => (
-                  <SelectItem key={student.id} value={student.id}>
-                    {student.firstName} {student.lastName}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={form.vehicleId}
-              onValueChange={(value) =>
-                setForm((prev) => ({ ...prev, vehicleId: value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Seleziona veicolo" />
-              </SelectTrigger>
-              <SelectContent>
-                {vehicles.map((vehicle) => (
-                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                    {vehicle.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="flex items-center justify-between rounded-2xl border border-white/60 bg-white/70 px-4 py-3">
-              <span className="text-sm">Manda proposta</span>
-              <Checkbox
-                checked={form.sendProposal}
-                onCheckedChange={(checked) =>
-                  setForm((prev) => ({ ...prev, sendProposal: Boolean(checked) }))
-                }
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                Annulla
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  !form.studentId ||
-                  !form.day ||
-                  !form.time ||
-                  !form.instructorId ||
-                  !form.vehicleId
-                }
-              >
-                {form.sendProposal ? "Invia proposta" : "Salva"}
-              </Button>
-            </DialogFooter>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
 
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }
 
@@ -1250,6 +1429,15 @@ function getFilterOptions(
   ];
 }
 
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium text-foreground">{value}</span>
+    </div>
+  );
+}
+
 function FilterTag({
   label,
   value,
@@ -1269,16 +1457,16 @@ function FilterTag({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-full border px-3 text-sm transition",
+        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm transition",
         active
-          ? "border-white/80 bg-white/85 text-foreground shadow-sm"
-          : "border-dashed border-white/70 bg-white/50 text-muted-foreground hover:bg-white/70",
+          ? "border-yellow-200 bg-yellow-50 text-yellow-700 shadow-sm"
+          : "border-dashed border-border bg-white text-muted-foreground hover:bg-gray-50",
       )}
     >
       <SlidersHorizontal className="h-3.5 w-3.5" />
       <span>{label}</span>
       {displayValue ? (
-        <span className="rounded-full bg-[#AFE2D4]/35 px-2 py-0.5 text-[11px] font-medium text-foreground">
+        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-700">
           {displayValue}
         </span>
       ) : null}

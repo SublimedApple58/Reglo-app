@@ -477,6 +477,24 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
       },
     });
 
+    // Auto-sync AutoscuolaInstructor record when role is set to INSTRUCTOR
+    if (user.autoscuolaRole === 'INSTRUCTOR') {
+      await prisma.autoscuolaInstructor.upsert({
+        where: {
+          companyId_userId: {
+            companyId: context.companyId,
+            userId: user.id,
+          },
+        },
+        update: { status: 'active' },
+        create: {
+          companyId: context.companyId,
+          userId: user.id,
+          name: user.name || user.id,
+        },
+      });
+    }
+
     revalidatePath('/admin/users');
 
     return {
@@ -535,6 +553,17 @@ export async function createCompanyUser(input: {
           autoscuolaRole: input.autoscuolaRole,
         },
       });
+
+      // Auto-create AutoscuolaInstructor record when role is INSTRUCTOR
+      if (input.autoscuolaRole === 'INSTRUCTOR') {
+        await tx.autoscuolaInstructor.create({
+          data: {
+            companyId: input.companyId,
+            userId: user.id,
+            name: input.name.trim(),
+          },
+        });
+      }
     });
 
     revalidatePath('/admin/users');

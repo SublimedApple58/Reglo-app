@@ -1,7 +1,11 @@
+"use client";
+
 import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
+import { motion } from "motion/react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { fadeInUp, spring } from "@/lib/motion";
 
 export function PageLoadingState({
   label = "Caricamento in corso...",
@@ -13,7 +17,7 @@ export function PageLoadingState({
   return (
     <div
       className={cn(
-        "glass-panel flex min-h-[220px] w-full items-center justify-center p-6",
+        "flex min-h-[220px] w-full items-center justify-center rounded-lg border border-border bg-white p-6 shadow-card",
         className,
       )}
     >
@@ -37,14 +41,17 @@ export function PageEmptyState({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div
+    <motion.div
+      variants={fadeInUp}
+      initial="hidden"
+      animate="show"
       className={cn(
-        "glass-panel flex min-h-[240px] w-full items-center justify-center p-6",
+        "flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-white p-6 shadow-card",
         className,
       )}
     >
       <div className="max-w-md space-y-3 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-white/75 bg-white/85 shadow-sm">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-pink-50">
           <Inbox className="h-5 w-5 text-primary" />
         </div>
         <p className="text-base font-semibold text-foreground">{title}</p>
@@ -57,7 +64,7 @@ export function PageEmptyState({
           </div>
         ) : null}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -73,15 +80,18 @@ export function PageErrorState({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div
+    <motion.div
+      variants={fadeInUp}
+      initial="hidden"
+      animate="show"
       className={cn(
-        "glass-panel flex min-h-[240px] w-full items-center justify-center p-6",
+        "flex min-h-[240px] w-full items-center justify-center rounded-lg border border-border bg-white p-6 shadow-card",
         className,
       )}
     >
       <div className="max-w-md space-y-3 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-rose-200 bg-rose-50/80 shadow-sm">
-          <AlertTriangle className="h-5 w-5 text-rose-700" />
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-pink-200 bg-[#FEF2F2]">
+          <AlertTriangle className="h-5 w-5 text-destructive" />
         </div>
         <p className="text-base font-semibold text-foreground">{title}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
@@ -93,7 +103,6 @@ export function PageErrorState({
           </div>
         ) : null}
       </div>
-    </div>
+    </motion.div>
   );
 }
-

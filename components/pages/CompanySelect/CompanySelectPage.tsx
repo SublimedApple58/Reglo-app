@@ -88,7 +88,7 @@ export function CompanySelectPage({
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
           Company
         </p>
-        <h1 className="text-3xl font-semibold text-[#324e7a]">
+        <h1 className="text-3xl font-semibold text-foreground">
           Scegli la company da aprire
         </h1>
         <p className="text-sm text-muted-foreground">

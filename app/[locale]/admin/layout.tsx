@@ -1,5 +1,6 @@
-import SideBarWrapper from '@/components/Layout/SideBarWrapper';
 import { requireCompanyAdmin } from '@/lib/auth-guard';
+import { AuthDataProvider } from '@/components/providers/auth-data.provider';
+import { AutoscuoleShell } from '@/components/Layout/AutoscuoleShell';
 
 export default async function AdminLayout({
   children,
@@ -12,8 +13,8 @@ export default async function AdminLayout({
   await requireCompanyAdmin(locale);
 
   return (
-    <>
-      <SideBarWrapper>{children}</SideBarWrapper>
-    </>
+    <AuthDataProvider>
+      <AutoscuoleShell>{children}</AutoscuoleShell>
+    </AuthDataProvider>
   );
 }

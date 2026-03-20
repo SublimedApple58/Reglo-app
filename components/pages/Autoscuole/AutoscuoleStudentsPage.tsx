@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import React from "react";
-import { ExternalLink, Loader2, UserPlus } from "lucide-react";
+import { ExternalLink, Loader2, MailPlus, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,8 +44,18 @@ import {
   getCompanyInviteCode,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
+import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  InputButton,
+  InputButtonAction,
+  InputButtonInput,
+  InputButtonProvider,
+  InputButtonSubmit,
+} from "@/components/animate-ui/buttons/input";
+import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type StudentProfile = {
   id: string;
@@ -174,10 +183,8 @@ const formatDate = (value: string | Date, withTime = false) => {
 };
 
 export function AutoscuoleStudentsPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const locale = useLocale();
@@ -335,184 +342,191 @@ export function AutoscuoleStudentsPage({
   }, []);
 
   return (
-    <ClientPageWrapper
-      title="Autoscuole"
-      subTitle="Allievi sincronizzati dalla Directory utenti."
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
+    <PageWrapper
+      title="Allievi"
+      subTitle={
+        inviteCode
+          ? `Allievi sincronizzati dalla Directory utenti. Codice autoscuola: ${inviteCode}`
+          : "Allievi sincronizzati dalla Directory utenti."
+      }
     >
-      <div className="w-full space-y-5">
+      <div className="relative w-full space-y-5">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel glass-strong space-y-4 p-4">
-          {inviteCode && (
-            <div className="flex items-center justify-between rounded-xl border border-pink-200 bg-pink-50 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-pink-700">Codice autoscuola:</span>
-                <span className="font-mono text-lg font-bold tracking-widest text-pink-900">
-                  {inviteCode}
-                </span>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  navigator.clipboard.writeText(inviteCode);
-                  toast.success({ description: "Codice copiato!" });
+        {loading ? (
+          <TableSkeleton rows={6} cols={7} />
+        ) : (
+          <>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  load();
                 }}
+                className="w-full sm:max-w-sm"
               >
-                Copia
-              </Button>
+                <InputButtonProvider showInput setShowInput={() => {}} className="w-full">
+                  <InputButton className="w-full">
+                    <InputButtonAction className="hidden" />
+                    <InputButtonSubmit
+                      onClick={() => {}}
+                      type="submit"
+                      className="bg-foreground text-background hover:bg-foreground/90"
+                    />
+                  </InputButton>
+                  <InputButtonInput
+                    type="text"
+                    placeholder="Cerca allievi"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pr-14 text-sm"
+                  />
+                </InputButtonProvider>
+              </form>
+
+              <ManagementBar
+                totalRows={students.length}
+                actions={[
+                  {
+                    id: "invite-student",
+                    label: "Invita allievo",
+                    icon: MailPlus,
+                    variant: "default",
+                    onClick: () => setInviteOpen(true),
+                  },
+                  {
+                    id: "directory",
+                    label: "Directory utenti",
+                    icon: ExternalLink,
+                    variant: "outline" as const,
+                    onClick: () => {
+                      window.location.href = `/${locale}/admin/users`;
+                    },
+                  },
+                ]}
+              />
             </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Input
-              placeholder="Cerca allievi"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="max-w-sm border-white/60 bg-white/80"
-            />
-            <Button onClick={() => setInviteOpen(true)}>
-              <UserPlus className="mr-2 h-4 w-4" />
-              Invita allievo
-            </Button>
-            <Button asChild variant="outline">
-              <Link href={`/${locale}/admin/users`}>
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Directory utenti
-              </Link>
-            </Button>
-          </div>
-        </div>
 
-        <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Invita allievo</DialogTitle>
-              <DialogDescription>
-                Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleInvite} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="invite-email">Email</Label>
-                <Input
-                  id="invite-email"
-                  type="email"
-                  placeholder="allievo@esempio.com"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Piattaforma</Label>
-                <Select
-                  value={invitePlatform}
-                  onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona piattaforma" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Non specificata</SelectItem>
-                    <SelectItem value="ios">iOS (iPhone)</SelectItem>
-                    <SelectItem value="android">Android</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Usato per mostrare il link corretto all&apos;app store nell&apos;email.
-                </p>
-              </div>
-              <DialogFooter>
-                <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
-                  {inviteSending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <UserPlus className="mr-2 h-4 w-4" />
-                  )}
-                  {inviteSending ? "Invio in corso…" : "Invia invito"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Invita allievo</DialogTitle>
+                  <DialogDescription>
+                    Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleInvite} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="invite-email">Email</Label>
+                    <Input
+                      id="invite-email"
+                      type="email"
+                      placeholder="allievo@esempio.com"
+                      value={inviteEmail}
+                      onChange={(event) => setInviteEmail(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Piattaforma</Label>
+                    <Select
+                      value={invitePlatform}
+                      onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona piattaforma" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Non specificata</SelectItem>
+                        <SelectItem value="ios">iOS (iPhone)</SelectItem>
+                        <SelectItem value="android">Android</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Usato per mostrare il link corretto all&apos;app store nell&apos;email.
+                    </p>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
+                      {inviteSending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="mr-2 h-4 w-4" />
+                      )}
+                      {inviteSending ? "Invio in corso…" : "Invia invito"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
 
-        <div className="glass-panel glass-strong p-4">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Allievo</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Telefono</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Guide completate</TableHead>
-                <TableHead>Obbligo</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                [...Array(4)].map((_, index) => (
-                  <TableRow key={`sk-${index}`}>
-                    <TableCell colSpan={7}>
-                      <Skeleton className="h-6 w-full" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : students.length ? (
-                students.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell className="font-medium">
-                      {student.firstName} {student.lastName}
-                    </TableCell>
-                    <TableCell>{student.email || "—"}</TableCell>
-                    <TableCell>{student.phone || "—"}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        {student.status ?? "active"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {student.summary.completedLessons}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-1">
-                        <Badge variant={student.summary.isCompleted ? "secondary" : "outline"}>
-                          {student.summary.completedLessons}/{student.summary.requiredLessons}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          {student.summary.isCompleted ? "Completato" : "In corso"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedStudentId(student.id);
-                          setDrawerOpen(true);
-                          void loadRegister(student.id);
-                          void loadCredits(student.id);
-                        }}
-                      >
-                        Dettaglio
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
-                    Nessun allievo trovato.
-                  </TableCell>
+                  <TableHead>Allievo</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Telefono</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Guide completate</TableHead>
+                  <TableHead>Obbligo</TableHead>
+                  <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {students.length ? (
+                  students.map((student) => (
+                    <TableRow key={student.id}>
+                      <TableCell className="font-medium">
+                        {student.firstName} {student.lastName}
+                      </TableCell>
+                      <TableCell>{student.email || "—"}</TableCell>
+                      <TableCell>{student.phone || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {student.status ?? "active"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {student.summary.completedLessons}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
+                            {student.summary.completedLessons}/{student.summary.requiredLessons}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {student.summary.isCompleted ? "Completato" : "In corso"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedStudentId(student.id);
+                            setDrawerOpen(true);
+                            void loadRegister(student.id);
+                            void loadCredits(student.id);
+                          }}
+                        >
+                          Dettaglio
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                      Nessun allievo trovato.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </>
+        )}
       </div>
 
       <Drawer
@@ -552,7 +566,7 @@ export function AutoscuoleStudentsPage({
               </div>
             ) : register ? (
               <>
-                <section className="glass-panel glass-strong space-y-3 p-4">
+                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Anagrafica
                   </p>
@@ -582,7 +596,7 @@ export function AutoscuoleStudentsPage({
                   </div>
                 </section>
 
-                <section className="glass-panel glass-strong space-y-3 p-4">
+                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Crediti guida
                   </p>
@@ -660,7 +674,7 @@ export function AutoscuoleStudentsPage({
                   )}
                 </section>
 
-                <section className="glass-panel glass-strong space-y-3 p-4">
+                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Stato obbligo guide
                   </p>
@@ -690,7 +704,7 @@ export function AutoscuoleStudentsPage({
                   </Badge>
                 </section>
 
-                <section className="glass-panel glass-strong space-y-3 p-4">
+                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Tipi guida completati
                   </p>
@@ -709,7 +723,7 @@ export function AutoscuoleStudentsPage({
                   )}
                 </section>
 
-                <section className="glass-panel glass-strong space-y-3 p-4">
+                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Storico guide
                   </p>
@@ -761,6 +775,6 @@ export function AutoscuoleStudentsPage({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }

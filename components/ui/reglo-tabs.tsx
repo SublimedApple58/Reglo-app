@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
+import { motion } from "motion/react";
 
 import { cn } from "@/lib/utils";
+import { spring, tapScale } from "@/lib/motion";
 
 export type RegloTabItem<T extends string = string> = {
   key: T;
@@ -27,7 +29,7 @@ export function RegloTabs<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       className={cn(
-        "glass-panel glass-strong w-full overflow-visible p-2",
+        "w-full overflow-visible rounded-lg border border-border bg-white p-2 shadow-card",
         className,
       )}
     >
@@ -35,21 +37,31 @@ export function RegloTabs<T extends string>({
         {items.map((item) => {
           const isActive = activeKey === item.key;
           return (
-            <button
+            <motion.button
               key={item.key}
               type="button"
               role="tab"
               aria-selected={isActive}
               onClick={() => onChange(item.key)}
+              whileTap={tapScale.standard}
+              transition={spring.snappy}
               className={cn(
-                "reglo-focus-ring reglo-interactive shrink-0 rounded-full border px-4 py-2 text-sm font-semibold",
+                "reglo-focus-ring relative shrink-0 rounded-full border px-4 py-2 text-sm font-semibold transition-colors duration-[var(--motion-fast)]",
                 isActive
-                  ? "border-[#324D7A] bg-[#324D7A] text-white shadow-[0_12px_24px_-14px_rgba(50,77,122,0.72)]"
-                  : "border-white/80 bg-white/78 text-[#324D7A] hover:-translate-y-0.5 hover:border-[#AFE2D4] hover:bg-[#AFE2D4]/45 hover:shadow-[0_10px_18px_-14px_rgba(50,77,122,0.42)]",
+                  ? "border-yellow-200 bg-yellow-50 text-yellow-700"
+                  : "border-border bg-white text-foreground hover:bg-yellow-50/50",
               )}
             >
+              {isActive && (
+                <motion.span
+                  layoutId="reglo-tab-indicator"
+                  className="absolute inset-0 rounded-full bg-yellow-50 border border-yellow-200"
+                  style={{ zIndex: -1 }}
+                  transition={spring.snappy}
+                />
+              )}
               {item.label}
-            </button>
+            </motion.button>
           );
         })}
       </div>

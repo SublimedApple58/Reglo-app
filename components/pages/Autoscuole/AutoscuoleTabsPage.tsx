@@ -155,19 +155,19 @@ export function AutoscuoleTabsPage() {
   return (
     <div className="w-full">
       {activeTab === "dashboard" ? (
-        <AutoscuoleDashboardPage hideNav tabs={tabsNode} />
+        <AutoscuoleDashboardPage tabs={tabsNode} />
       ) : null}
       {activeTab === "students" ? (
-        <AutoscuoleStudentsPage hideNav tabs={tabsNode} />
+        <AutoscuoleStudentsPage tabs={tabsNode} />
       ) : null}
       {activeTab === "agenda" ? (
-        <AutoscuoleAgendaPage hideNav tabs={tabsNode} />
+        <AutoscuoleAgendaPage tabs={tabsNode} />
       ) : null}
       {activeTab === "settings" ? (
-        <AutoscuoleResourcesPage hideNav tabs={tabsNode} />
+        <AutoscuoleResourcesPage tabs={tabsNode} />
       ) : null}
       {activeTab === "payments" ? (
-        <AutoscuolePaymentsPage hideNav tabs={tabsNode} />
+        <AutoscuolePaymentsPage tabs={tabsNode} />
       ) : null}
     </div>
   );

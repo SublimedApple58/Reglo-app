@@ -494,11 +494,14 @@ export async function getAutoscuolaOverview() {
     const inSevenDays = new Date(now);
     inSevenDays.setDate(inSevenDays.getDate() + 7);
 
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 86_400_000);
+
     const [
       studentsCount,
-      activeCasesCount,
+      todayAppointmentsCount,
       upcomingAppointmentsCount,
-      overdueInstallmentsCount,
+      activeInstructorsCount,
     ] = await Promise.all([
       prisma.companyMember.count({
         where: {
@@ -506,20 +509,25 @@ export async function getAutoscuolaOverview() {
           autoscuolaRole: "STUDENT",
         },
       }),
-      prisma.autoscuolaCase.count({
-        where: { companyId, status: { not: "archived" } },
+      prisma.autoscuolaAppointment.count({
+        where: {
+          companyId,
+          startsAt: { gte: todayStart, lt: todayEnd },
+          status: { notIn: ["cancelled"] },
+        },
       }),
       prisma.autoscuolaAppointment.count({
         where: {
           companyId,
           startsAt: { gte: now, lte: inSevenDays },
+          status: { notIn: ["cancelled"] },
         },
       }),
-      prisma.autoscuolaPaymentInstallment.count({
+      prisma.autoscuolaInstructor.count({
         where: {
-          plan: { companyId },
-          status: { in: ["pending", "overdue"] },
-          dueDate: { lt: now },
+          companyId,
+          status: "active",
+          userId: { not: null },
         },
       }),
     ]);
@@ -528,9 +536,9 @@ export async function getAutoscuolaOverview() {
       success: true,
       data: {
         studentsCount,
-        activeCasesCount,
+        todayAppointmentsCount,
         upcomingAppointmentsCount,
-        overdueInstallmentsCount,
+        activeInstructorsCount,
       },
     };
   } catch (error) {
@@ -1628,10 +1636,18 @@ export async function createAutoscuolaAppointment(
 
     await invalidateAgendaAndPaymentsCache(companyId);
 
+    // Serialize Decimal fields for client component compatibility
+    const serializedAppointment = {
+      ...appointment,
+      priceAmount: Number(appointment.priceAmount),
+      penaltyAmount: Number(appointment.penaltyAmount),
+      paidAmount: Number(appointment.paidAmount),
+    };
+
     if (!shouldSendProposal) {
       return {
         success: true,
-        data: appointment,
+        data: serializedAppointment,
         message: "Appuntamento creato.",
         ...(warnings.length ? { warnings } : {}),
       };
@@ -1686,7 +1702,7 @@ export async function createAutoscuolaAppointment(
 
     return {
       success: true,
-      data: appointment,
+      data: serializedAppointment,
       message: pushMessage,
       ...(warnings.length ? { warnings } : {}),
     };
@@ -2531,6 +2547,84 @@ export async function getAutoscuolaInstructors() {
   }
 }
 
+export async function getAutoscuolaInstructorsDashboard() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 86_400_000);
+
+    const [instructors, todayAppointments, blocks] = await Promise.all([
+      listAutoscuolaInstructorsReadOnly(companyId),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          startsAt: { gte: todayStart, lt: todayEnd },
+          status: { notIn: ["cancelled"] },
+        },
+        select: {
+          instructorId: true,
+          startsAt: true,
+          endsAt: true,
+          status: true,
+          student: { select: { name: true } },
+        },
+        orderBy: { startsAt: "asc" },
+      }),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId,
+          startsAt: { lte: now },
+          endsAt: { gte: now },
+        },
+        select: { instructorId: true, reason: true },
+      }),
+    ]);
+
+    const blockedSet = new Map(blocks.map((b) => [b.instructorId, b.reason]));
+
+    const data = instructors.map((inst) => {
+      const myAppointments = todayAppointments.filter((a) => a.instructorId === inst.id);
+      const current = myAppointments.find(
+        (a) => a.startsAt <= now && a.endsAt != null && a.endsAt > now,
+      );
+      const next = myAppointments.find((a) => a.startsAt > now);
+      const blockReason = blockedSet.get(inst.id) ?? null;
+
+      let liveStatus: "busy" | "blocked" | "free" | "inactive" = "free";
+      if (inst.status === "inactive") liveStatus = "inactive";
+      else if (current) liveStatus = "busy";
+      else if (blockReason !== null) liveStatus = "blocked";
+
+      return {
+        id: inst.id,
+        name: inst.name,
+        status: inst.status,
+        liveStatus,
+        blockReason,
+        currentLesson: current
+          ? {
+              studentName: current.student?.name ?? null,
+              endsAt: current.endsAt?.toISOString() ?? "",
+            }
+          : null,
+        nextLesson: next
+          ? {
+              studentName: next.student?.name ?? null,
+              startsAt: next.startsAt.toISOString(),
+            }
+          : null,
+        todayCount: myAppointments.length,
+      };
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function createAutoscuolaInstructor(
   input: z.infer<typeof createInstructorSchema>,
 ) {
@@ -2928,13 +3022,17 @@ export async function getAutoscuolaInstructorWeeklyAvailabilities() {
         ownerType: "instructor",
       },
     });
-    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number }> =
+    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> }> =
       {};
     for (const availability of availabilities) {
+      const ranges = Array.isArray(availability.ranges)
+        ? (availability.ranges as Array<{ startMinutes: number; endMinutes: number }>)
+        : undefined;
       map[availability.ownerId] = {
         daysOfWeek: availability.daysOfWeek,
         startMinutes: availability.startMinutes,
         endMinutes: availability.endMinutes,
+        ...(ranges?.length ? { ranges } : {}),
       };
     }
     return { success: true as const, data: map };
@@ -2943,11 +3041,17 @@ export async function getAutoscuolaInstructorWeeklyAvailabilities() {
   }
 }
 
+const timeRangeSchema = z.object({
+  startMinutes: z.number().int().min(0).max(1440),
+  endMinutes: z.number().int().min(0).max(1440),
+});
+
 const setInstructorWeeklyAvailabilitySchema = z.object({
   instructorId: z.string().uuid(),
   daysOfWeek: z.array(z.number().int().min(0).max(6)),
   startMinutes: z.number().int().min(0).max(1410),
   endMinutes: z.number().int().min(30).max(1440),
+  ranges: z.array(timeRangeSchema).optional(),
 });
 
 export async function setAutoscuolaInstructorWeeklyAvailability(
@@ -2973,6 +3077,10 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       return { success: false as const, message: "Intervallo orario non valido." };
     }
 
+    const rangesJson = payload.ranges?.length
+      ? payload.ranges
+      : [{ startMinutes: payload.startMinutes, endMinutes: payload.endMinutes }];
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -2981,7 +3089,7 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
           ownerId: payload.instructorId,
         },
       },
-      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes },
+      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes, ranges: rangesJson },
       create: {
         companyId,
         ownerType: "instructor",
@@ -2989,6 +3097,7 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
         daysOfWeek,
         startMinutes: payload.startMinutes,
         endMinutes: payload.endMinutes,
+        ranges: rangesJson,
       },
     });
 
@@ -3105,13 +3214,17 @@ export async function getAutoscuolaVehicleWeeklyAvailabilities() {
         ownerType: "vehicle",
       },
     });
-    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number }> =
+    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> }> =
       {};
     for (const availability of availabilities) {
+      const ranges = Array.isArray(availability.ranges)
+        ? (availability.ranges as Array<{ startMinutes: number; endMinutes: number }>)
+        : undefined;
       map[availability.ownerId] = {
         daysOfWeek: availability.daysOfWeek,
         startMinutes: availability.startMinutes,
         endMinutes: availability.endMinutes,
+        ...(ranges?.length ? { ranges } : {}),
       };
     }
     return { success: true as const, data: map };
@@ -3125,6 +3238,7 @@ const setVehicleWeeklyAvailabilitySchema = z.object({
   daysOfWeek: z.array(z.number().int().min(0).max(6)),
   startMinutes: z.number().int().min(0).max(1410),
   endMinutes: z.number().int().min(30).max(1440),
+  ranges: z.array(timeRangeSchema).optional(),
 });
 
 export async function setAutoscuolaVehicleWeeklyAvailability(
@@ -3150,6 +3264,10 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
       return { success: false as const, message: "Intervallo orario non valido." };
     }
 
+    const rangesJson = payload.ranges?.length
+      ? payload.ranges
+      : [{ startMinutes: payload.startMinutes, endMinutes: payload.endMinutes }];
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -3158,7 +3276,7 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
           ownerId: payload.vehicleId,
         },
       },
-      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes },
+      update: { daysOfWeek, startMinutes: payload.startMinutes, endMinutes: payload.endMinutes, ranges: rangesJson },
       create: {
         companyId,
         ownerType: "vehicle",
@@ -3166,6 +3284,7 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
         daysOfWeek,
         startMinutes: payload.startMinutes,
         endMinutes: payload.endMinutes,
+        ranges: rangesJson,
       },
     });
 

@@ -1,10 +1,12 @@
 "use client";
 
 import React from "react";
+import { AnimatePresence, motion } from "motion/react";
 import { useSearchParams } from "next/navigation";
+import { CreditCard, ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -28,6 +30,12 @@ import {
   getAutoscuolaStudentsList,
   generateTestPaymentReceipt,
 } from "@/lib/actions/autoscuole.actions";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { PaymentsSkeleton } from "@/components/ui/page-skeleton";
+import { SectionCard } from "@/components/ui/section-card";
+import { StatMetric } from "@/components/ui/stat-metric";
+import { FieldGroup } from "@/components/ui/field-group";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 
 type PaymentOverview = {
   totalRequired: number;
@@ -165,10 +173,8 @@ const paymentAttemptStatusLabel = (value: string) => {
 };
 
 export function AutoscuolePaymentsPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
@@ -193,6 +199,7 @@ export function AutoscuolePaymentsPage({
   const [detailsRow, setDetailsRow] = React.useState<PaymentAppointment | null>(null);
 
   const [autoPaymentsEnabled, setAutoPaymentsEnabled] = React.useState(false);
+  const [paymentSection, setPaymentSection] = React.useState<string | null>("pricing");
   const [lessonCreditFlowEnabled, setLessonCreditFlowEnabled] = React.useState(false);
   const [lessonPrice30, setLessonPrice30] = React.useState("25");
   const [lessonPrice60, setLessonPrice60] = React.useState("50");
@@ -596,322 +603,300 @@ export function AutoscuolePaymentsPage({
       ? "text-amber-700"
       : "text-muted-foreground";
 
+  const stripeConfigured = stripeStatus?.connected === true;
+  const togglePaymentSection = (key: string) =>
+    setPaymentSection((prev) => (prev === key ? null : key));
+
   return (
-    <ClientPageWrapper
-      title="Autoscuole"
-      subTitle="Pagamenti automatici guide e fatturazione FIC"
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
+    <PageWrapper
+      title="Pagamenti"
+      subTitle="Gestisci incassi, crediti guida e fatturazione"
     >
-      <div className="w-full space-y-5" data-testid="autoscuole-payments-page">
+      <div className="relative w-full space-y-5" data-testid="autoscuole-payments-page">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
-        <div className="glass-panel glass-strong space-y-4 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Stripe incassi autoscuola</h3>
-              <p className="text-xs text-muted-foreground">
-                Reglo ti guida nella procedura Stripe: termini, IBAN, P.IVA e documenti.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => loadStripeStatus(true)}
-                disabled={stripeOnboardingLoading || stripeLoading}
-              >
-                {stripeLoading ? "Sync..." : "Aggiorna stato"}
-              </Button>
-              <Button
-                onClick={handleOpenStripeOnboarding}
-                disabled={stripeOnboardingLoading || stripeLoading}
-              >
-                {stripeOnboardingLoading
-                  ? "Apertura..."
-                  : stripeStatus?.ready
-                    ? "Gestisci Stripe"
-                    : stripeStatus?.connected
-                    ? "Completa onboarding Stripe"
-                    : "Configura Stripe"}
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
-              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Stato</div>
-              <div className={`mt-1 text-sm font-semibold ${stripeStatusClassName}`}>
-                {stripeLoading ? "Caricamento..." : stripeStatusLabel}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
-              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                Account
-              </div>
-              <div className="mt-1 text-sm font-medium text-foreground">
-                {stripeStatus?.accountId ?? "-"}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-white/60 bg-white/75 p-3">
-              <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                Capacita
-              </div>
-              <div className="mt-1 text-sm text-foreground">
-                Pagamenti: {stripeStatus?.chargesEnabled ? "OK" : "NO"} · Payout:{" "}
-                {stripeStatus?.payoutsEnabled ? "OK" : "NO"}
-              </div>
-            </div>
-          </div>
-
-          {stripeStatus?.requirementsCurrentlyDue?.length ? (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3">
-              <div className="text-xs font-semibold text-amber-800">
-                Dati/documenti richiesti da Stripe
-              </div>
-              <div className="mt-1 text-xs text-amber-700">
-                {stripeStatus.requirementsCurrentlyDue.slice(0, 6).join(" · ")}
-              </div>
-            </div>
-          ) : null}
-
-          {stripeStatus?.syncError ? (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-xs text-rose-700">
-              Ultimo sync Stripe: {stripeStatus.syncError}
-            </div>
-          ) : null}
-        </div>
-
-        <div className="glass-panel glass-strong space-y-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Crediti guida e penali</h3>
-              <p className="text-xs text-muted-foreground">
-                Gestisci crediti guida e penali per annullamenti tardivi, senza richiedere Stripe.
-              </p>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <Checkbox
-                checked={lessonCreditFlowEnabled}
-                onCheckedChange={(checked) => setLessonCreditFlowEnabled(Boolean(checked))}
-              />
-              Abilitato
-            </label>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-semibold text-foreground">Pagamenti automatici</h3>
-              <p className="text-xs text-muted-foreground">
-                Addebito automatico tramite Stripe a fine guida e fatturazione FIC.
-              </p>
-            </div>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <Checkbox
-                checked={autoPaymentsEnabled}
-                onCheckedChange={(checked) => setAutoPaymentsEnabled(Boolean(checked))}
-              />
-              Abilitato
-            </label>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-4">
-            <Field
-              label="Prezzo guida 30m"
-              value={lessonPrice30}
-              onChange={setLessonPrice30}
-            />
-            <Field
-              label="Prezzo guida 60m"
-              value={lessonPrice60}
-              onChange={setLessonPrice60}
-            />
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Cutoff penale</div>
-              <Select value={penaltyCutoffHoursPreset} onValueChange={setPenaltyCutoffHoursPreset}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Ore" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cutoffPresets.map((preset) => (
-                    <SelectItem key={preset} value={String(preset)}>
-                      {preset} ore
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Penale</div>
-              <Select value={penaltyPercentPreset} onValueChange={setPenaltyPercentPreset}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Percentuale" />
-                </SelectTrigger>
-                <SelectContent>
-                  {penaltyPresets.map((preset) => (
-                    <SelectItem key={preset} value={String(preset)}>
-                      {preset}%
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">Aliquota IVA FIC</div>
-              <Select
-                value={ficVatTypeId}
-                onValueChange={setFicVatTypeId}
-                onOpenChange={(open) => {
-                  if (open) void loadFicOptions();
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={vatLoading ? "Caricamento IVA..." : "Seleziona aliquota"}
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {vatOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <div className="text-xs font-medium text-muted-foreground">
-                Metodo pagamento FIC
-              </div>
-              <Select
-                value={ficPaymentMethodId}
-                onValueChange={setFicPaymentMethodId}
-                onOpenChange={(open) => {
-                  if (open) void loadFicOptions();
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      methodLoading ? "Caricamento metodi..." : "Seleziona metodo pagamento"
-                    }
-                  />
-                </SelectTrigger>
-                <SelectContent>
-                  {methodOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 rounded-2xl border border-white/60 bg-white/75 p-3">
-              <div className="text-xs font-medium text-muted-foreground">Notifiche pagamento</div>
-              <label className="flex items-center justify-between gap-2 text-xs text-foreground">
-                <span>Push</span>
-                <Checkbox
-                  checked={pushEnabled}
-                  onCheckedChange={(checked) => setPushEnabled(Boolean(checked))}
-                />
-              </label>
-              <label className="flex items-center justify-between gap-2 text-xs text-foreground">
-                <span>Email</span>
-                <Checkbox
-                  checked={emailEnabled}
-                  onCheckedChange={(checked) => setEmailEnabled(Boolean(checked))}
-                />
-              </label>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Fatture in Cloud resta opzionale all&apos;attivazione: se non configurato, le fatture
-            vengono marcate in attesa e completate appena disponibile.
-          </p>
-
-          <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={saving || loading}>
-              {saving ? "Salvataggio..." : "Salva configurazione"}
+        {loading ? (
+          <PaymentsSkeleton />
+        ) : !stripeConfigured ? (
+          /* ── Stripe NOT configured: empty state ── */
+          <>
+        <div className="rounded-2xl border border-border bg-white p-8 shadow-card">
+          <div className="mx-auto flex max-w-sm flex-col items-center text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-yellow-50">
+              <CreditCard className="h-7 w-7 text-yellow-600" />
+            </span>
+            <h3 className="mt-4 text-base font-semibold text-foreground">Configura Stripe per iniziare</h3>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Collega il tuo account Stripe per attivare pagamenti automatici e fatturazione.
+            </p>
+            <Button
+              className="mt-5"
+              onClick={handleOpenStripeOnboarding}
+              disabled={stripeOnboardingLoading}
+            >
+              {stripeOnboardingLoading ? "Apertura..." : "Configura Stripe"}
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-5">
-          <StatCard label="Guide con pagamento" value={overview?.totalRequired ?? 0} />
-          <StatCard label="Pagate" value={overview?.paidCount ?? 0} />
-          <StatCard label="Insoluti" value={overview?.insolutiCount ?? 0} />
-          <StatCard label="In attesa penale" value={overview?.pendingPenaltyCount ?? 0} />
-          <StatCard label="Parziali" value={overview?.partialCount ?? 0} />
-        </div>
-
-        <div className="glass-panel glass-strong space-y-3 p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-foreground">Operativo pagamenti guide</h3>
-            <div className="flex items-center gap-3">
-              {loading ? <span className="text-xs text-muted-foreground">Caricamento...</span> : null}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={openTestModal}
-                className="gap-1.5 text-xs"
-              >
-                🧪 Prova ricevuta
-              </Button>
+        {/* Crediti guida — available without Stripe */}
+        <div className="rounded-2xl border border-border bg-white p-5 shadow-card space-y-4">
+          <div
+            role="switch"
+            tabIndex={0}
+            aria-checked={lessonCreditFlowEnabled}
+            onClick={() => setLessonCreditFlowEnabled((v) => !v)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLessonCreditFlowEnabled((v) => !v); } }}
+            className={cn(
+              "flex cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors",
+              lessonCreditFlowEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+            )}
+          >
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Crediti guida e penali</h3>
+              <p className="text-xs text-muted-foreground">Gestisci crediti e penali senza Stripe</p>
             </div>
+            <InlineToggle checked={lessonCreditFlowEnabled} />
           </div>
 
-          <div className="max-h-[540px] overflow-auto">
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={saving} size="sm">
+              {saving ? "Salvataggio..." : "Salva"}
+            </Button>
+          </div>
+        </div>
+          </>
+        ) : (
+          /* ── Stripe configured ── */
+          <>
+        {/* Stripe status bar */}
+        <div className="flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-3 shadow-card">
+          <div className="flex items-center gap-3">
+            <span className={cn("inline-block h-2.5 w-2.5 rounded-full", stripeReady ? "bg-positive" : "bg-yellow-400 animate-pulse")} />
+            <span className={cn("text-sm font-semibold", stripeReady ? "text-emerald-700" : "text-amber-700")}>
+              {stripeReady ? "Stripe attivo" : "Stripe in verifica"}
+            </span>
+            <span className="text-xs text-muted-foreground">{stripeStatus?.accountId ?? ""}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => loadStripeStatus(true)} disabled={stripeLoading}>
+              {stripeLoading ? "Sync..." : "Aggiorna"}
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={handleOpenStripeOnboarding} disabled={stripeOnboardingLoading}>
+              Gestisci Stripe
+            </Button>
+          </div>
+        </div>
+
+        {stripeStatus?.requirementsCurrentlyDue?.length ? (
+          <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
+            <div className="text-xs font-semibold text-yellow-800">Dati/documenti richiesti da Stripe</div>
+            <div className="mt-1 text-xs text-yellow-700">{stripeStatus.requirementsCurrentlyDue.slice(0, 6).join(" · ")}</div>
+          </div>
+        ) : null}
+
+        {/* Settings accordion */}
+        <div className="rounded-2xl border border-border bg-white shadow-card">
+          {/* Crediti e prezzi */}
+          <PaymentAccordion
+            title="Crediti e prezzi"
+            description="Tariffe guida, crediti e penali annullamento"
+            expanded={paymentSection === "pricing"}
+            onToggle={() => togglePaymentSection("pricing")}
+            isFirst
+          >
+            <div className="space-y-4">
+              <div
+                role="switch"
+                tabIndex={0}
+                aria-checked={lessonCreditFlowEnabled}
+                onClick={() => setLessonCreditFlowEnabled((v) => !v)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLessonCreditFlowEnabled((v) => !v); } }}
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors",
+                  lessonCreditFlowEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+                )}
+              >
+                <div>
+                  <span className="text-sm font-medium text-foreground">Crediti guida e penali</span>
+                  <p className="text-xs text-muted-foreground">Gestisci crediti e penali per annullamenti tardivi</p>
+                </div>
+                <InlineToggle checked={lessonCreditFlowEnabled} />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
+                <FieldGroup label="Prezzo guida 30m">
+                  <input className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40" value={lessonPrice30} onChange={(e) => setLessonPrice30(e.target.value)} inputMode="decimal" />
+                </FieldGroup>
+                <FieldGroup label="Prezzo guida 60m">
+                  <input className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40" value={lessonPrice60} onChange={(e) => setLessonPrice60(e.target.value)} inputMode="decimal" />
+                </FieldGroup>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
+                <FieldGroup label="Cutoff penale">
+                  <Select value={penaltyCutoffHoursPreset} onValueChange={setPenaltyCutoffHoursPreset}>
+                    <SelectTrigger><SelectValue placeholder="Ore" /></SelectTrigger>
+                    <SelectContent>{cutoffPresets.map((p) => (<SelectItem key={p} value={String(p)}>{p} ore</SelectItem>))}</SelectContent>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="Penale">
+                  <Select value={penaltyPercentPreset} onValueChange={setPenaltyPercentPreset}>
+                    <SelectTrigger><SelectValue placeholder="%" /></SelectTrigger>
+                    <SelectContent>{penaltyPresets.map((p) => (<SelectItem key={p} value={String(p)}>{p}%</SelectItem>))}</SelectContent>
+                  </Select>
+                </FieldGroup>
+              </div>
+            </div>
+          </PaymentAccordion>
+
+          {/* Pagamenti automatici — only if Stripe ready */}
+          {stripeReady && (
+            <PaymentAccordion
+              title="Pagamenti automatici"
+              description="Addebito automatico Stripe e fatturazione FIC"
+              expanded={paymentSection === "auto"}
+              onToggle={() => togglePaymentSection("auto")}
+            >
+              <div className="space-y-4">
+                <div
+                  role="switch"
+                  tabIndex={0}
+                  aria-checked={autoPaymentsEnabled}
+                  onClick={() => setAutoPaymentsEnabled((v) => !v)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setAutoPaymentsEnabled((v) => !v); } }}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors",
+                    autoPaymentsEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+                  )}
+                >
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Abilita pagamenti automatici</span>
+                    <p className="text-xs text-muted-foreground">Addebito a fine guida con fattura automatica</p>
+                  </div>
+                  <InlineToggle checked={autoPaymentsEnabled} />
+                </div>
+
+                {autoPaymentsEnabled && (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
+                      <FieldGroup label="Aliquota IVA FIC">
+                        <Select value={ficVatTypeId} onValueChange={setFicVatTypeId} onOpenChange={(open) => { if (open) void loadFicOptions(); }}>
+                          <SelectTrigger><SelectValue placeholder={vatLoading ? "Caricamento..." : "Seleziona aliquota"} /></SelectTrigger>
+                          <SelectContent>{vatOptions.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent>
+                        </Select>
+                      </FieldGroup>
+                      <FieldGroup label="Metodo pagamento FIC">
+                        <Select value={ficPaymentMethodId} onValueChange={setFicPaymentMethodId} onOpenChange={(open) => { if (open) void loadFicOptions(); }}>
+                          <SelectTrigger><SelectValue placeholder={methodLoading ? "Caricamento..." : "Seleziona metodo"} /></SelectTrigger>
+                          <SelectContent>{methodOptions.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}</SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Fatture in Cloud resta opzionale: se non configurato, le fatture vengono marcate in attesa.
+                    </p>
+                  </>
+                )}
+              </div>
+            </PaymentAccordion>
+          )}
+
+          {/* Notifiche */}
+          <PaymentAccordion
+            title="Notifiche pagamento"
+            description="Canali di comunicazione per notifiche addebito"
+            expanded={paymentSection === "notifications"}
+            onToggle={() => togglePaymentSection("notifications")}
+            isLast
+          >
+            <div className="flex gap-6">
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <Checkbox checked={pushEnabled} onCheckedChange={(c) => setPushEnabled(Boolean(c))} />
+                Push
+              </label>
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <Checkbox checked={emailEnabled} onCheckedChange={(c) => setEmailEnabled(Boolean(c))} />
+                Email
+              </label>
+            </div>
+          </PaymentAccordion>
+        </div>
+
+        <div className="flex justify-end">
+          <Button onClick={handleSave} disabled={saving || loading}>
+            {saving ? "Salvataggio..." : "Salva configurazione"}
+          </Button>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-5">
+          <StatMetric label="Guide con pagamento" value={overview?.totalRequired ?? 0} accent="default" />
+          <StatMetric label="Pagate" value={overview?.paidCount ?? 0} accent="green" />
+          <StatMetric label="Insoluti" value={overview?.insolutiCount ?? 0} accent="pink" />
+          <StatMetric label="In attesa penale" value={overview?.pendingPenaltyCount ?? 0} accent="yellow" />
+          <StatMetric label="Parziali" value={overview?.partialCount ?? 0} accent="default" />
+        </div>
+
+        <SectionCard
+          title="Operativo pagamenti guide"
+          headerRight={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openTestModal}
+            >
+              Prova ricevuta
+            </Button>
+          }
+        >
+          <div className="max-h-[540px] overflow-auto rounded-lg border border-border">
             <table className="w-full min-w-[1080px] text-sm">
-              <thead className="sticky top-0 z-10 bg-white/90 backdrop-blur">
-                <tr className="text-left text-xs uppercase tracking-[0.14em] text-muted-foreground">
-                  <th className="px-3 py-2">Data</th>
-                  <th className="px-3 py-2">Allievo</th>
-                  <th className="px-3 py-2">Stato guida</th>
-                  <th className="px-3 py-2">Stato pagamento</th>
-                  <th className="px-3 py-2">Prezzo</th>
-                  <th className="px-3 py-2">Penale</th>
-                  <th className="px-3 py-2">Pagato</th>
-                  <th className="px-3 py-2">Dovuto</th>
-                  <th className="px-3 py-2">Fattura</th>
-                  <th className="px-3 py-2">Ultimo tentativo</th>
-                  <th className="px-3 py-2">Logs</th>
+              <thead className="sticky top-0 z-10 bg-white">
+                <tr className="border-b border-border text-left">
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Data</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Allievo</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Stato guida</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Stato pagamento</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Prezzo</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Penale</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Pagato</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Dovuto</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Fattura</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Ultimo tentativo</th>
+                  <th className="px-3 py-2.5 ds-caption text-muted-foreground uppercase">Logs</th>
                 </tr>
               </thead>
               <tbody>
                 {appointments.map((row) => {
                   const latestPayment = row.payments[0];
                   return (
-                    <tr key={row.id} className="border-t border-white/40 text-foreground">
-                      <td className="px-3 py-2">{formatDateTime(row.startsAt)}</td>
-                      <td className="px-3 py-2">
+                    <tr key={row.id} className="border-t border-border text-foreground hover:bg-yellow-50/30 transition-colors">
+                      <td className="px-3 py-2.5 tabular-nums">{formatDateTime(row.startsAt)}</td>
+                      <td className="px-3 py-2.5">
                         <div className="font-medium">{row.student.name || "-"}</div>
                         <div className="text-xs text-muted-foreground">{row.student.email}</div>
                       </td>
-                      <td className="px-3 py-2">{row.status}</td>
-                      <td className="px-3 py-2">{statusLabel(row.paymentStatus)}</td>
-                      <td className="px-3 py-2">{formatMoney(row.priceAmount)}</td>
-                      <td className="px-3 py-2">{formatMoney(row.penaltyAmount)}</td>
-                      <td className="px-3 py-2">{formatMoney(row.paidAmount)}</td>
-                      <td className="px-3 py-2">{formatMoney(row.dueAmount)}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">{row.status}</td>
+                      <td className="px-3 py-2.5">{statusLabel(row.paymentStatus)}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatMoney(row.priceAmount)}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatMoney(row.penaltyAmount)}</td>
+                      <td className="px-3 py-2.5 tabular-nums">{formatMoney(row.paidAmount)}</td>
+                      <td className="px-3 py-2.5 tabular-nums font-medium">{formatMoney(row.dueAmount)}</td>
+                      <td className="px-3 py-2.5">
                         {row.invoiceId ? (
-                          <span>{row.invoiceId}</span>
+                          <span className="text-xs">{row.invoiceId}</span>
                         ) : (
-                          <span className="text-muted-foreground">{row.invoiceStatus ?? "-"}</span>
+                          <span className="text-xs text-muted-foreground">{row.invoiceStatus ?? "-"}</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
                         {latestPayment ? (
                           <div>
-                            <div className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                              {latestPayment.phase}
+                            <div className="ds-caption text-muted-foreground uppercase">
+                              {phaseLabel(latestPayment.phase)}
                             </div>
-                            <div>{latestPayment.status}</div>
+                            <div className="text-xs">{paymentAttemptStatusLabel(latestPayment.status)}</div>
                             {latestPayment.failureMessage ? (
                               <div className="text-xs text-rose-500">{latestPayment.failureMessage}</div>
                             ) : null}
@@ -920,7 +905,7 @@ export function AutoscuolePaymentsPage({
                           <span className="text-muted-foreground">-</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
                         <Button
                           type="button"
                           variant="outline"
@@ -928,7 +913,7 @@ export function AutoscuolePaymentsPage({
                           onClick={() => handleOpenPaymentDetails(row.id)}
                           disabled={detailsLoading}
                         >
-                          {detailsLoading && detailsTargetId === row.id ? "Caricamento..." : "Dettagli"}
+                          {detailsLoading && detailsTargetId === row.id ? "..." : "Dettagli"}
                         </Button>
                       </td>
                     </tr>
@@ -944,7 +929,9 @@ export function AutoscuolePaymentsPage({
               </tbody>
             </table>
           </div>
-        </div>
+        </SectionCard>
+          </>
+        )}
       </div>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -1078,17 +1065,13 @@ export function AutoscuolePaymentsPage({
       <Dialog open={testOpen} onOpenChange={(open) => { setTestOpen(open); if (!open) setTestReceiptUrl(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span>🧪</span>
-              Prova Ricevuta Pagamento
-            </DialogTitle>
+            <DialogTitle>Prova Ricevuta Pagamento</DialogTitle>
           </DialogHeader>
 
           {testReceiptUrl ? (
             <div className="space-y-4">
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
-                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-800">
-                  <span>✅</span>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="text-sm font-semibold text-emerald-800">
                   Ricevuta generata con successo!
                 </div>
                 <p className="mt-1 text-xs text-emerald-700">
@@ -1105,7 +1088,7 @@ export function AutoscuolePaymentsPage({
                 Apri ricevuta PDF ↗
               </a>
 
-              <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-800">
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-xs text-yellow-800">
                 <span className="font-semibold">Nota:</span> è stato creato un appuntamento di prova
                 visibile nella lista pagamenti (con nota &quot;[TEST]&quot;).
               </div>
@@ -1126,8 +1109,7 @@ export function AutoscuolePaymentsPage({
                 vedrà nell&apos;app.
               </p>
 
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-muted-foreground">Allievo *</div>
+              <FieldGroup label="Allievo" required>
                 <Select
                   value={testStudentId}
                   onValueChange={setTestStudentId}
@@ -1152,21 +1134,19 @@ export function AutoscuolePaymentsPage({
                     ) : null}
                   </SelectContent>
                 </Select>
-              </div>
+              </FieldGroup>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <div className="text-xs font-medium text-muted-foreground">Importo (€) *</div>
+                <FieldGroup label="Importo (€)" required>
                   <input
-                    className="h-10 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-foreground outline-none focus:border-foreground/25"
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
                     value={testAmount}
                     onChange={(e) => setTestAmount(e.target.value)}
                     inputMode="decimal"
                     placeholder="25.00"
                   />
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs font-medium text-muted-foreground">Tipo guida</div>
+                </FieldGroup>
+                <FieldGroup label="Tipo guida">
                   <Select value={testLessonType} onValueChange={setTestLessonType}>
                     <SelectTrigger>
                       <SelectValue />
@@ -1186,7 +1166,7 @@ export function AutoscuolePaymentsPage({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </FieldGroup>
               </div>
 
               <Button
@@ -1201,42 +1181,61 @@ export function AutoscuolePaymentsPage({
           )}
         </DialogContent>
       </Dialog>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  inputMode = "decimal",
+function PaymentAccordion({
+  title,
+  description,
+  expanded,
+  onToggle,
+  isFirst,
+  isLast,
+  children,
 }: {
-  label: string;
-  value: string;
-  onChange: (next: string) => void;
-  placeholder?: string;
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  title: string;
+  description: string;
+  expanded: boolean;
+  onToggle: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <label className="space-y-1 text-xs font-medium text-muted-foreground">
-      <span>{label}</span>
-      <input
-        className="h-10 w-full rounded-xl border border-white/60 bg-white/80 px-3 text-sm text-foreground outline-none focus:border-foreground/25"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        inputMode={inputMode}
-      />
-    </label>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="glass-panel glass-strong rounded-2xl p-4">
-      <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-foreground">{value}</div>
+    <div className={cn(!isFirst && "border-t border-border")}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className={cn(
+          "flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-gray-50/50",
+          isFirst && "rounded-t-2xl",
+          isLast && !expanded && "rounded-b-2xl",
+        )}
+      >
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", expanded && "rotate-180")} />
+      </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, overflow: "visible", transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className={cn("px-5 pb-5", isLast && "rounded-b-2xl")}>
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

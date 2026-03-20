@@ -115,7 +115,7 @@ export function AdminUsersTable({
 
   return (
     <>
-      <div className="glass-panel glass-strong mt-4 p-4">
+      <div className="mt-4">
         <Table>
           <TableHeader>
             <TableRow>

@@ -10,53 +10,86 @@ export default {
   theme: {
   	extend: {
   		colors: {
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
+  			background: 'var(--background)',
+  			foreground: 'var(--foreground)',
   			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
+  				DEFAULT: 'var(--card)',
+  				foreground: 'var(--card-foreground)',
   			},
   			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
+  				DEFAULT: 'var(--popover)',
+  				foreground: 'var(--popover-foreground)',
   			},
   			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				DEFAULT: 'var(--primary)',
+  				foreground: 'var(--primary-foreground)',
   			},
   			secondary: {
-  				DEFAULT: 'hsl(var(--secondary))',
-  				foreground: 'hsl(var(--secondary-foreground))'
+  				DEFAULT: 'var(--secondary)',
+  				foreground: 'var(--secondary-foreground)',
   			},
   			muted: {
-  				DEFAULT: 'hsl(var(--muted))',
-  				foreground: 'hsl(var(--muted-foreground))'
+  				DEFAULT: 'var(--muted)',
+  				foreground: 'var(--muted-foreground)',
   			},
   			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
+  				DEFAULT: 'var(--accent)',
+  				foreground: 'var(--accent-foreground)',
   			},
   			destructive: {
-  				DEFAULT: 'hsl(var(--destructive))',
-  				foreground: 'hsl(var(--destructive-foreground))'
+  				DEFAULT: 'var(--destructive)',
+  				foreground: 'var(--destructive-foreground)',
   			},
-  			border: 'hsl(var(--border))',
-  			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
+  			positive: {
+  				DEFAULT: 'var(--positive)',
+  				foreground: 'var(--positive-foreground)',
+  			},
+  			border: 'var(--border)',
+  			input: 'var(--input)',
+  			ring: 'var(--ring)',
   			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
-  			}
+  				'1': 'var(--chart-1)',
+  				'2': 'var(--chart-2)',
+  				'3': 'var(--chart-3)',
+  				'4': 'var(--chart-4)',
+  				'5': 'var(--chart-5)',
+  			},
+  			pink: {
+  				50: 'var(--pink-50)',
+  				100: 'var(--pink-100)',
+  				200: 'var(--pink-200)',
+  				500: 'var(--pink-500)',
+  				600: 'var(--pink-600)',
+  				700: 'var(--pink-700)',
+  			},
+  			yellow: {
+  				50: 'var(--yellow-50)',
+  				100: 'var(--yellow-100)',
+  				200: 'var(--yellow-200)',
+  				400: 'var(--yellow-400)',
+  				600: 'var(--yellow-600)',
+  				700: 'var(--yellow-700)',
+  			},
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)'
-  		}
-  	}
+  			sm: 'calc(var(--radius) - 4px)',
+  			pill: '9999px',
+  			'card-primary': '35px',
+  		},
+  		boxShadow: {
+  			card: '0 2px 8px rgba(0, 0, 0, 0.08)',
+  			'card-primary': '0 4px 12px rgba(0, 0, 0, 0.12)',
+  			cta: '0 6px 12px rgba(236, 72, 153, 0.3)',
+  			accent: '0 10px 20px rgba(180, 83, 9, 0.35)',
+  			dropdown: '0 8px 16px rgba(0, 0, 0, 0.1)',
+  			drawer: '0 -6px 18px rgba(0, 0, 0, 0.12)',
+  			'toast-success': '0 8px 16px rgba(22, 163, 74, 0.3)',
+  			'toast-danger': '0 8px 16px rgba(220, 38, 38, 0.3)',
+  			'toast-info': '0 8px 16px rgba(15, 23, 42, 0.3)',
+  		},
+  	},
   },
   plugins: [require("tailwindcss-animate")],
 } satisfies Config;

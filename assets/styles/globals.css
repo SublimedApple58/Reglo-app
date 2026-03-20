@@ -25,6 +25,7 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -37,48 +38,115 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-positive: var(--positive);
+  --color-positive-foreground: var(--positive-foreground);
+
+  /* Pink scale */
+  --color-pink-50: var(--pink-50);
+  --color-pink-100: var(--pink-100);
+  --color-pink-200: var(--pink-200);
+  --color-pink-500: var(--pink-500);
+  --color-pink-600: var(--pink-600);
+  --color-pink-700: var(--pink-700);
+
+  /* Yellow scale */
+  --color-yellow-50: var(--yellow-50);
+  --color-yellow-100: var(--yellow-100);
+  --color-yellow-200: var(--yellow-200);
+  --color-yellow-400: var(--yellow-400);
+  --color-yellow-600: var(--yellow-600);
+  --color-yellow-700: var(--yellow-700);
+
+  /* Radii */
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-pill: 9999px;
+  --radius-card-primary: 35px;
+
+  /* Shadows */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-card-primary: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-cta: 0 6px 12px rgba(236, 72, 153, 0.3);
+  --shadow-accent: 0 10px 20px rgba(180, 83, 9, 0.35);
+  --shadow-dropdown: 0 8px 16px rgba(0, 0, 0, 0.1);
+  --shadow-drawer: 0 -6px 18px rgba(0, 0, 0, 0.12);
+  --shadow-toast-success: 0 8px 16px rgba(22, 163, 74, 0.3);
+  --shadow-toast-danger: 0 8px 16px rgba(220, 38, 38, 0.3);
+  --shadow-toast-info: 0 8px 16px rgba(15, 23, 42, 0.3);
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: #f5f8fb;
-  --foreground: #324e7a;
-  --card: #ffffff;
-  --card-foreground: #324e7a;
-  --popover: #fdfefe;
-  --popover-foreground: #324e7a;
-  --primary: #324e7a;
-  --primary-foreground: #f8fafc;
-  --secondary: #afe2d4;
-  --secondary-foreground: #324e7a;
-  --muted: #e9f2f8;
-  --muted-foreground: #5a6f8f;
-  --accent: #dce8f9;
-  --accent-foreground: #324e7a;
-  --destructive: #d94b47;
-  --border: #d4e0ec;
-  --input: #d4e0ec;
-  --ring: #afe2d4;
-  --chart-1: #324e7a;
-  --chart-2: #afe2d4;
-  --chart-3: #324e7a;
-  --chart-4: #dce8f9;
-  --chart-5: #e9f2f8;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #324e7a;
-  --sidebar-primary: #324e7a;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #eef4fa;
-  --sidebar-accent-foreground: #324e7a;
-  --sidebar-border: #d4e0ec;
-  --sidebar-ring: #afe2d4;
+  /* Radii — 20px base (radii.sm del DS) */
+  --radius: 1.25rem;
+
+  /* Brand */
+  --primary: #EC4899;
+  --primary-foreground: #FFFFFF;
+  --accent: #FACC15;
+  --accent-foreground: #92400E;
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+  --positive: #22C55E;
+  --positive-foreground: #FFFFFF;
+
+  /* Superfici */
+  --background: #FFFFFF;
+  --foreground: #1F2937;
+  --card: #FFFFFF;
+  --card-foreground: #1F2937;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F2937;
+
+  /* Neutri */
+  --secondary: #F8FAFC;
+  --secondary-foreground: #1F2937;
+  --muted: #F8FAFC;
+  --muted-foreground: #6B7280;
+  --border: #E5E7EB;
+  --input: #E2E8F0;
+  --ring: #EC4899;
+
+  /* Charts — tema rosa/giallo */
+  --chart-1: #EC4899;
+  --chart-2: #FACC15;
+  --chart-3: #22C55E;
+  --chart-4: #FDF2F8;
+  --chart-5: #FEF9C3;
+
+  /* Sidebar */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1F2937;
+  --sidebar-primary: #EC4899;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #FDF2F8;
+  --sidebar-accent-foreground: #1F2937;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #EC4899;
+
+  /* Motion — custom properties per animazioni */
+  --motion-micro: 100ms;
   --motion-fast: 160ms;
   --motion-base: 220ms;
-  --motion-slow: 320ms;
+  --motion-emphasis: 350ms;
+  --motion-dramatic: 500ms;
+
+  /* Scale colori dirette — Pink */
+  --pink-50: #FDF2F8;
+  --pink-100: #FCE7F3;
+  --pink-200: #FBCFE8;
+  --pink-500: #EC4899;
+  --pink-600: #DB2777;
+  --pink-700: #BE185D;
+
+  /* Scale colori dirette — Yellow */
+  --yellow-50: #FEFCE8;
+  --yellow-100: #FEF9C3;
+  --yellow-200: #FEF08A;
+  --yellow-400: #FACC15;
+  --yellow-600: #CA8A04;
+  --yellow-700: #A16207;
 }
 
 .dark {
@@ -128,46 +196,121 @@
   .reglo-interactive {
     transition-property: all;
     transition-duration: var(--motion-base);
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
   }
 
   .reglo-hover-lift {
-    transition-property: all;
+    transition-property: transform, box-shadow;
     transition-duration: var(--motion-base);
-    transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition-timing-function: cubic-bezier(0.33, 1, 0.68, 1);
   }
 
   .reglo-hover-lift:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 16px 40px -30px rgba(50, 78, 122, 0.58);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
   }
 
   .reglo-focus-ring {
     @apply outline-none focus-visible:ring-2 focus-visible:ring-primary/45 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
+  .reglo-divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-border/70 to-transparent;
+  }
+
+  /* Typography — Design System tokens (§2 DESIGN_SYSTEM.md) */
+  .ds-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+    color: var(--foreground);
+  }
+
+  .ds-subtitle {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--foreground);
+  }
+
+  .ds-body {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--foreground);
+  }
+
+  .ds-caption {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    line-height: 1.4;
+  }
+
+  /* Card title hierarchy variants (§2 DESIGN_SYSTEM.md) */
+  .ds-card-title-primary {
+    font-size: 30px;
+    line-height: 34px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+  }
+
+  .ds-card-title-secondary {
+    font-size: 22px;
+    line-height: 27px;
+    font-weight: 700;
+  }
+
+  .ds-card-title-tertiary {
+    font-size: 18px;
+    line-height: 23px;
+    font-weight: 600;
+  }
+
+  /* Section header hierarchy variants (§2 DESIGN_SYSTEM.md) */
+  .ds-section-primary {
+    font-size: 22px;
+    line-height: 27px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+
+  .ds-section-secondary {
+    font-size: 19px;
+    line-height: 24px;
+    font-weight: 700;
+  }
+
+  .ds-section-tertiary {
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 600;
+  }
+
+  /* Legacy glass classes — da rimuovere nelle fasi successive, aggiornati al nuovo tema */
   .glass-surface {
-    @apply rounded-3xl border border-white/85 bg-white/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_-10px_24px_-20px_rgba(50,78,122,0.2),0_12px_34px_-24px_rgba(50,78,122,0.24),0_24px_70px_-50px_rgba(50,78,122,0.5),0_0_20px_-12px_rgba(50,78,122,0.28)] backdrop-blur-2xl;
+    @apply rounded-[35px] border border-border bg-white shadow-[var(--shadow-card-primary)];
   }
 
   .glass-panel {
-    @apply rounded-2xl border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.88),0_-8px_20px_-18px_rgba(50,78,122,0.18),0_8px_24px_-18px_rgba(50,78,122,0.2),0_18px_50px_-38px_rgba(50,78,122,0.5),0_0_18px_-10px_rgba(50,78,122,0.24)] backdrop-blur-xl;
+    @apply rounded-[var(--radius)] border border-border bg-white shadow-[var(--shadow-card)];
   }
 
   .glass-card {
-    @apply rounded-2xl border border-white/85 bg-white/78 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_-8px_18px_-16px_rgba(50,78,122,0.15),0_10px_24px_-20px_rgba(50,78,122,0.2),0_16px_42px_-32px_rgba(50,78,122,0.46),0_0_14px_-10px_rgba(50,78,122,0.2)] backdrop-blur-xl;
+    @apply rounded-[var(--radius)] border border-border bg-white shadow-[var(--shadow-card)];
   }
 
   .glass-sidebar {
-    @apply border border-white/80 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.85),0_-8px_22px_-20px_rgba(50,78,122,0.28),0_12px_30px_-22px_rgba(50,78,122,0.25),0_28px_70px_-50px_rgba(50,78,122,0.45),0_0_20px_-12px_rgba(50,78,122,0.25)] backdrop-blur-2xl;
+    @apply border-r border-border bg-white;
   }
 
   .glass-chip {
-    @apply rounded-full border border-white/85 bg-white/85 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.7),0_0_0_1px_rgba(255,255,255,0.72)];
+    @apply rounded-full border border-border bg-white px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground;
   }
 
   .glass-strong {
-    @apply border-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.92),0_-10px_24px_-20px_rgba(50,78,122,0.22),0_12px_26px_-22px_rgba(50,78,122,0.24),0_22px_60px_-42px_rgba(50,78,122,0.52),0_0_18px_-10px_rgba(50,78,122,0.25)];
+    @apply border-border shadow-[var(--shadow-card-primary)];
   }
 
   .glass-divider {
@@ -191,15 +334,25 @@
   }
 
   .doc-richtext h1 {
-    @apply mb-2 text-2xl font-semibold tracking-tight;
+    @apply mb-2;
+    font-size: 22px;
+    line-height: 27px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
   }
 
   .doc-richtext h2 {
-    @apply mb-2 text-xl font-semibold;
+    @apply mb-2;
+    font-size: 19px;
+    line-height: 24px;
+    font-weight: 700;
   }
 
   .doc-richtext h3 {
-    @apply mb-2 text-lg font-semibold;
+    @apply mb-2;
+    font-size: 17px;
+    line-height: 22px;
+    font-weight: 600;
   }
 
   .doc-richtext blockquote {

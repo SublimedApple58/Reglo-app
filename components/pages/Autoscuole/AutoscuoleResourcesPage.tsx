@@ -1,11 +1,11 @@
 "use client";
 
 import React from "react";
-import { Bell, CalendarDays, ClipboardList, CalendarSearch, Check, Plus, Pencil, Clock, Car } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Settings2, Users, Truck } from "lucide-react";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
-import { DatePicker } from "@/components/ui/date-picker";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
+import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -16,6 +16,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SectionCard } from "@/components/ui/section-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { FieldGroup } from "@/components/ui/field-group";
+import { InlineToggle } from "@/components/ui/inline-toggle";
+import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -55,11 +60,13 @@ import {
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
 type InstructorDetail = { id: string; name: string; status: string };
 type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
-type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number };
+type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
   id: string;
   ownerId: string;
@@ -187,14 +194,14 @@ type OverrideInfo = {
 };
 
 export function AutoscuoleResourcesPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
-  const [date, setDate] = React.useState(() => formatDateLocal(new Date()));
+  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles">("settings");
+  const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
+  const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
   const [savingSettings, setSavingSettings] = React.useState(false);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
@@ -232,11 +239,19 @@ export function AutoscuoleResourcesPage({
     Record<string, VehicleWeeklyAvailability>
   >({});
 
+  // ── Shared availability dialog state
+  const [availDialogTab, setAvailDialogTab] = React.useState<"default" | "calendar">("default");
+  const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
+  const [calendarSelectedDate, setCalendarSelectedDate] = React.useState<string | null>(null);
+  const [calendarDayRanges, setCalendarDayRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
+  const [calendarDayEnabled, setCalendarDayEnabled] = React.useState(true);
+
   // ── Instructor availability dialog
   const [availInstructor, setAvailInstructor] = React.useState<InstructorDetail | null>(null);
   const [instrDays, setInstrDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
   const [instrStartMinutes, setInstrStartMinutes] = React.useState(9 * 60);
   const [instrEndMinutes, setInstrEndMinutes] = React.useState(18 * 60);
+  const [instrDefaultRanges, setInstrDefaultRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
   const [savingInstrAvailability, setSavingInstrAvailability] = React.useState(false);
   // Week override state for instructor dialog
   const [instrSelectedWeek, setInstrSelectedWeek] = React.useState<string | null>(null); // null = "Predefinito"
@@ -271,6 +286,7 @@ export function AutoscuoleResourcesPage({
   const [availDays, setAvailDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
   const [availStartMinutes, setAvailStartMinutes] = React.useState(9 * 60);
   const [availEndMinutes, setAvailEndMinutes] = React.useState(18 * 60);
+  const [vehDefaultRanges, setVehDefaultRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
   const [savingAvailability, setSavingAvailability] = React.useState(false);
   // Week override state for vehicle dialog
   const [vehSelectedWeek, setVehSelectedWeek] = React.useState<string | null>(null);
@@ -637,10 +653,16 @@ export function AutoscuoleResourcesPage({
 
   const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
     const current = instructorWeeklyAvailability[instructor.id];
+    setAvailDialogTab("default");
+    setCalendarSelectedDate(null);
+    setCalendarMonth(new Date());
     setAvailInstructor(instructor);
     setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
     setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
     setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+    setInstrDefaultRanges(
+      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
+    );
     setInstrSelectedWeek(null);
     setInstrDaySchedule([]);
     // Load daily overrides for this instructor and group them by week
@@ -720,56 +742,30 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: "Seleziona almeno un giorno." });
       return;
     }
-    if (instrEndMinutes <= instrStartMinutes) {
-      toast.error({ description: "L'orario di fine deve essere dopo quello di inizio." });
+    const invalidRange = instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes);
+    if (invalidRange) {
+      toast.error({ description: "Una o più fasce orarie non sono valide." });
       return;
     }
     setSavingInstrAvailability(true);
-
-    if (instrSelectedWeek) {
-      // Save as override for the specific week with per-day schedule
-      if (!instrDaySchedule.length) {
-        toast.error({ description: "Configura almeno un giorno." });
-        setSavingInstrAvailability(false);
-        return;
-      }
-      const res = await setWeeklyAvailabilityOverride({
-        ownerType: "instructor",
-        ownerId: availInstructor.id,
-        weekStart: instrSelectedWeek,
-        schedule: instrDaySchedule,
-      });
-      setSavingInstrAvailability(false);
-      if (!res.success) {
-        toast.error({ description: res.message ?? "Impossibile salvare l'override." });
-        return;
-      }
-      setInstrOverrides((prev) => {
-        const filtered = prev.filter((o) => o.weekStart !== instrSelectedWeek);
-        return [...filtered, { weekStart: instrSelectedWeek, schedule: instrDaySchedule }];
-      });
-      setAvailInstructor(null);
-      toast.success({ description: "Override settimanale salvato." });
-    } else {
-      // Save as default
-      const res = await setAutoscuolaInstructorWeeklyAvailability({
-        instructorId: availInstructor.id,
-        daysOfWeek: instrDays,
-        startMinutes: instrStartMinutes,
-        endMinutes: instrEndMinutes,
-      });
-      setSavingInstrAvailability(false);
-      if (!res.success || !res.data) {
-        toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
-        return;
-      }
-      setInstructorWeeklyAvailability((prev) => ({
-        ...prev,
-        [availInstructor.id]: res.data!,
-      }));
-      setAvailInstructor(null);
-      toast.success({ description: "Disponibilità salvata." });
+    const res = await setAutoscuolaInstructorWeeklyAvailability({
+      instructorId: availInstructor.id,
+      daysOfWeek: instrDays,
+      startMinutes: instrDefaultRanges[0]?.startMinutes ?? 9 * 60,
+      endMinutes: instrDefaultRanges[0]?.endMinutes ?? 18 * 60,
+      ranges: instrDefaultRanges,
+    });
+    setSavingInstrAvailability(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+      return;
     }
+    setInstructorWeeklyAvailability((prev) => ({
+      ...prev,
+      [availInstructor.id]: res.data!,
+    }));
+    setAvailInstructor(null);
+    toast.success({ description: "Disponibilità salvata." });
     loadAvailability(date);
   };
 
@@ -929,10 +925,16 @@ export function AutoscuoleResourcesPage({
 
   const openAvailabilityDialog = (vehicle: VehicleDetail) => {
     const current = vehicleWeeklyAvailability[vehicle.id];
+    setAvailDialogTab("default");
+    setCalendarSelectedDate(null);
+    setCalendarMonth(new Date());
     setAvailVehicle(vehicle);
     setAvailDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
     setAvailStartMinutes(current?.startMinutes ?? 9 * 60);
     setAvailEndMinutes(current?.endMinutes ?? 18 * 60);
+    setVehDefaultRanges(
+      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
+    );
     setVehSelectedWeek(null);
     setVehDaySchedule([]);
     // Load daily overrides for this vehicle and group them by week
@@ -1008,54 +1010,30 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: "Seleziona almeno un giorno." });
       return;
     }
-    if (availEndMinutes <= availStartMinutes) {
-      toast.error({ description: "L'orario di fine deve essere dopo quello di inizio." });
+    const invalidRange = vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes);
+    if (invalidRange) {
+      toast.error({ description: "Una o più fasce orarie non sono valide." });
       return;
     }
     setSavingAvailability(true);
-
-    if (vehSelectedWeek) {
-      if (!vehDaySchedule.length) {
-        toast.error({ description: "Configura almeno un giorno." });
-        setSavingAvailability(false);
-        return;
-      }
-      const res = await setWeeklyAvailabilityOverride({
-        ownerType: "vehicle",
-        ownerId: availVehicle.id,
-        weekStart: vehSelectedWeek,
-        schedule: vehDaySchedule,
-      });
-      setSavingAvailability(false);
-      if (!res.success) {
-        toast.error({ description: res.message ?? "Impossibile salvare l'override." });
-        return;
-      }
-      setVehOverrides((prev) => {
-        const filtered = prev.filter((o) => o.weekStart !== vehSelectedWeek);
-        return [...filtered, { weekStart: vehSelectedWeek, schedule: vehDaySchedule }];
-      });
-      setAvailVehicle(null);
-      toast.success({ description: "Override settimanale salvato." });
-    } else {
-      const res = await setAutoscuolaVehicleWeeklyAvailability({
-        vehicleId: availVehicle.id,
-        daysOfWeek: availDays,
-        startMinutes: availStartMinutes,
-        endMinutes: availEndMinutes,
-      });
-      setSavingAvailability(false);
-      if (!res.success || !res.data) {
-        toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
-        return;
-      }
-      setVehicleWeeklyAvailability((prev) => ({
-        ...prev,
-        [availVehicle.id]: res.data!,
-      }));
-      setAvailVehicle(null);
-      toast.success({ description: "Disponibilità salvata." });
+    const res = await setAutoscuolaVehicleWeeklyAvailability({
+      vehicleId: availVehicle.id,
+      daysOfWeek: availDays,
+      startMinutes: vehDefaultRanges[0]?.startMinutes ?? 9 * 60,
+      endMinutes: vehDefaultRanges[0]?.endMinutes ?? 18 * 60,
+      ranges: vehDefaultRanges,
+    });
+    setSavingAvailability(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+      return;
     }
+    setVehicleWeeklyAvailability((prev) => ({
+      ...prev,
+      [availVehicle.id]: res.data!,
+    }));
+    setAvailVehicle(null);
+    toast.success({ description: "Disponibilità salvata." });
     loadAvailability(date);
   };
 
@@ -1102,158 +1080,166 @@ export function AutoscuoleResourcesPage({
     loadAvailability(date);
   };
 
-  return (
-    <ClientPageWrapper
-      title="Configurazione"
-      subTitle="Disponibilità, prenotazioni, reminder e policy per la tua autoscuola"
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
-    >
-      <div className="w-full space-y-5">
-        {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
+  const toggleSection = (key: string) =>
+    setExpandedSection((prev) => (prev === key ? null : key));
 
-        {/* Row 1: Prenotazioni + Reminder e notifiche */}
-        <div className="grid gap-5 lg:grid-cols-2">
-          {/* Prenotazioni */}
-          <ConfigSection
+  return (
+    <PageWrapper
+      title="Configurazione"
+      subTitle="Gestisci prenotazioni, notifiche e risorse"
+    >
+      <div className="relative w-full space-y-5">
+        <LottieLoadingOverlay visible={loading} />
+        {tabs}
+
+        {/* Sub-tabs */}
+        <div className="flex items-center gap-1 rounded-xl border border-border bg-white p-1.5 shadow-card">
+          {([
+            { key: "settings" as const, label: "Impostazioni", icon: Settings2 },
+            { key: "instructors" as const, label: "Istruttori", icon: Users },
+            { key: "vehicles" as const, label: "Veicoli", icon: Truck },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setConfigTab(tab.key)}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+                configTab === tab.key
+                  ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                  : "text-muted-foreground hover:text-foreground hover:bg-gray-50",
+              )}
+            >
+              <tab.icon className="size-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <SettingsSkeleton />
+        ) : configTab === "settings" ? (
+          <>
+        {/* Accordion settings card */}
+        <div className="rounded-2xl border border-border bg-white shadow-card">
+          {/* ── Prenotazioni ── */}
+          <AccordionSection
             icon={CalendarDays}
             title="Prenotazioni"
             description="Durate, attori e settimane di disponibilità visibili in app."
+            expanded={expandedSection === "bookings"}
+            onToggle={() => toggleSection("bookings")}
+            isFirst
           >
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Settimane di disponibilità
-                </div>
-                <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Settimane" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
-                      <SelectItem key={weeks} value={String(weeks)}>
-                        {weeks} settimane
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+                <FieldGroup label="Settimane di disponibilità">
+                  <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Settimane" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
+                        <SelectItem key={weeks} value={String(weeks)}>
+                          {weeks} settimane
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
 
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Prenotazioni aperte dal
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="date"
-                    value={bookingMinStartDate}
-                    onChange={(e) => setBookingMinStartDate(e.target.value)}
-                    className="max-w-[200px]"
-                  />
-                  {bookingMinStartDate ? (
-                    <button
-                      type="button"
-                      onClick={() => setBookingMinStartDate("")}
-                      className="text-xs text-muted-foreground hover:text-foreground transition"
-                    >
-                      Rimuovi
-                    </button>
-                  ) : null}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  Gli allievi non potranno prenotare prima di questa data. Lascia vuoto per nessun limite.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Durata prenotazione allievo
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {BOOKING_DURATION_OPTIONS.map((duration) => {
-                    const active = bookingSlotDurations.includes(duration);
-                    return (
-                      <button
-                        key={duration}
-                        type="button"
-                        onClick={() => toggleBookingDuration(duration)}
-                        className={cn(
-                          "cursor-pointer rounded-full border px-3 py-1.5 text-xs transition",
-                          active
-                            ? "border-[#324D7A] bg-[#324D7A]/15 text-foreground"
-                            : "border-white/70 bg-white/85 text-muted-foreground hover:bg-white hover:text-foreground",
-                        )}
-                      >
-                        {duration} min
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Chi può prenotare
-                </div>
-                <Select
-                  value={appBookingActors}
-                  onValueChange={(value) =>
-                    setAppBookingActors(value as AppBookingActorsValue)
-                  }
+                <FieldGroup
+                  label="Prenotazioni aperte dal"
+                  description="Lascia vuoto per nessun limite."
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona policy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {appBookingActors === "instructors" || appBookingActors === "both" ? (
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Modalità istruttore
+                  <div className="flex items-center gap-2">
+                    <DatePickerInput
+                      value={bookingMinStartDate}
+                      onChange={setBookingMinStartDate}
+                      placeholder="Nessun limite"
+                    />
+                    {bookingMinStartDate ? (
+                      <button
+                        type="button"
+                        onClick={() => setBookingMinStartDate("")}
+                        className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition"
+                      >
+                        Rimuovi
+                      </button>
+                    ) : null}
                   </div>
+                </FieldGroup>
+
+                <FieldGroup label="Chi può prenotare">
                   <Select
-                    value={instructorBookingMode}
+                    value={appBookingActors}
                     onValueChange={(value) =>
-                      setInstructorBookingMode(value as InstructorBookingModeValue)
+                      setAppBookingActors(value as AppBookingActorsValue)
                     }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Seleziona modalità" />
+                      <SelectValue placeholder="Seleziona policy" />
                     </SelectTrigger>
                     <SelectContent>
-                      {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                      {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              ) : null}
-            </div>
-          </ConfigSection>
+                </FieldGroup>
 
-          {/* Reminder e notifiche */}
-          <ConfigSection
+                {appBookingActors === "instructors" || appBookingActors === "both" ? (
+                  <FieldGroup label="Modalità istruttore">
+                    <Select
+                      value={instructorBookingMode}
+                      onValueChange={(value) =>
+                        setInstructorBookingMode(value as InstructorBookingModeValue)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona modalità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                ) : null}
+              </div>
+
+              <FieldGroup label="Durata prenotazione allievo">
+                <div className="flex flex-wrap gap-2">
+                  {BOOKING_DURATION_OPTIONS.map((duration) => (
+                    <ToggleChip
+                      key={duration}
+                      active={bookingSlotDurations.includes(duration)}
+                      onClick={() => toggleBookingDuration(duration)}
+                    >
+                      {duration} min
+                    </ToggleChip>
+                  ))}
+                </div>
+              </FieldGroup>
+            </div>
+          </AccordionSection>
+
+          {/* ── Reminder e notifiche ── */}
+          <AccordionSection
             icon={Bell}
             title="Reminder e notifiche"
             description="Quando e su quali canali inviare promemoria a allievi e istruttori."
+            expanded={expandedSection === "reminders"}
+            onToggle={() => toggleSection("reminders")}
           >
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Reminder allievo
-                  </div>
+            <div className="space-y-5">
+              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+                <FieldGroup label="Reminder allievo">
                   <Select
                     value={studentReminderMinutes}
                     onValueChange={setStudentReminderMinutes}
@@ -1269,11 +1255,8 @@ export function AutoscuoleResourcesPage({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">
-                    Reminder istruttore
-                  </div>
+                </FieldGroup>
+                <FieldGroup label="Reminder istruttore">
                   <Select
                     value={instructorReminderMinutes}
                     onValueChange={setInstructorReminderMinutes}
@@ -1289,7 +1272,7 @@ export function AutoscuoleResourcesPage({
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+                </FieldGroup>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
@@ -1316,26 +1299,17 @@ export function AutoscuoleResourcesPage({
                 />
               </div>
             </div>
-          </ConfigSection>
-        </div>
+          </AccordionSection>
 
-        {/* Save button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSaveSettings}
-            disabled={savingSettings}
-            className="min-w-[180px]"
+          {/* ── Policy tipi guida ── */}
+          <AccordionSection
+            icon={ClipboardList}
+            title="Policy tipi guida"
+            description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
+            expanded={expandedSection === "policy"}
+            onToggle={() => toggleSection("policy")}
+            isLast
           >
-            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-          </Button>
-        </div>
-
-        {/* Policy tipi guida */}
-        <ConfigSection
-          icon={ClipboardList}
-          title="Policy tipi guida"
-          description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
-        >
           <div className="space-y-5">
             {/* Global toggles */}
             <div className="space-y-2">
@@ -1367,8 +1341,8 @@ export function AutoscuoleResourcesPage({
                     <div
                       key={option.value}
                       className={cn(
-                        "rounded-2xl border bg-white/70 p-3 transition-all duration-200",
-                        hasLimit ? "border-[#324D7A]/25" : "border-white/60",
+                        "rounded-xl border bg-white p-3 transition-all duration-200",
+                        hasLimit ? "border-yellow-200" : "border-border",
                       )}
                     >
                       {/* Header: name + pill actions */}
@@ -1376,57 +1350,49 @@ export function AutoscuoleResourcesPage({
                         <span className="flex-1 text-sm font-semibold text-foreground">
                           {option.label}
                         </span>
-                        {/* Obbligatorio pill */}
-                        <button
-                          type="button"
+                        <ToggleChip
+                          active={isRequired}
                           onClick={() => toggleRequiredType(option.value)}
+                          size="sm"
                           aria-label={`Segna ${option.label} come obbligatorio`}
-                          className={cn(
-                            "flex cursor-pointer items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all duration-150",
-                            isRequired
-                              ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/60"
-                              : "bg-black/5 text-muted-foreground hover:bg-black/10",
-                          )}
                         >
-                          {isRequired && <Check className="size-2.5" />}
+                          {isRequired && <Check className="inline size-2.5 mr-0.5" />}
                           Obbl.
-                        </button>
+                        </ToggleChip>
                       </div>
 
                       {/* Limite orario toggle row */}
-                      <button
-                        type="button"
-                        onClick={() => toggleConstraintEnabled(option.value)}
+                      <div
+                        role="switch"
+                        tabIndex={0}
+                        aria-checked={hasLimit}
                         aria-label={`Limite orario per ${option.label}`}
+                        onClick={() => toggleConstraintEnabled(option.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleConstraintEnabled(option.value); } }}
                         className={cn(
-                          "flex w-full cursor-pointer items-center justify-between rounded-xl px-2.5 py-2 text-xs transition-all duration-150",
+                          "flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-all duration-150",
                           hasLimit
-                            ? "bg-[#324D7A]/10 text-foreground"
-                            : "bg-white/50 text-muted-foreground hover:bg-white/80",
+                            ? "bg-yellow-50 text-foreground"
+                            : "bg-gray-50 text-muted-foreground hover:bg-gray-100",
                         )}
                       >
                         <span className="font-medium">Limite orario</span>
-                        <InlineSwitch checked={hasLimit} />
-                      </button>
+                        <InlineToggle checked={hasLimit} size="sm" />
+                      </div>
 
                       {/* Expanded: days + time window */}
                       {hasLimit && (
-                        <div className="mt-3 space-y-2.5 border-t border-white/50 pt-2.5">
+                        <div className="mt-3 space-y-2.5 border-t border-border pt-2.5">
                           <div className="flex flex-wrap gap-1">
                             {WEEKDAY_OPTIONS.map((day) => (
-                              <button
+                              <ToggleChip
                                 key={`${option.value}-${day.value}`}
-                                type="button"
+                                active={constraint.daysOfWeek.includes(day.value)}
                                 onClick={() => toggleConstraintDay(option.value, day.value)}
-                                className={cn(
-                                  "cursor-pointer rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all duration-150",
-                                  constraint.daysOfWeek.includes(day.value)
-                                    ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                                    : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                                )}
+                                size="sm"
                               >
                                 {day.label}
-                              </button>
+                              </ToggleChip>
                             ))}
                           </div>
                           <div className="grid grid-cols-2 gap-1.5">
@@ -1479,269 +1445,228 @@ export function AutoscuoleResourcesPage({
               </div>
             </div>
           </div>
-        </ConfigSection>
-
-        {/* Disponibilità del giorno */}
-        <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-4 p-5">
-          <div className="flex items-start gap-3">
-            <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
-              <CalendarSearch className="size-4 text-foreground/70" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                Disponibilità del giorno
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Seleziona una data per vedere gli slot disponibili di istruttori e veicoli.
-              </p>
-            </div>
-          </div>
-          <div className="w-[280px]">
-            <DatePicker value={date} onChange={setDate} />
-          </div>
+          </AccordionSection>
         </div>
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">Istruttori</h3>
-            <div className="flex items-center gap-2">
-              {loading ? (
-                <span className="text-xs text-muted-foreground">Aggiornamento...</span>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setInviteInstructorOpen(true)}
-                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
-              >
-                <Plus className="size-3.5" />
-                Invita istruttore
-              </button>
-            </div>
-          </div>
+        {/* Save button */}
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="min-w-[180px]"
+          >
+            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+          </Button>
+        </div>
+          </>
+        ) : configTab === "instructors" ? (
+          <>
+        <div className="flex items-center justify-between">
+          <div />
+          <Button
+            size="sm"
+            onClick={() => setInviteInstructorOpen(true)}
+          >
+            <Plus className="size-3.5 mr-1.5" />
+            Invita istruttore
+          </Button>
+        </div>
           <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-            {instructors.map((instructor) => (
-              <InstructorCard
-                key={instructor.id}
-                instructor={instructor}
-                weeklyAvailability={instructorWeeklyAvailability[instructor.id] ?? null}
-                ranges={instructorAvailability[instructor.id] ?? []}
-                onEditAvailability={() => openInstructorAvailabilityDialog(instructor)}
-              />
-            ))}
+            {instructors.map((instructor) => {
+              const wa = instructorWeeklyAvailability[instructor.id] ?? null;
+              const ranges = instructorAvailability[instructor.id] ?? [];
+              const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
+              return (
+                <ResourceCard
+                  key={instructor.id}
+                  name={instructor.name}
+                  inactive={instructor.status === "inactive"}
+                  actions={
+                    <ResourceCardAction
+                      onClick={() => openInstructorAvailabilityDialog(instructor)}
+                      title="Modifica disponibilità"
+                    >
+                      <Clock className="size-3.5" />
+                    </ResourceCardAction>
+                  }
+                  availabilitySummary={
+                    wa ? (
+                      <span>
+                        {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
+                        {wa.daysOfWeek
+                          .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
+                          .filter(Boolean)
+                          .join(", ")}
+                      </span>
+                    ) : (
+                      <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
+                    )
+                  }
+                  slots={
+                    ranges.length > 0
+                      ? ranges.map((range) => (
+                          <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
+                            {formatTime(range.start)}–{formatTime(range.end)}
+                          </SlotPill>
+                        ))
+                      : undefined
+                  }
+                  totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
+                />
+              );
+            })}
             {!instructors.length ? (
-              <EmptyCard label="Nessun istruttore disponibile." />
+              <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
+                Nessun istruttore disponibile.
+              </div>
             ) : null}
           </div>
-        </section>
+          </>
+        ) : (
+          /* ── Veicoli tab ── */
+          <VehiclesTabContent
+            vehicles={vehicles}
+            vehicleWeeklyAvailability={vehicleWeeklyAvailability}
+            vehicleAvailability={vehicleAvailability}
+            loading={loading}
+            openCreateVehicle={openCreateVehicle}
+            openEditVehicle={openEditVehicle}
+            openAvailabilityDialog={openAvailabilityDialog}
+          />
+        )}
 
         {/* ── Instructor availability dialog */}
         <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Disponibilità settimanale — {availInstructor?.name}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {/* Week selector strip */}
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Settimana</div>
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectInstrWeek(null)}
-                    className={cn(
-                      "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                      instrSelectedWeek === null
-                        ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                        : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                    )}
-                  >
-                    Predefinito
-                  </button>
-                  {weekOptions.map((wo) => {
-                    const hasOverride = instrOverrides.some((o) => o.weekStart === wo.weekStart);
-                    return (
-                      <button
-                        key={wo.weekStart}
-                        type="button"
-                        onClick={() => handleSelectInstrWeek(wo.weekStart)}
-                        className={cn(
-                          "relative shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                          instrSelectedWeek === wo.weekStart
-                            ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                            : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                        )}
-                      >
-                        {wo.label}
-                        {hasOverride && (
-                          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[#324D7A]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+          <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
+            <DialogTitle className="sr-only">Disponibilità — {availInstructor?.name}</DialogTitle>
+            <div className="px-6 pt-5 pb-4 border-b border-border">
+              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availInstructor?.name}</h3>
+              {/* Tab switcher */}
+              <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
+                <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  Predefinito
+                </button>
+                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  Calendario
+                </button>
               </div>
-              {/* ── Default mode: flat days + single time range ── */}
-              {!instrSelectedWeek && (
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {availDialogTab === "default" ? (
                 <>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                  <FieldGroup label="Giorni attivi">
                     <div className="flex flex-wrap gap-1.5">
                       {WEEKDAY_OPTIONS.map((day) => (
-                        <button
-                          key={day.value}
-                          type="button"
-                          onClick={() => toggleInstrDay(day.value)}
-                          className={cn(
-                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                            instrDays.includes(day.value)
-                              ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                              : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                          )}
-                        >
+                        <ToggleChip key={day.value} active={instrDays.includes(day.value)} onClick={() => toggleInstrDay(day.value)}>
                           {day.label}
-                        </button>
+                        </ToggleChip>
                       ))}
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">Orario</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">Inizio</div>
-                        <Select
-                          value={String(instrStartMinutes)}
-                          onValueChange={(v) => setInstrStartMinutes(Number(v))}
-                        >
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {START_TIME_OPTIONS.map((m) => (
-                              <SelectItem key={`instr-start-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">Fine</div>
-                        <Select
-                          value={String(instrEndMinutes)}
-                          onValueChange={(v) => setInstrEndMinutes(Number(v))}
-                        >
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {END_TIME_OPTIONS.map((m) => (
-                              <SelectItem key={`instr-end-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* ── Override mode: per-day schedule editor ── */}
-              {instrSelectedWeek && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Orario per giorno</div>
-                  <div className="space-y-1.5">
-                    {WEEKDAY_OPTIONS.map((day) => {
-                      const entry = instrDaySchedule.find((e) => e.dayOfWeek === day.value);
-                      const isActive = Boolean(entry);
-                      return (
-                        <div key={day.value} className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isActive) {
-                                setInstrDaySchedule((prev) => prev.filter((e) => e.dayOfWeek !== day.value));
-                              } else {
-                                setInstrDaySchedule((prev) => [...prev, { dayOfWeek: day.value, startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
-                              }
-                            }}
-                            className={cn(
-                              "w-10 shrink-0 rounded-full border px-1 py-0.5 text-xs font-medium transition-all",
-                              isActive
-                                ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                                : "border-white/70 bg-white/80 text-muted-foreground",
-                            )}
-                          >
-                            {day.label}
-                          </button>
-                          {isActive && entry && (
-                            <>
-                              <Select
-                                value={String(entry.startMinutes)}
-                                onValueChange={(v) => setInstrDaySchedule((prev) =>
-                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, startMinutes: Number(v) } : e),
-                                )}
-                              >
-                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {START_TIME_OPTIONS.map((m) => (
-                                    <SelectItem key={`id-s-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <span className="text-xs text-muted-foreground">–</span>
-                              <Select
-                                value={String(entry.endMinutes)}
-                                onValueChange={(v) => setInstrDaySchedule((prev) =>
-                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, endMinutes: Number(v) } : e),
-                                )}
-                              >
-                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {END_TIME_OPTIONS.map((m) => (
-                                    <SelectItem key={`id-e-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </>
+                  </FieldGroup>
+                  <FieldGroup label="Fasce orarie">
+                    <div className="space-y-2">
+                      {instrDefaultRanges.map((range, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setInstrStartMinutes(val); }}>
+                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`is-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                          </Select>
+                          <span className="text-xs text-muted-foreground">–</span>
+                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setInstrEndMinutes(val); }}>
+                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ie-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                          </Select>
+                          {instrDefaultRanges.length > 1 && (
+                            <button type="button" onClick={() => setInstrDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
                           )}
-                          {!isActive && <span className="text-xs text-muted-foreground italic">spento</span>}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      ))}
+                      <button type="button" onClick={() => setInstrDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
+                        <Plus className="size-3" />
+                        Aggiungi fascia
+                      </button>
+                    </div>
+                  </FieldGroup>
+                </>
+              ) : (
+                <AvailabilityCalendar
+                  calendarMonth={calendarMonth}
+                  setCalendarMonth={setCalendarMonth}
+                  selectedDate={calendarSelectedDate}
+                  setSelectedDate={setCalendarSelectedDate}
+                  overrides={instrOverrides}
+                  ranges={calendarDayRanges}
+                  setRanges={setCalendarDayRanges}
+                  dayEnabled={calendarDayEnabled}
+                  setDayEnabled={setCalendarDayEnabled}
+                  defaultAvailability={availInstructor ? instructorWeeklyAvailability[availInstructor.id] ?? null : null}
+                />
               )}
             </div>
-            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-              {instrSelectedWeek ? (
-                <button
-                  type="button"
-                  onClick={handleResetInstrOverride}
-                  disabled={savingInstrAvailability || !instrOverrides.some((o) => o.weekStart === instrSelectedWeek)}
-                  className="order-last text-xs text-amber-600 hover:text-amber-700 hover:underline disabled:opacity-40 sm:order-first"
-                >
-                  Ripristina predefinito
+
+            <div className="flex items-center justify-between border-t border-border px-6 py-4">
+              {availDialogTab === "default" ? (
+                <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
+                  Rimuovi disponibilità
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleDeleteInstructorAvailability}
-                  disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]}
-                  className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
-                >
-                  Rimuovi disponibilità
+                <button type="button" onClick={() => { if (calendarSelectedDate && availInstructor) { const weekStart = getWeekStart(new Date(calendarSelectedDate)).toISOString().slice(0, 10); handleResetInstrOverride(); } }} disabled={savingInstrAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
+                  Ripristina predefinito
                 </button>
               )}
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setAvailInstructor(null)}
-                  disabled={savingInstrAvailability}
-                >
-                  Annulla
-                </Button>
-                <Button
-                  onClick={handleSaveInstructorAvailability}
-                  disabled={savingInstrAvailability || !instrDays.length || instrEndMinutes <= instrStartMinutes}
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)} disabled={savingInstrAvailability}>Annulla</Button>
+                <Button type="button" size="sm" onClick={async () => {
+                  if (availDialogTab === "calendar" && calendarSelectedDate && availInstructor) {
+                    const dateObj = new Date(calendarSelectedDate);
+                    const ws = getWeekStart(dateObj);
+                    const weekStartStr = ws.toISOString().slice(0, 10);
+                    const dayOfWeek = dateObj.getUTCDay();
+
+                    if (!calendarDayEnabled) {
+                      // Save empty schedule = day off
+                      setSavingInstrAvailability(true);
+                      const res = await setWeeklyAvailabilityOverride({
+                        ownerType: "instructor",
+                        ownerId: availInstructor.id,
+                        weekStart: weekStartStr,
+                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
+                      });
+                      setSavingInstrAvailability(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                    } else {
+                      const schedule: DayScheduleEntry[] = [{
+                        dayOfWeek,
+                        startMinutes: calendarDayRanges[0].startMinutes,
+                        endMinutes: calendarDayRanges[0].endMinutes,
+                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
+                      }];
+                      setSavingInstrAvailability(true);
+                      const res = await setWeeklyAvailabilityOverride({
+                        ownerType: "instructor",
+                        ownerId: availInstructor.id,
+                        weekStart: weekStartStr,
+                        schedule,
+                      });
+                      setSavingInstrAvailability(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                      // Update local overrides
+                      setInstrOverrides((prev) => {
+                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
+                        return [...filtered, { weekStart: weekStartStr, schedule }];
+                      });
+                    }
+                    toast.success({ description: "Override salvato." });
+                    loadAvailability(date);
+                  } else {
+                    handleSaveInstructorAvailability();
+                  }
+                }} disabled={savingInstrAvailability || (availDialogTab === "default" && (!instrDays.length || instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
                   {savingInstrAvailability ? "Salvataggio..." : "Salva"}
                 </Button>
               </div>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -1751,38 +1676,6 @@ export function AutoscuoleResourcesPage({
           onOpenChange={setInviteInstructorOpen}
           initialAutoscuolaRole="INSTRUCTOR"
         />
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-foreground">Veicoli</h3>
-            <div className="flex items-center gap-2">
-              {loading ? (
-                <span className="text-xs text-muted-foreground">Aggiornamento...</span>
-              ) : null}
-              <button
-                type="button"
-                onClick={openCreateVehicle}
-                className="flex items-center gap-1.5 rounded-full border border-[#324D7A]/30 bg-[#324D7A]/10 px-3 py-1.5 text-xs font-medium text-[#324D7A] transition hover:bg-[#324D7A]/20"
-              >
-                <Plus className="size-3.5" />
-                Nuovo veicolo
-              </button>
-            </div>
-          </div>
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-            {vehicles.map((vehicle) => (
-              <VehicleCard
-                key={vehicle.id}
-                vehicle={vehicle}
-                weeklyAvailability={vehicleWeeklyAvailability[vehicle.id] ?? null}
-                ranges={vehicleAvailability[vehicle.id] ?? []}
-                onEdit={() => openEditVehicle(vehicle)}
-                onEditAvailability={() => openAvailabilityDialog(vehicle)}
-              />
-            ))}
-            {!vehicles.length ? <EmptyCard label="Nessun veicolo disponibile." /> : null}
-          </div>
-        </section>
 
         {/* ── Create vehicle dialog */}
         <Dialog open={createVehicleOpen} onOpenChange={setCreateVehicleOpen}>
@@ -1879,240 +1772,304 @@ export function AutoscuoleResourcesPage({
           </DialogContent>
         </Dialog>
 
-        {/* ── Availability edit dialog */}
+        {/* ── Vehicle availability dialog */}
         <Dialog open={Boolean(availVehicle)} onOpenChange={(open) => !open && setAvailVehicle(null)}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Disponibilità settimanale — {availVehicle?.name}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {/* Week selector strip */}
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-muted-foreground">Settimana</div>
-                <div className="flex gap-1.5 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectVehWeek(null)}
-                    className={cn(
-                      "shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                      vehSelectedWeek === null
-                        ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                        : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                    )}
-                  >
-                    Predefinito
-                  </button>
-                  {weekOptions.map((wo) => {
-                    const hasOverride = vehOverrides.some((o) => o.weekStart === wo.weekStart);
-                    return (
-                      <button
-                        key={wo.weekStart}
-                        type="button"
-                        onClick={() => handleSelectVehWeek(wo.weekStart)}
-                        className={cn(
-                          "relative shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                          vehSelectedWeek === wo.weekStart
-                            ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                            : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                        )}
-                      >
-                        {wo.label}
-                        {hasOverride && (
-                          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[#324D7A]" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
+          <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
+            <DialogTitle className="sr-only">Disponibilità — {availVehicle?.name}</DialogTitle>
+            <div className="px-6 pt-5 pb-4 border-b border-border">
+              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availVehicle?.name}</h3>
+              <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
+                <button type="button" onClick={() => { setAvailDialogTab("default"); setVehSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  Predefinito
+                </button>
+                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  Calendario
+                </button>
               </div>
-              {!vehSelectedWeek && (
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              {availDialogTab === "default" ? (
                 <>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">Giorni attivi</div>
+                  <FieldGroup label="Giorni attivi">
                     <div className="flex flex-wrap gap-1.5">
                       {WEEKDAY_OPTIONS.map((day) => (
-                        <button
-                          key={day.value}
-                          type="button"
-                          onClick={() => toggleAvailDay(day.value)}
-                          className={cn(
-                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                            availDays.includes(day.value)
-                              ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                              : "border-white/70 bg-white/80 text-muted-foreground hover:bg-white hover:text-foreground",
-                          )}
-                        >
+                        <ToggleChip key={day.value} active={availDays.includes(day.value)} onClick={() => toggleAvailDay(day.value)}>
                           {day.label}
-                        </button>
+                        </ToggleChip>
                       ))}
                     </div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground">Orario</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">Inizio</div>
-                        <Select value={String(availStartMinutes)} onValueChange={(v) => setAvailStartMinutes(Number(v))}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {START_TIME_OPTIONS.map((m) => (
-                              <SelectItem key={`avail-start-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[11px] text-muted-foreground">Fine</div>
-                        <Select value={String(availEndMinutes)} onValueChange={(v) => setAvailEndMinutes(Number(v))}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {END_TIME_OPTIONS.map((m) => (
-                              <SelectItem key={`avail-end-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
-              {vehSelectedWeek && (
-                <div className="space-y-2">
-                  <div className="text-xs font-medium text-muted-foreground">Orario per giorno</div>
-                  <div className="space-y-1.5">
-                    {WEEKDAY_OPTIONS.map((day) => {
-                      const entry = vehDaySchedule.find((e) => e.dayOfWeek === day.value);
-                      const isActive = Boolean(entry);
-                      return (
-                        <div key={day.value} className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (isActive) {
-                                setVehDaySchedule((prev) => prev.filter((e) => e.dayOfWeek !== day.value));
-                              } else {
-                                setVehDaySchedule((prev) => [...prev, { dayOfWeek: day.value, startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
-                              }
-                            }}
-                            className={cn(
-                              "w-10 shrink-0 rounded-full border px-1 py-0.5 text-xs font-medium transition-all",
-                              isActive
-                                ? "border-[#324D7A] bg-[#324D7A]/15 text-[#324D7A]"
-                                : "border-white/70 bg-white/80 text-muted-foreground",
-                            )}
-                          >
-                            {day.label}
-                          </button>
-                          {isActive && entry && (
-                            <>
-                              <Select
-                                value={String(entry.startMinutes)}
-                                onValueChange={(v) => setVehDaySchedule((prev) =>
-                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, startMinutes: Number(v) } : e),
-                                )}
-                              >
-                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {START_TIME_OPTIONS.map((m) => (
-                                    <SelectItem key={`vd-s-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                              <span className="text-xs text-muted-foreground">–</span>
-                              <Select
-                                value={String(entry.endMinutes)}
-                                onValueChange={(v) => setVehDaySchedule((prev) =>
-                                  prev.map((e) => e.dayOfWeek === day.value ? { ...e, endMinutes: Number(v) } : e),
-                                )}
-                              >
-                                <SelectTrigger className="h-7 w-[80px] text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  {END_TIME_OPTIONS.map((m) => (
-                                    <SelectItem key={`vd-e-${day.value}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </>
+                  </FieldGroup>
+                  <FieldGroup label="Fasce orarie">
+                    <div className="space-y-2">
+                      {vehDefaultRanges.map((range, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setAvailStartMinutes(val); }}>
+                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`vs-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                          </Select>
+                          <span className="text-xs text-muted-foreground">–</span>
+                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setAvailEndMinutes(val); }}>
+                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ve-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                          </Select>
+                          {vehDefaultRanges.length > 1 && (
+                            <button type="button" onClick={() => setVehDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
                           )}
-                          {!isActive && <span className="text-xs text-muted-foreground italic">spento</span>}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      ))}
+                      <button type="button" onClick={() => setVehDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
+                        <Plus className="size-3" />
+                        Aggiungi fascia
+                      </button>
+                    </div>
+                  </FieldGroup>
+                </>
+              ) : (
+                <AvailabilityCalendar
+                  calendarMonth={calendarMonth}
+                  setCalendarMonth={setCalendarMonth}
+                  selectedDate={calendarSelectedDate}
+                  setSelectedDate={setCalendarSelectedDate}
+                  overrides={vehOverrides}
+                  ranges={calendarDayRanges}
+                  setRanges={setCalendarDayRanges}
+                  dayEnabled={calendarDayEnabled}
+                  setDayEnabled={setCalendarDayEnabled}
+                  defaultAvailability={availVehicle ? vehicleWeeklyAvailability[availVehicle.id] ?? null : null}
+                />
               )}
             </div>
-            <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-              {vehSelectedWeek ? (
-                <button
-                  type="button"
-                  onClick={handleResetVehOverride}
-                  disabled={savingAvailability || !vehOverrides.some((o) => o.weekStart === vehSelectedWeek)}
-                  className="order-last text-xs text-amber-600 hover:text-amber-700 hover:underline disabled:opacity-40 sm:order-first"
-                >
-                  Ripristina predefinito
+
+            <div className="flex items-center justify-between border-t border-border px-6 py-4">
+              {availDialogTab === "default" ? (
+                <button type="button" onClick={handleDeleteAvailability} disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
+                  Rimuovi disponibilità
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleDeleteAvailability}
-                  disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]}
-                  className="order-last text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40 sm:order-first"
-                >
-                  Rimuovi disponibilità
+                <button type="button" onClick={() => { if (calendarSelectedDate && availVehicle) handleResetVehOverride(); }} disabled={savingAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
+                  Ripristina predefinito
                 </button>
               )}
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setAvailVehicle(null)}
-                  disabled={savingAvailability}
-                >
-                  Annulla
-                </Button>
-                <Button
-                  onClick={handleSaveAvailability}
-                  disabled={savingAvailability || !availDays.length || availEndMinutes <= availStartMinutes}
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => setAvailVehicle(null)} disabled={savingAvailability}>Annulla</Button>
+                <Button type="button" size="sm" onClick={async () => {
+                  if (availDialogTab === "calendar" && calendarSelectedDate && availVehicle) {
+                    const dateObj = new Date(calendarSelectedDate);
+                    const ws = getWeekStart(dateObj);
+                    const weekStartStr = ws.toISOString().slice(0, 10);
+                    const dayOfWeek = dateObj.getUTCDay();
+
+                    if (!calendarDayEnabled) {
+                      setSavingAvailability(true);
+                      const res = await setWeeklyAvailabilityOverride({
+                        ownerType: "vehicle",
+                        ownerId: availVehicle.id,
+                        weekStart: weekStartStr,
+                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
+                      });
+                      setSavingAvailability(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                    } else {
+                      const schedule: DayScheduleEntry[] = [{
+                        dayOfWeek,
+                        startMinutes: calendarDayRanges[0].startMinutes,
+                        endMinutes: calendarDayRanges[0].endMinutes,
+                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
+                      }];
+                      setSavingAvailability(true);
+                      const res = await setWeeklyAvailabilityOverride({
+                        ownerType: "vehicle",
+                        ownerId: availVehicle.id,
+                        weekStart: weekStartStr,
+                        schedule,
+                      });
+                      setSavingAvailability(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                      setVehOverrides((prev) => {
+                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
+                        return [...filtered, { weekStart: weekStartStr, schedule }];
+                      });
+                    }
+                    toast.success({ description: "Override salvato." });
+                    loadAvailability(date);
+                  } else {
+                    handleSaveAvailability();
+                  }
+                }} disabled={savingAvailability || (availDialogTab === "default" && (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
                   {savingAvailability ? "Salvataggio..." : "Salva"}
                 </Button>
               </div>
-            </DialogFooter>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }
 
-function ConfigSection({
+function AccordionSection({
   icon: Icon,
   title,
   description,
+  expanded,
+  onToggle,
+  isFirst,
+  isLast,
   children,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
-  description?: string;
+  description: string;
+  expanded: boolean;
+  onToggle: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className="glass-panel glass-strong space-y-4 p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0 rounded-xl bg-white/80 p-2 shadow-sm ring-1 ring-white/60">
-          <Icon className="size-4 text-foreground/70" />
-        </div>
-        <div>
-          <div className="text-sm font-semibold text-foreground">{title}</div>
-          {description && (
+    <div className={cn(!isFirst && "border-t border-border")}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className={cn(
+          "flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-gray-50/50",
+          isFirst && "rounded-t-2xl",
+          isLast && !expanded && "rounded-b-2xl",
+        )}
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-yellow-50">
+            <Icon className="h-4 w-4 text-yellow-600" />
+          </span>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
             <p className="text-xs text-muted-foreground">{description}</p>
-          )}
+          </div>
         </div>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            expanded && "rotate-180",
+          )}
+        />
       </div>
-      {children}
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, overflow: "visible", transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className={cn("px-5 pb-5", isLast && "rounded-b-2xl")}>
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+function VehiclesTabContent({
+  vehicles,
+  vehicleWeeklyAvailability,
+  vehicleAvailability,
+  loading,
+  openCreateVehicle,
+  openEditVehicle,
+  openAvailabilityDialog,
+}: {
+  vehicles: VehicleDetail[];
+  vehicleWeeklyAvailability: Record<string, VehicleWeeklyAvailability>;
+  vehicleAvailability: Record<string, AvailabilityRange[]>;
+  loading: boolean;
+  openCreateVehicle: () => void;
+  openEditVehicle: (vehicle: VehicleDetail) => void;
+  openAvailabilityDialog: (vehicle: VehicleDetail) => void;
+}) {
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <div />
+        <Button size="sm" onClick={openCreateVehicle}>
+          <Plus className="size-3.5 mr-1.5" />
+          Nuovo veicolo
+        </Button>
+      </div>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+        {vehicles.map((vehicle) => {
+          const wa = vehicleWeeklyAvailability[vehicle.id] ?? null;
+          const ranges = vehicleAvailability[vehicle.id] ?? [];
+          const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
+          return (
+            <ResourceCard
+              key={vehicle.id}
+              name={vehicle.name}
+              subtitle={vehicle.plate ? (
+                <span className="flex items-center gap-1">
+                  <Car className="size-3" />
+                  {vehicle.plate}
+                </span>
+              ) : undefined}
+              inactive={vehicle.status === "inactive"}
+              actions={
+                <>
+                  <ResourceCardAction
+                    onClick={() => openAvailabilityDialog(vehicle)}
+                    title="Modifica disponibilità"
+                  >
+                    <Clock className="size-3.5" />
+                  </ResourceCardAction>
+                  <ResourceCardAction
+                    onClick={() => openEditVehicle(vehicle)}
+                    title="Modifica veicolo"
+                  >
+                    <Pencil className="size-3.5" />
+                  </ResourceCardAction>
+                </>
+              }
+              availabilitySummary={
+                wa ? (
+                  <span>
+                    {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
+                    {wa.daysOfWeek
+                      .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
+                      .filter(Boolean)
+                      .join(", ")}
+                  </span>
+                ) : (
+                  <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
+                )
+              }
+              slots={
+                ranges.length > 0
+                  ? ranges.map((range) => (
+                      <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
+                        {formatTime(range.start)}–{formatTime(range.end)}
+                      </SlotPill>
+                    ))
+                  : undefined
+              }
+              totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
+            />
+          );
+        })}
+        {!vehicles.length ? (
+          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
+            Nessun veicolo disponibile.
+          </div>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
+/* ConfigSection removed — now uses AccordionSection */
 
 function PolicySwitch({
   checked,
@@ -2126,16 +2083,17 @@ function PolicySwitch({
   description?: string;
 }) {
   return (
-    <button
-      type="button"
+    <div
       role="switch"
+      tabIndex={0}
       aria-checked={checked}
       onClick={onChange}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(); } }}
       className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-all duration-150",
+        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-all duration-150",
         checked
-          ? "border-[#324D7A]/30 bg-[#324D7A]/8 hover:bg-[#324D7A]/10"
-          : "border-white/60 bg-white/70 hover:bg-white/90",
+          ? "border-yellow-200 bg-yellow-50 hover:bg-yellow-100/50"
+          : "border-border bg-white hover:bg-gray-50",
       )}
     >
       <div>
@@ -2144,250 +2102,12 @@ function PolicySwitch({
           <div className="text-xs text-muted-foreground">{description}</div>
         )}
       </div>
-      <InlineSwitch checked={checked} />
-    </button>
-  );
-}
-
-function InlineSwitch({ checked }: { checked: boolean }) {
-  return (
-    <div
-      className={cn(
-        "relative flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors duration-200",
-        checked ? "bg-[#324D7A]" : "bg-black/20",
-      )}
-    >
-      <div
-        className={cn(
-          "absolute h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200",
-          checked ? "translate-x-[18px]" : "translate-x-[2px]",
-        )}
-      />
+      <InlineToggle checked={checked} />
     </div>
   );
 }
 
-function InstructorCard({
-  instructor,
-  weeklyAvailability,
-  ranges,
-  onEditAvailability,
-}: {
-  instructor: InstructorDetail;
-  weeklyAvailability: VehicleWeeklyAvailability | null;
-  ranges: AvailabilityRange[];
-  onEditAvailability: () => void;
-}) {
-  const totalMinutes = ranges.reduce((sum, range) => sum + diffMinutes(range.end, range.start), 0);
-  const isInactive = instructor.status === "inactive";
-
-  return (
-    <div className={cn("glass-panel glass-strong space-y-2 p-4", isInactive && "opacity-60")}>
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{instructor.name}</span>
-            {isInactive && (
-              <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-                Inattivo
-              </span>
-            )}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onEditAvailability}
-          title="Modifica disponibilità"
-          className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
-        >
-          <Clock className="size-3.5" />
-        </button>
-      </div>
-
-      {/* Weekly availability summary */}
-      {weeklyAvailability ? (
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>
-            {formatMinutes(weeklyAvailability.startMinutes)}–{formatMinutes(weeklyAvailability.endMinutes)}
-          </span>
-          <span>·</span>
-          <span>
-            {weeklyAvailability.daysOfWeek
-              .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-              .filter(Boolean)
-              .join(", ")}
-          </span>
-        </div>
-      ) : (
-        <div className="text-[11px] text-muted-foreground/60 italic">Nessuna disponibilità settimanale</div>
-      )}
-
-      {/* Today's slots */}
-      <div className="flex items-center justify-between border-t border-white/40 pt-2">
-        <div className="flex flex-wrap gap-1.5">
-          {ranges.map((range) => (
-            <span
-              key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
-            >
-              {formatTime(range.start)}–{formatTime(range.end)}
-            </span>
-          ))}
-          {!ranges.length ? (
-            <span className="text-xs text-muted-foreground">Nessuno slot oggi.</span>
-          ) : null}
-        </div>
-        {totalMinutes > 0 && (
-          <div className="shrink-0 pl-2 text-xs text-muted-foreground">
-            {Math.round(totalMinutes)} min
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function VehicleCard({
-  vehicle,
-  weeklyAvailability,
-  ranges,
-  onEdit,
-  onEditAvailability,
-}: {
-  vehicle: VehicleDetail;
-  weeklyAvailability: VehicleWeeklyAvailability | null;
-  ranges: AvailabilityRange[];
-  onEdit: () => void;
-  onEditAvailability: () => void;
-}) {
-  const totalMinutes = ranges.reduce((sum, range) => sum + diffMinutes(range.end, range.start), 0);
-  const isInactive = vehicle.status === "inactive";
-
-  return (
-    <div className={cn("glass-panel glass-strong space-y-2 p-4", isInactive && "opacity-60")}>
-      {/* Header row */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">{vehicle.name}</span>
-            {isInactive && (
-              <span className="shrink-0 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">
-                Inattivo
-              </span>
-            )}
-          </div>
-          {vehicle.plate && (
-            <div className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-              <Car className="size-3" />
-              {vehicle.plate}
-            </div>
-          )}
-        </div>
-        {/* Action icons */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={onEditAvailability}
-            title="Modifica disponibilità"
-            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
-          >
-            <Clock className="size-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={onEdit}
-            title="Modifica veicolo"
-            className="flex size-7 items-center justify-center rounded-lg border border-white/60 bg-white/60 text-muted-foreground transition hover:bg-white hover:text-foreground"
-          >
-            <Pencil className="size-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Weekly availability summary */}
-      {weeklyAvailability ? (
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span>
-            {formatMinutes(weeklyAvailability.startMinutes)}–{formatMinutes(weeklyAvailability.endMinutes)}
-          </span>
-          <span>·</span>
-          <span>
-            {weeklyAvailability.daysOfWeek
-              .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-              .filter(Boolean)
-              .join(", ")}
-          </span>
-        </div>
-      ) : (
-        <div className="text-[11px] text-muted-foreground/60 italic">Nessuna disponibilità settimanale</div>
-      )}
-
-      {/* Today's slots */}
-      <div className="flex items-center justify-between border-t border-white/40 pt-2">
-        <div className="flex flex-wrap gap-1.5">
-          {ranges.map((range) => (
-            <span
-              key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-              className="rounded-full border border-white/60 bg-white/80 px-2.5 py-0.5 text-[11px] text-foreground"
-            >
-              {formatTime(range.start)}–{formatTime(range.end)}
-            </span>
-          ))}
-          {!ranges.length ? (
-            <span className="text-xs text-muted-foreground">Nessuno slot oggi.</span>
-          ) : null}
-        </div>
-        {totalMinutes > 0 && (
-          <div className="shrink-0 pl-2 text-xs text-muted-foreground">
-            {Math.round(totalMinutes)} min
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function AvailabilityCard({
-  title,
-  ranges,
-}: {
-  title: string;
-  ranges: AvailabilityRange[];
-}) {
-  const totalMinutes = ranges.reduce((sum, range) => sum + diffMinutes(range.end, range.start), 0);
-  return (
-    <div className="glass-panel glass-strong space-y-2 p-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm font-semibold text-foreground">{title}</div>
-        <div className="text-xs text-muted-foreground">
-          {totalMinutes ? `${Math.round(totalMinutes)} min` : "0 min"}
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {ranges.map((range) => (
-          <span
-            key={`${range.start.toISOString()}-${range.end.toISOString()}`}
-            className="rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs text-foreground"
-          >
-            {formatTime(range.start)} - {formatTime(range.end)}
-          </span>
-        ))}
-        {!ranges.length ? (
-          <span className="text-xs text-muted-foreground">Nessuna disponibilità.</span>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
-function EmptyCard({ label }: { label: string }) {
-  return (
-    <div className="glass-panel glass-strong flex items-center justify-center p-6 text-sm text-muted-foreground">
-      {label}
-    </div>
-  );
-}
+/* InstructorCard, VehicleCard, AvailabilityCard, EmptyCard removed — now uses ResourceCard from @/components/ui/resource-card */
 
 function buildAvailabilityMap(slots: AvailabilitySlot[]) {
   const grouped: Record<string, AvailabilityRange[]> = {};
@@ -2444,8 +2164,8 @@ function ChannelGroup({
   onToggle: (channel: ChannelValue) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-2xl border border-white/60 bg-white/70 p-3">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
+    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
+      <div className="text-xs font-medium text-foreground">{title}</div>
       <div className="space-y-2">
         {CHANNEL_OPTIONS.map((channel) => (
           <label
@@ -2460,6 +2180,217 @@ function ChannelGroup({
           </label>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ── Mini Calendar for availability overrides ──────────────────────────────────
+
+const CAL_DAY_NAMES = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
+
+type TimeRange = { startMinutes: number; endMinutes: number };
+
+function AvailabilityCalendar({
+  calendarMonth,
+  setCalendarMonth,
+  selectedDate,
+  setSelectedDate,
+  overrides,
+  ranges,
+  setRanges,
+  dayEnabled,
+  setDayEnabled,
+  defaultAvailability,
+}: {
+  calendarMonth: Date;
+  setCalendarMonth: React.Dispatch<React.SetStateAction<Date>>;
+  selectedDate: string | null;
+  setSelectedDate: (date: string | null) => void;
+  overrides: OverrideInfo[];
+  ranges: TimeRange[];
+  setRanges: React.Dispatch<React.SetStateAction<TimeRange[]>>;
+  dayEnabled: boolean;
+  setDayEnabled: (v: boolean) => void;
+  defaultAvailability: VehicleWeeklyAvailability | null;
+}) {
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+  // Build calendar grid
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7; // Monday = 0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const calDays: Array<{ day: number; dateStr: string } | null> = [];
+  for (let i = 0; i < startOffset; i++) calDays.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    calDays.push({ day: d, dateStr: `${year}-${pad(month + 1)}-${pad(d)}` });
+  }
+
+  const overrideDates = new Set<string>();
+  for (const o of overrides) {
+    for (const entry of o.schedule) {
+      // Reconstruct date from weekStart + dayOfWeek
+      const ws = new Date(o.weekStart);
+      const dayOffset = entry.dayOfWeek === 0 ? 6 : entry.dayOfWeek - 1;
+      const d = new Date(ws);
+      d.setDate(d.getDate() + dayOffset);
+      overrideDates.add(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+    }
+  }
+
+  const handleSelectDay = (dateStr: string) => {
+    setSelectedDate(dateStr);
+    const dateObj = new Date(dateStr);
+    const dayOfWeek = dateObj.getDay();
+    const ws = getWeekStart(dateObj).toISOString().slice(0, 10);
+    const override = overrides.find((o) => o.weekStart === ws);
+    const entry = override?.schedule.find((e) => e.dayOfWeek === dayOfWeek);
+    if (entry) {
+      // Build ranges from override entry
+      const r: TimeRange[] = [{ startMinutes: entry.startMinutes, endMinutes: entry.endMinutes }];
+      if (entry.startMinutes2 != null && entry.endMinutes2 != null) {
+        r.push({ startMinutes: entry.startMinutes2, endMinutes: entry.endMinutes2 });
+      }
+      setRanges(r);
+      setDayEnabled(true);
+    } else if (defaultAvailability) {
+      setRanges([{ startMinutes: defaultAvailability.startMinutes, endMinutes: defaultAvailability.endMinutes }]);
+      setDayEnabled(defaultAvailability.daysOfWeek.includes(dayOfWeek));
+    } else {
+      setRanges([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
+      setDayEnabled(true);
+    }
+  };
+
+  const monthLabel = new Date(year, month).toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+
+  const selectedDateObj = selectedDate ? new Date(selectedDate) : null;
+  const selectedDayLabel = selectedDateObj
+    ? selectedDateObj.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })
+    : null;
+  const hasOverrideOnSelected = selectedDate ? overrideDates.has(selectedDate) : false;
+
+  return (
+    <div className="space-y-4">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-semibold text-foreground capitalize">{monthLabel}</span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            aria-label="Mese precedente"
+            onClick={() => setCalendarMonth(new Date(year, month - 1, 1))}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Mese successivo"
+            onClick={() => setCalendarMonth(new Date(year, month + 1, 1))}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-gray-100 transition-colors"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Day names header */}
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {CAL_DAY_NAMES.map((name) => (
+          <div key={name} className="text-[10px] font-semibold uppercase text-muted-foreground py-1">{name}</div>
+        ))}
+        {calDays.map((cell, i) => {
+          if (!cell) return <div key={`empty-${i}`} />;
+          const isToday = cell.dateStr === todayStr;
+          const isSelected = cell.dateStr === selectedDate;
+          const hasOverride = overrideDates.has(cell.dateStr);
+          return (
+            <button
+              key={cell.dateStr}
+              type="button"
+              onClick={() => handleSelectDay(cell.dateStr)}
+              className={cn(
+                "relative flex h-8 w-8 mx-auto cursor-pointer items-center justify-center rounded-full text-xs font-medium transition-colors",
+                isSelected
+                  ? "bg-yellow-400 text-white"
+                  : isToday
+                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                    : "text-foreground hover:bg-gray-100",
+              )}
+            >
+              {cell.day}
+              {hasOverride && !isSelected && (
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-yellow-400" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected day editor */}
+      {selectedDate && selectedDayLabel && (
+        <div className="rounded-xl border border-border bg-gray-50/50 p-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-foreground capitalize">{selectedDayLabel}</span>
+            {hasOverrideOnSelected && (
+              <span className="rounded-full bg-yellow-100 border border-yellow-200 px-2 py-0.5 text-[10px] font-medium text-yellow-700">Override</span>
+            )}
+          </div>
+          <div
+            role="switch"
+            tabIndex={0}
+            aria-checked={dayEnabled}
+            onClick={() => setDayEnabled(!dayEnabled)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDayEnabled(!dayEnabled); } }}
+            className={cn(
+              "flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors",
+              dayEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+            )}
+          >
+            <span className="text-xs font-medium text-foreground">Disponibile</span>
+            <InlineToggle checked={dayEnabled} size="sm" />
+          </div>
+          {dayEnabled && (
+            <div className="space-y-2">
+              {ranges.map((range, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <Select value={String(range.startMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: Number(v) } : r))}>
+                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-s-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">–</span>
+                  <Select value={String(range.endMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: Number(v) } : r))}>
+                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-e-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
+                  </Select>
+                  {ranges.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setRanges((prev) => prev.filter((_, i) => i !== idx))}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
+                      aria-label="Rimuovi fascia"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
+                className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors"
+              >
+                <Plus className="size-3" />
+                Aggiungi fascia
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

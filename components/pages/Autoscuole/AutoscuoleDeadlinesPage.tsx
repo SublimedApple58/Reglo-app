@@ -2,13 +2,13 @@
 
 import React from "react";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { getAutoscuolaDeadlines } from "@/lib/actions/autoscuole.actions";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type DeadlineItem = {
   id: string;
@@ -34,10 +34,8 @@ const statusBadge = (status: DeadlineItem["status"]) => {
 };
 
 export function AutoscuoleDeadlinesPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
@@ -67,17 +65,15 @@ export function AutoscuoleDeadlinesPage({
   }, [toast]);
 
   return (
-    <ClientPageWrapper
+    <PageWrapper
       title="Autoscuole"
       subTitle="Scadenze critiche e promemoria automatici."
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
     >
-      <div className="w-full space-y-5">
+      <div className="relative w-full space-y-5">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
-        <section className="glass-panel glass-strong p-6">
+        <section className="space-y-5">
           <div className="flex flex-col gap-2">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Scadenze
@@ -138,6 +134,6 @@ export function AutoscuoleDeadlinesPage({
           </div>
         </section>
       </div>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }

@@ -115,7 +115,7 @@ export function DocumentCanvas({
         <div
           ref={setRefs}
           className={cn(
-            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-2xl border border-white/70 bg-white/80 shadow-[0_20px_55px_-45px_rgba(50,78,122,0.45)]",
+            "relative mx-auto w-full overflow-y-auto overflow-x-hidden overscroll-contain rounded-[16px] border border-border bg-white shadow-card-primary",
             scrollClassName,
           )}
           style={{

@@ -489,8 +489,8 @@ export function SettingsPage(): React.ReactElement {
     >
       <div className="relative space-y-6">
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
-          <div className="absolute bottom-12 left-8 h-44 w-44 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
+          <div className="absolute -top-16 right-10 h-56 w-56 rounded-full bg-accent/30 blur-3xl animate-float-slow" />
+          <div className="absolute bottom-12 left-8 h-44 w-44 rounded-full bg-primary/15 blur-3xl animate-float-slower" />
         </div>
         <div className="flex flex-col gap-3">
           <RegloTabs
