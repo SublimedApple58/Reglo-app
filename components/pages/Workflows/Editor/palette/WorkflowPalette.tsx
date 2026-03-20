@@ -195,7 +195,7 @@ export function WorkflowPalette({
                 "glass-card px-4 py-3 text-sm font-medium text-foreground transition",
                 isDisabled
                   ? "cursor-not-allowed opacity-50"
-                  : "cursor-grab hover:-translate-y-[1px] hover:shadow-[0_22px_60px_-45px_rgba(50,78,122,0.55)] active:cursor-grabbing",
+                  : "cursor-grab hover:-translate-y-[1px] hover:shadow-card-primary active:cursor-grabbing",
               )}
             >
               <div className="space-y-1">

@@ -2,9 +2,11 @@
 
 import type { ReactElement, ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { motion } from "motion/react";
 import { SidebarInset } from "../ui/sidebar";
 import { ClientHeader } from "./ClientHeader";
 import { cn } from "@/lib/utils";
+import { pageTransition } from "@/lib/motion";
 
 export default function ClientPageWrapper({
   children = "",
@@ -62,12 +64,8 @@ export default function ClientPageWrapper({
                     <span className="text-[13px] leading-none">←</span>
                     {label}
                   </button>
-                ) : (
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
-                    {label || "Reglo"}
-                  </p>
-                )}
-                <h1 className="text-lg font-semibold text-foreground lg:text-xl">
+                ) : null}
+                <h1 className="ds-section-primary text-foreground">
                   {heading}
                 </h1>
                 {subTitle ? (
@@ -78,9 +76,16 @@ export default function ClientPageWrapper({
               </header>
             )}
 
-            {!hideHero && <div className="glass-divider" />}
+            {!hideHero && <div className="reglo-divider" />}
 
-            <section className="flex flex-1 flex-col">{children}</section>
+            <motion.section
+              className="flex flex-1 flex-col"
+              variants={pageTransition}
+              initial="initial"
+              animate="animate"
+            >
+              {children}
+            </motion.section>
           </div>
         </main>
       </div>

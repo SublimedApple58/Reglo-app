@@ -3,8 +3,7 @@
 import React from "react";
 import { Plus } from "lucide-react";
 
-import ClientPageWrapper from "@/components/Layout/ClientPageWrapper";
-import { AutoscuoleNav } from "./AutoscuoleNav";
+import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,6 +24,7 @@ import {
   updateAutoscuolaCaseStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type CaseRow = {
@@ -46,10 +46,8 @@ const STATUS_OPTIONS = [
 ];
 
 export function AutoscuoleCasesPage({
-  hideNav = false,
   tabs,
 }: {
-  hideNav?: boolean;
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
@@ -133,15 +131,13 @@ export function AutoscuoleCasesPage({
   };
 
   return (
-    <ClientPageWrapper
+    <PageWrapper
       title="Autoscuole"
       subTitle="Gestisci le pratiche e gli stati degli allievi."
-      hideHero
-      contentWidthClassName="max-w-[1600px]"
     >
-      <div className="w-full space-y-5">
+      <div className="relative w-full space-y-5">
+        <LottieLoadingOverlay visible={loading} />
         {tabs}
-        {!hideNav ? <AutoscuoleNav /> : null}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">
           <div className="min-w-[220px]">
@@ -158,7 +154,7 @@ export function AutoscuoleCasesPage({
           </Button>
         </div>
 
-        <div className="glass-panel glass-strong p-4">
+        <div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -302,6 +298,6 @@ export function AutoscuoleCasesPage({
           </form>
         </DialogContent>
       </Dialog>
-    </ClientPageWrapper>
+    </PageWrapper>
   );
 }

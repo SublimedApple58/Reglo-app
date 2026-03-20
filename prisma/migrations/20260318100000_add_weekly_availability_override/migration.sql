@@ -14,9 +14,9 @@ CREATE TABLE "AutoscuolaDailyAvailabilityOverride" (
     CONSTRAINT "AutoscuolaDailyAvailabilityOverride_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "AutoscuolaDailyAvailabilityOverride_companyId_ownerType_ownerId_idx" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId");
-CREATE INDEX "AutoscuolaDailyAvailabilityOverride_ownerId_date_idx" ON "AutoscuolaDailyAvailabilityOverride"("ownerId", "date");
-CREATE UNIQUE INDEX "AutoscuolaDailyAvailabilityOverride_companyId_ownerType_ownerId_date_key" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId", "date");
+CREATE INDEX "AutoscuolaDailyAvailabilityOverride_company_owner_idx" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId");
+CREATE INDEX "AutoscuolaDailyAvailabilityOverride_owner_date_idx" ON "AutoscuolaDailyAvailabilityOverride"("ownerId", "date");
+CREATE UNIQUE INDEX "AutoscuolaDailyAvailabilityOverride_company_owner_date_key" ON "AutoscuolaDailyAvailabilityOverride"("companyId", "ownerType", "ownerId", "date");
 
 ALTER TABLE "AutoscuolaDailyAvailabilityOverride" ADD CONSTRAINT "AutoscuolaDailyAvailabilityOverride_companyId_fkey" FOREIGN KEY ("companyId") REFERENCES "Company"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

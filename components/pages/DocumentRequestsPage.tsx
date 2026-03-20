@@ -71,9 +71,7 @@ export function DocumentRequestsPage(): React.ReactElement {
           </InputButtonProvider>
         </form>
       </div>
-      <div className="glass-panel glass-strong p-4">
-        <TableDocumentRequests onRowsChange={setTotalRows} />
-      </div>
+      <TableDocumentRequests onRowsChange={setTotalRows} />
     </ClientPageWrapper>
   );
 }

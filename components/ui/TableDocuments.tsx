@@ -308,7 +308,7 @@ export function TableDocuments({
                     <TableCell>
                       <span
                         className={cn(
-                          "inline-flex items-center rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
+                          "inline-flex items-center rounded-pill border border-border bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground",
                           doc.status === "Bozza" && "text-slate-600",
                           doc.status === "Configurato" && "text-amber-700",
                           doc.status === "Bindato" && "text-emerald-700",

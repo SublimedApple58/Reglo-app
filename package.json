@@ -56,6 +56,7 @@
     "clsx": "^2.1.1",
     "dequal": "^2.0.3",
     "jotai": "^2.12.5",
+    "lottie-react": "^2.4.1",
     "lucide-react": "^0.456.0",
     "make-cancellable-promise": "^2.0.0",
     "make-event-props": "^2.0.0",

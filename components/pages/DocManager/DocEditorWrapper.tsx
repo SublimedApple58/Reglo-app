@@ -655,8 +655,8 @@ export function DocEditorWrapper({
   return (
     <div className="relative flex min-h-[calc(100vh-160px)] w-full gap-6 p-6">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-20 right-8 h-60 w-60 rounded-full bg-[#a9d9d1]/30 blur-3xl animate-float-slow" />
-        <div className="absolute bottom-10 left-10 h-48 w-48 rounded-full bg-[#324e7a]/15 blur-3xl animate-float-slower" />
+        <div className="absolute -top-20 right-8 h-60 w-60 rounded-full bg-accent/30 blur-3xl animate-float-slow" />
+        <div className="absolute bottom-10 left-10 h-48 w-48 rounded-full bg-primary/15 blur-3xl animate-float-slower" />
       </div>
       <DocEditorSidebar
         tools={toolItems}

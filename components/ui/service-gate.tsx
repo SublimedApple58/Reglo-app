@@ -42,7 +42,7 @@ export function ServiceGate({
         className,
       )}
     >
-      <Card className="glass-panel glass-strong w-full max-w-xl p-8 pointer-events-auto">
+      <Card hierarchy="primary" className="w-full max-w-xl p-8 pointer-events-auto">
         <div className="space-y-3">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
             Servizio non attivo

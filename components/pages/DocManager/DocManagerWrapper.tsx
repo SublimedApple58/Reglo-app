@@ -296,7 +296,7 @@ export function DocManagerWrapper(): React.ReactElement {
             ? Array.from({ length: 6 }).map((_, index) => (
                 <div
                   key={`doc-skeleton-${index}`}
-                  className="flex flex-col gap-3 rounded-2xl border border-white/40 bg-white/60 p-3 shadow-[0_18px_50px_-40px_rgba(50,78,122,0.35)]"
+                  className="flex flex-col gap-3 rounded-[16px] border border-border bg-white p-3 shadow-card"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-2">
@@ -370,7 +370,7 @@ export function DocManagerWrapper(): React.ReactElement {
 
 function DocCard({ doc, onDelete }: { doc: DocItem; onDelete: () => void }) {
   return (
-    <div className="glass-card group flex flex-col gap-3 p-3 transition hover:-translate-y-[1px] hover:shadow-[0_26px_60px_-50px_rgba(50,78,122,0.55)]">
+    <div className="group flex flex-col gap-3 rounded-[16px] border border-border bg-white p-3 shadow-card transition hover:-translate-y-0.5 hover:shadow-card-primary">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-semibold text-foreground">{doc.title}</p>

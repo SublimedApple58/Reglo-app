@@ -109,7 +109,7 @@ export default function Filters({
                 <Badge
                   variant="outline"
                   className={cn(
-                    "reglo-focus-ring cursor-pointer border-2 border-dashed border-primary/35 bg-white/72 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+                    "reglo-focus-ring cursor-pointer border-2 border-dashed border-primary/35 bg-white text-primary",
                     isActive &&
                       "border-solid border-primary/50 bg-primary/12 text-primary",
                   )}

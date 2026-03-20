@@ -61,33 +61,8 @@ export function AdminUsersToolbar({
 
   return (
     <>
-      <div className="glass-panel glass-strong flex flex-col gap-4 p-4">
-        <div className="flex w-full justify-end">
-          <ManagementBar
-            totalRows={totalRows}
-            actions={
-              isAdmin
-                ? [
-                    {
-                      id: "create-member",
-                      label: "Crea utente",
-                      icon: UserPlus,
-                      variant: "default",
-                      onClick: () => setCreateOpen(true),
-                    },
-                    {
-                      id: "invite-member",
-                      label: "Invita utente",
-                      icon: MailPlus,
-                      variant: "outline" as const,
-                      onClick: () => setInviteOpen(true),
-                    },
-                  ]
-                : []
-            }
-          />
-        </div>
-        <form onSubmit={handleSubmit} className="w-full md:max-w-sm">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <form onSubmit={handleSubmit} className="w-full sm:max-w-sm">
           <InputButtonProvider showInput={showInput} setShowInput={setShowInput} className="w-full">
             <InputButton className="w-full">
               <InputButtonAction className="hidden" />
@@ -102,11 +77,35 @@ export function AdminUsersToolbar({
               placeholder="Cerca utenti"
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              className="border-white/60 bg-white/80 pr-14 text-sm shadow-sm"
+              className="pr-14 text-sm"
               autoFocus
             />
           </InputButtonProvider>
         </form>
+
+        <ManagementBar
+          totalRows={totalRows}
+          actions={
+            isAdmin
+              ? [
+                  {
+                    id: "create-member",
+                    label: "Crea utente",
+                    icon: UserPlus,
+                    variant: "default",
+                    onClick: () => setCreateOpen(true),
+                  },
+                  {
+                    id: "invite-member",
+                    label: "Invita utente",
+                    icon: MailPlus,
+                    variant: "outline" as const,
+                    onClick: () => setInviteOpen(true),
+                  },
+                ]
+              : []
+          }
+        />
       </div>
       <AdminUsersInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
       <AdminUsersCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
