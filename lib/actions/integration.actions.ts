@@ -9,7 +9,6 @@ import {
 } from "@/lib/integrations/oauth";
 
 const providerKeyMap: Record<string, IntegrationProviderKey> = {
-  SLACK: "slack",
   FATTURE_IN_CLOUD: "fatture-in-cloud",
 };
 

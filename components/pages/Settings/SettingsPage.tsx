@@ -44,22 +44,10 @@ type TabItem = { label: string; value: TabKey };
 
 const integrations = [
   {
-    id: "slack",
-    name: "Slack",
-    description: "Messaggi, thread, upload file e notifiche di workflow.",
-    helper: "Installa la Reglo Slack App nel workspace aziendale.",
-  },
-  {
     id: "fatture-in-cloud",
     name: "Fatture in Cloud",
     description: "Crea fatture, aggiorna stati, genera PDF e sincronizza clienti.",
     helper: "Collega l'account TeamSystem autorizzato della company.",
-  },
-  {
-    id: "doc-manager",
-    name: "Doc Manager",
-    description: "Azioni interne: upload, firma, aggiornamento stato e archiviazione.",
-    helper: "Disponibile di default per ogni company.",
   },
 ] as const;
 
@@ -719,14 +707,11 @@ export function SettingsPage(): React.ReactElement {
                     {integrations.map((integration) => {
                       const providerKey = integration.id;
                       const connection = integrationState[providerKey];
-                      const isBuiltIn = providerKey === "doc-manager";
                       const isConnected = connection?.status === "connected";
-                      const badgeLabel = isBuiltIn
-                        ? "Integrata"
-                        : isConnected
-                          ? "Connessa"
-                          : "Non collegata";
-                      const badgeVariant = isBuiltIn || isConnected ? "accent" : "base";
+                      const badgeLabel = isConnected
+                        ? "Connessa"
+                        : "Non collegata";
+                      const badgeVariant = isConnected ? "accent" : "base";
                       return (
                         <Card
                           key={integration.id}
@@ -876,43 +861,35 @@ export function SettingsPage(): React.ReactElement {
                               </div>
                             ) : null}
                             <div className="flex flex-wrap items-center gap-2">
-                              {isBuiltIn ? (
-                                <Button variant="outline" disabled className="rounded-full">
-                                  Disponibile
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  if (isConnected) return;
+                                  window.open(
+                                    `/api/integrations/${providerKey}/connect`,
+                                    "_blank",
+                                    "noopener,noreferrer"
+                                  );
+                                }}
+                                variant="outline"
+                                disabled={isConnected}
+                                className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                              >
+                                {isConnected ? "Connessa" : "Connetti"}
+                              </Button>
+                              {isConnected ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => handleDisconnect(providerKey)}
+                                  disabled={disconnectingProvider === providerKey}
+                                  className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                                >
+                                  {disconnectingProvider === providerKey
+                                    ? "Disconnettendo..."
+                                    : "Disconnetti"}
                                 </Button>
-                              ) : (
-                                <>
-                                  <Button
-                                    type="button"
-                                    onClick={() => {
-                                      if (isConnected) return;
-                                      window.open(
-                                        `/api/integrations/${providerKey}/connect`,
-                                        "_blank",
-                                        "noopener,noreferrer"
-                                      );
-                                    }}
-                                    variant="outline"
-                                    disabled={isConnected}
-                                    className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                                  >
-                                    {isConnected ? "Connessa" : "Connetti"}
-                                  </Button>
-                                  {isConnected ? (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      onClick={() => handleDisconnect(providerKey)}
-                                      disabled={disconnectingProvider === providerKey}
-                                      className="rounded-full transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
-                                    >
-                                      {disconnectingProvider === providerKey
-                                        ? "Disconnettendo..."
-                                        : "Disconnetti"}
-                                    </Button>
-                                  ) : null}
-                                </>
-                              )}
+                              ) : null}
                               <Button variant="ghost" disabled className="rounded-full">
                                 Dettagli
                               </Button>

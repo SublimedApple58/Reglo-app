@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Stripe from 'stripe';
-import { updateOrderToPaid } from '@/lib/actions/order.actions';
 import { prisma } from '@/db/prisma';
 import { persistAutoscuolaStripeConnectAccountStatus } from '@/lib/autoscuole/stripe-connect';
 import {
@@ -23,22 +22,6 @@ export async function POST(req: NextRequest) {
       signature,
       process.env.STRIPE_WEBHOOK_SECRET as string
     );
-
-    if (event.type === 'charge.succeeded') {
-      const { object } = event.data;
-      if (object.metadata?.orderId) {
-        await updateOrderToPaid({
-          orderId: object.metadata.orderId,
-          paymentResult: {
-            id: object.id,
-            status: 'COMPLETED',
-            email_address: object.billing_details.email!,
-            pricePaid: (object.amount / 100).toFixed(),
-          },
-        });
-      }
-      return NextResponse.json({ success: true, handled: 'charge.succeeded' });
-    }
 
     if (event.type === 'payment_intent.succeeded') {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;

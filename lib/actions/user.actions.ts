@@ -3,7 +3,6 @@
 import {
   signInFormSchema,
   signUpFormSchema,
-  paymentMethodSchema,
   updateUserSchema,
 } from '../validators';
 import { auth, signIn, signOut } from '@/auth';
@@ -91,9 +90,7 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
 
       await tx.companyService.createMany({
         data: [
-          { companyId: company.id, serviceKey: 'DOC_MANAGER' },
-          { companyId: company.id, serviceKey: 'WORKFLOWS' },
-          { companyId: company.id, serviceKey: 'AI_ASSISTANT' },
+          { companyId: company.id, serviceKey: 'AUTOSCUOLE' },
         ],
       });
 
@@ -122,34 +119,6 @@ export async function getUserById(userId: string) {
   });
   if (!user) throw new Error('User not found');
   return user;
-}
-
-// Update user's payment method
-export async function updateUserPaymentMethod(
-  data: z.infer<typeof paymentMethodSchema>
-) {
-  try {
-    const session = await auth();
-    const currentUser = await prisma.user.findFirst({
-      where: { id: session?.user?.id },
-    });
-
-    if (!currentUser) throw new Error('User not found');
-
-    const paymentMethod = paymentMethodSchema.parse(data);
-
-    await prisma.user.update({
-      where: { id: currentUser.id },
-      data: { paymentMethod: paymentMethod.type },
-    });
-
-    return {
-      success: true,
-      message: 'User updated successfully',
-    };
-  } catch (error) {
-    return { success: false, message: formatError(error) };
-  }
 }
 
 // Update the user profile

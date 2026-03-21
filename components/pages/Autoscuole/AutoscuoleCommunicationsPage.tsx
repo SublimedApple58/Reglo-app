@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
-import { TokenInput } from "@/components/pages/Workflows/Editor/shared/token-input";
+import { TokenInput } from "@/components/shared/token-input/token-input";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaRule,

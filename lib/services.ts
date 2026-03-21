@@ -1,9 +1,6 @@
 import type { CompanyService } from "@prisma/client";
 
 export const SERVICE_KEYS = [
-  "DOC_MANAGER",
-  "WORKFLOWS",
-  "AI_ASSISTANT",
   "AUTOSCUOLE",
 ] as const;
 
@@ -51,16 +48,10 @@ export type CompanyServiceInfo = {
 };
 
 export const SERVICE_LABELS: Record<ServiceKey, string> = {
-  DOC_MANAGER: "Doc manager",
-  WORKFLOWS: "Workflows",
-  AI_ASSISTANT: "AI Assistant",
   AUTOSCUOLE: "Reglo Autoscuole",
 };
 
 export const DEFAULT_SERVICE_LIMITS: Record<ServiceKey, ServiceLimits> = {
-  DOC_MANAGER: { documentsPerMonth: 300 },
-  WORKFLOWS: { workflowRunsPerMonth: 30 },
-  AI_ASSISTANT: { aiCreditsPerMonth: 200 },
   AUTOSCUOLE: {},
 };
 

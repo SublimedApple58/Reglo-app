@@ -1,4 +1,4 @@
-import type { VariableOption } from "@/components/pages/Workflows/Editor/types";
+import type { VariableOption } from "@/components/shared/token-input/types";
 
 export const autoscuolaTemplateVariables: VariableOption[] = [
   { label: "Nome allievo", token: "student.firstName" },

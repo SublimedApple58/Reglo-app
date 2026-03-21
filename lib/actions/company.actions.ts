@@ -220,9 +220,7 @@ export async function createCompanyForUser(
 
       await tx.companyService.createMany({
         data: [
-          { companyId: createdCompany.id, serviceKey: 'DOC_MANAGER' },
-          { companyId: createdCompany.id, serviceKey: 'WORKFLOWS' },
-          { companyId: createdCompany.id, serviceKey: 'AI_ASSISTANT' },
+          { companyId: createdCompany.id, serviceKey: 'AUTOSCUOLE' },
         ],
       });
 
