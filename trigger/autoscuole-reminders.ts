@@ -1,5 +1,5 @@
 import { schedules } from "@trigger.dev/sdk/v3";
-import { getPrisma } from "@/trigger/workflow-runner/prisma";
+import { getPrisma } from "@/trigger/prisma";
 import {
   processAutoscuolaAutoCompleteCheckedIn,
   processAutoscuolaAutoPendingReview,

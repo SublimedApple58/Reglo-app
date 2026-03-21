@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
@@ -10,7 +11,7 @@ import { setBackofficeCookie } from "@/lib/backoffice-auth";
 
 const updateCompanyServiceSchema = z.object({
   companyId: z.string().min(1),
-  serviceKey: z.enum(["DOC_MANAGER", "WORKFLOWS", "AI_ASSISTANT", "AUTOSCUOLE"]),
+  serviceKey: z.enum(["AUTOSCUOLE"]),
   status: z.enum(["active", "disabled"]),
   limits: z
     .record(
@@ -115,8 +116,8 @@ export async function updateCompanyService(input: z.infer<typeof updateCompanySe
         data: {
           status,
           limits:
-            (payload.limits ?? (existing.limits as Record<string, unknown> | null) ?? undefined) ??
-            undefined,
+            ((payload.limits ?? (existing.limits as Record<string, unknown> | null) ?? undefined) ??
+            undefined) as Prisma.InputJsonValue | undefined,
         },
       });
     } else {

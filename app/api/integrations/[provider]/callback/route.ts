@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/db/prisma";
+import { Prisma } from "@prisma/client";
 import {
   IntegrationProviderKey,
   getProviderConfig,
@@ -200,7 +201,7 @@ export async function GET(
     const mergedMetadata = {
       ...existingMetadata,
       ...(payload as Record<string, unknown>),
-    };
+    } as Prisma.InputJsonValue;
 
     await prisma.integrationConnection.upsert({
       where: {

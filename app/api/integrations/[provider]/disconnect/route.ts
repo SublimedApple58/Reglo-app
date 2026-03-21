@@ -9,14 +9,6 @@ import {
 import { decryptSecret } from "@/lib/integrations/secrets";
 import { getActiveCompanyContext } from "@/lib/company-context";
 
-const revokeSlack = async (token: string) => {
-  await fetch("https://slack.com/api/auth.revoke", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ token }),
-  });
-};
-
 const revokeFattureInCloud = async (token: string) => {
   const revokeUrl =
     process.env.FATTURE_IN_CLOUD_REVOKE_URL ||
@@ -71,9 +63,6 @@ export async function POST(
         iv: connection.accessTokenIv,
         tag: connection.accessTokenTag,
       });
-      if (providerKey === "slack") {
-        await revokeSlack(token);
-      }
       if (providerKey === "fatture-in-cloud") {
         await revokeFattureInCloud(token);
       }

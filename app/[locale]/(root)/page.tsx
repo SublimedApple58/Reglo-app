@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 const Homepage = async () => {
 
-  redirect("/user/home")
+  redirect("/user/autoscuole")
   return <></>;
 };
 

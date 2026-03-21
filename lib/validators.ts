@@ -1,13 +1,4 @@
 import { z } from 'zod';
-import { formatNumberWithDecimal } from './utils';
-import { PAYMENT_METHODS } from './constants';
-
-const currency = z
-  .string()
-  .refine(
-    (value) => /^\d+(\.\d{2})?$/.test(formatNumberWithDecimal(Number(value))),
-    'Price must have exactly two decimal places'
-  );
 
 // Schema for signing users in
 export const signInFormSchema = z.object({
@@ -46,46 +37,6 @@ export const studentRegisterSchema = z
     path: ['confirmPassword'],
   });
 
-// Schema for payment method
-export const paymentMethodSchema = z
-  .object({
-    type: z.string().min(1, 'Payment method is required'),
-  })
-  .refine((data) => PAYMENT_METHODS.includes(data.type), {
-    path: ['type'],
-    message: 'Invalid payment method',
-  });
-
-// Schema for inserting order
-export const insertOrderSchema = z.object({
-  userId: z.string().min(1, 'User is required'),
-  itemsPrice: currency,
-  shippingPrice: currency,
-  taxPrice: currency,
-  totalPrice: currency,
-  paymentMethod: z.string().refine((data) => PAYMENT_METHODS.includes(data), {
-    message: 'Invalid payment method',
-  }),
-});
-
-// Schema for inserting an order item
-export const insertOrderItemSchema = z.object({
-  productId: z.string(),
-  slug: z.string(),
-  image: z.string(),
-  name: z.string(),
-  price: currency,
-  qty: z.number(),
-});
-
-// Schema for the PayPal paymentResult
-export const paymentResultSchema = z.object({
-  id: z.string(),
-  status: z.string(),
-  email_address: z.string(),
-  pricePaid: z.string(),
-});
-
 // Schema for updating the user profile
 export const updateProfileSchema = z.object({
   name: z.string().min(3, 'Name must be at leaast 3 characters'),
@@ -97,102 +48,6 @@ export const updateUserSchema = updateProfileSchema.extend({
   id: z.string().min(1, 'ID is required'),
   role: z.enum(['member', 'admin']),
   autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
-});
-
-export const documentFieldSchema = z.object({
-  type: z.string().min(1, 'Field type is required'),
-  label: z.string().optional(),
-  bindingKey: z.string().optional(),
-  page: z.number().int().min(1, 'Page must be at least 1'),
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-  meta: z.unknown().optional(),
-});
-
-export const createDocumentTemplateSchema = z.object({
-  companyId: z.string().min(1, 'Company is required'),
-  name: z.string().min(1, 'Name is required'),
-  sourceUrl: z.string().optional(),
-});
-
-export const saveDocumentFieldsSchema = z.object({
-  companyId: z.string().min(1, 'Company is required'),
-  templateId: z.string().min(1, 'Template is required'),
-  fields: z.array(documentFieldSchema),
-});
-
-export const getDocumentConfigSchema = z.object({
-  companyId: z.string().min(1, 'Company is required'),
-  templateId: z.string().min(1, 'Template is required'),
-});
-
-export const createDocumentRequestSchema = z.object({
-  companyId: z.string().min(1, 'Company is required'),
-  templateId: z.string().min(1, 'Template is required'),
-  name: z.string().min(1, 'Name is required'),
-});
-
-export const workflowTriggerSchema = z.object({
-  type: z.enum([
-    'manual',
-    'email_inbound',
-    'document_completed',
-    'slack_message',
-    'fic_event',
-  ]),
-  config: z.record(z.unknown()).optional(),
-});
-
-export const workflowNodeSchema = z.object({
-  id: z.string().min(1, 'Node id is required'),
-  type: z.string().min(1, 'Node type is required'),
-  config: z.record(z.unknown()).optional(),
-});
-
-export const workflowEdgeSchema = z.object({
-  from: z.string().min(1, 'Edge source is required'),
-  to: z.string().min(1, 'Edge target is required'),
-  condition: z.record(z.unknown()).nullable().optional(),
-});
-
-export const workflowDefinitionSchema = z.object({
-  trigger: workflowTriggerSchema,
-  nodes: z.array(workflowNodeSchema).default([]),
-  edges: z.array(workflowEdgeSchema).default([]),
-  canvas: z
-    .object({
-      nodes: z.array(z.unknown()).default([]),
-      edges: z.array(z.unknown()).default([]),
-    })
-    .optional(),
-  settings: z
-    .object({
-      timezone: z.string().optional(),
-      onError: z.enum(['stop', 'continue']).optional(),
-      retryPolicy: z
-        .object({
-          maxAttempts: z.number().int().min(1).max(10).optional(),
-          backoffSeconds: z.number().int().min(1).optional(),
-        })
-        .optional(),
-    })
-    .optional(),
-});
-
-export const workflowStatusSchema = z.enum(['draft', 'active', 'paused']);
-
-export const createWorkflowSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
-  definition: workflowDefinitionSchema.optional(),
-});
-
-export const updateWorkflowSchema = z.object({
-  id: z.string().min(1, 'Workflow id is required'),
-  name: z.string().min(1).optional(),
-  status: workflowStatusSchema.optional(),
-  definition: workflowDefinitionSchema.optional(),
 });
 
 export const updateCompanyNameSchema = z.object({

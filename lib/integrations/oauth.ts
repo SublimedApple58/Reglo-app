@@ -1,11 +1,10 @@
 import { randomUUID } from "crypto";
 
-export type IntegrationProviderKey = "slack" | "fatture-in-cloud";
+export type IntegrationProviderKey = "fatture-in-cloud";
 
-export const providerKeys = ["slack", "fatture-in-cloud"] as const;
+export const providerKeys = ["fatture-in-cloud"] as const;
 
-export const providerEnumMap: Record<IntegrationProviderKey, "SLACK" | "FATTURE_IN_CLOUD"> = {
-  slack: "SLACK",
+export const providerEnumMap: Record<IntegrationProviderKey, "FATTURE_IN_CLOUD"> = {
   "fatture-in-cloud": "FATTURE_IN_CLOUD",
 };
 
@@ -31,36 +30,6 @@ export const getRedirectUri = (provider: IntegrationProviderKey) => {
 };
 
 export const getProviderConfig = (provider: IntegrationProviderKey): ProviderConfig => {
-  if (provider === "slack") {
-    const clientId = process.env.SLACK_CLIENT_ID;
-    const clientSecret = process.env.SLACK_CLIENT_SECRET;
-    if (!clientId || !clientSecret) {
-      throw new Error("Slack client credentials are missing.");
-    }
-    const defaultScopes = [
-      "chat:write",
-      "chat:write.public",
-      "files:write",
-      "reminders:write",
-      "channels:read",
-      "groups:read",
-      "im:read",
-      "mpim:read",
-      "users:read",
-      "team:read",
-    ].join(",");
-
-    return {
-      key: provider,
-      label: "Slack",
-      authorizeUrl: "https://slack.com/oauth/v2/authorize",
-      tokenUrl: "https://slack.com/api/oauth.v2.access",
-      clientId,
-      clientSecret,
-      scopes: process.env.SLACK_SCOPES || defaultScopes,
-    };
-  }
-
   const clientId = process.env.FATTURE_IN_CLOUD_CLIENT_ID;
   const clientSecret = process.env.FATTURE_IN_CLOUD_CLIENT_SECRET;
   if (!clientId || !clientSecret) {

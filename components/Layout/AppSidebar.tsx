@@ -1,13 +1,9 @@
 "use client";
 
 import {
-  Folders,
-  Workflow,
   LayoutDashboard,
   Settings,
   Users,
-  FolderKanban,
-  ClipboardCheck,
   GraduationCap,
   CalendarDays,
   SlidersHorizontal,
@@ -52,54 +48,13 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { setActiveCompany } from "@/lib/actions/company.actions";
-import { integrationsRefreshAtom } from "@/atoms/integrations.store";
-import { isServiceActive, type ServiceKey } from "@/lib/services";
 
 type SidebarItem = {
   title: string;
   url: string;
   icon: React.ComponentType<{ className?: string }>;
-  service?: ServiceKey;
   tabKey?: "dashboard" | "students" | "agenda" | "settings" | "payments";
 };
-
-const items: SidebarItem[] = [
-  {
-    title: "Home",
-    url: "home",
-    icon: LayoutDashboard,
-  },
-  {
-    title: "Workflows",
-    url: "workflows",
-    icon: Workflow,
-    service: "WORKFLOWS" as ServiceKey,
-  },
-  {
-    title: "Doc manager",
-    url: "doc_manager",
-    icon: FolderKanban,
-    service: "DOC_MANAGER" as ServiceKey,
-  },
-  {
-    title: "Documents",
-    url: "documents",
-    icon: Folders,
-    service: "DOC_MANAGER" as ServiceKey,
-  },
-  {
-    title: "Compilazioni",
-    url: "compilazioni",
-    icon: ClipboardCheck,
-    service: "DOC_MANAGER" as ServiceKey,
-  },
-  {
-    title: "Autoscuole",
-    url: "autoscuole",
-    icon: GraduationCap,
-    service: "AUTOSCUOLE" as ServiceKey,
-  },
-];
 
 const autoscuoleSidebarItems: SidebarItem[] = [
   {
@@ -145,11 +100,6 @@ const adminItems = [
     url: "users",
     icon: Users,
   },
-  // {
-  //   title: "Overview",
-  //   url: "/overview",
-  //   icon: BriefcaseBusiness,
-  // },
 ]
 
 const configurationItems: SidebarItem[] = [
@@ -167,7 +117,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const company = useAtomValue(companyAtom);
   const companyList = useAtomValue(companyListAtom);
   const setCompanyRefresh = useSetAtom(companyRefreshAtom);
-  const setIntegrationsRefresh = useSetAtom(integrationsRefreshAtom);
   const toast = useFeedbackToast();
   const companyName = company?.name ?? "Reglo srl";
   const companyRole = company?.role ?? null;
@@ -212,23 +161,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     }
     return "dashboard";
   }, [searchParams]);
-  const activeServiceKeys = useMemo(
-    () =>
-      (company?.services ?? [])
-        .filter((service) => service.status === "active")
-        .map((service) => service.key),
-    [company?.services],
-  );
-  const isAutoscuoleOnlyCompany = useMemo(() => {
-    if (!company || !company.services?.length) return false;
-    return activeServiceKeys.length === 1 && activeServiceKeys[0] === "AUTOSCUOLE";
-  }, [activeServiceKeys, company]);
-  const isInsideAutoscuoleArea = matchesPath(toUserHref("autoscuole"));
-  const shouldUseAutoscuoleSidebar = isAutoscuoleOnlyCompany || isInsideAutoscuoleArea;
-  const sidebarItems = useMemo(
-    () => (shouldUseAutoscuoleSidebar ? autoscuoleSidebarItems : items),
-    [shouldUseAutoscuoleSidebar],
-  );
 
   const { isMobile: sidebarIsMobile, setOpenMobile } = useSidebar();
 
@@ -257,7 +189,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       return;
     }
     setCompanyRefresh(true);
-    setIntegrationsRefresh(true);
     router.refresh();
   };
 
@@ -370,7 +301,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent className="flex justify-between px-1">
         <div className="space-y-4">
           <SidebarGroup>
-            {/* <SidebarGroupLabel>Application</SidebarGroupLabel> */}
             <SidebarGroupContent>
               <SidebarMenu>
                 {!isCompanyContextReady
@@ -382,19 +312,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         </div>
                       </SidebarMenuItem>
                     ))
-                  : sidebarItems.map((item) => (
+                  : autoscuoleSidebarItems.map((item) => (
                   <SidebarMenuItem key={item.title} style={{ cursor: "pointer" }}>
                     <SidebarMenuButton
                       asChild
                       isActive={isSidebarItemActive(item)}
                     >
                       <div
-                        className={
-                          item.service &&
-                          !isServiceActive(company?.services ?? null, item.service, true)
-                            ? "opacity-60"
-                            : ""
-                        }
                         onClick={() => {
                           router.push(toUserHref(item.url));
                           if (sidebarIsMobile) {
@@ -403,15 +327,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         }}
                       >
                         <item.icon />
-                        <span className="flex items-center gap-2">
-                          {item.title}
-                          {item.service &&
-                          !isServiceActive(company?.services ?? null, item.service, true) ? (
-                            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Locked
-                            </span>
-                          ) : null}
-                        </span>
+                        <span>{item.title}</span>
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -449,7 +365,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroup>
           )}
         </div>
-        {/* <Separator style={{ width: "90%", marginInline: "auto" }} /> */}
         {isCompanyContextReady ? (
           <SidebarGroup className="px-1">
             <SidebarGroupContent>
@@ -461,12 +376,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       isActive={matchesPath(toUserHref(item.url))}
                     >
                       <div
-                        className={
-                          item.service &&
-                          !isServiceActive(company?.services ?? null, item.service, true)
-                            ? "opacity-60"
-                            : ""
-                        }
                         onClick={() => {
                           router.push(toUserHref(item.url));
                           if (sidebarIsMobile) {
@@ -475,15 +384,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         }}
                       >
                         <item.icon />
-                        <span className="flex items-center gap-2">
-                          {item.title}
-                          {item.service &&
-                          !isServiceActive(company?.services ?? null, item.service, true) ? (
-                            <span className="rounded-full border border-border/70 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                              Locked
-                            </span>
-                          ) : null}
-                        </span>
+                        <span>{item.title}</span>
                       </div>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

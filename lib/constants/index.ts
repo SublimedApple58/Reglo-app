@@ -4,8 +4,6 @@ export const APP_DESCRIPTION =
   'From draft to signature in just a few clicks: Reglo orchestrates your documents and delivers them wherever they’re needed.';
 export const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000';
-export const INBOUND_EMAIL_DOMAIN =
-  process.env.NEXT_PUBLIC_INBOUND_EMAIL_DOMAIN || 'in.reglo.it';
 
 export const GLOBAL_ADMIN_EMAIL =
   process.env.GLOBAL_ADMIN_EMAIL || 'tiziano.difelice@reglo.it';
@@ -24,12 +22,6 @@ export const signUpDefaultValues = {
   password: '',
   confirmPassword: '',
 };
-
-export const PAYMENT_METHODS = process.env.PAYMENT_METHODS
-  ? process.env.PAYMENT_METHODS.split(', ')
-  : ['PayPal', 'Stripe', 'CashOnDelivery'];
-export const DEFAULT_PAYMENT_METHOD =
-  process.env.DEFAULT_PAYMENT_METHOD || 'PayPal';
 
 export enum UserRole {
   ADMIN = 'admin',

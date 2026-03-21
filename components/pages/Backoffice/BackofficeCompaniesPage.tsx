@@ -62,9 +62,6 @@ const limitFields: Record<
   ServiceKey,
   Array<{ key: keyof ServiceLimits; label: string }>
 > = {
-  DOC_MANAGER: [{ key: "documentsPerMonth", label: "Documenti / mese" }],
-  WORKFLOWS: [{ key: "workflowRunsPerMonth", label: "Run / mese" }],
-  AI_ASSISTANT: [{ key: "aiCreditsPerMonth", label: "Crediti AI / mese" }],
   AUTOSCUOLE: [],
 };
 

@@ -7,8 +7,6 @@ import {
   SERVER_URL,
   VERIFIED_EMAIL_SENDERS,
 } from '@/lib/constants';
-import { Order } from '@/types';
-import PurchaseReceiptEmail from './purchase-receipt';
 import CompanyInviteEmail from './company-invite';
 
 const getResend = () => {
@@ -130,16 +128,6 @@ export const sendDynamicEmail = async ({
     to,
     subject,
     html: buildEmailBody(body),
-  });
-};
-
-export const sendPurchaseReceipt = async ({ order }: { order: Order }) => {
-  const resend = getResend();
-  await resend.emails.send({
-    from: formatSender(DEFAULT_EMAIL_SENDER),
-    to: order.user.email,
-    subject: `Order Confirmation ${order.id}`,
-    react: <PurchaseReceiptEmail order={order} />,
   });
 };
 

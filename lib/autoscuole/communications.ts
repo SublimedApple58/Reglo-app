@@ -1,6 +1,6 @@
 "use server";
 
-import { tokenRegex } from "@/components/pages/Workflows/Editor/shared/token-utils";
+import { tokenRegex } from "@/components/shared/token-input/token-utils";
 import { sendDynamicEmail } from "@/email";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
