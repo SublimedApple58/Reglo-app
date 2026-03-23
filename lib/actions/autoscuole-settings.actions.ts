@@ -968,6 +968,7 @@ export async function updateAutoscuolaSettings(
       lessonRequiredTypes: nextLessonRequiredTypes,
       lessonTypeConstraints: nextLessonTypeConstraints,
       bookingSlotDurations: nextBookingSlotDurations,
+      roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
