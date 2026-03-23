@@ -167,9 +167,12 @@ export function AdminUsersToolbar({
                 return;
               }
               const d = res.data!;
-              toast.success({
-                description: `Notifica inviata a ${d.targeted} utenti: ${d.sent} ricevute, ${d.failed} fallite.`,
-              });
+              const details = [
+                `${d.targeted} destinatari, ${d.sent} ricevute, ${d.failed} fallite, ${d.skipped} senza device`,
+                ...(d.errorCodes?.length ? [`Codici: ${d.errorCodes.join(", ")}`] : []),
+                ...(d.errorMessages?.length ? [`Errori: ${d.errorMessages.join(", ")}`] : []),
+              ].join(" · ");
+              (d.failed ? toast.error : toast.success)({ description: details });
               setPushOpen(false);
               setPushTitle("");
               setPushBody("");
