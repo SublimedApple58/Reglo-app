@@ -1039,6 +1039,85 @@ export async function deleteWeeklyAvailabilityOverride(
   }
 }
 
+const recurringOverrideSchema = z.object({
+  ownerType: z.enum(["instructor", "vehicle"]),
+  ownerId: z.string().uuid(),
+  dayOfWeek: z.number().int().min(0).max(6),
+  ranges: z.array(z.object({
+    startMinutes: z.number().int().min(0).max(1440),
+    endMinutes: z.number().int().min(0).max(1440),
+  })).min(1),
+  weeksAhead: z.number().int().min(1).max(12).optional(),
+});
+
+export async function setRecurringAvailabilityOverride(
+  input: z.infer<typeof recurringOverrideSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = recurringOverrideSchema.parse(input);
+    const companyId = membership.companyId;
+
+    for (const r of payload.ranges) {
+      if (r.endMinutes <= r.startMinutes) {
+        return { success: false as const, message: "Intervallo non valido." };
+      }
+    }
+
+    // Determine how many weeks ahead from company settings
+    const service = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    const availabilityWeeks = typeof limits.availabilityWeeks === "number"
+      ? limits.availabilityWeeks
+      : 4;
+    const weeks = payload.weeksAhead ?? availabilityWeeks;
+
+    // Generate dates for the target dayOfWeek for the next N weeks
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const currentDay = today.getUTCDay();
+    let daysUntilTarget = payload.dayOfWeek - currentDay;
+    if (daysUntilTarget < 0) daysUntilTarget += 7;
+    const firstDate = new Date(today.getTime() + daysUntilTarget * 24 * 60 * 60 * 1000);
+
+    const dates: Date[] = [];
+    for (let w = 0; w < weeks; w++) {
+      dates.push(new Date(firstDate.getTime() + w * 7 * 24 * 60 * 60 * 1000));
+    }
+
+    // Upsert override for each date
+    await Promise.all(
+      dates.map((date) =>
+        prisma.autoscuolaDailyAvailabilityOverride.upsert({
+          where: {
+            companyId_ownerType_ownerId_date: {
+              companyId,
+              ownerType: payload.ownerType,
+              ownerId: payload.ownerId,
+              date,
+            },
+          },
+          update: { ranges: payload.ranges },
+          create: {
+            companyId,
+            ownerType: payload.ownerType,
+            ownerId: payload.ownerId,
+            date,
+            ranges: payload.ranges,
+          },
+        }),
+      ),
+    );
+
+    return { success: true as const, data: { count: dates.length } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 const getOverridesSchema = z.object({
   ownerType: z.enum(["instructor", "vehicle"]),
   ownerId: z.string().uuid(),

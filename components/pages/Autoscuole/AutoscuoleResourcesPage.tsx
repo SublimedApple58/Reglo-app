@@ -37,6 +37,7 @@ import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsers
 import {
   getAvailabilitySlots,
   setWeeklyAvailabilityOverride,
+  setRecurringAvailabilityOverride,
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
@@ -246,6 +247,7 @@ export function AutoscuoleResourcesPage({
   const [calendarSelectedDate, setCalendarSelectedDate] = React.useState<string | null>(null);
   const [calendarDayRanges, setCalendarDayRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
   const [calendarDayEnabled, setCalendarDayEnabled] = React.useState(true);
+  const [recurringOverride, setRecurringOverride] = React.useState(false);
 
   // ── Instructor availability dialog
   const [availInstructor, setAvailInstructor] = React.useState<InstructorDetail | null>(null);
@@ -660,6 +662,7 @@ export function AutoscuoleResourcesPage({
     setAvailDialogTab("default");
     setCalendarSelectedDate(null);
     setCalendarMonth(new Date());
+    setRecurringOverride(false);
     setAvailInstructor(instructor);
     setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
     setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
@@ -1607,18 +1610,34 @@ export function AutoscuoleResourcesPage({
                   </FieldGroup>
                 </>
               ) : (
-                <AvailabilityCalendar
-                  calendarMonth={calendarMonth}
-                  setCalendarMonth={setCalendarMonth}
-                  selectedDate={calendarSelectedDate}
-                  setSelectedDate={setCalendarSelectedDate}
-                  overrides={instrOverrides}
-                  ranges={calendarDayRanges}
-                  setRanges={setCalendarDayRanges}
-                  dayEnabled={calendarDayEnabled}
-                  setDayEnabled={setCalendarDayEnabled}
-                  defaultAvailability={availInstructor ? instructorWeeklyAvailability[availInstructor.id] ?? null : null}
-                />
+                <>
+                  <AvailabilityCalendar
+                    calendarMonth={calendarMonth}
+                    setCalendarMonth={setCalendarMonth}
+                    selectedDate={calendarSelectedDate}
+                    setSelectedDate={(d) => { setCalendarSelectedDate(d); setRecurringOverride(false); }}
+                    overrides={instrOverrides}
+                    ranges={calendarDayRanges}
+                    setRanges={setCalendarDayRanges}
+                    dayEnabled={calendarDayEnabled}
+                    setDayEnabled={setCalendarDayEnabled}
+                    defaultAvailability={availInstructor ? instructorWeeklyAvailability[availInstructor.id] ?? null : null}
+                  />
+                  {calendarSelectedDate && calendarDayEnabled && (
+                    <div
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                      onClick={() => setRecurringOverride((prev) => !prev)}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">Disponibilità ricorrente</span>
+                        <span className="text-xs text-muted-foreground">
+                          Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} futuri
+                        </span>
+                      </div>
+                      <InlineToggle checked={recurringOverride} size="sm" />
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
@@ -1649,6 +1668,17 @@ export function AutoscuoleResourcesPage({
                         ownerId: availInstructor.id,
                         weekStart: weekStartStr,
                         schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
+                      });
+                      setSavingInstrAvailability(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                    } else if (recurringOverride) {
+                      // Recurring: apply to all future weeks for this day of week
+                      setSavingInstrAvailability(true);
+                      const res = await setRecurringAvailabilityOverride({
+                        ownerType: "instructor",
+                        ownerId: availInstructor.id,
+                        dayOfWeek,
+                        ranges: calendarDayRanges,
                       });
                       setSavingInstrAvailability(false);
                       if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
