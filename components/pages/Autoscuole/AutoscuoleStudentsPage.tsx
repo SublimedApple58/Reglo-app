@@ -42,6 +42,7 @@ import {
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
   getCompanyInviteCode,
+  sendTestPushToStudent,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -204,6 +205,7 @@ export function AutoscuoleStudentsPage({
   const [creditsInput, setCreditsInput] = React.useState("1");
   const creditsRequestRef = React.useRef(0);
 
+  const [testPushingId, setTestPushingId] = React.useState<string | null>(null);
   const [inviteCode, setInviteCode] = React.useState<string | null>(null);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -500,7 +502,25 @@ export function AutoscuoleStudentsPage({
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={testPushingId === student.id}
+                          onClick={async () => {
+                            setTestPushingId(student.id);
+                            const res = await sendTestPushToStudent(student.id);
+                            setTestPushingId(null);
+                            if (!res.success) {
+                              toast.error({ description: res.message ?? "Errore invio push." });
+                              return;
+                            }
+                            const d = res.data!;
+                            toast.success({ description: `Push: ${d.sent} inviate, ${d.failed} fallite, ${d.skipped} saltate.` });
+                          }}
+                        >
+                          {testPushingId === student.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test Push"}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"

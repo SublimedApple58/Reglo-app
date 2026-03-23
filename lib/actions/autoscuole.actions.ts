@@ -931,6 +931,29 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
   }
 }
 
+export async function sendTestPushToStudent(studentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const student = await prisma.companyMember.findFirst({
+      where: { companyId: membership.companyId, userId: studentId },
+      include: { user: { select: { name: true } } },
+    });
+    if (!student) {
+      return { success: false, message: "Allievo non trovato." };
+    }
+    const result = await sendAutoscuolaPushToUsers({
+      companyId: membership.companyId,
+      userIds: [studentId],
+      title: "Test notifica Reglo",
+      body: "Se vedi questo messaggio, le notifiche push funzionano correttamente!",
+      data: { kind: "test_push" },
+    });
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
