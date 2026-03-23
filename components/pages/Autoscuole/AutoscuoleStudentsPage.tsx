@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { ExternalLink, Loader2, MailPlus, UserPlus } from "lucide-react";
+import { ExternalLink, Loader2, MailPlus, Trash2, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -43,6 +43,7 @@ import {
   getAutoscuolaStudentsWithProgress,
   getCompanyInviteCode,
   sendTestPushToStudent,
+  clearPushDevices,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -396,6 +397,21 @@ export function AutoscuoleStudentsPage({
                     icon: MailPlus,
                     variant: "default",
                     onClick: () => setInviteOpen(true),
+                  },
+                  {
+                    id: "clear-push",
+                    label: "Reset push tokens",
+                    icon: Trash2,
+                    variant: "outline" as const,
+                    onClick: async () => {
+                      if (!window.confirm("Cancellare tutti i push token? Gli utenti dovranno riaprire l'app per ri-registrarsi.")) return;
+                      const res = await clearPushDevices();
+                      if (!res.success) {
+                        toast.error({ description: res.message ?? "Errore." });
+                        return;
+                      }
+                      toast.success({ description: `${res.data!.deleted} device token eliminati.` });
+                    },
                   },
                   {
                     id: "directory",

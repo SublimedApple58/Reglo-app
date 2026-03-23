@@ -931,6 +931,22 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
   }
 }
 
+export async function clearPushDevices() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const userIds = (await prisma.companyMember.findMany({
+      where: { companyId: membership.companyId },
+      select: { userId: true },
+    })).map((m) => m.userId);
+    const deleted = await prisma.mobilePushDevice.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    return { success: true, data: { deleted: deleted.count } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function sendTestPushToStudent(studentId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
