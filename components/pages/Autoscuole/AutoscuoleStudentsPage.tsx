@@ -516,7 +516,12 @@ export function AutoscuoleStudentsPage({
                               return;
                             }
                             const d = res.data!;
-                            toast.success({ description: `Push: ${d.sent} inviate, ${d.failed} fallite, ${d.skipped} saltate.` });
+                            const details = [
+                              `${d.sent} inviate, ${d.failed} fallite, ${d.skipped} saltate, ${d.invalidated} invalidate`,
+                              ...(d.errorCodes?.length ? [`Codici: ${d.errorCodes.join(", ")}`] : []),
+                              ...(d.errorMessages?.length ? [`Errori: ${d.errorMessages.join(", ")}`] : []),
+                            ].join(" · ");
+                            (d.failed ? toast.error : toast.success)({ description: `Push: ${details}` });
                           }}
                         >
                           {testPushingId === student.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test Push"}
