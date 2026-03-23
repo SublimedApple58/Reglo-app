@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import DeleteDialog from "@/components/shared/delete-dialog";
 import { deleteUser } from "@/lib/actions/user.actions";
+import { sendTestPushToStudent } from "@/lib/actions/autoscuole.actions";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { Loader2 } from "lucide-react";
 import {
   cancelCompanyInvite,
   resendCompanyInvite,
@@ -60,11 +63,13 @@ export function AdminUsersTable({
   users,
 }: AdminUsersTableProps): React.ReactElement {
   const router = useRouter();
+  const toast = useFeedbackToast();
   const [open, setOpen] = React.useState(false);
   const [activeUser, setActiveUser] = React.useState<AdminUserRow | null>(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isResending, setIsResending] = React.useState(false);
   const [isCancelling, setIsCancelling] = React.useState(false);
+  const [testPushingId, setTestPushingId] = React.useState<string | null>(null);
   const [selectedItems, setSelectedItems] = React.useState<Record<string, boolean>>({});
   const formId = "update-user-form";
 
@@ -219,6 +224,32 @@ export function AdminUsersTable({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="inline-flex items-center gap-2">
+                        {!isInvited && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            disabled={testPushingId === user.id}
+                            onClick={async () => {
+                              setTestPushingId(user.id);
+                              const res = await sendTestPushToStudent(user.id);
+                              setTestPushingId(null);
+                              if (!res.success) {
+                                toast.error({ description: res.message ?? "Errore invio push." });
+                                return;
+                              }
+                              const d = res.data!;
+                              const details = [
+                                `${d.sent} inviate, ${d.failed} fallite, ${d.skipped} saltate`,
+                                ...(d.errorCodes?.length ? [`${d.errorCodes.join(", ")}`] : []),
+                              ].join(" · ");
+                              (d.failed ? toast.error : toast.success)({ description: `Push: ${details}` });
+                            }}
+                            className="rounded-full px-3 text-xs"
+                          >
+                            {testPushingId === user.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test Push"}
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"

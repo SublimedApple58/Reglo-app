@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { ExternalLink, Loader2, MailPlus, Trash2, UserPlus } from "lucide-react";
+import { ExternalLink, Loader2, MailPlus, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -42,8 +42,6 @@ import {
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
   getCompanyInviteCode,
-  sendTestPushToStudent,
-  clearPushDevices,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -206,7 +204,6 @@ export function AutoscuoleStudentsPage({
   const [creditsInput, setCreditsInput] = React.useState("1");
   const creditsRequestRef = React.useRef(0);
 
-  const [testPushingId, setTestPushingId] = React.useState<string | null>(null);
   const [inviteCode, setInviteCode] = React.useState<string | null>(null);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
@@ -398,22 +395,7 @@ export function AutoscuoleStudentsPage({
                     variant: "default",
                     onClick: () => setInviteOpen(true),
                   },
-                  {
-                    id: "clear-push",
-                    label: "Reset push tokens",
-                    icon: Trash2,
-                    variant: "outline" as const,
-                    onClick: async () => {
-                      if (!window.confirm("Cancellare tutti i push token? Gli utenti dovranno riaprire l'app per ri-registrarsi.")) return;
-                      const res = await clearPushDevices();
-                      if (!res.success) {
-                        toast.error({ description: res.message ?? "Errore." });
-                        return;
-                      }
-                      toast.success({ description: `${res.data!.deleted} device token eliminati.` });
-                    },
-                  },
-                  {
+{
                     id: "directory",
                     label: "Directory utenti",
                     icon: ExternalLink,
@@ -518,30 +500,7 @@ export function AutoscuoleStudentsPage({
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={testPushingId === student.id}
-                          onClick={async () => {
-                            setTestPushingId(student.id);
-                            const res = await sendTestPushToStudent(student.id);
-                            setTestPushingId(null);
-                            if (!res.success) {
-                              toast.error({ description: res.message ?? "Errore invio push." });
-                              return;
-                            }
-                            const d = res.data!;
-                            const details = [
-                              `${d.sent} inviate, ${d.failed} fallite, ${d.skipped} saltate, ${d.invalidated} invalidate`,
-                              ...(d.errorCodes?.length ? [`Codici: ${d.errorCodes.join(", ")}`] : []),
-                              ...(d.errorMessages?.length ? [`Errori: ${d.errorMessages.join(", ")}`] : []),
-                            ].join(" · ");
-                            (d.failed ? toast.error : toast.success)({ description: `Push: ${details}` });
-                          }}
-                        >
-                          {testPushingId === student.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Test Push"}
-                        </Button>
+                      <TableCell className="text-right">
                         <Button
                           variant="outline"
                           size="sm"

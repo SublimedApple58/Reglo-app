@@ -10,12 +10,12 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Bell, Loader2, MailPlus, UserPlus } from "lucide-react";
+import { Bell, Loader2, MailPlus, Trash2, UserPlus } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
 import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
-import { sendBroadcastPush } from "@/lib/actions/autoscuole.actions";
+import { sendBroadcastPush, clearPushDevices } from "@/lib/actions/autoscuole.actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -134,6 +134,21 @@ export function AdminUsersToolbar({
                     icon: Bell,
                     variant: "outline" as const,
                     onClick: () => setPushOpen(true),
+                  },
+                  {
+                    id: "clear-push",
+                    label: "Reset push tokens",
+                    icon: Trash2,
+                    variant: "outline" as const,
+                    onClick: async () => {
+                      if (!window.confirm("Cancellare tutti i push token? Gli utenti dovranno riaprire l'app per ri-registrarsi.")) return;
+                      const res = await clearPushDevices();
+                      if (!res.success) {
+                        toast.error({ description: res.message ?? "Errore." });
+                        return;
+                      }
+                      toast.success({ description: `${res.data!.deleted} device token eliminati.` });
+                    },
                   },
                 ]
               : []
