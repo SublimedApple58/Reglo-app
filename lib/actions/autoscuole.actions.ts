@@ -931,6 +931,35 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
   }
 }
 
+export async function sendBroadcastPush(input: {
+  title: string;
+  body: string;
+  role?: "OWNER" | "INSTRUCTOR" | "STUDENT" | null;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const where: Record<string, unknown> = { companyId: membership.companyId };
+    if (input.role) where.autoscuolaRole = input.role;
+    const members = await prisma.companyMember.findMany({
+      where,
+      select: { userId: true },
+    });
+    if (!members.length) {
+      return { success: false, message: "Nessun utente trovato." };
+    }
+    const result = await sendAutoscuolaPushToUsers({
+      companyId: membership.companyId,
+      userIds: members.map((m) => m.userId),
+      title: input.title,
+      body: input.body,
+      data: { kind: "broadcast" },
+    });
+    return { success: true, data: { ...result, targeted: members.length } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function clearPushDevices() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");

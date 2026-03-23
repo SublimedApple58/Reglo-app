@@ -10,11 +10,31 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { MailPlus, UserPlus } from "lucide-react";
+import { Bell, Loader2, MailPlus, UserPlus } from "lucide-react";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
 import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
+import { sendBroadcastPush } from "@/lib/actions/autoscuole.actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
 type AdminUsersToolbarProps = {
   totalRows: number;
@@ -29,6 +49,12 @@ export function AdminUsersToolbar({
   const [value, setValue] = React.useState(initialQuery ?? "");
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [pushOpen, setPushOpen] = React.useState(false);
+  const [pushTitle, setPushTitle] = React.useState("");
+  const [pushBody, setPushBody] = React.useState("");
+  const [pushRole, setPushRole] = React.useState<string>("all");
+  const [pushSending, setPushSending] = React.useState(false);
+  const toast = useFeedbackToast();
   const company = useAtomValue(companyAtom);
   const router = useRouter();
   const pathname = usePathname();
@@ -102,6 +128,13 @@ export function AdminUsersToolbar({
                     variant: "outline" as const,
                     onClick: () => setInviteOpen(true),
                   },
+                  {
+                    id: "broadcast-push",
+                    label: "Invia notifica",
+                    icon: Bell,
+                    variant: "outline" as const,
+                    onClick: () => setPushOpen(true),
+                  },
                 ]
               : []
           }
@@ -109,6 +142,88 @@ export function AdminUsersToolbar({
       </div>
       <AdminUsersInviteDialog open={inviteOpen} onOpenChange={setInviteOpen} />
       <AdminUsersCreateDialog open={createOpen} onOpenChange={setCreateOpen} />
+
+      <Dialog open={pushOpen} onOpenChange={setPushOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invia notifica push</DialogTitle>
+            <DialogDescription>
+              Invia una notifica push agli utenti della company.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!pushTitle.trim() || !pushBody.trim()) return;
+              setPushSending(true);
+              const res = await sendBroadcastPush({
+                title: pushTitle.trim(),
+                body: pushBody.trim(),
+                role: pushRole === "all" ? null : (pushRole as "OWNER" | "INSTRUCTOR" | "STUDENT"),
+              });
+              setPushSending(false);
+              if (!res.success) {
+                toast.error({ description: res.message ?? "Errore invio push." });
+                return;
+              }
+              const d = res.data!;
+              toast.success({
+                description: `Notifica inviata a ${d.targeted} utenti: ${d.sent} ricevute, ${d.failed} fallite.`,
+              });
+              setPushOpen(false);
+              setPushTitle("");
+              setPushBody("");
+              setPushRole("all");
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label>Destinatari</Label>
+              <Select value={pushRole} onValueChange={setPushRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti</SelectItem>
+                  <SelectItem value="STUDENT">Solo Allievi</SelectItem>
+                  <SelectItem value="INSTRUCTOR">Solo Istruttori</SelectItem>
+                  <SelectItem value="OWNER">Solo Titolari</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="push-title">Titolo</Label>
+              <Input
+                id="push-title"
+                placeholder="Titolo notifica"
+                value={pushTitle}
+                onChange={(e) => setPushTitle(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="push-body">Messaggio</Label>
+              <Input
+                id="push-body"
+                placeholder="Corpo del messaggio"
+                value={pushBody}
+                onChange={(e) => setPushBody(e.target.value)}
+                required
+              />
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={pushSending} className="w-full sm:w-auto">
+                {pushSending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Bell className="mr-2 h-4 w-4" />
+                )}
+                {pushSending ? "Invio in corso…" : "Invia notifica"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
