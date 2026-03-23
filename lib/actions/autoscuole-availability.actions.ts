@@ -792,6 +792,36 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
   }
 }
 
+const getDefaultAvailabilitySchema = z.object({
+  ownerType: z.enum(["student", "instructor", "vehicle"]),
+  ownerId: z.string().uuid(),
+});
+
+export async function getDefaultAvailability(input: z.infer<typeof getDefaultAvailabilitySchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getDefaultAvailabilitySchema.parse(input);
+
+    const record = await prisma.autoscuolaWeeklyAvailability.findFirst({
+      where: {
+        companyId: membership.companyId,
+        ownerType: payload.ownerType,
+        ownerId: payload.ownerId,
+      },
+    });
+
+    if (!record) {
+      return { success: true, data: null };
+    }
+
+    const { daysOfWeek, ranges } = defaultToAvailabilityRecord(record);
+
+    return { success: true, data: { daysOfWeek, ranges } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 // ── Weekly availability override CRUD ─────────────────────
 
 const dayScheduleEntrySchema = z.object({
