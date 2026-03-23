@@ -2109,6 +2109,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     const bookingSlotDurations = normalizeBookingSlotDurations(
       limits.bookingSlotDurations,
     );
+    const governance = await getBookingGovernanceForCompany(membership.companyId);
 
     const lessonTypeSelectionEnabled = policy.lessonPolicyEnabled;
     let availableLessonTypes: string[] = lessonTypeSelectionEnabled
@@ -2136,8 +2137,291 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         bookingSlotDurations,
         lessonTypeSelectionEnabled,
         availableLessonTypes,
+        studentBookingMode: governance.studentBookingMode,
       },
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+const availableSlotsSchema = z.object({
+  studentId: z.string().uuid(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  durationMinutes: z.number().int().min(30).max(120),
+  lessonType: z.string().optional(),
+});
+
+export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = availableSlotsSchema.parse(input);
+    const bookingAccess = await ensureStudentCanBookFromApp({
+      companyId: membership.companyId,
+      membership,
+      studentId: payload.studentId,
+    });
+    if (!bookingAccess.allowed) {
+      return { success: false, message: bookingAccess.message };
+    }
+
+    const now = new Date();
+    const durationSlots = payload.durationMinutes / SLOT_MINUTES;
+    if (!Number.isInteger(durationSlots) || durationSlots < 1 || durationSlots > 4) {
+      return { success: false, message: "Durata non valida." };
+    }
+
+    const requestedLessonType = normalizeLessonType(payload.lessonType);
+    const requestedPolicyType = isLessonPolicyType(requestedLessonType)
+      ? requestedLessonType
+      : null;
+
+    const dateParts = parseDateOnly(payload.date);
+    if (!dateParts) {
+      return { success: false, message: "Data non valida." };
+    }
+    const dateStart = toTimeZoneDate(dateParts, 0, 0);
+    const nowParts = getZonedParts(now);
+    const todayStart = toTimeZoneDate(
+      { year: nowParts.year, month: nowParts.month, day: nowParts.day },
+      0,
+      0,
+    );
+    if (dateStart < todayStart) {
+      return { success: false, message: "Non puoi prenotare una guida nel passato." };
+    }
+
+    const serviceForLimits = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<string, unknown>;
+    const roundedHoursOnly = serviceLimits.roundedHoursOnly === true;
+    const bookingMinStartDate =
+      typeof serviceLimits.bookingMinStartDate === "string"
+        ? serviceLimits.bookingMinStartDate.trim()
+        : null;
+    if (bookingMinStartDate) {
+      const minDate = new Date(bookingMinStartDate);
+      minDate.setHours(0, 0, 0, 0);
+      if (dateStart < minDate) {
+        return { success: false, message: "Data non disponibile per prenotazioni." };
+      }
+    }
+
+    const allowedDurations = normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations);
+    if (!allowedDurations.some((d) => d === payload.durationMinutes)) {
+      return { success: false, message: "Durata non disponibile per questa autoscuola." };
+    }
+
+    const lessonPolicy = parseLessonPolicyFromLimits(serviceLimits);
+    const enforceLessonTypeTimeConstraints = lessonPolicy.lessonPolicyEnabled;
+    const enforceRequiredTypes =
+      lessonPolicy.lessonPolicyEnabled &&
+      lessonPolicy.lessonRequiredTypesEnabled &&
+      lessonPolicy.lessonRequiredTypes.length > 0;
+
+    const [
+      activeInstructors,
+      activeVehicles,
+      studentAvailabilityRaw,
+      student,
+    ] = await Promise.all([
+      prisma.autoscuolaInstructor.findMany({
+        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        select: { id: true },
+      }),
+      prisma.autoscuolaVehicle.findMany({
+        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        select: { id: true },
+      }),
+      prisma.autoscuolaWeeklyAvailability.findFirst({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "student",
+          ownerId: payload.studentId,
+        },
+      }),
+      ensureStudentMembership(membership.companyId, payload.studentId),
+    ]);
+
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const studentAvailability = studentAvailabilityRaw
+      ? defaultToAvailabilityRecord(studentAvailabilityRaw)
+      : null;
+    if (!studentAvailability) {
+      return { success: true, data: [] };
+    }
+
+    const activeInstructorIds = activeInstructors.map((i) => i.id);
+    const activeVehicleIds = activeVehicles.map((v) => v.id);
+    if (!activeInstructorIds.length || !activeVehicleIds.length) {
+      return { success: true, data: [] };
+    }
+
+    const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
+    if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) {
+      return { success: true, data: [] };
+    }
+
+    let missingRequiredTypes: string[] = [];
+    if (enforceRequiredTypes) {
+      const coverage = await getStudentLessonPolicyCoverage({
+        companyId: membership.companyId,
+        studentId: payload.studentId,
+        policy: lessonPolicy,
+      });
+      missingRequiredTypes = coverage.missingRequiredTypes;
+    }
+
+    const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
+      prisma.autoscuolaWeeklyAvailability.findMany({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "instructor",
+          ownerId: { in: activeInstructorIds },
+        },
+      }),
+      prisma.autoscuolaWeeklyAvailability.findMany({
+        where: {
+          companyId: membership.companyId,
+          ownerType: "vehicle",
+          ownerId: { in: activeVehicleIds },
+        },
+      }),
+    ]);
+
+    const instructorAvailabilityMap = new Map<string, AvailabilityRecord>(
+      instructorAvailabilities.map((a) => [a.ownerId, defaultToAvailabilityRecord(a)]),
+    );
+    const vehicleAvailabilityMap = new Map<string, AvailabilityRecord>(
+      vehicleAvailabilities.map((a) => [a.ownerId, defaultToAvailabilityRecord(a)]),
+    );
+
+    const rangeStart = dateStart;
+    const rangeEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
+    const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: membership.companyId,
+        status: { notIn: ["cancelled"] },
+        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+      },
+    });
+
+    const starts = new Map<string, Set<number>>();
+    const intervals = new Map<string, Array<{ start: number; end: number }>>();
+    for (const appt of appointments) {
+      const start = appt.startsAt.getTime();
+      const end = appt.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
+      const addInterval = (ownerId: string) => {
+        const list = intervals.get(ownerId) ?? [];
+        list.push({ start, end });
+        intervals.set(ownerId, list);
+        const set = starts.get(ownerId) ?? new Set<number>();
+        set.add(start);
+        starts.set(ownerId, set);
+      };
+      addInterval(appt.studentId);
+      if (appt.instructorId) addInterval(appt.instructorId);
+      if (appt.vehicleId) addInterval(appt.vehicleId);
+    }
+
+    const overlaps = (
+      ownerIntervals: Array<{ start: number; end: number }> | undefined,
+      start: number,
+      end: number,
+    ) => {
+      if (!ownerIntervals?.length) return false;
+      return ownerIntervals.some((i) => start < i.end && end > i.start);
+    };
+
+    const isOwnerAvailable = (
+      availability: AvailabilityRecord | null | undefined,
+      dow: number,
+      startMin: number,
+      endMin: number,
+    ) => {
+      if (!availability) return false;
+      if (!availability.daysOfWeek.includes(dow)) return false;
+      return availability.ranges.some(
+        (r) => r.endMinutes > r.startMinutes && startMin >= r.startMinutes && endMin <= r.endMinutes,
+      );
+    };
+
+    const slotStep = roundedHoursOnly ? 60 : SLOT_MINUTES;
+    const result: Array<{ startsAt: string; endsAt: string }> = [];
+    const studentIntervals = intervals.get(payload.studentId);
+
+    for (const range of studentAvailability.ranges) {
+      const first = Math.ceil(range.startMinutes / slotStep) * slotStep;
+      const lastStart = range.endMinutes - payload.durationMinutes;
+      for (let minutes = first; minutes <= lastStart; minutes += slotStep) {
+        const startDate = toTimeZoneDate(dateParts, Math.floor(minutes / 60), minutes % 60);
+        const endDate = getSlotEnd(startDate, payload.durationMinutes);
+        const startMs = startDate.getTime();
+        if (startMs < now.getTime()) continue;
+        if (startDate < rangeStart || endDate > rangeEnd) continue;
+        if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
+
+        if (
+          enforceLessonTypeTimeConstraints &&
+          requestedPolicyType &&
+          !getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: startDate,
+            endsAt: endDate,
+            candidateTypes: [requestedPolicyType],
+          }).length
+        ) {
+          continue;
+        }
+
+        if (enforceRequiredTypes && missingRequiredTypes.length) {
+          const compatibleTypes = getCompatibleLessonTypesForInterval({
+            policy: lessonPolicy,
+            startsAt: startDate,
+            endsAt: endDate,
+            candidateTypes: missingRequiredTypes,
+          });
+          if (!compatibleTypes.length) continue;
+          if (requestedPolicyType && !compatibleTypes.includes(requestedPolicyType)) continue;
+        }
+
+        const candidateStartMinutes = minutes;
+        const candidateEndMinutes = minutes + payload.durationMinutes;
+
+        let hasInstructor = false;
+        for (const ownerId of activeInstructorIds) {
+          const availability = instructorAvailabilityMap.get(ownerId);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
+          if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
+          hasInstructor = true;
+          break;
+        }
+        if (!hasInstructor) continue;
+
+        let hasVehicle = false;
+        for (const ownerId of activeVehicleIds) {
+          const availability = vehicleAvailabilityMap.get(ownerId);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
+          if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
+          hasVehicle = true;
+          break;
+        }
+        if (!hasVehicle) continue;
+
+        result.push({
+          startsAt: startDate.toISOString(),
+          endsAt: endDate.toISOString(),
+        });
+      }
+    }
+
+    return { success: true, data: result };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

@@ -96,6 +96,10 @@ const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
   { value: "guided_proposal", label: "Guidata con proposta" },
 ] as const;
+const STUDENT_BOOKING_MODE_OPTIONS = [
+  { value: "engine", label: "Motore (proposta automatica)" },
+  { value: "free_choice", label: "Scelta libera" },
+] as const;
 const CHANNEL_OPTIONS = [
   { value: "push", label: "Push" },
   { value: "whatsapp", label: "WhatsApp" },
@@ -104,6 +108,7 @@ const CHANNEL_OPTIONS = [
 type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
 type AppBookingActorsValue = (typeof APP_BOOKING_ACTOR_OPTIONS)[number]["value"];
 type InstructorBookingModeValue = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number]["value"];
+type StudentBookingModeValue = (typeof STUDENT_BOOKING_MODE_OPTIONS)[number]["value"];
 
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
@@ -232,6 +237,7 @@ export function AutoscuoleResourcesPage({
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
+  const [studentBookingMode, setStudentBookingMode] = React.useState<StudentBookingModeValue>("engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   const [instructorWeeklyAvailability, setInstructorWeeklyAvailability] = React.useState<
     Record<string, VehicleWeeklyAvailability>
@@ -415,6 +421,13 @@ export function AutoscuoleResourcesPage({
           ? (res.data.instructorBookingMode as InstructorBookingModeValue)
           : "manual_engine",
       );
+      setStudentBookingMode(
+        STUDENT_BOOKING_MODE_OPTIONS.some(
+          (option) => option.value === res.data.studentBookingMode,
+        )
+          ? (res.data.studentBookingMode as StudentBookingModeValue)
+          : "engine",
+      );
     };
     loadSettings();
     return () => {
@@ -530,6 +543,7 @@ export function AutoscuoleResourcesPage({
       roundedHoursOnly,
       appBookingActors,
       instructorBookingMode,
+      studentBookingMode,
     });
     setSavingSettings(false);
 
@@ -578,6 +592,13 @@ export function AutoscuoleResourcesPage({
       )
         ? (res.data.instructorBookingMode as InstructorBookingModeValue)
         : "manual_engine",
+    );
+    setStudentBookingMode(
+      STUDENT_BOOKING_MODE_OPTIONS.some(
+        (option) => option.value === res.data.studentBookingMode,
+      )
+        ? (res.data.studentBookingMode as StudentBookingModeValue)
+        : "engine",
     );
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
@@ -1210,6 +1231,28 @@ export function AutoscuoleResourcesPage({
                       </SelectTrigger>
                       <SelectContent>
                         {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                ) : null}
+
+                {appBookingActors !== "instructors" ? (
+                  <FieldGroup label="Modalità allievo">
+                    <Select
+                      value={studentBookingMode}
+                      onValueChange={(value) =>
+                        setStudentBookingMode(value as StudentBookingModeValue)
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleziona modalità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STUDENT_BOOKING_MODE_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
                           </SelectItem>

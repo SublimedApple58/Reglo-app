@@ -21,8 +21,11 @@ import {
   AppBookingActors,
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
+  DEFAULT_STUDENT_BOOKING_MODE,
   INSTRUCTOR_BOOKING_MODE_OPTIONS,
   InstructorBookingMode,
+  STUDENT_BOOKING_MODE_OPTIONS,
+  StudentBookingMode,
   parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 
@@ -182,6 +185,7 @@ const bookingSlotDurationsSchema = z
 
 const appBookingActorsSchema = z.enum(APP_BOOKING_ACTOR_OPTIONS);
 const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
+const studentBookingModeSchema = z.enum(STUDENT_BOOKING_MODE_OPTIONS);
 const voiceAllowedActionSchema = z.enum(VOICE_ALLOWED_ACTIONS);
 const voiceOfficeHoursSchema = z
   .object({
@@ -253,6 +257,7 @@ const autoscuolaSettingsPatchSchema = z
     roundedHoursOnly: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
+    studentBookingMode: studentBookingModeSchema.optional(),
     voiceAssistantEnabled: z.boolean().optional(),
     voiceBookingEnabled: z.boolean().optional(),
     voiceLanguage: z.literal("it-IT").optional(),
@@ -294,6 +299,7 @@ const autoscuolaSettingsPatchSchema = z
       value.bookingSlotDurations !== undefined ||
       value.appBookingActors !== undefined ||
       value.instructorBookingMode !== undefined ||
+      value.studentBookingMode !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
       value.voiceLanguage !== undefined ||
@@ -434,6 +440,7 @@ export type AutoscuolaSettingsData = {
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
+  studentBookingMode: StudentBookingMode;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
   voiceLineRef: string | null;
@@ -625,6 +632,7 @@ const resolveAutoscuolaSettingsData = (
         : false,
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
+    studentBookingMode: bookingGovernance.studentBookingMode,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
     voiceLineRef,
@@ -847,6 +855,8 @@ export async function updateAutoscuolaSettings(
       (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
         ? previousBookingGovernance.instructorBookingMode
         : DEFAULT_INSTRUCTOR_BOOKING_MODE);
+    const nextStudentBookingMode =
+      payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -971,6 +981,7 @@ export async function updateAutoscuolaSettings(
       roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
+      studentBookingMode: nextStudentBookingMode,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
       voiceLineRef: nextVoiceLineRef,
@@ -1039,6 +1050,7 @@ export async function updateAutoscuolaSettings(
         roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
+        studentBookingMode: nextLimits.studentBookingMode,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
         voiceLineRef: nextLimits.voiceLineRef,

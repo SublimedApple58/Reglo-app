@@ -14,16 +14,22 @@ export const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
 ] as const;
 export type InstructorBookingMode = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number];
 
+export const STUDENT_BOOKING_MODE_OPTIONS = ["engine", "free_choice"] as const;
+export type StudentBookingMode = (typeof STUDENT_BOOKING_MODE_OPTIONS)[number];
+
 export type BookingGovernanceSettings = {
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
+  studentBookingMode: StudentBookingMode;
 };
 
 export const DEFAULT_APP_BOOKING_ACTORS: AppBookingActors = "students";
 export const DEFAULT_INSTRUCTOR_BOOKING_MODE: InstructorBookingMode = "manual_engine";
+export const DEFAULT_STUDENT_BOOKING_MODE: StudentBookingMode = "engine";
 
 const APP_BOOKING_ACTOR_SET = new Set<string>(APP_BOOKING_ACTOR_OPTIONS);
 const INSTRUCTOR_BOOKING_MODE_SET = new Set<string>(INSTRUCTOR_BOOKING_MODE_OPTIONS);
+const STUDENT_BOOKING_MODE_SET = new Set<string>(STUDENT_BOOKING_MODE_OPTIONS);
 
 const normalizeString = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -33,6 +39,7 @@ export const parseBookingGovernanceFromLimits = (
 ): BookingGovernanceSettings => {
   const appBookingActorsRaw = normalizeString(limits.appBookingActors);
   const instructorBookingModeRaw = normalizeString(limits.instructorBookingMode);
+  const studentBookingModeRaw = normalizeString(limits.studentBookingMode);
 
   const appBookingActors = APP_BOOKING_ACTOR_SET.has(appBookingActorsRaw)
     ? (appBookingActorsRaw as AppBookingActors)
@@ -42,10 +49,14 @@ export const parseBookingGovernanceFromLimits = (
   )
     ? (instructorBookingModeRaw as InstructorBookingMode)
     : DEFAULT_INSTRUCTOR_BOOKING_MODE;
+  const studentBookingMode = STUDENT_BOOKING_MODE_SET.has(studentBookingModeRaw)
+    ? (studentBookingModeRaw as StudentBookingMode)
+    : DEFAULT_STUDENT_BOOKING_MODE;
 
   return {
     appBookingActors,
     instructorBookingMode,
+    studentBookingMode,
   };
 };
 
