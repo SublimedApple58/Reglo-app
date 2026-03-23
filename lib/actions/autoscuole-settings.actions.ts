@@ -1036,6 +1036,7 @@ export async function updateAutoscuolaSettings(
         lessonRequiredTypes: nextLimits.lessonRequiredTypes,
         lessonTypeConstraints: nextLimits.lessonTypeConstraints,
         bookingSlotDurations: nextLimits.bookingSlotDurations,
+        roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
