@@ -227,6 +227,7 @@ export function AutoscuoleResourcesPage({
     createDefaultLessonConstraintMap(),
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
+  const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -399,6 +400,7 @@ export function AutoscuoleResourcesPage({
       );
       setLessonConstraints(nextConstraints);
       setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
+      setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
           ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -523,6 +525,7 @@ export function AutoscuoleResourcesPage({
       lessonRequiredTypes,
       lessonTypeConstraints,
       bookingSlotDurations,
+      roundedHoursOnly,
       appBookingActors,
       instructorBookingMode,
     });
@@ -561,6 +564,7 @@ export function AutoscuoleResourcesPage({
     );
     setLessonConstraints(nextConstraints);
     setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
+    setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -1226,6 +1230,19 @@ export function AutoscuoleResourcesPage({
                   ))}
                 </div>
               </FieldGroup>
+
+              <div
+                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                onClick={() => setRoundedHoursOnly((prev) => !prev)}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Solo orari tondi</span>
+                  <span className="text-xs text-muted-foreground">
+                    Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)
+                  </span>
+                </div>
+                <InlineToggle checked={roundedHoursOnly} size="sm" />
+              </div>
             </div>
           </AccordionSection>
 

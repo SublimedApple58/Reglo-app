@@ -1354,6 +1354,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const bookingMinStartDate = typeof serviceLimits.bookingMinStartDate === "string"
       ? serviceLimits.bookingMinStartDate.trim()
       : null;
+    const roundedHoursOnly = serviceLimits.roundedHoursOnly === true;
     if (bookingMinStartDate) {
       const minDate = new Date(bookingMinStartDate);
       minDate.setHours(0, 0, 0, 0);
@@ -1570,15 +1571,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       );
     };
 
+    const slotStep = roundedHoursOnly ? 60 : SLOT_MINUTES;
     const buildCandidateStarts = (
       dayParts: CalendarDateParts,
       window: { startMinutes: number; endMinutes: number },
     ) => {
-      const first = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+      const first = Math.ceil(window.startMinutes / slotStep) * slotStep;
       const lastStart = window.endMinutes - payload.durationMinutes;
       if (lastStart < first) return [];
       const candidates: Date[] = [];
-      for (let minutes = first; minutes <= lastStart; minutes += SLOT_MINUTES) {
+      for (let minutes = first; minutes <= lastStart; minutes += slotStep) {
         candidates.push(
           toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60),
         );

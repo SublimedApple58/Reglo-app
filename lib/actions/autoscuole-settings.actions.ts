@@ -250,6 +250,7 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     lessonTypeConstraints: lessonTypeConstraintsSchema.optional(),
     bookingSlotDurations: bookingSlotDurationsSchema.optional(),
+    roundedHoursOnly: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     voiceAssistantEnabled: z.boolean().optional(),
@@ -430,6 +431,7 @@ export type AutoscuolaSettingsData = {
     >
   >;
   bookingSlotDurations: number[];
+  roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
   voiceFeatureEnabled: boolean;
@@ -617,6 +619,10 @@ const resolveAutoscuolaSettingsData = (
     lessonRequiredTypes: lessonPolicy.lessonRequiredTypes,
     lessonTypeConstraints: lessonPolicy.lessonTypeConstraints,
     bookingSlotDurations,
+    roundedHoursOnly:
+      typeof limits.roundedHoursOnly === "boolean"
+        ? limits.roundedHoursOnly
+        : false,
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
     voiceFeatureEnabled,
