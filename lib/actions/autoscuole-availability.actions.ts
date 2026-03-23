@@ -1606,25 +1606,39 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return intervals.some((interval) => start < interval.end && end > interval.start);
     };
 
-    const excludedStartMs = payload.excludeStartsAt
-      ? new Date(payload.excludeStartsAt).getTime()
-      : null;
-
-    const upsertBookingRequest = async (status: "pending" | "matched") => {
-      if (payload.requestId) {
-        const existing = await prisma.autoscuolaBookingRequest.findFirst({
-          where: {
-            id: payload.requestId,
-            companyId: membership.companyId,
-            studentId: payload.studentId,
-          },
-        });
-        if (existing) {
-          return prisma.autoscuolaBookingRequest.update({
-            where: { id: existing.id },
-            data: { status, desiredDate: preferredDate },
-          });
+    // Build excluded set: accumulate all previously rejected slots
+    const excludedStartsSet = new Set<number>();
+    let existingRequest: { id: string; rejectedSlots: unknown } | null = null;
+    if (payload.requestId) {
+      existingRequest = await prisma.autoscuolaBookingRequest.findFirst({
+        where: {
+          id: payload.requestId,
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+        },
+        select: { id: true, rejectedSlots: true },
+      });
+      if (existingRequest && Array.isArray(existingRequest.rejectedSlots)) {
+        for (const ms of existingRequest.rejectedSlots) {
+          if (typeof ms === "number") excludedStartsSet.add(ms);
         }
+      }
+    }
+    if (payload.excludeStartsAt) {
+      const ms = new Date(payload.excludeStartsAt).getTime();
+      if (!Number.isNaN(ms)) excludedStartsSet.add(ms);
+    }
+
+    const upsertBookingRequest = async (status: "pending" | "matched", suggestedStartMs?: number) => {
+      // When matched or no more slots, clear rejected list
+      const nextRejected = status === "matched" ? [] : Array.from(excludedStartsSet);
+      if (suggestedStartMs) nextRejected.push(suggestedStartMs);
+
+      if (existingRequest) {
+          return prisma.autoscuolaBookingRequest.update({
+            where: { id: existingRequest.id },
+            data: { status, desiredDate: preferredDate, rejectedSlots: nextRejected },
+          });
       }
 
       return prisma.autoscuolaBookingRequest.create({
@@ -1633,6 +1647,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           studentId: payload.studentId,
           desiredDate: preferredDate,
           status,
+          rejectedSlots: status === "matched" ? [] : Array.from(excludedStartsSet),
         },
       });
     };
@@ -1734,7 +1749,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
         if (startMs < now.getTime()) continue;
-        if (excludedStartMs && startMs === excludedStartMs) continue;
+        if (excludedStartsSet.size && excludedStartsSet.has(startMs)) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
@@ -2027,7 +2042,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     if (candidate) {
-      const request = await upsertBookingRequest("pending");
+      const request = await upsertBookingRequest("pending", candidate.start.getTime());
 
       return {
         success: true,
@@ -2049,7 +2064,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
     }
 
-    const request = await upsertBookingRequest("pending");
+    const request = await upsertBookingRequest("pending", suggestion?.startsAt.getTime());
 
     return {
       success: true,

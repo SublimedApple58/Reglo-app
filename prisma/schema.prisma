@@ -600,13 +600,14 @@ model AutoscuolaAvailabilitySlot {
 }
 
 model AutoscuolaBookingRequest {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId   String   @db.Uuid
-  studentId   String   @db.Uuid
-  desiredDate DateTime @db.Timestamp(6)
-  status      String   @default("pending")
-  createdAt   DateTime @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String   @db.Uuid
+  studentId     String   @db.Uuid
+  desiredDate   DateTime @db.Timestamp(6)
+  status        String   @default("pending")
+  rejectedSlots Json?    @db.Json
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   student User    @relation(fields: [studentId], references: [id], onDelete: Restrict)
