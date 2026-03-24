@@ -312,6 +312,8 @@ export function AutoscuoleAgendaPage({
   };
 
   const handleCancel = async (appointmentId: string) => {
+    const confirmed = window.confirm("Sei sicuro di voler annullare questa guida?");
+    if (!confirmed) return;
     setPendingEventActionId(appointmentId);
     const res = await cancelAutoscuolaAppointment({ appointmentId });
     if (!res.success) {
