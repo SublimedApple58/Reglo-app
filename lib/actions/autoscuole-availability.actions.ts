@@ -2259,32 +2259,25 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       missingRequiredTypes = coverage.missingRequiredTypes;
     }
 
-    const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
-      prisma.autoscuolaWeeklyAvailability.findMany({
-        where: {
-          companyId: membership.companyId,
-          ownerType: "instructor",
-          ownerId: { in: activeInstructorIds },
-        },
-      }),
-      prisma.autoscuolaWeeklyAvailability.findMany({
-        where: {
-          companyId: membership.companyId,
-          ownerType: "vehicle",
-          ownerId: { in: activeVehicleIds },
-        },
-      }),
-    ]);
-
-    const instructorAvailabilityMap = new Map<string, AvailabilityRecord>(
-      instructorAvailabilities.map((a) => [a.ownerId, defaultToAvailabilityRecord(a)]),
-    );
-    const vehicleAvailabilityMap = new Map<string, AvailabilityRecord>(
-      vehicleAvailabilities.map((a) => [a.ownerId, defaultToAvailabilityRecord(a)]),
-    );
-
     const rangeStart = dateStart;
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
+
+    const [instructorResolver, vehicleResolver] = await Promise.all([
+      buildAvailabilityResolver(
+        membership.companyId,
+        "instructor",
+        activeInstructorIds,
+        rangeStart,
+        rangeEnd,
+      ),
+      buildAvailabilityResolver(
+        membership.companyId,
+        "vehicle",
+        activeVehicleIds,
+        rangeStart,
+        rangeEnd,
+      ),
+    ]);
     const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -2378,7 +2371,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
         let hasInstructor = false;
         for (const ownerId of activeInstructorIds) {
-          const availability = instructorAvailabilityMap.get(ownerId);
+          const availability = instructorResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
           if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
           hasInstructor = true;
@@ -2388,7 +2381,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
         let hasVehicle = false;
         for (const ownerId of activeVehicleIds) {
-          const availability = vehicleAvailabilityMap.get(ownerId);
+          const availability = vehicleResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
           if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
           hasVehicle = true;
