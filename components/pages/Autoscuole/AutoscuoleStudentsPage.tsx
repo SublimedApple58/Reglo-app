@@ -344,15 +344,27 @@ export function AutoscuoleStudentsPage({
   return (
     <PageWrapper
       title="Allievi"
-      subTitle={
-        inviteCode
-          ? `Allievi sincronizzati dalla Directory utenti. Codice autoscuola: ${inviteCode}`
-          : "Allievi sincronizzati dalla Directory utenti."
-      }
+      subTitle="Allievi sincronizzati dalla Directory utenti."
     >
       <div className="relative w-full space-y-5">
         <LottieLoadingOverlay visible={loading} />
         {tabs}
+
+        {inviteCode ? (
+          <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+            <span className="text-sm text-muted-foreground">Codice autoscuola:</span>
+            <span className="text-base font-bold tracking-wider text-yellow-800">{inviteCode}</span>
+            <button
+              type="button"
+              className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
+              onClick={() => {
+                navigator.clipboard.writeText(inviteCode);
+              }}
+            >
+              Copia
+            </button>
+          </div>
+        ) : null}
 
         {loading ? (
           <TableSkeleton rows={6} cols={7} />
