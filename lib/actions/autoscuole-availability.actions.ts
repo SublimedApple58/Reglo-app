@@ -2224,7 +2224,6 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const [
       activeInstructors,
       activeVehicles,
-      studentAvailabilityRaw,
       student,
     ] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
@@ -2235,25 +2234,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         where: { companyId: membership.companyId, status: { not: "inactive" } },
         select: { id: true },
       }),
-      prisma.autoscuolaWeeklyAvailability.findFirst({
-        where: {
-          companyId: membership.companyId,
-          ownerType: "student",
-          ownerId: payload.studentId,
-        },
-      }),
       ensureStudentMembership(membership.companyId, payload.studentId),
     ]);
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
-    }
-
-    const studentAvailability = studentAvailabilityRaw
-      ? defaultToAvailabilityRecord(studentAvailabilityRaw)
-      : null;
-    if (!studentAvailability) {
-      return { success: true, data: [] };
     }
 
     const activeInstructorIds = activeInstructors.map((i) => i.id);
@@ -2263,9 +2248,6 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     }
 
     const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
-    if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) {
-      return { success: true, data: [] };
-    }
 
     let missingRequiredTypes: string[] = [];
     if (enforceRequiredTypes) {
@@ -2356,10 +2338,10 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const result: Array<{ startsAt: string; endsAt: string }> = [];
     const studentIntervals = intervals.get(payload.studentId);
 
-    for (const range of studentAvailability.ranges) {
-      const first = Math.ceil(range.startMinutes / slotStep) * slotStep;
-      const lastStart = range.endMinutes - payload.durationMinutes;
-      for (let minutes = first; minutes <= lastStart; minutes += slotStep) {
+    // Scan the full day (0–1440) — instructor/vehicle availability filters naturally
+    const dayLastStart = 1440 - payload.durationMinutes;
+    {
+      for (let minutes = 0; minutes <= dayLastStart; minutes += slotStep) {
         const startDate = toTimeZoneDate(dateParts, Math.floor(minutes / 60), minutes % 60);
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
