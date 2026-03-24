@@ -1680,26 +1680,23 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       preferredWindow?: { startMinutes: number; endMinutes: number },
       forcedStart?: Date,
     ) => {
-      if (!studentAvailability) return null;
+      if (!studentAvailability && !forcedStart) return null;
       if (!activeInstructorIds.length || !activeVehicleIds.length) return null;
 
       const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
-      if (!studentAvailability.daysOfWeek.includes(dayOfWeek)) {
-        return null;
-      }
 
       // Build candidate starts from all student availability ranges
       let candidateStarts: Date[] = [];
       if (forcedStart) {
+        // When a specific start is forced (free_choice or accepted suggestion),
+        // skip student availability checks — the slot was already validated
         const forcedMinutes = minutesFromDate(forcedStart);
         if (forcedMinutes % SLOT_MINUTES !== 0) return null;
-        // Ensure the forced start fits within at least one student range
-        const inRange = studentAvailability.ranges.some(
-          (r) => forcedMinutes >= r.startMinutes && forcedMinutes + payload.durationMinutes <= r.endMinutes,
-        );
-        if (!inRange) return null;
         candidateStarts = [forcedStart];
       } else {
+        if (!studentAvailability || !studentAvailability.daysOfWeek.includes(dayOfWeek)) {
+          return null;
+        }
         for (const range of studentAvailability.ranges) {
           let start = range.startMinutes;
           let end = range.endMinutes;
