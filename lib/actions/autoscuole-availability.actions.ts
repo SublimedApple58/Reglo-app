@@ -1522,39 +1522,32 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = activeVehicles.map((item) => item.id);
 
-    const [instructorAvailabilities, vehicleAvailabilities] = await Promise.all([
+    const resolverRangeStart = preferredDate;
+    const resolverRangeEnd = toTimeZoneDate(
+      addDaysToDateParts(preferredDateParts, (payload.maxDays ?? DEFAULT_MAX_DAYS) + 1),
+      0,
+      0,
+    );
+    const [instructorAvailabilityResolver, vehicleAvailabilityResolver] = await Promise.all([
       activeInstructorIds.length
-        ? prisma.autoscuolaWeeklyAvailability.findMany({
-            where: {
-              companyId: membership.companyId,
-              ownerType: "instructor",
-              ownerId: { in: activeInstructorIds },
-            },
-          })
-        : [],
+        ? buildAvailabilityResolver(
+            membership.companyId,
+            "instructor",
+            activeInstructorIds,
+            resolverRangeStart,
+            resolverRangeEnd,
+          )
+        : { resolve: () => null, defaultMap: new Map<string, AvailabilityRecord>() },
       activeVehicleIds.length
-        ? prisma.autoscuolaWeeklyAvailability.findMany({
-            where: {
-              companyId: membership.companyId,
-              ownerType: "vehicle",
-              ownerId: { in: activeVehicleIds },
-            },
-          })
-        : [],
+        ? buildAvailabilityResolver(
+            membership.companyId,
+            "vehicle",
+            activeVehicleIds,
+            resolverRangeStart,
+            resolverRangeEnd,
+          )
+        : { resolve: () => null, defaultMap: new Map<string, AvailabilityRecord>() },
     ]);
-
-    const instructorAvailabilityMap = new Map<string, AvailabilityRecord>(
-      instructorAvailabilities.map((availability) => [
-        availability.ownerId,
-        defaultToAvailabilityRecord(availability),
-      ]),
-    );
-    const vehicleAvailabilityMap = new Map<string, AvailabilityRecord>(
-      vehicleAvailabilities.map((availability) => [
-        availability.ownerId,
-        defaultToAvailabilityRecord(availability),
-      ]),
-    );
 
     const buildAppointmentMaps = (
       appointments: Array<{
@@ -1795,7 +1788,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           score: number;
         }> = [];
         for (const ownerId of activeInstructorIds) {
-          const availability = instructorAvailabilityMap.get(ownerId);
+          const availability = instructorAvailabilityResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
             continue;
           }
@@ -1815,7 +1808,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           score: number;
         }> = [];
         for (const ownerId of activeVehicleIds) {
-          const availability = vehicleAvailabilityMap.get(ownerId);
+          const availability = vehicleAvailabilityResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
             continue;
           }
