@@ -226,8 +226,13 @@ export function AutoscuoleAgendaPage({
     }
   }, [buildAgendaBootstrapUrl, rangeEnd, rangeStart, toast]);
 
+  const hasLoadedOnce = React.useRef(false);
   React.useEffect(() => {
-    load({ from: rangeStart, to: rangeEnd });
+    // First load: full skeleton. Subsequent (week navigation): silent with grid-only indicator.
+    const silent = hasLoadedOnce.current;
+    load({ silent, from: rangeStart, to: rangeEnd }).then(() => {
+      hasLoadedOnce.current = true;
+    });
   }, [load, rangeEnd, rangeStart]);
 
   React.useEffect(() => {
@@ -596,9 +601,18 @@ export function AutoscuoleAgendaPage({
         {/* ── Calendar scroll container ── */}
         <div
           ref={calendarScrollRef}
-          className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
+          className="relative overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
           style={{ height: "calc(100vh - 280px)", minHeight: 400 }}
         >
+          {/* Grid-only loading overlay during week navigation */}
+          {refreshing && (
+            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
+              <div className="flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
+                <div className="size-3.5 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
+                <span className="text-xs text-muted-foreground">Caricamento...</span>
+              </div>
+            </div>
+          )}
           {/* Sticky day headers */}
           <div
             className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${
