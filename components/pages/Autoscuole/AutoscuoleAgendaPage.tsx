@@ -2,7 +2,9 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
+import Lottie from "lottie-react";
 import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
@@ -586,11 +588,6 @@ export function AutoscuoleAgendaPage({
                 </Button>
               </div>
             )}
-            {refreshing ? (
-              <span className="rounded-full border border-border bg-gray-50 px-3 py-1 text-xs text-muted-foreground">
-                Aggiornamento...
-              </span>
-            ) : null}
           </div>
           <Button onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
             <Plus className="mr-2 h-4 w-4" />
@@ -599,20 +596,29 @@ export function AutoscuoleAgendaPage({
         </div>
 
         {/* ── Calendar scroll container ── */}
-        <div
-          ref={calendarScrollRef}
-          className="relative overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
-          style={{ height: "calc(100vh - 280px)", minHeight: 400 }}
-        >
-          {/* Grid-only loading overlay during week navigation */}
-          {refreshing && (
-            <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-white/60 backdrop-blur-[1px]">
-              <div className="flex items-center gap-2 rounded-full border border-border bg-white px-4 py-2 shadow-sm">
-                <div className="size-3.5 animate-spin rounded-full border-2 border-pink-300 border-t-transparent" />
-                <span className="text-xs text-muted-foreground">Caricamento...</span>
-              </div>
-            </div>
-          )}
+        <div className="relative" style={{ height: "calc(100vh - 280px)", minHeight: 400 }}>
+          {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
+          <AnimatePresence>
+            {refreshing && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50"
+              >
+                <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
+                  <Lottie animationData={carAnimation} loop style={{ width: 140, height: 140 }} />
+                  <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div
+            ref={calendarScrollRef}
+            className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
+            style={{ height: "100%" }}
+          >
           {/* Sticky day headers */}
           <div
             className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${
@@ -1051,6 +1057,7 @@ export function AutoscuoleAgendaPage({
               );
             })}
           </div>
+        </div>
         </div>
           </>
         )}
