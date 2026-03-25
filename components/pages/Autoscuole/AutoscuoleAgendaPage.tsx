@@ -736,10 +736,9 @@ export function AutoscuoleAgendaPage({
                     const laneInfo = laneMap.get(item.id);
                     const lane = laneInfo?.lane ?? 0;
                     const totalLanes = laneInfo?.totalLanes ?? 1;
-                    const hasOverflow = totalLanes > MAX_VISIBLE_LANES;
 
-                    // Skip events that are in the overflow (lane >= 2)
-                    if (hasOverflow && lane >= MAX_VISIBLE_LANES) return null;
+                    // Skip ALL events that belong to an overflow cluster — they're shown as a summary block
+                    if (totalLanes > MAX_VISIBLE_LANES) return null;
 
                     const start = toDate(item.startsAt);
                     const end = getAppointmentEnd(item);
@@ -758,20 +757,9 @@ export function AutoscuoleAgendaPage({
                     const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                     const isCompact = height <= 56;
 
-                    // Lane layout: when overflowing, visible lanes share space with badge
                     const GAP_PX = 2;
-                    const BADGE_PX = 30;
-                    let laneLeft: string;
-                    let laneWidth: string;
-                    if (hasOverflow) {
-                      // 2 visible lanes + badge area on the right
-                      const usable = `(100% - ${BADGE_PX}px)`;
-                      laneLeft = `calc(${lane} * ${usable} / ${MAX_VISIBLE_LANES} + ${GAP_PX / 2}px)`;
-                      laneWidth = `calc(${usable} / ${MAX_VISIBLE_LANES} - ${GAP_PX}px)`;
-                    } else {
-                      laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
-                      laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
-                    }
+                    const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
+                    const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
 
                     const isPendingAction = pendingEventActionId === item.id;
                     return (
@@ -931,67 +919,113 @@ export function AutoscuoleAgendaPage({
                       </DropdownMenu>
                     );
                   })}
-                  {/* Overflow badges — "+N" pills for clusters with >2 simultaneous events */}
+                  {/* Summary blocks for clusters with >2 simultaneous events */}
                   {overflowGroups.map((group) => {
-                    const badgeTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
-                    const badgeHeight = Math.max(24, group.spanMinutes * PIXELS_PER_MINUTE);
+                    const blockTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
+                    const blockHeight = Math.max(30, group.spanMinutes * PIXELS_PER_MINUTE);
+                    const earliest = toDate(group.allItems[0].startsAt);
+                    const latest = group.allItems.reduce((acc, a) => {
+                      const e = getAppointmentEnd(a);
+                      return e > acc ? e : acc;
+                    }, earliest);
                     return (
                       <DropdownMenu key={`overflow-${group.clusterId}`}>
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            className="absolute z-20 flex items-center justify-center rounded-full bg-pink-100 text-[11px] font-bold text-pink-600 shadow-sm transition hover:bg-pink-200 hover:shadow-md"
-                            style={{
-                              top: badgeTop,
-                              right: 2,
-                              width: 26,
-                              height: Math.min(badgeHeight, 26),
-                            }}
+                            className="absolute left-1 right-1 z-10 box-border flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-pink-200 bg-pink-50 text-left shadow-sm transition hover:bg-pink-100 hover:shadow-md"
+                            style={{ top: blockTop, height: blockHeight }}
                             onClick={(e) => e.stopPropagation()}
                           >
-                            +{group.overflowCount}
+                            <span className="text-[12px] font-bold text-pink-600">
+                              {group.allItems.length} guide
+                            </span>
+                            <span className="text-[10px] text-pink-500/80">
+                              {formatTimeRange(earliest, latest)}
+                            </span>
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent
-                          align="end"
-                          side="left"
-                          sideOffset={8}
-                          className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
+                          align="start"
+                          side="right"
+                          sideOffset={12}
+                          className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown"
                         >
                           <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            {group.allItems.length} appuntamenti sovrapposti
+                            {group.allItems.length} guide sovrapposte
                           </div>
-                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                          <div className="space-y-1.5 max-h-72 overflow-y-auto">
                             {group.allItems.map((item) => {
                               const s = toDate(item.startsAt);
                               const e = getAppointmentEnd(item);
                               const meta = getStatusMeta(item.status, item, new Date(nowTick));
+                              const itemPending = pendingEventActionId === item.id;
                               return (
-                                <div
-                                  key={item.id}
-                                  className={cn(
-                                    "rounded-lg border p-2.5 text-xs",
-                                    meta.className,
-                                  )}
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <span className="font-semibold text-foreground truncate">
-                                      {item.student.firstName} {item.student.lastName}
-                                    </span>
-                                    <Badge
-                                      variant="secondary"
-                                      className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80"
+                                <DropdownMenu key={item.id}>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        "w-full rounded-lg border p-2.5 text-left text-xs transition hover:shadow-sm",
+                                        itemPending ? "pointer-events-none opacity-75" : "",
+                                        meta.className,
+                                      )}
                                     >
-                                      {meta.shortLabel}
-                                    </Badge>
-                                  </div>
-                                  <div className="text-muted-foreground mt-0.5">
-                                    {item.type} · {formatTimeRange(s, e)}
-                                  </div>
-                                  <div className="text-muted-foreground">
-                                    {item.instructor?.name ?? "N/A"} · {item.vehicle?.name ?? "N/A"}
-                                  </div>
-                                </div>
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="font-semibold text-foreground truncate">
+                                          {item.student.firstName} {item.student.lastName}
+                                        </span>
+                                        <Badge
+                                          variant="secondary"
+                                          className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80"
+                                        >
+                                          {meta.shortLabel}
+                                        </Badge>
+                                      </div>
+                                      <div className="text-muted-foreground mt-0.5">
+                                        {item.type} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}
+                                      </div>
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    align="start"
+                                    side="right"
+                                    sideOffset={8}
+                                    className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
+                                  >
+                                    <div className="space-y-2">
+                                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                                        Evento
+                                      </div>
+                                      <div className="rounded-xl border border-border bg-white p-3">
+                                        <div className="text-sm font-semibold text-foreground">
+                                          {item.student.firstName} {item.student.lastName}
+                                        </div>
+                                        <div className="mt-1 text-xs text-muted-foreground">
+                                          {item.type} · {formatTimeRange(s, e)}
+                                        </div>
+                                        <div className="text-xs text-muted-foreground">
+                                          {s.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
+                                        </div>
+                                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                          <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                          <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
+                                        </div>
+                                        <div className="mt-2 flex items-center gap-2">
+                                          <Badge variant="secondary">{meta.label}</Badge>
+                                          {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="mt-3 grid grid-cols-2 gap-2">
+                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Check‑in</Button>
+                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "no_show")}>No‑show</Button>
+                                      <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
+                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleCancel(item.id)}>Annulla</Button>
+                                    </div>
+                                    <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={itemPending} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               );
                             })}
                           </div>
