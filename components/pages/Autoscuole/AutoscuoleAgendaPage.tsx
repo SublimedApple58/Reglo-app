@@ -139,6 +139,8 @@ export function AutoscuoleAgendaPage({
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const todayNormalized = React.useMemo(() => normalizeDay(new Date(nowTick)), [nowTick]);
   const bootstrapRequestRef = React.useRef(0);
+  const calendarScrollRef = React.useRef<HTMLDivElement>(null);
+  const hasAutoScrolled = React.useRef(false);
 
   const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
   const rangeStart = React.useMemo(
@@ -245,6 +247,17 @@ export function AutoscuoleAgendaPage({
     }, 30_000);
     return () => clearInterval(interval);
   }, []);
+
+  // Auto-scroll to current time on first load
+  React.useEffect(() => {
+    if (!loading && calendarScrollRef.current && !hasAutoScrolled.current) {
+      hasAutoScrolled.current = true;
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+      const scrollTarget = currentMinutes * PIXELS_PER_MINUTE - calendarScrollRef.current.clientHeight / 3;
+      calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
+    }
+  }, [loading]);
 
   const filtered = appointments.filter((item) => {
     if ((item.status ?? "").toLowerCase() === "cancelled") return false;
@@ -397,16 +410,6 @@ export function AutoscuoleAgendaPage({
     }
     setStatusFilter(value);
   }, []);
-  const handleCalendarWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLDivElement>) => {
-      const verticalIntent = Math.abs(event.deltaY) > Math.abs(event.deltaX);
-      if (!verticalIntent) return;
-      event.preventDefault();
-      window.scrollBy({ top: event.deltaY, behavior: "auto" });
-    },
-    [],
-  );
-
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
   const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
@@ -590,322 +593,324 @@ export function AutoscuoleAgendaPage({
           </Button>
         </div>
 
-        <div>
-            <div
-              className="overflow-x-auto overflow-y-hidden overscroll-y-none"
-              onWheel={handleCalendarWheel}
-            >
-              <div className="min-w-[980px] space-y-3">
+        {/* ── Calendar scroll container ── */}
+        <div
+          ref={calendarScrollRef}
+          className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
+          style={{ height: "calc(100vh - 280px)", minHeight: 400 }}
+        >
+          {/* Sticky day headers */}
+          <div
+            className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${
+              viewMode === "week"
+                ? "grid-cols-[56px_repeat(7,1fr)]"
+                : "grid-cols-[56px_1fr]"
+            }`}
+          >
+            <div />
+            {visibleDays.map((day) => {
+              const isDayToday = day.getTime() === todayNormalized.getTime();
+              return (
                 <div
-                  className={`grid gap-3 text-xs text-muted-foreground ${
-                    viewMode === "week"
-                      ? "grid-cols-[80px_repeat(7,minmax(160px,1fr))]"
-                      : "grid-cols-[80px_minmax(240px,1fr)]"
-                  }`}
+                  key={day.toISOString()}
+                  className={cn(
+                    "py-2.5 text-center text-xs font-semibold transition-colors border-l border-border/50",
+                    isDayToday
+                      ? "bg-yellow-50 text-yellow-700"
+                      : "text-muted-foreground",
+                  )}
                 >
-                  <div />
-                  {visibleDays.map((day) => {
-                    const isDayToday = day.getTime() === todayNormalized.getTime();
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className={cn(
-                          "rounded-lg py-1.5 text-center text-xs font-semibold transition-colors",
-                          isDayToday
-                            ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                            : "text-muted-foreground",
-                        )}
-                      >
-                        {day.toLocaleDateString("it-IT", {
-                          weekday: "short",
-                          day: "2-digit",
-                          month: "short",
-                        })}
-                      </div>
-                    );
+                  {day.toLocaleDateString("it-IT", {
+                    weekday: "short",
+                    day: "2-digit",
+                    month: "short",
                   })}
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Calendar body: time gutter + day columns */}
+          <div
+            className={`grid ${
+              viewMode === "week"
+                ? "grid-cols-[56px_repeat(7,1fr)]"
+                : "grid-cols-[56px_1fr]"
+            }`}
+          >
+            {/* Time gutter */}
+            <div className="relative" style={{ height: calendarHeight }}>
+              {hourMarks.map((hour) => (
                 <div
-                  className={`grid gap-3 ${
-                    viewMode === "week"
-                      ? "grid-cols-[80px_repeat(7,minmax(160px,1fr))]"
-                      : "grid-cols-[80px_minmax(240px,1fr)]"
-                  }`}
+                  key={hour}
+                  className="absolute left-0 right-0 flex items-start"
+                  style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                 >
-                  <div className="relative">
-                    <div style={{ height: calendarHeight }} className="relative">
-                      {hourMarks.map((hour) => (
-                        <div
-                          key={hour}
-                          className="absolute left-0 right-0 text-[11px] text-muted-foreground"
-                          style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="min-w-[36px]">{`${pad(hour)}:00`}</span>
-                            <span className="h-px flex-1 bg-border" />
-                          </div>
-                        </div>
-                      ))}
-                      {/* Current time label in the left column */}
-                      {(() => {
-                        const now = new Date(nowTick);
-                        const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                        const todayInView = visibleDays.some(
-                          (d) => d.getTime() === todayNormalized.getTime(),
-                        );
-                        if (!todayInView || mins < 0 || mins > totalMinutes) return null;
-                        return (
-                          <div
-                            className="absolute left-0 right-0 z-20 flex items-center"
-                            style={{ top: mins * PIXELS_PER_MINUTE }}
-                          >
-                            <span className="min-w-[36px] text-[10px] font-semibold tabular-nums text-red-500">
-                              {`${pad(now.getHours())}:${pad(now.getMinutes())}`}
-                            </span>
-                            <span className="h-[1.5px] flex-1 bg-red-500" />
-                          </div>
-                        );
-                      })()}
-                    </div>
+                  <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">
+                    {`${pad(hour)}:00`}
+                  </span>
+                </div>
+              ))}
+              {/* Current time label in gutter */}
+              {(() => {
+                const now = new Date(nowTick);
+                const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                const todayInView = visibleDays.some(
+                  (d) => d.getTime() === todayNormalized.getTime(),
+                );
+                if (!todayInView || mins < 0 || mins > totalMinutes) return null;
+                return (
+                  <div
+                    className="absolute left-0 right-0 z-20 flex items-center"
+                    style={{ top: mins * PIXELS_PER_MINUTE }}
+                  >
+                    <span className="w-full pr-1 text-right text-[10px] font-semibold tabular-nums text-red-500">
+                      {`${pad(now.getHours())}:${pad(now.getMinutes())}`}
+                    </span>
                   </div>
-                  {visibleDays.map((day, dayIndex) => {
-                    const dayStart = new Date(day);
-                    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
-                    const dayEnd = new Date(day);
-                    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
-                    const dayAppointments = appointmentsByDay[dayIndex] ?? [];
-                    const isDayToday = day.getTime() === todayNormalized.getTime();
-                    const now = new Date(nowTick);
-                    const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                    const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+                );
+              })()}
+            </div>
 
+            {/* Day columns */}
+            {visibleDays.map((day, dayIndex) => {
+              const dayStart = new Date(day);
+              dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+              const dayEnd = new Date(day);
+              dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+              const dayAppointments = appointmentsByDay[dayIndex] ?? [];
+              const isDayToday = day.getTime() === todayNormalized.getTime();
+              const now = new Date(nowTick);
+              const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+              const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+
+              return (
+                <div
+                  key={day.toISOString()}
+                  className={cn(
+                    "relative cursor-pointer border-l border-border/50",
+                    isDayToday ? "bg-yellow-50/30" : "",
+                  )}
+                  style={{ height: calendarHeight }}
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
+                    const minutes = Math.max(
+                      0,
+                      Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE),
+                    );
+                    const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+                    const slotTime = new Date(dayStart.getTime() + rounded * 60 * 1000);
+                    setForm((prev) => ({
+                      ...prev,
+                      day: formatYmd(slotTime),
+                      time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
+                    }));
+                    setCreateStep(0);
+                    setCreateOpen(true);
+                  }}
+                >
+                  {/* Hour grid lines */}
+                  {hourMarks.map((hour) => (
+                    <div
+                      key={hour}
+                      className="absolute left-0 right-0 h-px bg-border/40"
+                      style={{
+                        top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE,
+                      }}
+                    />
+                  ))}
+                  {/* Red "now" line */}
+                  {showNowLine && (
+                    <div
+                      className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
+                      style={{ top: nowMinutes * PIXELS_PER_MINUTE }}
+                    >
+                      <span className="size-2 shrink-0 rounded-full bg-red-500" />
+                      <span className="h-[1.5px] flex-1 bg-red-500" />
+                    </div>
+                  )}
+                  {/* Appointments */}
+                  {dayAppointments.map((item) => {
+                    const start = toDate(item.startsAt);
+                    const end = getAppointmentEnd(item);
+                    const clippedStart = start < dayStart ? dayStart : start;
+                    const clippedEnd = end > dayEnd ? dayEnd : end;
+                    const offsetMinutes = Math.max(
+                      0,
+                      diffMinutes(clippedStart, dayStart),
+                    );
+                    const durationMinutes = Math.max(
+                      15,
+                      diffMinutes(clippedEnd, clippedStart),
+                    );
+                    const top = offsetMinutes * PIXELS_PER_MINUTE;
+                    const height = durationMinutes * PIXELS_PER_MINUTE;
+                    const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                    const isCompact = height <= 56;
+
+                    const isPendingAction = pendingEventActionId === item.id;
                     return (
-                      <div
-                        key={day.toISOString()}
-                        className={cn(
-                          "relative cursor-pointer overflow-hidden rounded-[16px] border bg-white shadow-card",
-                          isDayToday ? "border-yellow-200" : "border-border",
-                        )}
-                        style={{ height: calendarHeight }}
-                        onClick={(event) => {
-                          const rect = event.currentTarget.getBoundingClientRect();
-                          const offsetY = event.clientY - rect.top;
-                          const minutes = Math.max(
-                            0,
-                            Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE),
-                          );
-                          const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
-                          const slotTime = new Date(dayStart.getTime() + rounded * 60 * 1000);
-                          setForm((prev) => ({
-                            ...prev,
-                            day: formatYmd(slotTime),
-                            time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
-                          }));
-                          setCreateStep(0);
-                          setCreateOpen(true);
-                        }}
-                      >
-                        {hourMarks.map((hour) => (
-                          <div
-                            key={hour}
-                            className="absolute left-0 right-0 h-px bg-border/50"
-                            style={{
-                              top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE,
+                      <DropdownMenu key={item.id}>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className={cn(
+                              "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
+                              isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
+                              isPendingAction ? "pointer-events-none opacity-75" : "",
+                              statusMeta.className,
+                            )}
+                            style={{ top, height }}
+                            onClick={(event) => {
+                              event.stopPropagation();
                             }}
-                          />
-                        ))}
-                        {/* Red "now" line */}
-                        {showNowLine && (
-                          <div
-                            className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
-                            style={{ top: nowMinutes * PIXELS_PER_MINUTE }}
                           >
-                            <span className="size-2 shrink-0 rounded-full bg-red-500" />
-                            <span className="h-[1.5px] flex-1 bg-red-500" />
+                            {isPendingAction ? (
+                              <>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" />
+                                  <div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" />
+                                </div>
+                                <div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" />
+                              </>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div
+                                    className={cn(
+                                      "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
+                                      isCompact ? "text-[10px]" : "text-[11px]",
+                                    )}
+                                  >
+                                    {item.student.firstName} {item.student.lastName}
+                                  </div>
+                                  <Badge
+                                    variant="secondary"
+                                    className={cn(
+                                      "shrink-0 border border-border bg-white font-medium text-foreground/80",
+                                      isCompact
+                                        ? "px-1.5 py-0 text-[9px]"
+                                        : "px-2 py-0.5 text-[10px]",
+                                    )}
+                                  >
+                                    {statusMeta.shortLabel}
+                                  </Badge>
+                                </div>
+                                <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
+                                  {item.type} · {formatTimeRange(start, end)}
+                                  {!isCompact
+                                    ? ` · ${Math.round(diffMinutes(end, start))}m`
+                                    : ""}
+                                </div>
+                              </>
+                            )}
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="start"
+                          side="right"
+                          sideOffset={12}
+                          className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
+                        >
+                          <div className="space-y-2">
+                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                              Evento
+                            </div>
+                            <div className="rounded-xl border border-border bg-white p-3">
+                              <div className="text-sm font-semibold text-foreground">
+                                {item.student.firstName} {item.student.lastName}
+                              </div>
+                              <div className="mt-1 text-xs text-muted-foreground">
+                                {item.type} · {formatTimeRange(start, end)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {start.toLocaleDateString("it-IT", {
+                                  weekday: "long",
+                                  day: "2-digit",
+                                  month: "long",
+                                })}
+                              </div>
+                              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                <div>
+                                  Istruttore:{" "}
+                                  <span className="font-medium text-foreground/85">
+                                    {item.instructor?.name ?? "Non assegnato"}
+                                  </span>
+                                </div>
+                                <div>
+                                  Veicolo:{" "}
+                                  <span className="font-medium text-foreground/85">
+                                    {item.vehicle?.name ?? "Non assegnato"}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-2 flex items-center gap-2">
+                                <Badge variant="secondary">{statusMeta.label}</Badge>
+                                {!canUpdateStatus(item) ? (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    Slot passato o chiuso
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                        {dayAppointments.map((item) => {
-                          const start = toDate(item.startsAt);
-                          const end = getAppointmentEnd(item);
-                          const clippedStart = start < dayStart ? dayStart : start;
-                          const clippedEnd = end > dayEnd ? dayEnd : end;
-                          const offsetMinutes = Math.max(
-                            0,
-                            diffMinutes(clippedStart, dayStart),
-                          );
-                          const durationMinutes = Math.max(
-                            15,
-                            diffMinutes(clippedEnd, clippedStart),
-                          );
-                          const top = offsetMinutes * PIXELS_PER_MINUTE;
-                          const height = durationMinutes * PIXELS_PER_MINUTE;
-                          const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
-                          const isCompact = height <= 56;
-
-                          const isPendingAction = pendingEventActionId === item.id;
-                          return (
-                            <DropdownMenu key={item.id}>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className={cn(
-                                    "absolute left-2 right-2 z-10 box-border flex flex-col overflow-hidden rounded-xl border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
-                                    isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
-                                    isPendingAction ? "pointer-events-none opacity-75" : "",
-                                    statusMeta.className,
-                                  )}
-                                  style={{ top, height }}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                  }}
-                                >
-                                  {isPendingAction ? (
-                                    <>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" />
-                                        <div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" />
-                                      </div>
-                                      <div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div className="flex items-center justify-between gap-2">
-                                        <div
-                                          className={cn(
-                                            "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
-                                            isCompact ? "text-[10px]" : "text-[11px]",
-                                          )}
-                                        >
-                                          {item.student.firstName} {item.student.lastName}
-                                        </div>
-                                        <Badge
-                                          variant="secondary"
-                                          className={cn(
-                                            "shrink-0 border border-border bg-white font-medium text-foreground/80",
-                                            isCompact
-                                              ? "px-1.5 py-0 text-[9px]"
-                                              : "px-2 py-0.5 text-[10px]",
-                                          )}
-                                        >
-                                          {statusMeta.shortLabel}
-                                        </Badge>
-                                      </div>
-                                      <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
-                                        {item.type} · {formatTimeRange(start, end)}
-                                        {!isCompact
-                                          ? ` · ${Math.round(diffMinutes(end, start))}m`
-                                          : ""}
-                                      </div>
-                                    </>
-                                  )}
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="start"
-                                side="right"
-                                sideOffset={12}
-                                className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                              >
-                                <div className="space-y-2">
-                                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                    Evento
-                                  </div>
-                                  <div className="rounded-xl border border-border bg-white p-3">
-                                    <div className="text-sm font-semibold text-foreground">
-                                      {item.student.firstName} {item.student.lastName}
-                                    </div>
-                                    <div className="mt-1 text-xs text-muted-foreground">
-                                      {item.type} · {formatTimeRange(start, end)}
-                                    </div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {start.toLocaleDateString("it-IT", {
-                                        weekday: "long",
-                                        day: "2-digit",
-                                        month: "long",
-                                      })}
-                                    </div>
-                                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                      <div>
-                                        Istruttore:{" "}
-                                        <span className="font-medium text-foreground/85">
-                                          {item.instructor?.name ?? "Non assegnato"}
-                                        </span>
-                                      </div>
-                                      <div>
-                                        Veicolo:{" "}
-                                        <span className="font-medium text-foreground/85">
-                                          {item.vehicle?.name ?? "Non assegnato"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="mt-2 flex items-center gap-2">
-                                      <Badge variant="secondary">{statusMeta.label}</Badge>
-                                      {!canUpdateStatus(item) ? (
-                                        <span className="text-[11px] text-muted-foreground">
-                                          Slot passato o chiuso
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!canUpdateStatus(item) || isPendingAction}
-                                    onClick={() => handleStatusUpdate(item.id, "checked_in")}
-                                  >
-                                    Check‑in
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!canUpdateStatus(item) || isPendingAction}
-                                    onClick={() => handleStatusUpdate(item.id, "no_show")}
-                                  >
-                                    No‑show
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!canCompleteStatus(item) || isPendingAction}
-                                    onClick={() => handleStatusUpdate(item.id, "completed")}
-                                  >
-                                    Completa
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    disabled={!canUpdateStatus(item) || isPendingAction}
-                                    onClick={() => handleCancel(item.id)}
-                                  >
-                                    Annulla
-                                  </Button>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700"
-                                  disabled={isPendingAction}
-                                  onClick={() => handleDelete(item.id)}
-                                >
-                                  Cancella e riposiziona
-                                </Button>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          );
-                        })}
-                      </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!canUpdateStatus(item) || isPendingAction}
+                              onClick={() => handleStatusUpdate(item.id, "checked_in")}
+                            >
+                              Check‑in
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!canUpdateStatus(item) || isPendingAction}
+                              onClick={() => handleStatusUpdate(item.id, "no_show")}
+                            >
+                              No‑show
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!canCompleteStatus(item) || isPendingAction}
+                              onClick={() => handleStatusUpdate(item.id, "completed")}
+                            >
+                              Completa
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={!canUpdateStatus(item) || isPendingAction}
+                              onClick={() => handleCancel(item.id)}
+                            >
+                              Annulla
+                            </Button>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700"
+                            disabled={isPendingAction}
+                            onClick={() => handleDelete(item.id)}
+                          >
+                            Cancella e riposiziona
+                          </Button>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     );
                   })}
                 </div>
-              </div>
-            </div>
+              );
+            })}
+          </div>
         </div>
           </>
         )}
