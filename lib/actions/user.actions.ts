@@ -455,7 +455,7 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
             userId: user.id,
           },
         },
-        update: { status: 'active' },
+        update: { status: 'active', name: user.name || undefined },
         create: {
           companyId: context.companyId,
           userId: user.id,

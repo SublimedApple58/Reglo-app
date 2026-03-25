@@ -679,7 +679,7 @@ export function AutoscuoleAgendaPage({
               const dayEnd = new Date(day);
               dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
               const dayAppointments = appointmentsByDay[dayIndex] ?? [];
-              const laneMap = computeLanes(dayAppointments);
+              const { laneMap, overflowGroups } = computeLanes(dayAppointments);
               const isDayToday = day.getTime() === todayNormalized.getTime();
               const now = new Date(nowTick);
               const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
@@ -733,6 +733,14 @@ export function AutoscuoleAgendaPage({
                   )}
                   {/* Appointments */}
                   {dayAppointments.map((item) => {
+                    const laneInfo = laneMap.get(item.id);
+                    const lane = laneInfo?.lane ?? 0;
+                    const totalLanes = laneInfo?.totalLanes ?? 1;
+                    const hasOverflow = totalLanes > MAX_VISIBLE_LANES;
+
+                    // Skip events that are in the overflow (lane >= 2)
+                    if (hasOverflow && lane >= MAX_VISIBLE_LANES) return null;
+
                     const start = toDate(item.startsAt);
                     const end = getAppointmentEnd(item);
                     const clippedStart = start < dayStart ? dayStart : start;
@@ -750,13 +758,20 @@ export function AutoscuoleAgendaPage({
                     const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                     const isCompact = height <= 56;
 
-                    // Lane layout for overlapping events
-                    const laneInfo = laneMap.get(item.id);
-                    const lane = laneInfo?.lane ?? 0;
-                    const totalLanes = laneInfo?.totalLanes ?? 1;
+                    // Lane layout: when overflowing, visible lanes share space with badge
                     const GAP_PX = 2;
-                    const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
-                    const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
+                    const BADGE_PX = 30;
+                    let laneLeft: string;
+                    let laneWidth: string;
+                    if (hasOverflow) {
+                      // 2 visible lanes + badge area on the right
+                      const usable = `(100% - ${BADGE_PX}px)`;
+                      laneLeft = `calc(${lane} * ${usable} / ${MAX_VISIBLE_LANES} + ${GAP_PX / 2}px)`;
+                      laneWidth = `calc(${usable} / ${MAX_VISIBLE_LANES} - ${GAP_PX}px)`;
+                    } else {
+                      laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
+                      laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
+                    }
 
                     const isPendingAction = pendingEventActionId === item.id;
                     return (
@@ -912,6 +927,74 @@ export function AutoscuoleAgendaPage({
                           >
                             Cancella e riposiziona
                           </Button>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    );
+                  })}
+                  {/* Overflow badges — "+N" pills for clusters with >2 simultaneous events */}
+                  {overflowGroups.map((group) => {
+                    const badgeTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
+                    const badgeHeight = Math.max(24, group.spanMinutes * PIXELS_PER_MINUTE);
+                    return (
+                      <DropdownMenu key={`overflow-${group.clusterId}`}>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="absolute z-20 flex items-center justify-center rounded-full bg-pink-100 text-[11px] font-bold text-pink-600 shadow-sm transition hover:bg-pink-200 hover:shadow-md"
+                            style={{
+                              top: badgeTop,
+                              right: 2,
+                              width: 26,
+                              height: Math.min(badgeHeight, 26),
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            +{group.overflowCount}
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          side="left"
+                          sideOffset={8}
+                          className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
+                        >
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {group.allItems.length} appuntamenti sovrapposti
+                          </div>
+                          <div className="space-y-2 max-h-64 overflow-y-auto">
+                            {group.allItems.map((item) => {
+                              const s = toDate(item.startsAt);
+                              const e = getAppointmentEnd(item);
+                              const meta = getStatusMeta(item.status, item, new Date(nowTick));
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={cn(
+                                    "rounded-lg border p-2.5 text-xs",
+                                    meta.className,
+                                  )}
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="font-semibold text-foreground truncate">
+                                      {item.student.firstName} {item.student.lastName}
+                                    </span>
+                                    <Badge
+                                      variant="secondary"
+                                      className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80"
+                                    >
+                                      {meta.shortLabel}
+                                    </Badge>
+                                  </div>
+                                  <div className="text-muted-foreground mt-0.5">
+                                    {item.type} · {formatTimeRange(s, e)}
+                                  </div>
+                                  <div className="text-muted-foreground">
+                                    {item.instructor?.name ?? "N/A"} · {item.vehicle?.name ?? "N/A"}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     );
@@ -1302,18 +1385,38 @@ function normalizeDay(date: Date) {
   return copy;
 }
 
+const MAX_VISIBLE_LANES = 2;
+
+type LaneInfo = { lane: number; totalLanes: number; clusterId: number };
+type OverflowGroup = {
+  clusterId: number;
+  /** Earliest start among ALL items in the cluster (minutes from day start) */
+  topMinutes: number;
+  /** Span of the cluster (minutes) */
+  spanMinutes: number;
+  /** Number of events beyond the visible lanes */
+  overflowCount: number;
+  /** All events in this cluster (for popover) */
+  allItems: AppointmentRow[];
+};
+type LaneResult = {
+  laneMap: Map<string, LaneInfo>;
+  overflowGroups: OverflowGroup[];
+};
+
 /**
  * Compute horizontal "lanes" for overlapping appointments within a single day.
- * Returns a Map from appointment id → { lane, totalLanes }.
- * Events that overlap in time share the same cluster and are placed side by side.
+ * When a cluster has more than MAX_VISIBLE_LANES events, the extras are collapsed
+ * into an overflow badge.
  */
-function computeLanes(appointments: AppointmentRow[]): Map<string, { lane: number; totalLanes: number }> {
-  if (!appointments.length) return new Map();
+function computeLanes(appointments: AppointmentRow[]): LaneResult {
+  const laneMap = new Map<string, LaneInfo>();
+  const overflowGroups: OverflowGroup[] = [];
+  if (!appointments.length) return { laneMap, overflowGroups };
 
   const sorted = [...appointments].sort((a, b) => {
     const diff = toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime();
     if (diff !== 0) return diff;
-    // Longer events first so they anchor their lane
     return (
       (getAppointmentEnd(b).getTime() - toDate(b.startsAt).getTime()) -
       (getAppointmentEnd(a).getTime() - toDate(a.startsAt).getTime())
@@ -1330,7 +1433,6 @@ function computeLanes(appointments: AppointmentRow[]): Map<string, { lane: numbe
     const end = getAppointmentEnd(appt).getTime();
 
     if (currentCluster.length === 0 || start < clusterEnd) {
-      // Overlaps with current cluster
       currentCluster.push(appt);
       clusterEnd = Math.max(clusterEnd, end);
     } else {
@@ -1342,17 +1444,14 @@ function computeLanes(appointments: AppointmentRow[]): Map<string, { lane: numbe
   if (currentCluster.length) clusters.push(currentCluster);
 
   // 2. Within each cluster, greedily assign lanes
-  const result = new Map<string, { lane: number; totalLanes: number }>();
-
-  for (const cluster of clusters) {
-    // Each lane tracks when it becomes free (end timestamp)
+  for (let ci = 0; ci < clusters.length; ci++) {
+    const cluster = clusters[ci];
     const lanes: number[] = [];
 
     for (const appt of cluster) {
       const start = toDate(appt.startsAt).getTime();
       const end = getAppointmentEnd(appt).getTime();
 
-      // Find first lane whose previous event has ended
       let assignedLane = -1;
       for (let i = 0; i < lanes.length; i++) {
         if (lanes[i] <= start) {
@@ -1361,23 +1460,36 @@ function computeLanes(appointments: AppointmentRow[]): Map<string, { lane: numbe
           break;
         }
       }
-
       if (assignedLane === -1) {
         assignedLane = lanes.length;
         lanes.push(end);
       }
 
-      result.set(appt.id, { lane: assignedLane, totalLanes: 0 });
+      laneMap.set(appt.id, { lane: assignedLane, totalLanes: 0, clusterId: ci });
     }
 
-    // Set totalLanes for every event in the cluster
     const totalLanes = lanes.length;
     for (const appt of cluster) {
-      result.get(appt.id)!.totalLanes = totalLanes;
+      laneMap.get(appt.id)!.totalLanes = totalLanes;
+    }
+
+    // 3. If cluster overflows, record the overflow group
+    if (totalLanes > MAX_VISIBLE_LANES) {
+      const starts = cluster.map((a) => toDate(a.startsAt).getTime());
+      const ends = cluster.map((a) => getAppointmentEnd(a).getTime());
+      const earliest = Math.min(...starts);
+      const latest = Math.max(...ends);
+      overflowGroups.push({
+        clusterId: ci,
+        topMinutes: (earliest - normalizeDay(new Date(earliest)).getTime()) / 60000,
+        spanMinutes: (latest - earliest) / 60000,
+        overflowCount: cluster.filter((a) => laneMap.get(a.id)!.lane >= MAX_VISIBLE_LANES).length,
+        allItems: cluster,
+      });
     }
   }
 
-  return result;
+  return { laneMap, overflowGroups };
 }
 
 function canUpdateStatus(appointment: AppointmentRow) {
