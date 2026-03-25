@@ -679,6 +679,7 @@ export function AutoscuoleAgendaPage({
               const dayEnd = new Date(day);
               dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
               const dayAppointments = appointmentsByDay[dayIndex] ?? [];
+              const laneMap = computeLanes(dayAppointments);
               const isDayToday = day.getTime() === todayNormalized.getTime();
               const now = new Date(nowTick);
               const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
@@ -749,6 +750,14 @@ export function AutoscuoleAgendaPage({
                     const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                     const isCompact = height <= 56;
 
+                    // Lane layout for overlapping events
+                    const laneInfo = laneMap.get(item.id);
+                    const lane = laneInfo?.lane ?? 0;
+                    const totalLanes = laneInfo?.totalLanes ?? 1;
+                    const GAP_PX = 2;
+                    const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
+                    const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
+
                     const isPendingAction = pendingEventActionId === item.id;
                     return (
                       <DropdownMenu key={item.id}>
@@ -756,12 +765,12 @@ export function AutoscuoleAgendaPage({
                           <button
                             type="button"
                             className={cn(
-                              "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
+                              "absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
                               isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
                               isPendingAction ? "pointer-events-none opacity-75" : "",
                               statusMeta.className,
                             )}
-                            style={{ top, height }}
+                            style={{ top, height, left: laneLeft, width: laneWidth }}
                             onClick={(event) => {
                               event.stopPropagation();
                             }}
@@ -1291,6 +1300,84 @@ function normalizeDay(date: Date) {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
   return copy;
+}
+
+/**
+ * Compute horizontal "lanes" for overlapping appointments within a single day.
+ * Returns a Map from appointment id → { lane, totalLanes }.
+ * Events that overlap in time share the same cluster and are placed side by side.
+ */
+function computeLanes(appointments: AppointmentRow[]): Map<string, { lane: number; totalLanes: number }> {
+  if (!appointments.length) return new Map();
+
+  const sorted = [...appointments].sort((a, b) => {
+    const diff = toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime();
+    if (diff !== 0) return diff;
+    // Longer events first so they anchor their lane
+    return (
+      (getAppointmentEnd(b).getTime() - toDate(b.startsAt).getTime()) -
+      (getAppointmentEnd(a).getTime() - toDate(a.startsAt).getTime())
+    );
+  });
+
+  // 1. Build clusters — groups of mutually-overlapping events
+  const clusters: AppointmentRow[][] = [];
+  let currentCluster: AppointmentRow[] = [];
+  let clusterEnd = 0;
+
+  for (const appt of sorted) {
+    const start = toDate(appt.startsAt).getTime();
+    const end = getAppointmentEnd(appt).getTime();
+
+    if (currentCluster.length === 0 || start < clusterEnd) {
+      // Overlaps with current cluster
+      currentCluster.push(appt);
+      clusterEnd = Math.max(clusterEnd, end);
+    } else {
+      clusters.push(currentCluster);
+      currentCluster = [appt];
+      clusterEnd = end;
+    }
+  }
+  if (currentCluster.length) clusters.push(currentCluster);
+
+  // 2. Within each cluster, greedily assign lanes
+  const result = new Map<string, { lane: number; totalLanes: number }>();
+
+  for (const cluster of clusters) {
+    // Each lane tracks when it becomes free (end timestamp)
+    const lanes: number[] = [];
+
+    for (const appt of cluster) {
+      const start = toDate(appt.startsAt).getTime();
+      const end = getAppointmentEnd(appt).getTime();
+
+      // Find first lane whose previous event has ended
+      let assignedLane = -1;
+      for (let i = 0; i < lanes.length; i++) {
+        if (lanes[i] <= start) {
+          assignedLane = i;
+          lanes[i] = end;
+          break;
+        }
+      }
+
+      if (assignedLane === -1) {
+        assignedLane = lanes.length;
+        lanes.push(end);
+      }
+
+      result.set(appt.id, { lane: assignedLane, totalLanes: 0 });
+    }
+
+    // Set totalLanes for every event in the cluster
+    const totalLanes = lanes.length;
+    for (const appt of cluster) {
+      result.get(appt.id)!.totalLanes = totalLanes;
+    }
+  }
+
+  return result;
 }
 
 function canUpdateStatus(appointment: AppointmentRow) {
