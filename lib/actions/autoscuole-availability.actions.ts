@@ -969,8 +969,8 @@ const recurringOverrideSchema = z.object({
   ranges: z.array(z.object({
     startMinutes: z.number().int().min(0).max(1440),
     endMinutes: z.number().int().min(0).max(1440),
-  })).min(1),
-  weeksAhead: z.number().int().min(1).max(12).optional(),
+  })), // empty = absent for the day
+  weeksAhead: z.number().int().min(1).max(52).optional(),
 });
 
 export async function setRecurringAvailabilityOverride(
@@ -1035,6 +1035,28 @@ export async function setRecurringAvailabilityOverride(
       ),
     );
 
+    // Reset override-approved flag for appointments on affected dates
+    const ownerField =
+      payload.ownerType === "instructor"
+        ? { instructorId: payload.ownerId }
+        : { vehicleId: payload.ownerId };
+
+    await Promise.all(
+      dates.map((date) => {
+        const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
+        return prisma.autoscuolaAppointment.updateMany({
+          where: {
+            companyId,
+            ...ownerField,
+            startsAt: { gte: date, lt: nextDay },
+            status: { in: ["scheduled", "confirmed", "checked_in"] },
+            availabilityOverrideApproved: true,
+          },
+          data: { availabilityOverrideApproved: false },
+        });
+      }),
+    );
+
     return { success: true as const, data: { count: dates.length } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
@@ -1093,7 +1115,7 @@ const setDailyOverrideSchema = z.object({
   ownerType: z.enum(["instructor", "vehicle"]),
   ownerId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD
-  ranges: z.array(timeRangeSchema).min(1, "Almeno una fascia oraria."),
+  ranges: z.array(timeRangeSchema), // empty = absent for the day
 });
 
 export async function setDailyAvailabilityOverride(
@@ -1116,11 +1138,11 @@ export async function setDailyAvailabilityOverride(
       return { success: false as const, message: "Data non valida." };
     }
 
-    // Max 12 weeks in the future
+    // Max 52 weeks in the future
     const maxDate = new Date();
-    maxDate.setDate(maxDate.getDate() + 12 * 7);
+    maxDate.setDate(maxDate.getDate() + 52 * 7);
     if (date.getTime() > maxDate.getTime()) {
-      return { success: false as const, message: "Override massimo 12 settimane in avanti." };
+      return { success: false as const, message: "Override massimo 52 settimane in avanti." };
     }
 
     const override = await prisma.autoscuolaDailyAvailabilityOverride.upsert({
