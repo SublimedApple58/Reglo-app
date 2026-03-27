@@ -44,22 +44,38 @@ const ACTIVE_REPOSITIONABLE_STATUSES = new Set([
 const normalizeStatus = (value: string | null | undefined) =>
   (value ?? "").trim().toLowerCase();
 
-const formatCancellationReason = (value: string) => {
+const formatCancellationTitle = (value: string) => {
   switch ((value ?? "").trim()) {
     case "instructor_cancel":
-      return "L'istruttore ha cancellato la guida";
+      return "Guida spostata dall'istruttore";
     case "vehicle_inactive":
-      return "Il veicolo non è più disponibile";
     case "instructor_inactive":
-      return "L'istruttore non è più disponibile";
     case "availability_changed":
-      return "Disponibilità risorse aggiornata";
-    case "owner_delete":
-      return "La guida è stata rimossa dall'agenda autoscuola";
     case "directory_instructor_removed":
-      return "Istruttore rimosso dalla directory";
+      return "Guida da riprogrammare";
+    case "owner_delete":
+      return "Guida spostata dalla segreteria";
     default:
-      return "La guida è stata cancellata per motivi organizzativi";
+      return "Guida da riprogrammare";
+  }
+};
+
+const formatCancellationBody = (value: string, slotLabel: string, instrLabel: string) => {
+  switch ((value ?? "").trim()) {
+    case "instructor_cancel":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata dall'istruttore. Stiamo già cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "vehicle_inactive":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché il veicolo non è più disponibile. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "instructor_inactive":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché l'istruttore non è al momento disponibile. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "availability_changed":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per una variazione di disponibilità. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "owner_delete":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata dalla segreteria. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "directory_instructor_removed":
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per un cambio istruttore. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    default:
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per motivi organizzativi. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
   }
 };
 
@@ -314,20 +330,31 @@ const notifyOperationalCancellationPending = async ({
   studentId,
   startsAt,
   reason,
+  instructorId,
 }: {
   companyId: string;
   studentId: string;
   startsAt: Date;
   reason: string;
+  instructorId?: string | null;
 }) => {
-  const [studentUser] = await Promise.all([
+  const [studentUser, instructor] = await Promise.all([
     defaultPrisma.user.findUnique({
       where: { id: studentId },
       select: { email: true },
     }),
+    instructorId
+      ? defaultPrisma.autoscuolaInstructor.findFirst({
+          where: { id: instructorId, companyId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const dateLabel = startsAt.toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
     timeZone: AUTOSCUOLA_TIMEZONE,
   });
   const timeLabel = startsAt.toLocaleTimeString("it-IT", {
@@ -335,9 +362,11 @@ const notifyOperationalCancellationPending = async ({
     hour: "2-digit",
     minute: "2-digit",
   });
+  const slotLabel = `${dateLabel} alle ${timeLabel}`;
+  const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
 
-  const title = "Reglo Autoscuole · Guida da riprogrammare";
-  const body = `${formatCancellationReason(reason)} (${dateLabel} ${timeLabel}). Stiamo cercando un nuovo slot e ti invieremo una proposta.`;
+  const title = formatCancellationTitle(reason);
+  const body = formatCancellationBody(reason, slotLabel, instrLabel);
 
   try {
     await sendAutoscuolaPushToUsers({
@@ -385,16 +414,20 @@ const notifyOperationalProposal = async ({
     select: { email: true },
   });
 
-  const when = startsAt.toLocaleString("it-IT", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
+  const when = startsAt.toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
     timeZone: AUTOSCUOLA_TIMEZONE,
   });
+  const timeLabel = startsAt.toLocaleTimeString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
-  const title = "Reglo Autoscuole · Nuova proposta guida";
-  const body = `Abbiamo trovato un nuovo slot per il ${when}. Apri Reglo per accettare o rifiutare.`;
+  const title = "Nuova proposta guida disponibile";
+  const body = `Abbiamo trovato un nuovo orario per la tua guida: ${when} alle ${timeLabel}. Apri l'app per accettare o rifiutare la proposta.`;
 
   try {
     await sendAutoscuolaPushToUsers({
@@ -752,6 +785,7 @@ export async function queueOperationalRepositionForAppointment({
       studentId: appointment.studentId,
       startsAt: appointment.startsAt,
       reason,
+      instructorId: appointment.instructorId,
     });
   }
 

@@ -280,6 +280,8 @@ const notifyStudentAppointmentCancelled = async ({
   companyId,
   actorUserId,
   appointment,
+  cancellationKind,
+  actorRole,
 }: {
   companyId: string;
   actorUserId: string;
@@ -289,6 +291,8 @@ const notifyStudentAppointmentCancelled = async ({
     startsAt: Date;
     instructorId: string | null;
   };
+  cancellationKind: "manual_cancel" | "permanent_cancel";
+  actorRole: "instructor" | "owner" | "admin";
 }) => {
   if (actorUserId === appointment.studentId) return;
 
@@ -306,6 +310,9 @@ const notifyStudentAppointmentCancelled = async ({
   ]);
 
   const dateLabel = appointment.startsAt.toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
     timeZone: "Europe/Rome",
   });
   const timeLabel = appointment.startsAt.toLocaleTimeString("it-IT", {
@@ -313,10 +320,27 @@ const notifyStudentAppointmentCancelled = async ({
     hour: "2-digit",
     minute: "2-digit",
   });
-  const title = "Reglo Autoscuole · Guida annullata";
-  const body = `La guida del ${dateLabel} alle ${timeLabel}${
-    instructor?.name ? ` con ${instructor.name}` : ""
-  } e stata annullata dall'autoscuola.`;
+  const slotLabel = `${dateLabel} alle ${timeLabel}`;
+  const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
+
+  let title: string;
+  let body: string;
+
+  if (cancellationKind === "permanent_cancel") {
+    title = "Guida annullata definitivamente";
+    if (actorRole === "instructor") {
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. Prenota una nuova guida dall'app quando vuoi.`;
+    } else {
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. Prenota una nuova guida dall'app quando vuoi.`;
+    }
+  } else {
+    title = "Guida annullata";
+    if (actorRole === "instructor") {
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. Prenota una nuova guida dall'app quando vuoi.`;
+    } else {
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. Prenota una nuova guida dall'app quando vuoi.`;
+    }
+  }
 
   try {
     await sendAutoscuolaPushToUsers({
@@ -1844,6 +1868,8 @@ export async function cancelAutoscuolaAppointment(
         startsAt: appointment.startsAt,
         instructorId: appointment.instructorId,
       },
+      cancellationKind: "manual_cancel",
+      actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
 
     if (appointment.slotId) {
@@ -1939,6 +1965,8 @@ export async function permanentlyCancelAutoscuolaAppointment(
         startsAt: appointment.startsAt,
         instructorId: appointment.instructorId,
       },
+      cancellationKind: "permanent_cancel",
+      actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -2366,6 +2394,8 @@ export async function updateAutoscuolaAppointmentStatus(
           startsAt: updated.startsAt,
           instructorId: updated.instructorId ?? null,
         },
+        cancellationKind: "manual_cancel",
+        actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
       });
     }
 

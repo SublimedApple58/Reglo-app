@@ -191,8 +191,10 @@ export function AutoscuoleStudentsPage({
   const isMobile = useIsMobile();
   const toast = useFeedbackToast();
   const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [searching, setSearching] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
@@ -211,19 +213,26 @@ export function AutoscuoleStudentsPage({
   const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "none">("none");
   const [inviteSending, setInviteSending] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    const res = await getAutoscuolaStudentsWithProgress(search);
+  React.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const load = React.useCallback(async (isSearch = false) => {
+    if (isSearch) setSearching(true); else setLoading(true);
+    const res = await getAutoscuolaStudentsWithProgress(debouncedSearch);
     if (!res.success || !res.data) {
       toast.error({
         description: res.message ?? "Impossibile caricare gli allievi.",
       });
       setLoading(false);
+      setSearching(false);
       return;
     }
     setStudents(res.data as Student[]);
     setLoading(false);
-  }, [search, toast]);
+    setSearching(false);
+  }, [debouncedSearch, toast]);
 
   const selectedStudent = React.useMemo(
     () => students.find((student) => student.id === selectedStudentId) ?? null,
@@ -331,8 +340,14 @@ export function AutoscuoleStudentsPage({
     [inviteEmail, invitePlatform, toast],
   );
 
+  const initialRef = React.useRef(true);
   React.useEffect(() => {
-    load();
+    if (initialRef.current) {
+      initialRef.current = false;
+      load(false);
+    } else {
+      load(true);
+    }
   }, [load]);
 
   React.useEffect(() => {
@@ -347,7 +362,6 @@ export function AutoscuoleStudentsPage({
       subTitle="Allievi sincronizzati dalla Directory utenti."
     >
       <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
         {inviteCode ? (
@@ -374,7 +388,7 @@ export function AutoscuoleStudentsPage({
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  load();
+                  setDebouncedSearch(search);
                 }}
                 className="w-full sm:max-w-sm"
               >
@@ -473,6 +487,31 @@ export function AutoscuoleStudentsPage({
               </DialogContent>
             </Dialog>
 
+            {searching ? (
+              <div className="relative">
+                <LottieLoadingOverlay visible />
+                <div className="pointer-events-none opacity-40">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Allievo</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Telefono</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Guide completate</TableHead>
+                        <TableHead>Obbligo</TableHead>
+                        <TableHead className="text-right">Azioni</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell colSpan={7} className="h-48" />
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            ) : (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -537,6 +576,7 @@ export function AutoscuoleStudentsPage({
                 )}
               </TableBody>
             </Table>
+            )}
           </>
         )}
       </div>
