@@ -320,6 +320,7 @@ model AutoscuolaAppointment {
   invoiceStatus           String?
   creditApplied           Boolean   @default(false)
   creditRefundedAt        DateTime? @db.Timestamp(6)
+  availabilityOverrideApproved Boolean @default(false)
   createdAt               DateTime  @default(now()) @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt
 

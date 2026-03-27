@@ -3,7 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -22,6 +22,7 @@ import {
   createAutoscuolaAppointment,
   cancelAutoscuolaAppointment,
   deleteAutoscuolaAppointment,
+  permanentlyCancelAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
@@ -37,6 +38,10 @@ import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import {
+  OutOfAvailabilitySheet,
+  type OutOfAvailabilityAppointment,
+} from "@/components/pages/Autoscuole/OutOfAvailabilitySheet";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type ResourceOption = { id: string; name: string };
@@ -138,6 +143,8 @@ export function AutoscuoleAgendaPage({
     sendProposal: false,
     duration: "30",
   });
+  const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
+  const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const todayNormalized = React.useMemo(() => normalizeDay(new Date(nowTick)), [nowTick]);
   const bootstrapRequestRef = React.useRef(0);
@@ -228,14 +235,27 @@ export function AutoscuoleAgendaPage({
     }
   }, [buildAgendaBootstrapUrl, rangeEnd, rangeStart, toast]);
 
+  const loadOutOfAvailability = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/autoscuole/appointments/out-of-availability", { cache: "no-store" });
+      const payload = await res.json().catch(() => null);
+      if (payload?.success && Array.isArray(payload.data)) {
+        setOutOfAvailAppointments(payload.data);
+      }
+    } catch {
+      // silent — non-blocking
+    }
+  }, []);
+
   const hasLoadedOnce = React.useRef(false);
   React.useEffect(() => {
     // First load: full skeleton. Subsequent (week navigation): silent with grid-only indicator.
     const silent = hasLoadedOnce.current;
     load({ silent, from: rangeStart, to: rangeEnd }).then(() => {
       hasLoadedOnce.current = true;
+      loadOutOfAvailability();
     });
-  }, [load, rangeEnd, rangeStart]);
+  }, [load, loadOutOfAvailability, rangeEnd, rangeStart]);
 
   React.useEffect(() => {
     const prefetchFrom = viewMode === "week" ? rangeEnd : addDays(rangeStart, 1);
@@ -343,21 +363,26 @@ export function AutoscuoleAgendaPage({
       setPendingEventActionId(null);
       return;
     }
-    if (res.data?.rescheduled && res.data?.newStartsAt) {
-      toast.success({
-        description: `Slot ripianificato: ${new Date(
-          res.data.newStartsAt,
-        ).toLocaleString("it-IT")}`,
+    toast.success({
+      description: "Guida annullata.",
+    });
+    await load({ silent: true });
+    setPendingEventActionId(null);
+  };
+
+  const handlePermanentCancel = async (appointmentId: string) => {
+    const confirmed = window.confirm("Sei sicuro di voler eliminare definitivamente questa guida? Non verrà riposizionata.");
+    if (!confirmed) return;
+    setPendingEventActionId(appointmentId);
+    const res = await permanentlyCancelAutoscuolaAppointment({ appointmentId });
+    if (!res.success) {
+      toast.error({
+        description: res.message ?? "Impossibile eliminare l'appuntamento.",
       });
-    } else if (res.data?.rescheduled) {
-      toast.success({
-        description: "Slot ripianificato automaticamente.",
-      });
-    } else {
-      toast.info({
-        description: "Nessuno slot disponibile, notifica staff inviata.",
-      });
+      setPendingEventActionId(null);
+      return;
     }
+    toast.success({ description: "Guida eliminata definitivamente." });
     await load({ silent: true });
     setPendingEventActionId(null);
   };
@@ -595,6 +620,33 @@ export function AutoscuoleAgendaPage({
           </Button>
         </div>
 
+        {outOfAvailAppointments.length > 0 && (
+          <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+            <AlertTriangle className="size-5 shrink-0 text-yellow-600" />
+            <span className="text-sm font-medium text-yellow-800">
+              <strong>{outOfAvailAppointments.length}</strong> guid{outOfAvailAppointments.length === 1 ? "a" : "e"} fuori disponibilità
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto border-yellow-300 bg-white text-yellow-800 hover:bg-yellow-100"
+              onClick={() => setOutOfAvailSheetOpen(true)}
+            >
+              Gestisci
+            </Button>
+          </div>
+        )}
+
+        <OutOfAvailabilitySheet
+          open={outOfAvailSheetOpen}
+          onOpenChange={setOutOfAvailSheetOpen}
+          appointments={outOfAvailAppointments}
+          onActionComplete={() => {
+            loadOutOfAvailability();
+            load({ silent: true });
+          }}
+        />
+
         {/* ── Calendar scroll container ── */}
         <div className="relative" style={{ height: "calc(100vh - 280px)", minHeight: 400 }}>
           {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
@@ -714,6 +766,8 @@ export function AutoscuoleAgendaPage({
                   )}
                   style={{ height: calendarHeight }}
                   onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
                     const rect = event.currentTarget.getBoundingClientRect();
                     const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
                     const minutes = Math.max(
@@ -721,11 +775,12 @@ export function AutoscuoleAgendaPage({
                       Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE),
                     );
                     const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
-                    const slotTime = new Date(dayStart.getTime() + rounded * 60 * 1000);
+                    const hours = Math.floor(rounded / 60);
+                    const mins = rounded % 60;
                     setForm((prev) => ({
                       ...prev,
-                      day: formatYmd(slotTime),
-                      time: `${pad(slotTime.getHours())}:${pad(slotTime.getMinutes())}`,
+                      day: formatYmd(day),
+                      time: `${pad(hours)}:${pad(mins)}`,
                     }));
                     setCreateStep(0);
                     setCreateOpen(true);
@@ -935,6 +990,16 @@ export function AutoscuoleAgendaPage({
                           >
                             Cancella e riposiziona
                           </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                            disabled={isPendingAction}
+                            onClick={() => handlePermanentCancel(item.id)}
+                          >
+                            Elimina definitivamente
+                          </Button>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     );
@@ -1044,6 +1109,7 @@ export function AutoscuoleAgendaPage({
                                       <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleCancel(item.id)}>Annulla</Button>
                                     </div>
                                     <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={itemPending} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                                    <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={itemPending} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               );

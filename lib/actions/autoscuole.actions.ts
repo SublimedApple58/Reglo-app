@@ -1829,14 +1829,9 @@ export async function cancelAutoscuolaAppointment(
       },
     });
 
-    const cancelledByAutoscuola =
-      membership.role === "admin" ||
-      membership.autoscuolaRole === "OWNER" ||
-      membership.autoscuolaRole === "INSTRUCTOR";
-
     await refundLessonCreditIfEligible({
       appointmentId: appointment.id,
-      cancelledByAutoscuola,
+      cancelledByAutoscuola: false,
       actorUserId: membership.userId,
     });
 
@@ -1897,146 +1892,58 @@ export async function cancelAutoscuolaAppointment(
       };
     }
 
-    const canAutoReschedule =
-      membership.role === "admin" ||
-      membership.autoscuolaRole === "OWNER" ||
-      membership.autoscuolaRole === "INSTRUCTOR";
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
 
-    if (!canAutoReschedule || appointment.status === "proposal") {
-      await invalidateAgendaAndPaymentsCache(membership.companyId);
-      return { success: true, data: { rescheduled: false } };
+    return { success: true, data: { rescheduled: false } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function permanentlyCancelAutoscuolaAppointment(
+  input: z.infer<typeof cancelAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = cancelAppointmentSchema.parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId: membership.companyId },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
     }
 
-    const slotMinutes = 30;
-    const startHour = 7;
-    const endHour = 21;
-    const scanStart = new Date(appointment.startsAt);
-    scanStart.setMinutes(scanStart.getMinutes() + slotMinutes);
-    const scanEnd = new Date(appointment.startsAt);
-    scanEnd.setDate(scanEnd.getDate() + 7);
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancellationKind: "permanent_cancel",
+        cancellationReason: "permanent_cancel",
+      },
+    });
 
-    const [existing, instructors, vehicles] = await Promise.all([
-      prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId: membership.companyId,
-          startsAt: { gte: scanStart, lte: scanEnd },
-          status: { notIn: ["cancelled"] },
-        },
-      }),
-      prisma.autoscuolaInstructor.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
-        orderBy: { name: "asc" },
-      }),
-      prisma.autoscuolaVehicle.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
-        orderBy: { name: "asc" },
-      }),
-    ]);
+    await refundLessonCreditIfEligible({
+      appointmentId: appointment.id,
+      cancelledByAutoscuola: true,
+      actorUserId: membership.userId,
+    });
 
-    if (!instructors.length || !vehicles.length) {
-      await invalidateAgendaAndPaymentsCache(membership.companyId);
-      return { success: true, data: { rescheduled: false } };
-    }
-
-    const busy = new Map<
-      string,
-      { instructors: Set<string>; vehicles: Set<string> }
-    >();
-    for (const item of existing) {
-      const key = slotKey(item.startsAt);
-      const entry =
-        busy.get(key) ?? { instructors: new Set<string>(), vehicles: new Set<string>() };
-      if (item.instructorId) entry.instructors.add(item.instructorId);
-      if (item.vehicleId) entry.vehicles.add(item.vehicleId);
-      busy.set(key, entry);
-    }
-
-    let newStartsAt: Date | null = null;
-    let newInstructorId: string | null = null;
-    let newVehicleId: string | null = null;
-    for (let day = new Date(scanStart); day <= scanEnd; day.setDate(day.getDate() + 1)) {
-      for (let hour = startHour; hour < endHour; hour += 1) {
-        for (let minutes = 0; minutes < 60; minutes += slotMinutes) {
-          const candidate = new Date(day);
-          candidate.setHours(hour, minutes, 0, 0);
-          if (candidate <= scanStart) continue;
-          if (candidate > scanEnd) break;
-          const key = slotKey(candidate);
-          const occupied = busy.get(key);
-          const busyInstructors = occupied?.instructors ?? new Set<string>();
-          const busyVehicles = occupied?.vehicles ?? new Set<string>();
-          const availableInstructor = instructors.find(
-            (item) => !busyInstructors.has(item.id),
-          );
-          if (!availableInstructor) continue;
-          const availableVehicle = vehicles.find(
-            (item) => !busyVehicles.has(item.id),
-          );
-          if (!availableVehicle) continue;
-          newStartsAt = candidate;
-          newInstructorId = availableInstructor.id;
-          newVehicleId = availableVehicle.id;
-          break;
-        }
-        if (newStartsAt) break;
-      }
-      if (newStartsAt) break;
-    }
-
-    if (!newStartsAt || !newInstructorId || !newVehicleId) {
-      await invalidateAgendaAndPaymentsCache(membership.companyId);
-      return { success: true, data: { rescheduled: false } };
-    }
-
-    const originalDurationMs = Math.max(
-      30 * 60 * 1000,
-      (appointment.endsAt?.getTime() ?? appointment.startsAt.getTime() + 30 * 60 * 1000) -
-        appointment.startsAt.getTime(),
-    );
-    const newEndsAt = new Date(newStartsAt.getTime() + originalDurationMs);
-    const newAppointmentId = randomUUID();
-    await prisma.$transaction(async (tx) => {
-      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
-        prisma: tx as never,
-        companyId: membership.companyId,
+    await notifyStudentAppointmentCancelled({
+      companyId: membership.companyId,
+      actorUserId: membership.userId,
+      appointment: {
+        id: appointment.id,
         studentId: appointment.studentId,
-        startsAt: newStartsAt,
-        endsAt: newEndsAt,
-        appointmentId: newAppointmentId,
-        actorUserId: membership.userId,
-      });
-
-      await tx.autoscuolaAppointment.create({
-        data: {
-          id: newAppointmentId,
-          companyId: membership.companyId,
-          studentId: appointment.studentId,
-          caseId: appointment.caseId,
-          type: appointment.type,
-          startsAt: newStartsAt,
-          endsAt: newEndsAt,
-          status: "scheduled",
-          instructorId: newInstructorId,
-          vehicleId: newVehicleId,
-          notes: appointment.notes,
-          paymentRequired: paymentSnapshot.paymentRequired,
-          paymentStatus: paymentSnapshot.paymentStatus,
-          priceAmount: paymentSnapshot.priceAmount,
-          penaltyAmount: paymentSnapshot.penaltyAmount,
-          penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
-          paidAmount: paymentSnapshot.paidAmount,
-          invoiceStatus: paymentSnapshot.invoiceStatus,
-          creditApplied: paymentSnapshot.creditApplied,
-        },
-      });
+        startsAt: appointment.startsAt,
+        instructorId: appointment.instructorId,
+      },
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
-    return {
-      success: true,
-      data: { rescheduled: true, newStartsAt },
-    };
+    return { success: true, message: "Guida eliminata definitivamente." };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -3169,56 +3076,17 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
       },
     });
 
-    // Reposition appointments now outside the new availability window
-    // Date-aware: for each appointment, resolve the effective availability
-    // (override or default) for that specific week before checking conflicts.
-    const SLOT_MINUTES = 30;
-    const futureAppointments = await prisma.autoscuolaAppointment.findMany({
+    // Reset override-approved flag so out-of-availability appointments are re-detected
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
         instructorId: payload.instructorId,
         startsAt: { gt: new Date() },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    const resolver = futureAppointments.length
-      ? await buildAvailabilityResolver(
-          companyId,
-          "instructor",
-          [payload.instructorId],
-          futureAppointments[0].startsAt,
-          futureAppointments[futureAppointments.length - 1].startsAt,
-        )
-      : null;
-
-    const impactedIds = futureAppointments
-      .filter((appointment) => {
-        const end =
-          appointment.endsAt ??
-          new Date(appointment.startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-        // If this date has a daily override, the override takes precedence
-        // over the new default — skip conflict check for overridden dates
-        if (resolver?.hasOverride(payload.instructorId, appointment.startsAt)) {
-          return false;
-        }
-        const aptDayOfWeek = appointment.startsAt.getDay();
-        if (!daysOfWeek.includes(aptDayOfWeek)) return true;
-        const aptStartMinutes = appointment.startsAt.getHours() * 60 + appointment.startsAt.getMinutes();
-        const aptEndMinutes = end.getHours() * 60 + end.getMinutes();
-        return aptStartMinutes < payload.startMinutes || aptEndMinutes > payload.endMinutes;
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -3244,24 +3112,17 @@ export async function deleteAutoscuolaInstructorWeeklyAvailability(instructorId:
       where: { companyId, ownerType: "instructor", ownerId: instructorId },
     });
 
-    const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+    // Reset override-approved flag so out-of-availability appointments are re-detected
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
         instructorId,
         startsAt: { gt: new Date() },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    if (impactedAppointments.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedAppointments.map((a) => a.id),
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -3356,39 +3217,17 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
       },
     });
 
-    // Reposition appointments now outside the new availability window
-    const futureAppointments = await prisma.autoscuolaAppointment.findMany({
+    // Reset override-approved flag so out-of-availability appointments are re-detected
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
         vehicleId: payload.vehicleId,
         startsAt: { gt: new Date() },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    const SLOT_MINUTES = 30;
-    const impactedIds = futureAppointments
-      .filter((appointment) => {
-        const end =
-          appointment.endsAt ??
-          new Date(appointment.startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-        const aptDayOfWeek = appointment.startsAt.getDay();
-        if (!daysOfWeek.includes(aptDayOfWeek)) return true;
-        const aptStartMinutes = appointment.startsAt.getHours() * 60 + appointment.startsAt.getMinutes();
-        const aptEndMinutes = end.getHours() * 60 + end.getMinutes();
-        return aptStartMinutes < payload.startMinutes || aptEndMinutes > payload.endMinutes;
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -3414,25 +3253,17 @@ export async function deleteAutoscuolaVehicleWeeklyAvailability(vehicleId: strin
       where: { companyId, ownerType: "vehicle", ownerId: vehicleId },
     });
 
-    // Reposition all future appointments for this vehicle
-    const impactedAppointments = await prisma.autoscuolaAppointment.findMany({
+    // Reset override-approved flag so out-of-availability appointments are re-detected
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
         vehicleId,
         startsAt: { gt: new Date() },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    if (impactedAppointments.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedAppointments.map((a) => a.id),
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 

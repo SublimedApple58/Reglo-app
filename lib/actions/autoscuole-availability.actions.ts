@@ -9,7 +9,6 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
-import { cancelAndQueueOperationalRepositionByResource } from "@/lib/autoscuole/repositioning";
 import {
   getBookingGovernanceForCompany,
   isStudentAppBookingEnabled,
@@ -594,48 +593,17 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
           ? { instructorId: payload.ownerId }
           : { vehicleId: payload.ownerId };
 
-      const futureAppointments = await prisma.autoscuolaAppointment.findMany({
+      // Reset the override-approved flag so these appointments are re-checked
+      await prisma.autoscuolaAppointment.updateMany({
         where: {
           companyId: membership.companyId,
-          startsAt: { gt: new Date() },
-          status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
           ...ownerField,
+          startsAt: { gt: new Date() },
+          status: { in: ["scheduled", "confirmed", "checked_in"] },
+          availabilityOverrideApproved: true,
         },
-        select: {
-          id: true,
-          startsAt: true,
-          endsAt: true,
-        },
+        data: { availabilityOverrideApproved: false },
       });
-
-      // Date-aware conflict check: for each appointment, resolve the effective
-      // availability for that specific week (override or default)
-      const resolver = await buildAvailabilityResolver(
-        membership.companyId,
-        payload.ownerType,
-        [payload.ownerId],
-        futureAppointments.length ? futureAppointments[0].startsAt : new Date(),
-        futureAppointments.length
-          ? futureAppointments[futureAppointments.length - 1].startsAt
-          : new Date(),
-      );
-
-      const impactedIds = futureAppointments
-        .filter((appointment) => {
-          const end = appointment.endsAt ?? getSlotEnd(appointment.startsAt, SLOT_MINUTES);
-          const effectiveAvail = resolver.resolve(payload.ownerId, appointment.startsAt);
-          return !isAvailabilityCovering(effectiveAvail, appointment.startsAt, end);
-        })
-        .map((appointment) => appointment.id);
-
-      if (impactedIds.length) {
-        await cancelAndQueueOperationalRepositionByResource({
-          companyId: membership.companyId,
-          appointmentIds: impactedIds,
-          reason: "availability_changed",
-          actorUserId: membership.userId,
-        });
-      }
     }
 
     return { success: true, data: { count: availability ? 1 : 0 } };
@@ -913,48 +881,23 @@ export async function setWeeklyAvailabilityOverride(
       }),
     );
 
-    // Conflict-check: reposition appointments in this specific week
+    // Reset override-approved flag for appointments in this week
     const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     const ownerField =
       payload.ownerType === "instructor"
         ? { instructorId: payload.ownerId }
         : { vehicleId: payload.ownerId };
 
-    const weekAppointments = await prisma.autoscuolaAppointment.findMany({
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
-        startsAt: { gte: weekStart, lt: weekEnd },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
         ...ownerField,
+        startsAt: { gte: weekStart, lt: weekEnd },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    // Build resolver for this week using the newly upserted overrides
-    const resolver = await buildAvailabilityResolver(
-      companyId,
-      payload.ownerType,
-      [payload.ownerId],
-      weekStart,
-      weekEnd,
-    );
-
-    const impactedIds = weekAppointments
-      .filter((a) => {
-        const end = a.endsAt ?? getSlotEnd(a.startsAt, SLOT_MINUTES);
-        const effectiveAvail = resolver.resolve(payload.ownerId, a.startsAt);
-        return !isAvailabilityCovering(effectiveAvail, a.startsAt, end);
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -994,42 +937,22 @@ export async function deleteWeeklyAvailabilityOverride(
       },
     });
 
-    // After deleting the overrides, the week falls back to the default.
-    const baseAvailabilityRaw = await prisma.autoscuolaWeeklyAvailability.findFirst({
-      where: { companyId, ownerType: payload.ownerType, ownerId: payload.ownerId },
-    });
-    const baseAvailability = baseAvailabilityRaw ? defaultToAvailabilityRecord(baseAvailabilityRaw) : null;
-
+    // Reset override-approved flag for appointments in this week
     const ownerField =
       payload.ownerType === "instructor"
         ? { instructorId: payload.ownerId }
         : { vehicleId: payload.ownerId };
 
-    const weekAppointments = await prisma.autoscuolaAppointment.findMany({
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
-        startsAt: { gte: weekStart, lt: weekEnd },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
         ...ownerField,
+        startsAt: { gte: weekStart, lt: weekEnd },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    const impactedIds = weekAppointments
-      .filter((a) => {
-        const end = a.endsAt ?? getSlotEnd(a.startsAt, SLOT_MINUTES);
-        return !isAvailabilityCovering(baseAvailability, a.startsAt, end);
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -1219,43 +1142,23 @@ export async function setDailyAvailabilityOverride(
       },
     });
 
-    // Conflict-check: appointments on this specific date
+    // Reset override-approved flag for appointments on this date
     const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
     const ownerField =
       payload.ownerType === "instructor"
         ? { instructorId: payload.ownerId }
         : { vehicleId: payload.ownerId };
 
-    const dayAppointments = await prisma.autoscuolaAppointment.findMany({
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
-        startsAt: { gte: date, lt: nextDay },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
         ...ownerField,
+        startsAt: { gte: date, lt: nextDay },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    const overrideAvail: AvailabilityRecord = {
-      daysOfWeek: [date.getUTCDay()],
-      ranges: parseRanges(override.ranges),
-    };
-
-    const impactedIds = dayAppointments
-      .filter((a) => {
-        const end = a.endsAt ?? getSlotEnd(a.startsAt, SLOT_MINUTES);
-        return !isAvailabilityCovering(overrideAvail, a.startsAt, end);
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -1293,43 +1196,23 @@ export async function deleteDailyAvailabilityOverride(
       },
     });
 
-    // Fall back to default — conflict-check
-    const baseRaw = await prisma.autoscuolaWeeklyAvailability.findFirst({
-      where: { companyId, ownerType: payload.ownerType, ownerId: payload.ownerId },
-    });
-    const baseAvail = baseRaw ? defaultToAvailabilityRecord(baseRaw) : null;
-
+    // Reset override-approved flag for appointments on this date
     const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
     const ownerField =
       payload.ownerType === "instructor"
         ? { instructorId: payload.ownerId }
         : { vehicleId: payload.ownerId };
 
-    const dayAppointments = await prisma.autoscuolaAppointment.findMany({
+    await prisma.autoscuolaAppointment.updateMany({
       where: {
         companyId,
-        startsAt: { gte: date, lt: nextDay },
-        status: { in: [...OPERATIONAL_REPOSITIONABLE_STATUSES] },
         ...ownerField,
+        startsAt: { gte: date, lt: nextDay },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
       },
-      select: { id: true, startsAt: true, endsAt: true },
+      data: { availabilityOverrideApproved: false },
     });
-
-    const impactedIds = dayAppointments
-      .filter((a) => {
-        const end = a.endsAt ?? getSlotEnd(a.startsAt, SLOT_MINUTES);
-        return !isAvailabilityCovering(baseAvail, a.startsAt, end);
-      })
-      .map((a) => a.id);
-
-    if (impactedIds.length) {
-      await cancelAndQueueOperationalRepositionByResource({
-        companyId,
-        appointmentIds: impactedIds,
-        reason: "availability_changed",
-        actorUserId: membership.userId,
-      });
-    }
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
@@ -3029,4 +2912,137 @@ export async function broadcastWaitlistOffer({
   }
 
   return offer;
+}
+
+// ── Out-of-availability detection & override approval ─────────────────
+
+const getOutOfAvailabilitySchema = z.object({
+  instructorId: z.string().uuid().optional(),
+});
+
+export async function getOutOfAvailabilityAppointments(
+  input?: z.infer<typeof getOutOfAvailabilitySchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getOutOfAvailabilitySchema.parse(input ?? {});
+    const companyId = membership.companyId;
+
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        startsAt: { gt: new Date() },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: false,
+        ...(payload.instructorId ? { instructorId: payload.instructorId } : {}),
+      },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        type: true,
+        status: true,
+        instructorId: true,
+        vehicleId: true,
+        student: { select: { id: true, name: true } },
+        instructor: { select: { id: true, name: true } },
+        vehicle: { select: { id: true, name: true, plate: true } },
+      },
+      orderBy: { startsAt: "asc" },
+      take: 200,
+    });
+
+    if (!appointments.length) {
+      return { success: true as const, data: [] };
+    }
+
+    // Collect unique instructor/vehicle IDs
+    const instructorIds = [...new Set(appointments.map((a) => a.instructorId).filter(Boolean))] as string[];
+    const vehicleIds = [...new Set(appointments.map((a) => a.vehicleId).filter(Boolean))] as string[];
+    const earliest = appointments[0].startsAt;
+    const latest = appointments[appointments.length - 1].startsAt;
+
+    // Build resolvers for instructors and vehicles
+    const [instructorResolver, vehicleResolver] = await Promise.all([
+      instructorIds.length
+        ? buildAvailabilityResolver(companyId, "instructor", instructorIds, earliest, latest)
+        : null,
+      vehicleIds.length
+        ? buildAvailabilityResolver(companyId, "vehicle", vehicleIds, earliest, latest)
+        : null,
+    ]);
+
+    const results: Array<{
+      id: string;
+      startsAt: Date;
+      endsAt: Date;
+      type: string;
+      status: string;
+      studentName: string;
+      instructorName: string | null;
+      vehicleName: string | null;
+      outOfAvailabilityFor: ("instructor" | "vehicle")[];
+    }> = [];
+
+    for (const apt of appointments) {
+      const end = apt.endsAt ?? getSlotEnd(apt.startsAt, SLOT_MINUTES);
+      const outOf: ("instructor" | "vehicle")[] = [];
+
+      if (apt.instructorId && instructorResolver) {
+        const avail = instructorResolver.resolve(apt.instructorId, apt.startsAt);
+        if (!isAvailabilityCovering(avail, apt.startsAt, end)) {
+          outOf.push("instructor");
+        }
+      }
+
+      if (apt.vehicleId && vehicleResolver) {
+        const avail = vehicleResolver.resolve(apt.vehicleId, apt.startsAt);
+        if (!isAvailabilityCovering(avail, apt.startsAt, end)) {
+          outOf.push("vehicle");
+        }
+      }
+
+      if (outOf.length > 0) {
+        results.push({
+          id: apt.id,
+          startsAt: apt.startsAt,
+          endsAt: end,
+          type: apt.type,
+          status: apt.status,
+          studentName: apt.student?.name ?? "Senza nome",
+          instructorName: apt.instructor?.name ?? null,
+          vehicleName: apt.vehicle
+            ? `${apt.vehicle.name}${apt.vehicle.plate ? ` (${apt.vehicle.plate})` : ""}`
+            : null,
+          outOfAvailabilityFor: outOf,
+        });
+      }
+    }
+
+    return { success: true as const, data: results };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const approveOverrideSchema = z.object({
+  appointmentId: z.string().uuid(),
+});
+
+export async function approveAvailabilityOverride(
+  input: z.infer<typeof approveOverrideSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const { appointmentId } = approveOverrideSchema.parse(input);
+
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appointmentId, companyId: membership.companyId },
+      data: { availabilityOverrideApproved: true },
+    });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
 }
