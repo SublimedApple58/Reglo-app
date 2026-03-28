@@ -998,10 +998,11 @@ export function AutoscuoleStudentsPage({
                     <div className="space-y-2">
                       {register.lessons.map((lesson) => {
                         const isCompleted = lesson.status === "completed";
+                        const isCheckedIn = lesson.status === "checked_in";
                         const isCancelled = lesson.status === "cancelled";
                         const showPaymentToggle =
                           manualMode &&
-                          (isCompleted || lesson.manualPaymentStatus === "unpaid");
+                          (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid");
                         const isCancelledCharged =
                           isCancelled &&
                           lesson.lateCancellationAction === "charged" &&
