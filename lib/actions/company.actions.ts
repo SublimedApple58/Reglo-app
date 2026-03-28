@@ -9,6 +9,11 @@ import { normalizeCompanyServices } from '@/lib/services';
 import { z } from 'zod';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
+import crypto from 'crypto';
+
+function generateInviteCode(): string {
+  return crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
+}
 
 type CompanyRole = 'admin' | 'member';
 
@@ -205,8 +210,9 @@ export async function createCompanyForUser(
     }
 
     const company = await prisma.$transaction(async (tx) => {
+      const inviteCode = generateInviteCode();
       const createdCompany = await tx.company.create({
-        data: { name: payload.name.trim() },
+        data: { name: payload.name.trim(), inviteCode },
       });
 
       await tx.companyMember.create({

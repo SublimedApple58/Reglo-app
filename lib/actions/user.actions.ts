@@ -1,5 +1,6 @@
 'use server';
 
+import crypto from 'crypto';
 import {
   signInFormSchema,
   signUpFormSchema,
@@ -75,8 +76,9 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
     const companyName = user.companyName.trim();
 
     const createdUser = await prisma.$transaction(async (tx) => {
+      const inviteCode = crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
       const company = await tx.company.create({
-        data: { name: companyName },
+        data: { name: companyName, inviteCode },
       });
 
       const createdUser = await tx.user.create({
