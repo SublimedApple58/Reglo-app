@@ -7,7 +7,7 @@ import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
-import { setBackofficeCookie } from "@/lib/backoffice-auth";
+import { setBackofficeCookie, clearBackofficeCookie } from "@/lib/backoffice-auth";
 
 const updateCompanyServiceSchema = z.object({
   companyId: z.string().min(1),
@@ -293,6 +293,10 @@ export async function backofficeSignIn(input: z.infer<typeof backofficeSignInSch
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
+}
+
+export async function backofficeSignOut() {
+  await clearBackofficeCookie();
 }
 
 export async function deleteCompany(companyId: string) {

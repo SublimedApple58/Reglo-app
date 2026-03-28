@@ -76,7 +76,7 @@ const SignInPage = async (props: {
       );
     }
 
-    if (!user?.activeCompanyId && memberships.length > 1) {
+    if (memberships.length > 1) {
       const selectPath = locale ? `/${locale}/select-company` : '/select-company';
       return redirect(selectPath);
     }

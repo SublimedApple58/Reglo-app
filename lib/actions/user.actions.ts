@@ -30,7 +30,17 @@ export async function signInWithCredentials(
       password: formData.get('password'),
     });
 
-    await signIn('credentials', { ...user, redirectTo: callbackUrl });
+    // Check if user has multiple companies — if so, redirect to company selector
+    const dbUser = await prisma.user.findUnique({
+      where: { email: user.email },
+      select: { _count: { select: { companyMembers: true } } },
+    });
+    const redirectTo =
+      dbUser && dbUser._count.companyMembers > 1
+        ? '/select-company'
+        : callbackUrl;
+
+    await signIn('credentials', { ...user, redirectTo });
 
     return { success: true, message: 'Signed in successfully' };
   } catch (error) {

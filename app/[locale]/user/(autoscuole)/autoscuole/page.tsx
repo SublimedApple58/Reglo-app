@@ -1,4 +1,3 @@
-import { ServiceGate } from "@/components/ui/service-gate";
 import { AutoscuoleTabsPage } from "@/components/pages/Autoscuole/AutoscuoleTabsPage";
 import { notFound } from "next/navigation";
 
@@ -13,9 +12,5 @@ export default async function AutoscuolePage(props: {
     notFound();
   }
 
-  return (
-    <ServiceGate service="AUTOSCUOLE">
-      <AutoscuoleTabsPage />
-    </ServiceGate>
-  );
+  return <AutoscuoleTabsPage />;
 }

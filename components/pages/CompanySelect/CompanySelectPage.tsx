@@ -22,7 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { createCompanyForUser, setActiveCompany } from "@/lib/actions/company.actions";
-import { Building2, Plus } from "lucide-react";
+import { GraduationCap, Plus } from "lucide-react";
 
 type CompanyOption = {
   id: string;
@@ -51,48 +51,48 @@ export function CompanySelectPage({
 
   const handleSelect = async (companyId: string) => {
     if (companyId === activeCompanyId) {
-      router.push(`/${locale}/user/home`);
+      router.push(`/${locale}/user/autoscuole`);
       return;
     }
     const res = await setActiveCompany({ companyId });
     if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile selezionare company." });
+      toast.error({ description: res.message ?? "Impossibile selezionare l'autoscuola." });
       return;
     }
-    router.push(`/${locale}/user/home`);
+    router.push(`/${locale}/user/autoscuole`);
   };
 
   const handleCreate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = companyName.trim();
     if (!name) {
-      toast.error({ description: "Inserisci un nome company." });
+      toast.error({ description: "Inserisci un nome per l'autoscuola." });
       return;
     }
     setCreating(true);
     const res = await createCompanyForUser({ name });
     if (!res.success) {
-      toast.error({ description: res.message ?? "Creazione non riuscita." });
+      toast.error({ description: res.message ?? "Creazione autoscuola non riuscita." });
       setCreating(false);
       return;
     }
     setCreating(false);
     setCreateOpen(false);
     setCompanyName("");
-    router.push(`/${locale}/user/home`);
+    router.push(`/${locale}/user/autoscuole`);
   };
 
   return (
     <div className="mx-auto flex min-h-[70vh] w-full max-w-4xl flex-col gap-6 px-6 py-10">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
-          Company
+          Autoscuola
         </p>
         <h1 className="text-3xl font-semibold text-foreground">
-          Scegli la company da aprire
+          Scegli l&apos;autoscuola da aprire
         </h1>
         <p className="text-sm text-muted-foreground">
-          Puoi cambiare company in qualsiasi momento dal menu in alto nella sidebar.
+          Puoi cambiare autoscuola in qualsiasi momento dal menu in alto.
         </p>
       </div>
 
@@ -110,7 +110,7 @@ export function CompanySelectPage({
                 className="w-full"
                 onClick={() => handleSelect(company.id)}
               >
-                Entra nella company
+                Entra nell&apos;autoscuola
               </Button>
             </CardContent>
           </Card>
@@ -121,17 +121,17 @@ export function CompanySelectPage({
         <CardContent className="flex flex-col items-start gap-3 p-6 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-xl bg-white shadow-sm">
-              <Building2 className="h-5 w-5 text-muted-foreground" />
+              <GraduationCap className="h-5 w-5 text-muted-foreground" />
             </div>
             <div>
-              <p className="text-sm font-medium">Crea una nuova company</p>
+              <p className="text-sm font-medium">Aggiungi una nuova autoscuola</p>
               <p className="text-xs text-muted-foreground">
-                Avvia una nuova area di lavoro separata.
+                Crea un&apos;autoscuola separata con la propria gestione.
               </p>
             </div>
           </div>
           <Button variant="outline" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> Nuova company
+            <Plus className="h-4 w-4" /> Nuova autoscuola
           </Button>
         </CardContent>
       </Card>
@@ -139,24 +139,24 @@ export function CompanySelectPage({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Crea nuova company</DialogTitle>
+            <DialogTitle>Nuova autoscuola</DialogTitle>
             <DialogDescription>
-              Dai un nome alla nuova company per iniziare.
+              Dai un nome alla nuova autoscuola per iniziare.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="company-name">Nome company</Label>
+              <Label htmlFor="company-name">Nome autoscuola</Label>
               <Input
                 id="company-name"
                 value={companyName}
                 onChange={(event) => setCompanyName(event.target.value)}
-                placeholder="Es. Studio Reglo"
+                placeholder="Es. Autoscuola Roma Centro"
               />
             </div>
             <DialogFooter>
               <Button type="submit" disabled={creating}>
-                {creating ? "Creazione..." : "Crea company"}
+                {creating ? "Creazione..." : "Crea autoscuola"}
               </Button>
             </DialogFooter>
           </form>
