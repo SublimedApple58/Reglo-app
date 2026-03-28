@@ -553,6 +553,11 @@ export async function getAutoscuolaOverview() {
           companyId,
           status: "active",
           userId: { not: null },
+          user: {
+            companyMembers: {
+              some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+            },
+          },
         },
       }),
     ]);

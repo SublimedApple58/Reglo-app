@@ -100,7 +100,7 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
 
       await tx.companyService.createMany({
         data: [
-          { companyId: company.id, serviceKey: 'AUTOSCUOLE' },
+          { companyId: company.id, serviceKey: 'AUTOSCUOLE', status: 'DISABLED' },
         ],
       });
 
