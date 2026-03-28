@@ -500,6 +500,17 @@ const ensureStudentCanBookFromApp = async ({
       message: "Puoi prenotare solo per il tuo profilo allievo.",
     };
   }
+
+  // Check if student has booking blocked
+  const blocked = await getStudentBookingBlockStatus(companyId, studentId);
+  if (blocked) {
+    return {
+      allowed: false as const,
+      message:
+        "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+    };
+  }
+
   const governance = await getBookingGovernanceForCompany(companyId);
   if (!isStudentAppBookingEnabled(governance)) {
     return {
@@ -3067,4 +3078,15 @@ export async function approveAvailabilityOverride(
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
+}
+
+export async function getStudentBookingBlockStatus(
+  companyId: string,
+  studentId: string,
+): Promise<boolean> {
+  const member = await prisma.companyMember.findFirst({
+    where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
+    select: { bookingBlocked: true },
+  });
+  return member?.bookingBlocked ?? false;
 }

@@ -42,6 +42,9 @@ import {
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
   getCompanyInviteCode,
+  getPaymentMode,
+  toggleStudentBookingBlock,
+  setManualPaymentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -56,6 +59,8 @@ import {
 } from "@/components/animate-ui/buttons/input";
 import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { RegloTabs } from "@/components/ui/reglo-tabs";
+import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 
 type StudentProfile = {
   id: string;
@@ -68,6 +73,7 @@ type StudentProfile = {
 };
 
 type Student = StudentProfile & {
+  bookingBlocked?: boolean;
   activeCase: {
     id: string;
     status: string;
@@ -81,8 +87,34 @@ type Student = StudentProfile & {
   };
 };
 
+type ExtendedSummary = {
+  booked: number;
+  completed: number;
+  cancelled: number;
+  upcoming: number;
+  manualUnpaid: number;
+};
+
+type LessonEntry = {
+  id: string;
+  type: string;
+  status: string;
+  startsAt: string | Date;
+  durationMinutes: number;
+  instructorName: string | null;
+  vehicleName: string | null;
+  cancelledAt: string | Date | null;
+  cancellationKind: string | null;
+  cancellationReason: string | null;
+  paymentRequired: boolean;
+  manualPaymentStatus: string | null;
+  lateCancellationAction: string | null;
+  createdAt: string | Date | null;
+};
+
 type StudentRegister = {
   student: StudentProfile;
+  bookingBlocked?: boolean;
   activeCase: {
     id: string;
     status: string;
@@ -94,19 +126,12 @@ type StudentRegister = {
     remaining: number;
     isCompleted: boolean;
   };
+  extendedSummary?: ExtendedSummary;
   byLessonType: Array<{
     type: string;
     count: number;
   }>;
-  lessons: Array<{
-    id: string;
-    type: string;
-    status: string;
-    startsAt: string | Date;
-    durationMinutes: number;
-    instructorName: string | null;
-    vehicleName: string | null;
-  }>;
+  lessons: LessonEntry[];
 };
 
 type StudentCredits = {
@@ -121,6 +146,11 @@ type StudentCredits = {
     actorName: string | null;
     createdAt: string | Date;
   }>;
+};
+
+type PaymentModeState = {
+  auto: boolean;
+  credits: boolean;
 };
 
 const LESSON_TYPE_LABELS: Record<string, string> = {
@@ -182,6 +212,8 @@ const formatDate = (value: string | Date, withTime = false) => {
   });
 };
 
+type SubTab = "students" | "late_cancellations";
+
 export function AutoscuoleStudentsPage({
   tabs,
 }: {
@@ -212,6 +244,20 @@ export function AutoscuoleStudentsPage({
   const [inviteEmail, setInviteEmail] = React.useState("");
   const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "none">("none");
   const [inviteSending, setInviteSending] = React.useState(false);
+
+  // Payment mode
+  const [paymentMode, setPaymentMode] = React.useState<PaymentModeState | null>(null);
+  const manualMode = paymentMode !== null && !paymentMode.auto && !paymentMode.credits;
+
+  // Sub-tabs
+  const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
+  const [lateCancellationsCount, setLateCancellationsCount] = React.useState(0);
+
+  // Booking block toggle
+  const [blockSaving, setBlockSaving] = React.useState(false);
+
+  // Manual payment toggle
+  const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -314,6 +360,66 @@ export function AutoscuoleStudentsPage({
     [creditsInput, creditsSaving, loadCredits, selectedStudentId, toast],
   );
 
+  const handleToggleBlock = React.useCallback(
+    async (blocked: boolean) => {
+      if (!selectedStudentId || blockSaving) return;
+      setBlockSaving(true);
+      const res = await toggleStudentBookingBlock({
+        studentId: selectedStudentId,
+        blocked,
+      });
+      setBlockSaving(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Errore aggiornamento blocco." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Stato aggiornato." });
+      // Update local register
+      setRegister((prev) => prev ? { ...prev, bookingBlocked: blocked } : prev);
+      // Update student in table list
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === selectedStudentId ? { ...s, bookingBlocked: blocked } : s,
+        ),
+      );
+    },
+    [selectedStudentId, blockSaving, toast],
+  );
+
+  const handleSetManualPayment = React.useCallback(
+    async (appointmentId: string, status: "paid" | "unpaid") => {
+      if (paymentSaving) return;
+      setPaymentSaving(appointmentId);
+      const res = await setManualPaymentStatus({ appointmentId, status });
+      setPaymentSaving(null);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Errore aggiornamento." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Stato aggiornato." });
+      // Update register locally
+      setRegister((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          extendedSummary: prev.extendedSummary
+            ? {
+                ...prev.extendedSummary,
+                manualUnpaid:
+                  status === "paid"
+                    ? Math.max(0, prev.extendedSummary.manualUnpaid - 1)
+                    : prev.extendedSummary.manualUnpaid + 1,
+              }
+            : prev.extendedSummary,
+          lessons: prev.lessons.map((l) =>
+            l.id === appointmentId ? { ...l, manualPaymentStatus: status } : l,
+          ),
+        };
+      });
+    },
+    [paymentSaving, toast],
+  );
+
   const handleInvite = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -354,7 +460,28 @@ export function AutoscuoleStudentsPage({
     getCompanyInviteCode().then((res) => {
       if (res.success && res.data) setInviteCode(res.data);
     });
+    getPaymentMode().then((res) => {
+      if (res.success && res.data) {
+        setPaymentMode({
+          auto: res.data.autoPaymentsEnabled,
+          credits: res.data.lessonCreditFlowEnabled,
+        });
+      }
+    });
   }, []);
+
+  const subTabItems = React.useMemo(
+    () => [
+      { key: "students" as const, label: "Allievi" },
+      {
+        key: "late_cancellations" as const,
+        label: lateCancellationsCount > 0
+          ? `Cancellazioni tardive (${lateCancellationsCount})`
+          : "Cancellazioni tardive",
+      },
+    ],
+    [lateCancellationsCount],
+  );
 
   return (
     <PageWrapper
@@ -364,218 +491,238 @@ export function AutoscuoleStudentsPage({
       <div className="relative w-full space-y-5">
         {tabs}
 
-        {inviteCode ? (
-          <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
-            <span className="text-sm text-muted-foreground">Codice autoscuola:</span>
-            <span className="text-base font-bold tracking-wider text-yellow-800">{inviteCode}</span>
-            <button
-              type="button"
-              className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
-              onClick={() => {
-                navigator.clipboard.writeText(inviteCode);
-              }}
-            >
-              Copia
-            </button>
-          </div>
-        ) : null}
+        <RegloTabs
+          items={subTabItems}
+          activeKey={activeSubTab}
+          onChange={setActiveSubTab}
+          ariaLabel="Sezioni allievi"
+        />
 
-        {loading ? (
-          <TableSkeleton rows={6} cols={7} />
+        {activeSubTab === "late_cancellations" ? (
+          <AutoscuoleLateCancellationsPanel
+            onCountChange={setLateCancellationsCount}
+          />
         ) : (
           <>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  setDebouncedSearch(search);
-                }}
-                className="w-full sm:max-w-sm"
-              >
-                <InputButtonProvider showInput setShowInput={() => {}} className="w-full">
-                  <InputButton className="w-full">
-                    <InputButtonAction className="hidden" />
-                    <InputButtonSubmit
-                      onClick={() => {}}
-                      type="submit"
-                      className="bg-foreground text-background hover:bg-foreground/90"
-                    />
-                  </InputButton>
-                  <InputButtonInput
-                    type="text"
-                    placeholder="Cerca allievi"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pr-14 text-sm"
-                  />
-                </InputButtonProvider>
-              </form>
-
-              <ManagementBar
-                totalRows={students.length}
-                actions={[
-                  {
-                    id: "invite-student",
-                    label: "Invita allievo",
-                    icon: MailPlus,
-                    variant: "default",
-                    onClick: () => setInviteOpen(true),
-                  },
-{
-                    id: "directory",
-                    label: "Directory utenti",
-                    icon: ExternalLink,
-                    variant: "outline" as const,
-                    onClick: () => {
-                      window.location.href = `/${locale}/admin/users`;
-                    },
-                  },
-                ]}
-              />
-            </div>
-
-            <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Invita allievo</DialogTitle>
-                  <DialogDescription>
-                    Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleInvite} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="invite-email">Email</Label>
-                    <Input
-                      id="invite-email"
-                      type="email"
-                      placeholder="allievo@esempio.com"
-                      value={inviteEmail}
-                      onChange={(event) => setInviteEmail(event.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Piattaforma</Label>
-                    <Select
-                      value={invitePlatform}
-                      onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleziona piattaforma" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Non specificata</SelectItem>
-                        <SelectItem value="ios">iOS (iPhone)</SelectItem>
-                        <SelectItem value="android">Android</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      Usato per mostrare il link corretto all&apos;app store nell&apos;email.
-                    </p>
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
-                      {inviteSending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <UserPlus className="mr-2 h-4 w-4" />
-                      )}
-                      {inviteSending ? "Invio in corso…" : "Invia invito"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-
-            {searching ? (
-              <div className="relative">
-                <LottieLoadingOverlay visible />
-                <div className="pointer-events-none opacity-40">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Allievo</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Telefono</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Guide completate</TableHead>
-                        <TableHead>Obbligo</TableHead>
-                        <TableHead className="text-right">Azioni</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell colSpan={7} className="h-48" />
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
+            {inviteCode ? (
+              <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+                <span className="text-sm text-muted-foreground">Codice autoscuola:</span>
+                <span className="text-base font-bold tracking-wider text-yellow-800">{inviteCode}</span>
+                <button
+                  type="button"
+                  className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
+                  onClick={() => {
+                    navigator.clipboard.writeText(inviteCode);
+                  }}
+                >
+                  Copia
+                </button>
               </div>
+            ) : null}
+
+            {loading ? (
+              <TableSkeleton rows={6} cols={7} />
             ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Allievo</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Telefono</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Guide completate</TableHead>
-                  <TableHead>Obbligo</TableHead>
-                  <TableHead className="text-right">Azioni</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {students.length ? (
-                  students.map((student) => (
-                    <TableRow key={student.id}>
-                      <TableCell className="font-medium">
-                        {student.firstName} {student.lastName}
-                      </TableCell>
-                      <TableCell>{student.email || "—"}</TableCell>
-                      <TableCell>{student.phone || "—"}</TableCell>
-                      <TableCell>
-                        <Badge variant="secondary">
-                          {student.status ?? "active"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {student.summary.completedLessons}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
-                            {student.summary.completedLessons}/{student.summary.requiredLessons}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {student.summary.isCompleted ? "Completato" : "In corso"}
-                          </span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedStudentId(student.id);
-                            setDrawerOpen(true);
-                            void loadRegister(student.id);
-                            void loadCredits(student.id);
-                          }}
+              <>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      setDebouncedSearch(search);
+                    }}
+                    className="w-full sm:max-w-sm"
+                  >
+                    <InputButtonProvider showInput setShowInput={() => {}} className="w-full">
+                      <InputButton className="w-full">
+                        <InputButtonAction className="hidden" />
+                        <InputButtonSubmit
+                          onClick={() => {}}
+                          type="submit"
+                          className="bg-foreground text-background hover:bg-foreground/90"
+                        />
+                      </InputButton>
+                      <InputButtonInput
+                        type="text"
+                        placeholder="Cerca allievi"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pr-14 text-sm"
+                      />
+                    </InputButtonProvider>
+                  </form>
+
+                  <ManagementBar
+                    totalRows={students.length}
+                    actions={[
+                      {
+                        id: "invite-student",
+                        label: "Invita allievo",
+                        icon: MailPlus,
+                        variant: "default",
+                        onClick: () => setInviteOpen(true),
+                      },
+                      {
+                        id: "directory",
+                        label: "Directory utenti",
+                        icon: ExternalLink,
+                        variant: "outline" as const,
+                        onClick: () => {
+                          window.location.href = `/${locale}/admin/users`;
+                        },
+                      },
+                    ]}
+                  />
+                </div>
+
+                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+                  <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Invita allievo</DialogTitle>
+                      <DialogDescription>
+                        Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleInvite} className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="invite-email">Email</Label>
+                        <Input
+                          id="invite-email"
+                          type="email"
+                          placeholder="allievo@esempio.com"
+                          value={inviteEmail}
+                          onChange={(event) => setInviteEmail(event.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Piattaforma</Label>
+                        <Select
+                          value={invitePlatform}
+                          onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
                         >
-                          Dettaglio
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleziona piattaforma" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Non specificata</SelectItem>
+                            <SelectItem value="ios">iOS (iPhone)</SelectItem>
+                            <SelectItem value="android">Android</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Usato per mostrare il link corretto all&apos;app store nell&apos;email.
+                        </p>
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
+                          {inviteSending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserPlus className="mr-2 h-4 w-4" />
+                          )}
+                          {inviteSending ? "Invio in corso…" : "Invia invito"}
                         </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                {searching ? (
+                  <div className="relative">
+                    <LottieLoadingOverlay visible />
+                    <div className="pointer-events-none opacity-40">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Allievo</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Telefono</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Guide completate</TableHead>
+                            <TableHead>Obbligo</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell colSpan={7} className="h-48" />
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
                 ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
-                      Nessun allievo trovato.
-                    </TableCell>
-                  </TableRow>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Allievo</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Telefono</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Guide completate</TableHead>
+                      <TableHead>Obbligo</TableHead>
+                      <TableHead className="text-right">Azioni</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {students.length ? (
+                      students.map((student) => (
+                        <TableRow key={student.id}>
+                          <TableCell className="font-medium">
+                            <span>{student.firstName} {student.lastName}</span>
+                            {student.bookingBlocked && (
+                              <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
+                                Bloccato
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>{student.email || "—"}</TableCell>
+                          <TableCell>{student.phone || "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">
+                              {student.status ?? "active"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {student.summary.completedLessons}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
+                                {student.summary.completedLessons}/{student.summary.requiredLessons}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {student.summary.isCompleted ? "Completato" : "In corso"}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedStudentId(student.id);
+                                setDrawerOpen(true);
+                                void loadRegister(student.id);
+                                void loadCredits(student.id);
+                              }}
+                            >
+                              Dettaglio
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                          Nessun allievo trovato.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
                 )}
-              </TableBody>
-            </Table>
+              </>
             )}
           </>
         )}
@@ -618,6 +765,7 @@ export function AutoscuoleStudentsPage({
               </div>
             ) : register ? (
               <>
+                {/* Anagrafica */}
                 <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Anagrafica
@@ -645,86 +793,152 @@ export function AutoscuoleStudentsPage({
                           : "Nessuna"}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Prenotazioni</p>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={register.bookingBlocked ? "destructive" : "secondary"}>
+                          {register.bookingBlocked ? "Bloccate" : "Attive"}
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          disabled={blockSaving}
+                          onClick={() => void handleToggleBlock(!register.bookingBlocked)}
+                        >
+                          {blockSaving
+                            ? "Salvo..."
+                            : register.bookingBlocked
+                              ? "Sblocca"
+                              : "Blocca"}
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Crediti guida
-                  </p>
-                  {creditsLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-6 w-28 rounded-full" />
-                      <Skeleton className="h-10 w-full rounded-xl" />
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <p className="text-xs text-muted-foreground">Saldo disponibile</p>
-                          <p className="text-2xl font-semibold text-foreground">
-                            {credits?.availableCredits ?? 0}
-                          </p>
-                        </div>
-                        <Badge variant="outline">
-                          {credits?.availableCredits ?? 0} crediti
-                        </Badge>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
-                        <Input
-                          type="number"
-                          min={1}
-                          step={1}
-                          value={creditsInput}
-                          onChange={(event) => setCreditsInput(event.target.value)}
-                          className="border-white/60 bg-white/80"
-                          placeholder="Crediti"
-                        />
-                        <Button
-                          onClick={() => void handleAdjustCredits("grant")}
-                          disabled={creditsSaving !== null}
-                        >
-                          {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => void handleAdjustCredits("revoke")}
-                          disabled={creditsSaving !== null}
-                        >
-                          {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
-                        </Button>
-                      </div>
-                      {credits?.ledger.length ? (
-                        <div className="space-y-2">
-                          {credits.ledger.slice(0, 8).map((entry) => (
-                            <div
-                              key={entry.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 p-3"
-                            >
-                              <div className="space-y-1">
-                                <p className="text-sm font-medium text-foreground">
-                                  {formatCreditReason(entry.reason)}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {formatDate(entry.createdAt, true)}
-                                  {entry.actorName ? ` · ${entry.actorName}` : ""}
-                                </p>
-                              </div>
-                              <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
-                                {entry.delta >= 0 ? "+" : ""}
-                                {entry.delta}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          Nessun movimento crediti disponibile.
+                {/* Stats section — only in manual mode */}
+                {manualMode && register.extendedSummary && (
+                  <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Riepilogo guide
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Prenotate</p>
+                        <p className="text-2xl font-semibold text-foreground">
+                          {register.extendedSummary.booked}
                         </p>
-                      )}
-                    </>
-                  )}
-                </section>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Completate</p>
+                        <p className="text-2xl font-semibold text-foreground">
+                          {register.extendedSummary.completed}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Annullate</p>
+                        <p className="text-2xl font-semibold text-foreground">
+                          {register.extendedSummary.cancelled}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">In programma</p>
+                        <p className="text-2xl font-semibold text-foreground">
+                          {register.extendedSummary.upcoming}
+                        </p>
+                      </div>
+                    </div>
+                    {register.extendedSummary.manualUnpaid > 0 && (
+                      <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                        <span className="text-sm font-medium text-amber-800">
+                          Da pagare: {register.extendedSummary.manualUnpaid}
+                        </span>
+                      </div>
+                    )}
+                  </section>
+                )}
+
+                {/* Crediti guida — hide in manual mode */}
+                {(paymentMode?.auto || paymentMode?.credits) && (
+                  <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Crediti guida
+                    </p>
+                    {creditsLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-6 w-28 rounded-full" />
+                        <Skeleton className="h-10 w-full rounded-xl" />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Saldo disponibile</p>
+                            <p className="text-2xl font-semibold text-foreground">
+                              {credits?.availableCredits ?? 0}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {credits?.availableCredits ?? 0} crediti
+                          </Badge>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={creditsInput}
+                            onChange={(event) => setCreditsInput(event.target.value)}
+                            className="border-white/60 bg-white/80"
+                            placeholder="Crediti"
+                          />
+                          <Button
+                            onClick={() => void handleAdjustCredits("grant")}
+                            disabled={creditsSaving !== null}
+                          >
+                            {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => void handleAdjustCredits("revoke")}
+                            disabled={creditsSaving !== null}
+                          >
+                            {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
+                          </Button>
+                        </div>
+                        {credits?.ledger.length ? (
+                          <div className="space-y-2">
+                            {credits.ledger.slice(0, 8).map((entry) => (
+                              <div
+                                key={entry.id}
+                                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 p-3"
+                              >
+                                <div className="space-y-1">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {formatCreditReason(entry.reason)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatDate(entry.createdAt, true)}
+                                    {entry.actorName ? ` · ${entry.actorName}` : ""}
+                                  </p>
+                                </div>
+                                <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
+                                  {entry.delta >= 0 ? "+" : ""}
+                                  {entry.delta}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            Nessun movimento crediti disponibile.
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </section>
+                )}
 
                 <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
@@ -775,36 +989,96 @@ export function AutoscuoleStudentsPage({
                   )}
                 </section>
 
+                {/* Storico guide */}
                 <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     Storico guide
                   </p>
                   {register.lessons.length ? (
                     <div className="space-y-2">
-                      {register.lessons.map((lesson) => (
-                        <div
-                          key={lesson.id}
-                          className="rounded-2xl border border-white/60 bg-white/70 p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <p className="text-sm font-semibold text-foreground">
-                              {formatDate(lesson.startsAt, true)}
+                      {register.lessons.map((lesson) => {
+                        const isCompleted = lesson.status === "completed";
+                        const isCancelled = lesson.status === "cancelled";
+                        const showPaymentToggle =
+                          manualMode &&
+                          (isCompleted || lesson.manualPaymentStatus === "unpaid");
+                        const isCancelledCharged =
+                          isCancelled &&
+                          lesson.lateCancellationAction === "charged" &&
+                          lesson.manualPaymentStatus === "unpaid";
+
+                        return (
+                          <div
+                            key={lesson.id}
+                            className="rounded-2xl border border-white/60 bg-white/70 p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-sm font-semibold text-foreground">
+                                {formatDate(lesson.startsAt, true)}
+                              </p>
+                              <div className="flex items-center gap-1.5">
+                                {isCancelledCharged && (
+                                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                                    Annullata — Da pagare
+                                  </Badge>
+                                )}
+                                {!isCancelledCharged && lesson.manualPaymentStatus === "paid" && manualMode && (
+                                  <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700">
+                                    Pagata
+                                  </Badge>
+                                )}
+                                {!isCancelledCharged && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && (
+                                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+                                    Da pagare
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant={isCompleted ? "secondary" : "outline"}
+                                >
+                                  {formatStatus(lesson.status)}
+                                </Badge>
+                              </div>
+                            </div>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              Tipo: {formatLessonType(lesson.type)} · Durata {lesson.durationMinutes} min
                             </p>
-                            <Badge
-                              variant={lesson.status === "completed" ? "secondary" : "outline"}
-                            >
-                              {formatStatus(lesson.status)}
-                            </Badge>
+                            <p className="text-sm text-muted-foreground">
+                              Istruttore: {lesson.instructorName || "Da assegnare"} · Veicolo:{" "}
+                              {lesson.vehicleName || "Da assegnare"}
+                            </p>
+                            {(showPaymentToggle || isCancelledCharged) && (
+                              <div className="mt-2 flex gap-2">
+                                {(lesson.manualPaymentStatus !== "paid") && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={paymentSaving === lesson.id}
+                                    onClick={() =>
+                                      void handleSetManualPayment(lesson.id, "paid")
+                                    }
+                                  >
+                                    {paymentSaving === lesson.id ? "Salvo..." : "Segna pagata"}
+                                  </Button>
+                                )}
+                                {lesson.manualPaymentStatus === "paid" && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    disabled={paymentSaving === lesson.id}
+                                    onClick={() =>
+                                      void handleSetManualPayment(lesson.id, "unpaid")
+                                    }
+                                  >
+                                    {paymentSaving === lesson.id ? "Salvo..." : "Segna da pagare"}
+                                  </Button>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            Tipo: {formatLessonType(lesson.type)} · Durata {lesson.durationMinutes} min
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            Istruttore: {lesson.instructorName || "Da assegnare"} · Veicolo:{" "}
-                            {lesson.vehicleName || "Da assegnare"}
-                          </p>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">

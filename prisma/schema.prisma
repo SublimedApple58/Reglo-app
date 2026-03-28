@@ -212,6 +212,7 @@ model CompanyMember {
   userId         String         @db.Uuid
   role           String         @default("member")
   autoscuolaRole AutoscuolaRole @default(STUDENT)
+  bookingBlocked Boolean        @default(false)
   createdAt      DateTime       @default(now()) @db.Timestamp(6)
   updatedAt      DateTime       @updatedAt
 
@@ -321,6 +322,8 @@ model AutoscuolaAppointment {
   creditApplied           Boolean   @default(false)
   creditRefundedAt        DateTime? @db.Timestamp(6)
   availabilityOverrideApproved Boolean @default(false)
+  manualPaymentStatus     String?
+  lateCancellationAction  String?
   createdAt               DateTime  @default(now()) @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt
 
