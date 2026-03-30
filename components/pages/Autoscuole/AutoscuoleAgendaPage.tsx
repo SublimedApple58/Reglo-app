@@ -1038,9 +1038,7 @@ export function AutoscuoleAgendaPage({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: viewMode === "week"
-                ? `56px repeat(7, 1fr)`
-                : `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
+              gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
             }}
           >
             {/* Time gutter */}
