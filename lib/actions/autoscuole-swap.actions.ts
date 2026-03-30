@@ -591,7 +591,18 @@ export async function respondSwapOffer(
         userIds: [offer.requestingStudentId],
         title: "Affare fatto!",
         body: `${newStudentName} ti sostituirà per la guida di ${formattedDate} alle ${formattedTime}.`,
-        data: { kind: "swap_accepted" },
+        data: {
+          kind: "swap_accepted",
+          acceptedByName: newStudentName,
+          appointmentDate: formattedDate,
+          appointmentTime: formattedTime,
+          instructorName: offer.appointment.instructor?.name ?? "",
+          vehicleName: (await prisma.autoscuolaAppointment.findFirst({
+            where: { id: offer.appointmentId },
+            include: { vehicle: { select: { name: true } } },
+          }))?.vehicle?.name ?? "",
+          appointmentType: offer.appointment.type,
+        },
       });
     } catch (error) {
       console.error("Swap accept push (requester) error", error);
