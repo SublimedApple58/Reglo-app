@@ -637,3 +637,56 @@ export async function respondSwapOffer(
     return { success: false, message: formatError(error) };
   }
 }
+
+// ── getMyAcceptedSwaps ──────────────────────────────────────────────────
+
+const getMyAcceptedSwapsSchema = z.object({
+  studentId: z.string().uuid(),
+});
+
+export async function getMyAcceptedSwaps(
+  input: z.infer<typeof getMyAcceptedSwapsSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getMyAcceptedSwapsSchema.parse(input);
+
+    const offers = await prisma.autoscuolaSwapOffer.findMany({
+      where: {
+        companyId: membership.companyId,
+        requestingStudentId: payload.studentId,
+        status: "accepted",
+      },
+      include: {
+        appointment: {
+          include: {
+            instructor: { select: { name: true } },
+            vehicle: { select: { name: true } },
+          },
+        },
+        responses: {
+          where: { status: "accepted" },
+          include: { student: { select: { name: true } } },
+          take: 1,
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    });
+
+    const data = offers.map((offer) => ({
+      id: offer.id,
+      acceptedByName: offer.responses[0]?.student.name ?? "Un allievo",
+      appointmentDate: formatItalianDate(offer.appointment.startsAt),
+      appointmentTime: formatItalianTime(offer.appointment.startsAt),
+      instructorName: offer.appointment.instructor?.name ?? "",
+      vehicleName: offer.appointment.vehicle?.name ?? "",
+      appointmentType: offer.appointment.type,
+      acceptedAt: offer.updatedAt.toISOString(),
+    }));
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
