@@ -51,6 +51,7 @@ const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
 const DEFAULT_SWAP_ENABLED = false;
 const DEFAULT_SWAP_NOTIFY_MODE = "available_only" as const;
 const SWAP_NOTIFY_MODES = ["all", "available_only"] as const;
+const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
   "not_started",
@@ -260,6 +261,7 @@ const autoscuolaSettingsPatchSchema = z
     roundedHoursOnly: z.boolean().optional(),
     swapEnabled: z.boolean().optional(),
     swapNotifyMode: z.enum(["all", "available_only"]).optional(),
+    instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     studentBookingMode: studentBookingModeSchema.optional(),
@@ -307,6 +309,7 @@ const autoscuolaSettingsPatchSchema = z
       value.studentBookingMode !== undefined ||
       value.swapEnabled !== undefined ||
       value.swapNotifyMode !== undefined ||
+      value.instructorPreferenceEnabled !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
       value.voiceLanguage !== undefined ||
@@ -450,6 +453,7 @@ export type AutoscuolaSettingsData = {
   studentBookingMode: StudentBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
+  instructorPreferenceEnabled: boolean;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
   voiceLineRef: string | null;
@@ -561,6 +565,10 @@ const resolveAutoscuolaSettingsData = (
   )
     ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
     : DEFAULT_SWAP_NOTIFY_MODE;
+  const instructorPreferenceEnabled =
+    typeof limits.instructorPreferenceEnabled === "boolean"
+      ? limits.instructorPreferenceEnabled
+      : DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED;
   const voiceFeatureEnabled =
     typeof limits.voiceFeatureEnabled === "boolean"
       ? limits.voiceFeatureEnabled
@@ -653,6 +661,7 @@ const resolveAutoscuolaSettingsData = (
     studentBookingMode: bookingGovernance.studentBookingMode,
     swapEnabled,
     swapNotifyMode,
+    instructorPreferenceEnabled,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
     voiceLineRef,
@@ -788,6 +797,10 @@ export async function updateAutoscuolaSettings(
     )
       ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
       : DEFAULT_SWAP_NOTIFY_MODE;
+    const previousInstructorPreferenceEnabled =
+      typeof limits.instructorPreferenceEnabled === "boolean"
+        ? limits.instructorPreferenceEnabled
+        : DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -888,6 +901,8 @@ export async function updateAutoscuolaSettings(
       payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
     const nextSwapEnabled = payload.swapEnabled ?? previousSwapEnabled;
     const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
+    const nextInstructorPreferenceEnabled =
+      payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1015,6 +1030,7 @@ export async function updateAutoscuolaSettings(
       studentBookingMode: nextStudentBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
+      instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
       voiceLineRef: nextVoiceLineRef,
@@ -1086,6 +1102,7 @@ export async function updateAutoscuolaSettings(
         studentBookingMode: nextLimits.studentBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,
+        instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
         voiceLineRef: nextLimits.voiceLineRef,

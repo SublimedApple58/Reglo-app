@@ -70,6 +70,7 @@ const bookingRequestSchema = z.object({
   selectedStartsAt: z.string().optional(),
   excludeStartsAt: z.string().optional(),
   requestId: z.string().uuid().optional(),
+  instructorId: z.string().uuid().optional(),
 });
 
 const bookingOptionsSchema = z.object({
@@ -1369,7 +1370,11 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     const [activeInstructors, activeVehicles, studentAvailabilityRaw, autoscuolaService] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        where: {
+          companyId: membership.companyId,
+          status: { not: "inactive" },
+          ...(payload.instructorId ? { id: payload.instructorId } : {}),
+        },
         select: { id: true },
       }),
       prisma.autoscuolaVehicle.findMany({
@@ -2060,6 +2065,11 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       }
     }
 
+    const instructorPreferenceEnabled =
+      typeof limits.instructorPreferenceEnabled === "boolean"
+        ? limits.instructorPreferenceEnabled
+        : false;
+
     return {
       success: true,
       data: {
@@ -2067,6 +2077,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         lessonTypeSelectionEnabled,
         availableLessonTypes,
         studentBookingMode: governance.studentBookingMode,
+        instructorPreferenceEnabled,
       },
     };
   } catch (error) {
@@ -2078,6 +2089,7 @@ const availableSlotsSchema = z.object({
   studentId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   durationMinutes: z.number().int().min(30).max(120),
+  instructorId: z.string().uuid().optional(),
   lessonType: z.string().optional(),
 });
 
@@ -2156,7 +2168,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       student,
     ] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        where: {
+          companyId: membership.companyId,
+          status: { not: "inactive" },
+          ...(payload.instructorId ? { id: payload.instructorId } : {}),
+        },
         select: { id: true },
       }),
       prisma.autoscuolaVehicle.findMany({

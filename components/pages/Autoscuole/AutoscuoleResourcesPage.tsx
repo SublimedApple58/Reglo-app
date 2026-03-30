@@ -236,6 +236,7 @@ export function AutoscuoleResourcesPage({
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
+  const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -413,6 +414,7 @@ export function AutoscuoleResourcesPage({
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
       setSwapEnabled(res.data.swapEnabled ?? false);
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+      setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
           ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -547,6 +549,7 @@ export function AutoscuoleResourcesPage({
       roundedHoursOnly,
       swapEnabled,
       swapNotifyMode,
+      instructorPreferenceEnabled,
       appBookingActors,
       instructorBookingMode,
       studentBookingMode,
@@ -589,6 +592,7 @@ export function AutoscuoleResourcesPage({
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
     setSwapEnabled(res.data.swapEnabled ?? false);
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+    setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -1605,7 +1609,6 @@ export function AutoscuoleResourcesPage({
               expanded={expandedSection === "swap"}
               onToggle={() => toggleSection("swap")}
               isFirst
-              isLast
             >
               <div className="space-y-5 max-w-2xl">
                 <div
@@ -1634,6 +1637,29 @@ export function AutoscuoleResourcesPage({
                     </Select>
                   </FieldGroup>
                 ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={Users}
+              title="Preferenza istruttore"
+              description="Consenti agli allievi di scegliere l'istruttore quando prenotano una guida."
+              expanded={expandedSection === "instructorPreference"}
+              onToggle={() => toggleSection("instructorPreference")}
+              isLast
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setInstructorPreferenceEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Consenti scelta istruttore</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi potranno selezionare un istruttore specifico durante la prenotazione. Se non ne selezionano uno, vedranno le proposte di tutti gli istruttori.
+                    </span>
+                  </div>
+                  <InlineToggle checked={instructorPreferenceEnabled} size="sm" />
+                </div>
               </div>
             </AccordionSection>
           </div>
