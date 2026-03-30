@@ -254,7 +254,6 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     lessonTypeConstraints: lessonTypeConstraintsSchema.optional(),
     bookingSlotDurations: bookingSlotDurationsSchema.optional(),
-    roundedHoursOnly: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     studentBookingMode: studentBookingModeSchema.optional(),
@@ -437,7 +436,6 @@ export type AutoscuolaSettingsData = {
     >
   >;
   bookingSlotDurations: number[];
-  roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
   studentBookingMode: StudentBookingMode;
@@ -626,10 +624,6 @@ const resolveAutoscuolaSettingsData = (
     lessonRequiredTypes: lessonPolicy.lessonRequiredTypes,
     lessonTypeConstraints: lessonPolicy.lessonTypeConstraints,
     bookingSlotDurations,
-    roundedHoursOnly:
-      typeof limits.roundedHoursOnly === "boolean"
-        ? limits.roundedHoursOnly
-        : false,
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
     studentBookingMode: bookingGovernance.studentBookingMode,
@@ -978,7 +972,6 @@ export async function updateAutoscuolaSettings(
       lessonRequiredTypes: nextLessonRequiredTypes,
       lessonTypeConstraints: nextLessonTypeConstraints,
       bookingSlotDurations: nextBookingSlotDurations,
-      roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
       studentBookingMode: nextStudentBookingMode,
@@ -1047,7 +1040,6 @@ export async function updateAutoscuolaSettings(
         lessonRequiredTypes: nextLimits.lessonRequiredTypes,
         lessonTypeConstraints: nextLimits.lessonTypeConstraints,
         bookingSlotDurations: nextLimits.bookingSlotDurations,
-        roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
         studentBookingMode: nextLimits.studentBookingMode,

@@ -1349,7 +1349,6 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const bookingMinStartDate = typeof serviceLimits.bookingMinStartDate === "string"
       ? serviceLimits.bookingMinStartDate.trim()
       : null;
-    const roundedHoursOnly = serviceLimits.roundedHoursOnly === true;
     if (bookingMinStartDate) {
       const minDate = new Date(bookingMinStartDate);
       minDate.setHours(0, 0, 0, 0);
@@ -1574,7 +1573,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       );
     };
 
-    const slotStep = roundedHoursOnly ? 60 : SLOT_MINUTES;
+    const slotStep = SLOT_MINUTES;
     const buildCandidateStarts = (
       dayParts: CalendarDateParts,
       window: { startMinutes: number; endMinutes: number },
@@ -2102,7 +2101,6 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       select: { limits: true },
     });
     const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<string, unknown>;
-    const roundedHoursOnly = serviceLimits.roundedHoursOnly === true;
     const bookingMinStartDate =
       typeof serviceLimits.bookingMinStartDate === "string"
         ? serviceLimits.bookingMinStartDate.trim()
@@ -2233,7 +2231,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       );
     };
 
-    const slotStep = roundedHoursOnly ? 60 : SLOT_MINUTES;
+    const slotStep = SLOT_MINUTES;
     const result: Array<{ startsAt: string; endsAt: string }> = [];
     const studentIntervals = intervals.get(payload.studentId);
 
