@@ -49,7 +49,9 @@ export type LessonCreditLedgerReason =
   | "manual_grant"
   | "manual_revoke"
   | "booking_consume"
-  | "cancel_refund";
+  | "cancel_refund"
+  | "swap_refund"
+  | "swap_consume";
 
 let stripeSingleton: Stripe | null = null;
 

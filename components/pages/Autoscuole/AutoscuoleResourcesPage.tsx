@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Settings2, Users, Truck } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
@@ -205,7 +205,7 @@ export function AutoscuoleResourcesPage({
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
-  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles">("settings");
+  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles" | "students">("settings");
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
@@ -234,6 +234,8 @@ export function AutoscuoleResourcesPage({
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
+  const [swapEnabled, setSwapEnabled] = React.useState(false);
+  const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -409,6 +411,8 @@ export function AutoscuoleResourcesPage({
       setLessonConstraints(nextConstraints);
       setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+      setSwapEnabled(res.data.swapEnabled ?? false);
+      setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
           ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -541,6 +545,8 @@ export function AutoscuoleResourcesPage({
       lessonTypeConstraints,
       bookingSlotDurations,
       roundedHoursOnly,
+      swapEnabled,
+      swapNotifyMode,
       appBookingActors,
       instructorBookingMode,
       studentBookingMode,
@@ -581,6 +587,8 @@ export function AutoscuoleResourcesPage({
     setLessonConstraints(nextConstraints);
     setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+    setSwapEnabled(res.data.swapEnabled ?? false);
+    setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -1126,6 +1134,7 @@ export function AutoscuoleResourcesPage({
             { key: "settings" as const, label: "Impostazioni", icon: Settings2 },
             { key: "instructors" as const, label: "Istruttori", icon: Users },
             { key: "vehicles" as const, label: "Veicoli", icon: Truck },
+            { key: "students" as const, label: "Gestione allievi", icon: UserRoundCog },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -1583,6 +1592,61 @@ export function AutoscuoleResourcesPage({
                 Nessun istruttore disponibile.
               </div>
             ) : null}
+          </div>
+          </>
+        ) : configTab === "students" ? (
+          <>
+          {/* ── Gestione allievi tab ── */}
+          <div className="rounded-2xl border border-border bg-white shadow-card">
+            <AccordionSection
+              icon={UserRoundCog}
+              title="Sostituiscimi"
+              description="Consenti agli allievi di proporre scambi guide tra loro."
+              expanded={expandedSection === "swap"}
+              onToggle={() => toggleSection("swap")}
+              isFirst
+              isLast
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setSwapEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Consenti scambi tra allievi</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi potranno proporre ad altri di prendere il loro posto in una guida futura.
+                    </span>
+                  </div>
+                  <InlineToggle checked={swapEnabled} size="sm" />
+                </div>
+
+                {swapEnabled ? (
+                  <FieldGroup label="Modalità notifica">
+                    <Select value={swapNotifyMode} onValueChange={(value) => setSwapNotifyMode(value as "all" | "available_only")}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Modalità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="available_only">Solo allievi disponibili nello slot</SelectItem>
+                        <SelectItem value="all">Tutti gli allievi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                ) : null}
+              </div>
+            </AccordionSection>
+          </div>
+
+          {/* Save button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={handleSaveSettings}
+              disabled={savingSettings}
+              className="min-w-[180px]"
+            >
+              {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+            </Button>
           </div>
           </>
         ) : (

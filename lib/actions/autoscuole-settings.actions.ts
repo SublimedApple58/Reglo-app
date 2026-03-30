@@ -48,6 +48,9 @@ const DEFAULT_PENALTY_CUTOFF_HOURS = 24;
 const DEFAULT_PENALTY_PERCENT = 50;
 const DEFAULT_PAYMENT_NOTIFICATION_CHANNELS = ["push", "email"] as const;
 const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
+const DEFAULT_SWAP_ENABLED = false;
+const DEFAULT_SWAP_NOTIFY_MODE = "available_only" as const;
+const SWAP_NOTIFY_MODES = ["all", "available_only"] as const;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
   "not_started",
@@ -255,6 +258,8 @@ const autoscuolaSettingsPatchSchema = z
     lessonTypeConstraints: lessonTypeConstraintsSchema.optional(),
     bookingSlotDurations: bookingSlotDurationsSchema.optional(),
     roundedHoursOnly: z.boolean().optional(),
+    swapEnabled: z.boolean().optional(),
+    swapNotifyMode: z.enum(["all", "available_only"]).optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
     studentBookingMode: studentBookingModeSchema.optional(),
@@ -300,6 +305,8 @@ const autoscuolaSettingsPatchSchema = z
       value.appBookingActors !== undefined ||
       value.instructorBookingMode !== undefined ||
       value.studentBookingMode !== undefined ||
+      value.swapEnabled !== undefined ||
+      value.swapNotifyMode !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
       value.voiceLanguage !== undefined ||
@@ -441,6 +448,8 @@ export type AutoscuolaSettingsData = {
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
   studentBookingMode: StudentBookingMode;
+  swapEnabled: boolean;
+  swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
   voiceLineRef: string | null;
@@ -543,6 +552,15 @@ const resolveAutoscuolaSettingsData = (
     DEFAULT_BOOKING_SLOT_DURATIONS,
   );
   const bookingGovernance = parseBookingGovernanceFromLimits(limits);
+  const swapEnabled =
+    typeof limits.swapEnabled === "boolean"
+      ? limits.swapEnabled
+      : DEFAULT_SWAP_ENABLED;
+  const swapNotifyMode = (SWAP_NOTIFY_MODES as readonly string[]).includes(
+    limits.swapNotifyMode as string,
+  )
+    ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
+    : DEFAULT_SWAP_NOTIFY_MODE;
   const voiceFeatureEnabled =
     typeof limits.voiceFeatureEnabled === "boolean"
       ? limits.voiceFeatureEnabled
@@ -633,6 +651,8 @@ const resolveAutoscuolaSettingsData = (
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
     studentBookingMode: bookingGovernance.studentBookingMode,
+    swapEnabled,
+    swapNotifyMode,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
     voiceLineRef,
@@ -759,6 +779,15 @@ export async function updateAutoscuolaSettings(
       DEFAULT_BOOKING_SLOT_DURATIONS,
     );
     const previousBookingGovernance = parseBookingGovernanceFromLimits(limits);
+    const previousSwapEnabled =
+      typeof limits.swapEnabled === "boolean"
+        ? limits.swapEnabled
+        : DEFAULT_SWAP_ENABLED;
+    const previousSwapNotifyMode = (SWAP_NOTIFY_MODES as readonly string[]).includes(
+      limits.swapNotifyMode as string,
+    )
+      ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
+      : DEFAULT_SWAP_NOTIFY_MODE;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -857,6 +886,8 @@ export async function updateAutoscuolaSettings(
         : DEFAULT_INSTRUCTOR_BOOKING_MODE);
     const nextStudentBookingMode =
       payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
+    const nextSwapEnabled = payload.swapEnabled ?? previousSwapEnabled;
+    const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -982,6 +1013,8 @@ export async function updateAutoscuolaSettings(
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
       studentBookingMode: nextStudentBookingMode,
+      swapEnabled: nextSwapEnabled,
+      swapNotifyMode: nextSwapNotifyMode,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
       voiceLineRef: nextVoiceLineRef,
@@ -1051,6 +1084,8 @@ export async function updateAutoscuolaSettings(
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
         studentBookingMode: nextLimits.studentBookingMode,
+        swapEnabled: nextLimits.swapEnabled,
+        swapNotifyMode: nextLimits.swapNotifyMode,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
         voiceLineRef: nextLimits.voiceLineRef,

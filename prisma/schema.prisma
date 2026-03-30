@@ -56,6 +56,8 @@ model User {
   autoscuolaAppointments               AutoscuolaAppointment[]
   autoscuolaBookingRequests            AutoscuolaBookingRequest[]
   autoscuolaWaitlistResponses          AutoscuolaWaitlistResponse[]
+  autoscuolaSwapOfferRequests          AutoscuolaSwapOffer[]                  @relation("SwapOfferRequester")
+  autoscuolaSwapResponses              AutoscuolaSwapResponse[]               @relation("SwapResponseStudent")
   autoscuolaDocuments                  AutoscuolaDocument[]
   autoscuolaPaymentPlans               AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles            AutoscuolaStudentPaymentProfile[]
@@ -172,6 +174,7 @@ model Company {
   autoscuolaDailyAvailabilityOverrides  AutoscuolaDailyAvailabilityOverride[]
   autoscuolaBookingRequests      AutoscuolaBookingRequest[]
   autoscuolaWaitlistOffers       AutoscuolaWaitlistOffer[]
+  autoscuolaSwapOffers           AutoscuolaSwapOffer[]
   autoscuolaDocuments            AutoscuolaDocument[]
   autoscuolaPaymentPlans         AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles      AutoscuolaStudentPaymentProfile[]
@@ -341,6 +344,7 @@ model AutoscuolaAppointment {
   voiceCalls            AutoscuolaVoiceCall[]
   repositionTaskSource  AutoscuolaAppointmentRepositionTask?  @relation("AutoscuolaRepositionSource")
   repositionTaskMatched AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionMatched")
+  swapOffers            AutoscuolaSwapOffer[]
 
   @@index([companyId])
   @@index([studentId])
@@ -650,6 +654,43 @@ model AutoscuolaWaitlistResponse {
 
   offer   AutoscuolaWaitlistOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
   student User                    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@index([offerId])
+  @@index([studentId])
+}
+
+model AutoscuolaSwapOffer {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId           String   @db.Uuid
+  appointmentId       String   @db.Uuid
+  requestingStudentId String   @db.Uuid
+  status              String   @default("broadcasted")
+  sentAt              DateTime @db.Timestamp(6)
+  expiresAt           DateTime @db.Timestamp(6)
+  createdAt           DateTime @default(now()) @db.Timestamp(6)
+  updatedAt           DateTime @updatedAt
+
+  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment       AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  requestingStudent User                  @relation("SwapOfferRequester", fields: [requestingStudentId], references: [id], onDelete: Restrict)
+  responses         AutoscuolaSwapResponse[]
+
+  @@index([companyId])
+  @@index([appointmentId])
+  @@index([status])
+}
+
+model AutoscuolaSwapResponse {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  offerId     String   @db.Uuid
+  studentId   String   @db.Uuid
+  status      String   @default("pending")
+  respondedAt DateTime @db.Timestamp(6)
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt
+
+  offer   AutoscuolaSwapOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  student User                @relation("SwapResponseStudent", fields: [studentId], references: [id], onDelete: Restrict)
 
   @@index([offerId])
   @@index([studentId])
