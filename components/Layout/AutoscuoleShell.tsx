@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAtomValue, useSetAtom } from "jotai";
 import { LogOut, Settings, ChevronsUpDown, Plus, Check } from "lucide-react";
 
@@ -32,7 +32,22 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   const session = useAtomValue(userSessionAtom);
   const avatarUrl = useAtomValue(userAvatarUrlAtom);
   const router = useRouter();
+  const pathname = usePathname();
   const toast = useFeedbackToast();
+  const searchParams = useSearchParams();
+  const isAgenda = searchParams.get("tab") === "agenda";
+  const [agendaStoredMode, setAgendaStoredMode] = React.useState("instructor");
+  React.useEffect(() => {
+    if (!isAgenda) return;
+    const stored = localStorage.getItem("reglo-agenda-mode") || "instructor";
+    setAgendaStoredMode(stored);
+    const handler = () => setAgendaStoredMode(localStorage.getItem("reglo-agenda-mode") || "instructor");
+    window.addEventListener("storage", handler);
+    // Also poll briefly to catch same-tab changes
+    const interval = setInterval(handler, 300);
+    return () => { window.removeEventListener("storage", handler); clearInterval(interval); };
+  }, [isAgenda]);
+  const isWideLayout = isAgenda && agendaStoredMode !== "classic";
 
   const initials = React.useMemo(() => {
     const name = session?.user?.name?.trim();
@@ -189,7 +204,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main content */}
-      <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 pt-8 pb-10 lg:gap-8 lg:px-6 lg:pt-10 lg:pb-12">
+      <main className={`mx-auto flex w-full flex-1 flex-col gap-6 px-4 pt-8 pb-10 lg:gap-8 lg:px-6 lg:pt-10 lg:pb-12 ${isWideLayout ? "max-w-[1920px]" : "max-w-7xl"}`}>
         {children}
       </main>
     </div>

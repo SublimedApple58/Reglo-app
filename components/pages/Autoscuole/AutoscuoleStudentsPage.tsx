@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { ExternalLink, Loader2, MailPlus, UserPlus } from "lucide-react";
+import { BookOpen, ExternalLink, FileText, Loader2, MailPlus, NotebookPen, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -109,6 +109,7 @@ type LessonEntry = {
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
   lateCancellationAction: string | null;
+  notes: string | null;
   createdAt: string | Date | null;
 };
 
@@ -252,6 +253,9 @@ export function AutoscuoleStudentsPage({
   // Sub-tabs
   const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
   const [lateCancellationsCount, setLateCancellationsCount] = React.useState(0);
+
+  // Drawer tabs
+  const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
 
   // Booking block toggle
   const [blockSaving, setBlockSaving] = React.useState(false);
@@ -743,17 +747,60 @@ export function AutoscuoleStudentsPage({
             setCreditsLoading(false);
             setCreditsSaving(null);
             setCreditsInput("1");
+            setDrawerTab("summary");
           }
         }}
       >
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,960px)] data-[vaul-drawer-direction=right]:sm:max-w-4xl h-full">
-          <DrawerHeader className="border-b border-white/60 bg-white/80 backdrop-blur">
-            <DrawerTitle>Registro guide allievo</DrawerTitle>
-            <DrawerDescription>
-              {selectedStudent
-                ? `${selectedStudent.firstName} ${selectedStudent.lastName}`
-                : "Dettaglio allievo"}
-            </DrawerDescription>
+          {/* Header with student info */}
+          <DrawerHeader className="border-b border-border/40 bg-white px-5 py-4">
+            <div className="flex items-center gap-3.5">
+              {selectedStudent && (
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pink-50 ring-1 ring-pink-100">
+                  <span className="text-base font-bold text-pink-500">
+                    {selectedStudent.firstName.charAt(0)}{selectedStudent.lastName.charAt(0)}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <DrawerTitle className="text-base font-semibold text-foreground">
+                  {selectedStudent
+                    ? `${selectedStudent.firstName} ${selectedStudent.lastName}`
+                    : "Dettaglio allievo"}
+                </DrawerTitle>
+                <DrawerDescription className="text-xs text-muted-foreground">
+                  {register?.student.email || register?.student.phone || "Registro guide allievo"}
+                </DrawerDescription>
+              </div>
+              {register?.bookingBlocked && (
+                <Badge variant="destructive" className="shrink-0 text-[10px]">Bloccato</Badge>
+              )}
+            </div>
+
+            {/* Drawer tabs */}
+            {register && (
+              <div className="mt-3 flex gap-1 rounded-lg bg-gray-100/80 p-1">
+                {([
+                  { key: "summary" as const, label: "Riepilogo", icon: BookOpen },
+                  { key: "lessons" as const, label: "Guide", icon: FileText },
+                  { key: "notes" as const, label: `Note${register.lessons.filter(l => l.notes?.trim()).length ? ` (${register.lessons.filter(l => l.notes?.trim()).length})` : ""}`, icon: NotebookPen },
+                ]).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setDrawerTab(tab.key)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                      drawerTab === tab.key
+                        ? "bg-white text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <tab.icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </DrawerHeader>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
@@ -765,328 +812,406 @@ export function AutoscuoleStudentsPage({
               </div>
             ) : register ? (
               <>
-                {/* Anagrafica */}
-                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Anagrafica
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Nome</p>
-                      <p className="font-medium text-foreground">
-                        {register.student.firstName} {register.student.lastName}
+                {/* ── TAB: Riepilogo ── */}
+                {drawerTab === "summary" && (
+                  <>
+                    {/* Anagrafica */}
+                    <section className="rounded-2xl border border-border/50 bg-white p-4">
+                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                        Anagrafica
                       </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Email</p>
-                      <p className="font-medium text-foreground">{register.student.email || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Telefono</p>
-                      <p className="font-medium text-foreground">{register.student.phone || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Case attiva</p>
-                      <p className="font-medium text-foreground">
-                        {register.activeCase
-                          ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
-                          : "Nessuna"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Prenotazioni</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={register.bookingBlocked ? "destructive" : "secondary"}>
-                          {register.bookingBlocked ? "Bloccate" : "Attive"}
-                        </Badge>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          disabled={blockSaving}
-                          onClick={() => void handleToggleBlock(!register.bookingBlocked)}
-                        >
-                          {blockSaving
-                            ? "Salvo..."
-                            : register.bookingBlocked
-                              ? "Sblocca"
-                              : "Blocca"}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Stats section — only in manual mode */}
-                {manualMode && register.extendedSummary && (
-                  <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Riepilogo guide
-                    </p>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Prenotate</p>
-                        <p className="text-2xl font-semibold text-foreground">
-                          {register.extendedSummary.booked}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Completate</p>
-                        <p className="text-2xl font-semibold text-foreground">
-                          {register.extendedSummary.completed}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Annullate</p>
-                        <p className="text-2xl font-semibold text-foreground">
-                          {register.extendedSummary.cancelled}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">In programma</p>
-                        <p className="text-2xl font-semibold text-foreground">
-                          {register.extendedSummary.upcoming}
-                        </p>
-                      </div>
-                    </div>
-                    {register.extendedSummary.manualUnpaid > 0 && (
-                      <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                        <span className="text-sm font-medium text-amber-800">
-                          Da pagare: {register.extendedSummary.manualUnpaid}
-                        </span>
-                      </div>
-                    )}
-                  </section>
-                )}
-
-                {/* Crediti guida — hide in manual mode */}
-                {(paymentMode?.auto || paymentMode?.credits) && (
-                  <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Crediti guida
-                    </p>
-                    {creditsLoading ? (
-                      <div className="space-y-2">
-                        <Skeleton className="h-6 w-28 rounded-full" />
-                        <Skeleton className="h-10 w-full rounded-xl" />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Saldo disponibile</p>
-                            <p className="text-2xl font-semibold text-foreground">
-                              {credits?.availableCredits ?? 0}
-                            </p>
+                      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Nome</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {register.student.firstName} {register.student.lastName}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Email</p>
+                          <p className="text-sm font-medium text-foreground">{register.student.email || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Telefono</p>
+                          <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Case attiva</p>
+                          <p className="text-sm font-medium text-foreground">
+                            {register.activeCase
+                              ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
+                              : "Nessuna"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={register.bookingBlocked ? "destructive" : "secondary"} className="text-[11px]">
+                              {register.bookingBlocked ? "Bloccate" : "Attive"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2 text-[11px]"
+                              disabled={blockSaving}
+                              onClick={() => void handleToggleBlock(!register.bookingBlocked)}
+                            >
+                              {blockSaving
+                                ? "Salvo..."
+                                : register.bookingBlocked
+                                  ? "Sblocca"
+                                  : "Blocca"}
+                            </Button>
                           </div>
-                          <Badge variant="outline">
-                            {credits?.availableCredits ?? 0} crediti
-                          </Badge>
                         </div>
-                        <div className="grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
-                          <Input
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={creditsInput}
-                            onChange={(event) => setCreditsInput(event.target.value)}
-                            className="border-white/60 bg-white/80"
-                            placeholder="Crediti"
-                          />
-                          <Button
-                            onClick={() => void handleAdjustCredits("grant")}
-                            disabled={creditsSaving !== null}
-                          >
-                            {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => void handleAdjustCredits("revoke")}
-                            disabled={creditsSaving !== null}
-                          >
-                            {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
-                          </Button>
+                      </div>
+                    </section>
+
+                    {/* Stats — manual mode */}
+                    {manualMode && register.extendedSummary && (
+                      <section className="rounded-2xl border border-border/50 bg-white p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          Riepilogo guide
+                        </p>
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                          {[
+                            { label: "Prenotate", value: register.extendedSummary.booked },
+                            { label: "Completate", value: register.extendedSummary.completed },
+                            { label: "Annullate", value: register.extendedSummary.cancelled },
+                            { label: "In programma", value: register.extendedSummary.upcoming },
+                          ].map((stat) => (
+                            <div key={stat.label} className="rounded-xl bg-gray-50/80 p-3">
+                              <p className="text-[11px] text-muted-foreground">{stat.label}</p>
+                              <p className="text-xl font-semibold text-foreground">{stat.value}</p>
+                            </div>
+                          ))}
                         </div>
-                        {credits?.ledger.length ? (
+                        {register.extendedSummary.manualUnpaid > 0 && (
+                          <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                            <span className="text-sm font-medium text-amber-800">
+                              Da pagare: {register.extendedSummary.manualUnpaid}
+                            </span>
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* Obbligo guide */}
+                    <section className="rounded-2xl border border-border/50 bg-white p-4">
+                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                        Obbligo guide
+                      </p>
+                      <div className="flex items-end gap-6">
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-3xl font-bold text-foreground">
+                            {register.summary.completedLessons}
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            /{register.summary.requiredLessons}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
+                            <div
+                              className="h-full rounded-full bg-pink-400 transition-all"
+                              style={{
+                                width: `${Math.min(100, (register.summary.completedLessons / Math.max(1, register.summary.requiredLessons)) * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            {register.summary.isCompleted
+                              ? "Obbligo completato"
+                              : `${register.summary.remaining} rimanenti`}
+                          </p>
+                        </div>
+                      </div>
+                    </section>
+
+                    {/* Tipi guida */}
+                    {register.byLessonType.length > 0 && (
+                      <section className="rounded-2xl border border-border/50 bg-white p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          Tipi guida completati
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {register.byLessonType.map((item) => (
+                            <span
+                              key={`${item.type}-${item.count}`}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-foreground ring-1 ring-border/40"
+                            >
+                              {formatLessonType(item.type)}
+                              <span className="text-muted-foreground">{item.count}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {/* Crediti guida — hide in manual mode */}
+                    {(paymentMode?.auto || paymentMode?.credits) && (
+                      <section className="rounded-2xl border border-border/50 bg-white p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          Crediti guida
+                        </p>
+                        {creditsLoading ? (
                           <div className="space-y-2">
-                            {credits.ledger.slice(0, 8).map((entry) => (
-                              <div
-                                key={entry.id}
-                                className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/60 bg-white/70 p-3"
-                              >
-                                <div className="space-y-1">
-                                  <p className="text-sm font-medium text-foreground">
-                                    {formatCreditReason(entry.reason)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {formatDate(entry.createdAt, true)}
-                                    {entry.actorName ? ` · ${entry.actorName}` : ""}
-                                  </p>
-                                </div>
-                                <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
-                                  {entry.delta >= 0 ? "+" : ""}
-                                  {entry.delta}
-                                </Badge>
-                              </div>
-                            ))}
+                            <Skeleton className="h-6 w-28 rounded-full" />
+                            <Skeleton className="h-10 w-full rounded-xl" />
                           </div>
                         ) : (
-                          <p className="text-sm text-muted-foreground">
-                            Nessun movimento crediti disponibile.
-                          </p>
+                          <>
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-[11px] text-muted-foreground">Saldo disponibile</p>
+                                <p className="text-2xl font-semibold text-foreground">
+                                  {credits?.availableCredits ?? 0}
+                                </p>
+                              </div>
+                              <Badge variant="outline">
+                                {credits?.availableCredits ?? 0} crediti
+                              </Badge>
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
+                              <Input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={creditsInput}
+                                onChange={(event) => setCreditsInput(event.target.value)}
+                                className="bg-gray-50/80"
+                                placeholder="Crediti"
+                              />
+                              <Button
+                                onClick={() => void handleAdjustCredits("grant")}
+                                disabled={creditsSaving !== null}
+                              >
+                                {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                onClick={() => void handleAdjustCredits("revoke")}
+                                disabled={creditsSaving !== null}
+                              >
+                                {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
+                              </Button>
+                            </div>
+                            {credits?.ledger.length ? (
+                              <div className="mt-3 space-y-1.5">
+                                {credits.ledger.slice(0, 8).map((entry) => (
+                                  <div
+                                    key={entry.id}
+                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-50/80 p-3"
+                                  >
+                                    <div className="space-y-0.5">
+                                      <p className="text-sm font-medium text-foreground">
+                                        {formatCreditReason(entry.reason)}
+                                      </p>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {formatDate(entry.createdAt, true)}
+                                        {entry.actorName ? ` · ${entry.actorName}` : ""}
+                                      </p>
+                                    </div>
+                                    <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
+                                      {entry.delta >= 0 ? "+" : ""}
+                                      {entry.delta}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                Nessun movimento crediti disponibile.
+                              </p>
+                            )}
+                          </>
                         )}
-                      </>
+                      </section>
                     )}
-                  </section>
+                  </>
                 )}
 
-                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Stato obbligo guide
-                  </p>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Completate</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {register.summary.completedLessons}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Rimanenti</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {register.summary.remaining}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Obbligo</p>
-                      <p className="text-2xl font-semibold text-foreground">
-                        {register.summary.requiredLessons}
-                      </p>
-                    </div>
-                  </div>
-                  <Badge variant={register.summary.isCompleted ? "secondary" : "outline"}>
-                    {register.summary.completedLessons}/{register.summary.requiredLessons} ·{" "}
-                    {register.summary.isCompleted ? "Completato" : "In corso"}
-                  </Badge>
-                </section>
+                {/* ── TAB: Guide ── */}
+                {drawerTab === "lessons" && (() => {
+                  const sortedLessons = [...register.lessons].sort((a, b) => {
+                    const aUnpaid = a.manualPaymentStatus !== "paid" && (
+                      (["completed", "checked_in"].includes(a.status) && manualMode) ||
+                      a.manualPaymentStatus === "unpaid" ||
+                      (a.status === "cancelled" && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
+                    );
+                    const bUnpaid = b.manualPaymentStatus !== "paid" && (
+                      (["completed", "checked_in"].includes(b.status) && manualMode) ||
+                      b.manualPaymentStatus === "unpaid" ||
+                      (b.status === "cancelled" && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
+                    );
+                    if (aUnpaid && !bUnpaid) return -1;
+                    if (!aUnpaid && bUnpaid) return 1;
+                    return 0;
+                  });
+                  return (
+                  <>
+                    {sortedLessons.length ? (
+                      <div className="space-y-2">
+                        {sortedLessons.map((lesson) => {
+                          const isCompleted = lesson.status === "completed";
+                          const isCheckedIn = lesson.status === "checked_in";
+                          const isCancelled = lesson.status === "cancelled";
+                          const showPaymentToggle =
+                            manualMode &&
+                            (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid");
+                          const isCancelledCharged =
+                            isCancelled &&
+                            lesson.lateCancellationAction === "charged" &&
+                            lesson.manualPaymentStatus === "unpaid";
 
-                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Tipi guida completati
-                  </p>
-                  {register.byLessonType.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {register.byLessonType.map((item) => (
-                        <Badge key={`${item.type}-${item.count}`} variant="outline">
-                          {formatLessonType(item.type)} · {item.count}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Nessuna guida completata per questo allievo.
-                    </p>
-                  )}
-                </section>
-
-                {/* Storico guide */}
-                <section className="space-y-3 rounded-[16px] border border-border bg-white p-4 shadow-card">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    Storico guide
-                  </p>
-                  {register.lessons.length ? (
-                    <div className="space-y-2">
-                      {register.lessons.map((lesson) => {
-                        const isCompleted = lesson.status === "completed";
-                        const isCheckedIn = lesson.status === "checked_in";
-                        const isCancelled = lesson.status === "cancelled";
-                        const showPaymentToggle =
-                          manualMode &&
-                          (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid");
-                        const isCancelledCharged =
-                          isCancelled &&
-                          lesson.lateCancellationAction === "charged" &&
-                          lesson.manualPaymentStatus === "unpaid";
-
-                        return (
-                          <div
-                            key={lesson.id}
-                            className="rounded-2xl border border-white/60 bg-white/70 p-3"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-sm font-semibold text-foreground">
-                                {formatDate(lesson.startsAt, true)}
+                          return (
+                            <div
+                              key={lesson.id}
+                              className="rounded-2xl border border-border/50 bg-white p-3.5"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-sm font-semibold text-foreground">
+                                  {formatDate(lesson.startsAt, true)}
+                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  {isCancelledCharged && (
+                                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
+                                      Annullata — Da pagare
+                                    </Badge>
+                                  )}
+                                  {!isCancelledCharged && lesson.manualPaymentStatus === "paid" && manualMode && (
+                                    <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
+                                      Pagata
+                                    </Badge>
+                                  )}
+                                  {!isCancelledCharged && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && (
+                                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
+                                      Da pagare
+                                    </Badge>
+                                  )}
+                                  <Badge
+                                    variant={isCompleted ? "secondary" : "outline"}
+                                    className="text-[10px]"
+                                  >
+                                    {formatStatus(lesson.status)}
+                                  </Badge>
+                                </div>
+                              </div>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {formatLessonType(lesson.type)} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                               </p>
-                              <div className="flex items-center gap-1.5">
-                                {isCancelledCharged && (
-                                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
-                                    Annullata — Da pagare
-                                  </Badge>
+                              {(showPaymentToggle || isCancelledCharged) && (
+                                <div className="mt-2 flex gap-2">
+                                  {(lesson.manualPaymentStatus !== "paid") && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      disabled={paymentSaving === lesson.id}
+                                      onClick={() =>
+                                        void handleSetManualPayment(lesson.id, "paid")
+                                      }
+                                    >
+                                      {paymentSaving === lesson.id ? "Salvo..." : "Segna pagata"}
+                                    </Button>
+                                  )}
+                                  {lesson.manualPaymentStatus === "paid" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 text-xs"
+                                      disabled={paymentSaving === lesson.id}
+                                      onClick={() =>
+                                        void handleSetManualPayment(lesson.id, "unpaid")
+                                      }
+                                    >
+                                      {paymentSaving === lesson.id ? "Salvo..." : "Segna da pagare"}
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <FileText className="mb-2 h-8 w-8 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">Nessuna guida registrata.</p>
+                      </div>
+                    )}
+                  </>
+                  );
+                })()}
+
+                {/* ── TAB: Note ── */}
+                {drawerTab === "notes" && (
+                  <>
+                    {register.lessons.length ? (
+                      <div className="relative space-y-0">
+                        {register.lessons.map((lesson, idx) => {
+                          const hasNote = !!lesson.notes?.trim();
+                          const isLast = idx === register.lessons.length - 1;
+                          const lessonDate = lesson.startsAt instanceof Date
+                            ? lesson.startsAt
+                            : new Date(lesson.startsAt);
+                          const endDate = lesson.startsAt instanceof Date
+                            ? new Date(lesson.startsAt.getTime() + lesson.durationMinutes * 60000)
+                            : new Date(new Date(lesson.startsAt).getTime() + lesson.durationMinutes * 60000);
+
+                          return (
+                            <div key={lesson.id} className="flex gap-4">
+                              {/* Timeline */}
+                              <div className="flex w-16 shrink-0 flex-col items-center pt-3.5">
+                                <span className="text-[11px] font-semibold text-muted-foreground">
+                                  {lessonDate.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
+                                </span>
+                                {!isLast && (
+                                  <div className="mt-2 flex-1 border-l border-dashed border-border/60" />
                                 )}
-                                {!isCancelledCharged && lesson.manualPaymentStatus === "paid" && manualMode && (
-                                  <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700">
-                                    Pagata
-                                  </Badge>
-                                )}
-                                {!isCancelledCharged && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && (
-                                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
-                                    Da pagare
-                                  </Badge>
-                                )}
-                                <Badge
-                                  variant={isCompleted ? "secondary" : "outline"}
+                              </div>
+
+                              {/* Card */}
+                              <div
+                                className={`mb-2.5 flex-1 rounded-2xl border p-3.5 ${
+                                  hasNote
+                                    ? "border-border/50 bg-white"
+                                    : "border-border/30 bg-gray-50/50"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                    {" – "}
+                                    {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                  <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                                    {formatLessonType(lesson.type)}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                  {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
+                                </p>
+                                <p
+                                  className={`mt-2 text-sm leading-relaxed ${
+                                    hasNote ? "text-foreground" : "text-muted-foreground/50 italic"
+                                  }`}
                                 >
-                                  {formatStatus(lesson.status)}
-                                </Badge>
+                                  {lesson.notes?.trim() || "Nessuna nota"}
+                                </p>
                               </div>
                             </div>
-                            <p className="mt-1 text-sm text-muted-foreground">
-                              Tipo: {formatLessonType(lesson.type)} · Durata {lesson.durationMinutes} min
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              Istruttore: {lesson.instructorName || "Da assegnare"} · Veicolo:{" "}
-                              {lesson.vehicleName || "Da assegnare"}
-                            </p>
-                            {(showPaymentToggle || isCancelledCharged) && (
-                              <div className="mt-2 flex gap-2">
-                                {(lesson.manualPaymentStatus !== "paid") && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    disabled={paymentSaving === lesson.id}
-                                    onClick={() =>
-                                      void handleSetManualPayment(lesson.id, "paid")
-                                    }
-                                  >
-                                    {paymentSaving === lesson.id ? "Salvo..." : "Segna pagata"}
-                                  </Button>
-                                )}
-                                {lesson.manualPaymentStatus === "paid" && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    disabled={paymentSaving === lesson.id}
-                                    onClick={() =>
-                                      void handleSetManualPayment(lesson.id, "unpaid")
-                                    }
-                                  >
-                                    {paymentSaving === lesson.id ? "Salvo..." : "Segna da pagare"}
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Nessuna guida registrata.
-                    </p>
-                  )}
-                </section>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <NotebookPen className="mb-2 h-8 w-8 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">Nessuna guida registrata.</p>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -1095,9 +1220,9 @@ export function AutoscuoleStudentsPage({
             )}
           </div>
 
-          <DrawerFooter className="border-t border-white/60 bg-white/90 backdrop-blur">
+          <DrawerFooter className="border-t border-border/40 bg-white px-5 py-3">
             <DrawerClose asChild>
-              <Button variant="outline">Chiudi</Button>
+              <Button variant="outline" size="sm">Chiudi</Button>
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>

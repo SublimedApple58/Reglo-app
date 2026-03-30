@@ -3,7 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -24,6 +24,7 @@ import {
   deleteAutoscuolaAppointment,
   permanentlyCancelAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
+  getInstructorAvailabilityForAgenda,
 } from "@/lib/actions/autoscuole.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -97,6 +98,23 @@ const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 },
   return `${pad(hours)}:${pad(minutes)}`;
 });
 
+type InstructorAvailabilityWeek = {
+  instructorId: string;
+  instructorName: string;
+  days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+};
+
+const INSTRUCTOR_COLORS = [
+  { bg: "bg-pink-50/60", border: "border-pink-200/40", text: "text-pink-700", avatar: "bg-pink-100 text-pink-700" },
+  { bg: "bg-sky-50/60", border: "border-sky-200/40", text: "text-sky-700", avatar: "bg-sky-100 text-sky-700" },
+  { bg: "bg-emerald-50/60", border: "border-emerald-200/40", text: "text-emerald-700", avatar: "bg-emerald-100 text-emerald-700" },
+  { bg: "bg-amber-50/60", border: "border-amber-200/40", text: "text-amber-700", avatar: "bg-amber-100 text-amber-700" },
+  { bg: "bg-violet-50/60", border: "border-violet-200/40", text: "text-violet-700", avatar: "bg-violet-100 text-violet-700" },
+  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
+  { bg: "bg-teal-50/60", border: "border-teal-200/40", text: "text-teal-700", avatar: "bg-teal-100 text-teal-700" },
+  { bg: "bg-orange-50/60", border: "border-orange-200/40", text: "text-orange-700", avatar: "bg-orange-100 text-orange-700" },
+];
+
 type FilterKind = "instructor" | "vehicle" | "type" | "status";
 
 type FilterEditorState = {
@@ -127,6 +145,19 @@ export function AutoscuoleAgendaPage({
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
+  const [agendaMode, setAgendaMode] = React.useState<"instructor" | "classic">(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("reglo-agenda-mode") as "instructor" | "classic") || "instructor";
+    }
+    return "instructor";
+  });
+  const toggleAgendaMode = React.useCallback(() => {
+    setAgendaMode((prev) => {
+      const next = prev === "instructor" ? "classic" : "instructor";
+      localStorage.setItem("reglo-agenda-mode", next);
+      return next;
+    });
+  }, []);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createStep, setCreateStep] = React.useState(0);
   const [creating, setCreating] = React.useState(false);
@@ -143,6 +174,7 @@ export function AutoscuoleAgendaPage({
     sendProposal: false,
     duration: "30",
   });
+  const [instructorAvailability, setInstructorAvailability] = React.useState<InstructorAvailabilityWeek[]>([]);
   const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
@@ -285,6 +317,38 @@ export function AutoscuoleAgendaPage({
       calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
     }
   }, [loading]);
+
+  // Fetch instructor availability for the visible range
+  React.useEffect(() => {
+    let cancelled = false;
+    const from = viewMode === "week" ? weekStart : dayFocus;
+    const to = viewMode === "week" ? addDays(weekStart, 7) : addDays(dayFocus, 1);
+    getInstructorAvailabilityForAgenda({ from: formatYmd(from), to: formatYmd(to) }).then((res) => {
+      if (cancelled) return;
+      setInstructorAvailability(res.success && res.data ? res.data : []);
+    });
+    return () => { cancelled = true; };
+  }, [viewMode, dayFocus, weekStart]);
+
+  // Build instructor columns for day view
+  const dayViewInstructors = React.useMemo(() => {
+    if (viewMode !== "day") return [];
+    const dateKey = formatYmd(dayFocus);
+    const instrMap = new Map<string, { id: string; name: string; ranges: Array<{ startMinutes: number; endMinutes: number }> }>();
+    for (const instr of instructors) {
+      instrMap.set(instr.id, { id: instr.id, name: instr.name, ranges: [] });
+    }
+    for (const avail of instructorAvailability) {
+      const existing = instrMap.get(avail.instructorId);
+      const ranges = avail.days[dateKey] ?? [];
+      if (existing) {
+        existing.ranges = ranges;
+      } else {
+        instrMap.set(avail.instructorId, { id: avail.instructorId, name: avail.instructorName, ranges });
+      }
+    }
+    return Array.from(instrMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [viewMode, instructors, instructorAvailability, dayFocus]);
 
   const filtered = appointments.filter((item) => {
     if ((item.status ?? "").toLowerCase() === "cancelled") return false;
@@ -442,6 +506,16 @@ export function AutoscuoleAgendaPage({
     }
     setStatusFilter(value);
   }, []);
+  // Stable instructor → color mapping (used in both week and day views)
+  const instructorColorMap = React.useMemo(() => {
+    const map = new Map<string, typeof INSTRUCTOR_COLORS[0]>();
+    const sorted = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
+    sorted.forEach((instr, idx) => {
+      map.set(instr.id, INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length]);
+    });
+    return map;
+  }, [instructors]);
+
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
   const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
@@ -467,157 +541,89 @@ export function AutoscuoleAgendaPage({
     <PageWrapper
       title="Agenda"
       subTitle="Agenda guide ed esami."
+      hideHero
     >
       <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
         <LottieLoadingOverlay visible={loading} />
-        {tabs}
+        <div className="mx-auto max-w-7xl space-y-5">
+          <header className="space-y-1.5">
+            <h1 className="ds-section-primary text-foreground">Agenda</h1>
+            <p className="text-sm text-muted-foreground">Agenda guide ed esami.</p>
+          </header>
+          {tabs}
+          {loading && <AgendaSkeleton />}
+          {!loading && (<>
+        <div className="flex items-center gap-3">
+          {/* Date nav */}
+          <div className="flex items-center gap-1.5">
+            <Button variant="ghost" size="sm" className="size-8 p-0"
+              onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, -7)) : setDayFocus((prev) => addDays(prev, -1))}>
+              <ChevronLeft className="size-4" />
+            </Button>
+            <span className="min-w-[140px] text-center text-sm font-semibold text-foreground">
+              {viewMode === "week"
+                ? formatRangeLabel(weekStart)
+                : dayFocus.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
+            </span>
+            <Button variant="ghost" size="sm" className="size-8 p-0"
+              onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
+              <ChevronRight className="size-4" />
+            </Button>
+          </div>
 
-        {loading ? (
-          <AgendaSkeleton />
-        ) : (
-          <>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white p-4 shadow-card">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="min-w-[220px]">
-              <Input
-                placeholder="Cerca appuntamenti"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                className="border-border bg-white"
-              />
-            </div>
-            <FilterTag
-              label="Istruttore"
-              value={instructorFilter}
-              allValue="all"
+          <div className="h-5 w-px bg-border" />
+
+          {/* Period toggle */}
+          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
+            <Button variant={viewMode === "week" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
+              onClick={() => setViewMode("week")}>Settimana</Button>
+            <Button variant={viewMode === "day" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
+              onClick={() => setViewMode("day")}>Giorno</Button>
+          </div>
+
+          {/* Mode toggle */}
+          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
+            <Button variant={agendaMode === "classic" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
+              onClick={() => { if (agendaMode !== "classic") toggleAgendaMode(); }}>
+              <CalendarDays className="size-3" />Classica
+            </Button>
+            <Button variant={agendaMode === "instructor" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
+              onClick={() => { if (agendaMode !== "instructor") toggleAgendaMode(); }}>
+              <Users className="size-3" />Istruttori
+            </Button>
+          </div>
+
+          <div className="h-5 w-px bg-border" />
+
+          {/* Filters */}
+          <div className="flex items-center gap-1.5">
+            <FilterTag label="Istruttore" value={instructorFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
-              displayValue={
-                instructorFilter === "all"
-                  ? null
-                  : instructors.find((item) => item.id === instructorFilter)?.name ??
-                    "Selezionato"
-              }
-            />
-            <FilterTag
-              label="Veicolo"
-              value={vehicleFilter}
-              allValue="all"
+              displayValue={instructorFilter === "all" ? null : instructors.find((item) => item.id === instructorFilter)?.name ?? "Selezionato"} />
+            <FilterTag label="Veicolo" value={vehicleFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
-              displayValue={
-                vehicleFilter === "all"
-                  ? null
-                  : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"
-              }
-            />
-            <FilterTag
-              label="Tipo"
-              value={typeFilter}
-              allValue="all"
+              displayValue={vehicleFilter === "all" ? null : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"} />
+            <FilterTag label="Tipo" value={typeFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
-              displayValue={
-                typeFilter === "all"
-                  ? null
-                  : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ??
-                    typeFilter
-              }
-            />
-            <FilterTag
-              label="Stato"
-              value={statusFilter}
-              allValue="all"
+              displayValue={typeFilter === "all" ? null : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ?? typeFilter} />
+            <FilterTag label="Stato" value={statusFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "status", value: statusFilter })}
-              displayValue={statusFilter === "all" ? null : getStatusMeta(statusFilter).label}
-            />
-            {(instructorFilter !== "all" ||
-              vehicleFilter !== "all" ||
-              typeFilter !== "all" ||
-              statusFilter !== "all") && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-9 rounded-full"
-                onClick={() => {
-                  setInstructorFilter("all");
-                  setVehicleFilter("all");
-                  setTypeFilter("all");
-                  setStatusFilter("all");
-                }}
-              >
-                Reset filtri
+              displayValue={statusFilter === "all" ? null : getStatusMeta(statusFilter).label} />
+            {(instructorFilter !== "all" || vehicleFilter !== "all" || typeFilter !== "all" || statusFilter !== "all") && (
+              <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs px-2"
+                onClick={() => { setInstructorFilter("all"); setVehicleFilter("all"); setTypeFilter("all"); setStatusFilter("all"); }}>
+                Reset
               </Button>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            <div className="flex items-center gap-1 rounded-full border border-border bg-gray-50 p-1">
-              <Button
-                variant={viewMode === "week" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("week")}
-              >
-                Settimana
-              </Button>
-              <Button
-                variant={viewMode === "day" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("day")}
-              >
-                Giorno
-              </Button>
-            </div>
-            {viewMode === "week" ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label="Settimana precedente"
-                  onClick={() => setWeekStart((prev) => addDays(prev, -7))}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="min-w-[140px] text-center">
-                  {formatRangeLabel(weekStart)}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label="Settimana successiva"
-                  onClick={() => setWeekStart((prev) => addDays(prev, 7))}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label="Giorno precedente"
-                  onClick={() => setDayFocus((prev) => addDays(prev, -1))}
-                >
-                  <ChevronLeft className="size-4" />
-                </Button>
-                <span className="min-w-[140px] text-center">
-                  {dayFocus.toLocaleDateString("it-IT", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label="Giorno successivo"
-                  onClick={() => setDayFocus((prev) => addDays(prev, 1))}
-                >
-                  <ChevronRight className="size-4" />
-                </Button>
-              </div>
-            )}
+
+          {/* Spacer + CTA */}
+          <div className="ml-auto">
+            <Button size="sm" onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
+              <Plus className="mr-1.5 size-3.5" />
+              Nuovo appuntamento
+            </Button>
           </div>
-          <Button onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" />
-            Nuovo appuntamento
-          </Button>
         </div>
 
         {outOfAvailAppointments.length > 0 && (
@@ -646,9 +652,332 @@ export function AutoscuoleAgendaPage({
             load({ silent: true });
           }}
         />
+          </>)}
+        </div>
 
-        {/* ── Calendar scroll container ── */}
-        <div className="relative" style={{ height: "calc(100vh - 280px)", minHeight: 400 }}>
+        {!loading && (<>
+        {/* ── CLASSIC VIEW ── */}
+        {agendaMode === "classic" && (
+          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+            <div ref={calendarScrollRef} className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card" style={{ height: "100%" }}>
+              {/* Sticky day headers */}
+              <div
+                className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
+              >
+                <div />
+                {visibleDays.map((day) => {
+                  const isDayToday = day.getTime() === todayNormalized.getTime();
+                  return (
+                    <div key={day.toISOString()} className={cn("py-2.5 text-center text-xs font-semibold transition-colors border-l border-border/50", isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground")}>
+                      {day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Calendar body */}
+              <div className={`grid ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}>
+                {/* Time gutter */}
+                <div className="relative" style={{ height: calendarHeight }}>
+                  {hourMarks.map((hour) => (
+                    <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
+                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
+                    </div>
+                  ))}
+                  {(() => {
+                    const now = new Date(nowTick);
+                    const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                    const todayInView = visibleDays.some((d) => d.getTime() === todayNormalized.getTime());
+                    if (!todayInView || mins < 0 || mins > totalMinutes) return null;
+                    return (
+                      <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: mins * PIXELS_PER_MINUTE }}>
+                        <span className="w-full pr-1 text-right text-[10px] font-semibold tabular-nums text-red-500">{`${pad(now.getHours())}:${pad(now.getMinutes())}`}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+                {/* Day columns */}
+                {visibleDays.map((day, dayIndex) => {
+                  const dayStart = new Date(day); dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+                  const dayEnd = new Date(day); dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+                  const dayAppointments = appointmentsByDay[dayIndex] ?? [];
+                  const { laneMap, overflowGroups } = computeLanes(dayAppointments);
+                  const isDayToday = day.getTime() === todayNormalized.getTime();
+                  const now = new Date(nowTick);
+                  const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                  const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+                  return (
+                    <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-border/50", isDayToday ? "bg-yellow-50/30" : "")} style={{ height: calendarHeight }}
+                      onClick={(event) => {
+                        const target = event.target as HTMLElement;
+                        if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
+                        const minutes = Math.max(0, Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE));
+                        const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+                        setForm((prev) => ({ ...prev, day: formatYmd(day), time: `${pad(Math.floor(rounded / 60))}:${pad(rounded % 60)}` }));
+                        setCreateStep(0); setCreateOpen(true);
+                      }}
+                    >
+                      {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-border/40" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
+                      {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
+                      {dayAppointments.map((item) => {
+                        const laneInfo = laneMap.get(item.id);
+                        const lane = laneInfo?.lane ?? 0;
+                        const totalLanes = laneInfo?.totalLanes ?? 1;
+                        if (totalLanes > MAX_VISIBLE_LANES) return null;
+                        const start = toDate(item.startsAt); const end = getAppointmentEnd(item);
+                        const clippedStart = start < dayStart ? dayStart : start; const clippedEnd = end > dayEnd ? dayEnd : end;
+                        const offsetMinutes = Math.max(0, diffMinutes(clippedStart, dayStart));
+                        const durationMinutes = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                        const top = offsetMinutes * PIXELS_PER_MINUTE; const height = durationMinutes * PIXELS_PER_MINUTE;
+                        const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                        const isCompact = height <= 56; const GAP_PX = 2;
+                        const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
+                        const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
+                        const isPendingAction = pendingEventActionId === item.id;
+                        return (
+                          <DropdownMenu key={item.id}>
+                            <DropdownMenuTrigger asChild>
+                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", statusMeta.className)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
+                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 border border-border bg-white font-medium text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{statusMeta.shortLabel}</Badge></div><div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">{item.type} · {formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}</div></>)}
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div></div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="mt-3 grid grid-cols-2 gap-2"><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Check‑in</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>No‑show</Button><Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                              <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        );
+                      })}
+                      {overflowGroups.map((group) => {
+                        const blockTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
+                        const blockHeight = Math.max(30, group.spanMinutes * PIXELS_PER_MINUTE);
+                        const earliest = toDate(group.allItems[0].startsAt);
+                        const latest = group.allItems.reduce((acc, a) => { const e = getAppointmentEnd(a); return e > acc ? e : acc; }, earliest);
+                        return (
+                          <DropdownMenu key={`overflow-${group.clusterId}`}>
+                            <DropdownMenuTrigger asChild>
+                              <button type="button" className="absolute left-1 right-1 z-10 box-border flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-pink-200 bg-pink-50 text-left shadow-sm transition hover:bg-pink-100 hover:shadow-md" style={{ top: blockTop, height: blockHeight }} onClick={(e) => e.stopPropagation()}>
+                                <span className="text-[12px] font-bold text-pink-600">{group.allItems.length} guide</span>
+                                <span className="text-[10px] text-pink-500/80">{formatTimeRange(earliest, latest)}</span>
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.allItems.length} guide sovrapposte</div>
+                              <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                                {group.allItems.map((item) => {
+                                  const s = toDate(item.startsAt); const e = getAppointmentEnd(item);
+                                  const meta = getStatusMeta(item.status, item, new Date(nowTick));
+                                  return (
+                                    <div key={item.id} className={cn("rounded-lg border p-2.5 text-xs", meta.className)}>
+                                      <div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground truncate">{item.student.firstName} {item.student.lastName}</span><Badge variant="secondary" className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80">{meta.shortLabel}</Badge></div>
+                                      <div className="text-muted-foreground mt-0.5">{item.type} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── INSTRUCTOR WEEKLY VIEW ── */}
+        {agendaMode === "instructor" && viewMode === "week" && (() => {
+          const weekInstructors = instructorAvailability.length > 0
+            ? instructorAvailability
+            : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
+          const instrCount = Math.max(1, weekInstructors.length);
+          const totalCols = instrCount * 7; // instructor sub-columns across 7 days
+
+          return (
+          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+            <AnimatePresence>
+              {refreshing && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+                  className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50">
+                  <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
+                    <Lottie animationData={carAnimation} loop style={{ width: 100, height: 100 }} />
+                    <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <div ref={calendarScrollRef} className="overflow-auto bg-white" style={{ height: "100%" }}>
+              {/* Two-row sticky header: Day names → Instructor names */}
+              <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-border" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                {/* Day header row spanning instructor columns */}
+                <div className="row-span-2" />
+                {days.map((day) => {
+                  const isDayToday = day.getTime() === todayNormalized.getTime();
+                  return (
+                    <div
+                      key={`day-${day.toISOString()}`}
+                      className={cn(
+                        "text-center text-xs font-semibold py-1.5 border-l border-border cursor-pointer hover:bg-gray-50 transition-colors",
+                        isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground",
+                      )}
+                      style={{ gridColumn: `span ${instrCount}` }}
+                      onClick={() => { setDayFocus(normalizeDay(day)); setViewMode("day"); }}
+                    >
+                      {day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
+                    </div>
+                  );
+                })}
+                {/* Instructor sub-headers within each day */}
+                {days.map((day) =>
+                  weekInstructors.map((instr, idx) => {
+                    const color = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
+                    const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+                    return (
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className="flex flex-col items-center gap-0.5 py-1.5 border-l border-border/40">
+                        <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", color.avatar)}>{initials}</div>
+                        <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Calendar body */}
+              <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                {/* Time gutter */}
+                <div className="relative" style={{ height: calendarHeight }}>
+                  {hourMarks.map((hour) => (
+                    <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
+                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
+                    </div>
+                  ))}
+                  {/* Now label */}
+                  {(() => {
+                    const now = new Date(nowTick);
+                    const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                    if (mins < 0 || mins > totalMinutes) return null;
+                    return (
+                      <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: mins * PIXELS_PER_MINUTE }}>
+                        <span className="w-full pr-1 text-right text-[10px] font-semibold tabular-nums text-red-500">{`${pad(now.getHours())}:${pad(now.getMinutes())}`}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Day × Instructor columns */}
+                {days.map((day, dayIndex) => {
+                  const dayStart = new Date(day);
+                  dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+                  const dayEnd = new Date(day);
+                  dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+                  const dateKey = formatYmd(day);
+                  const isDayToday = day.getTime() === todayNormalized.getTime();
+                  const now = new Date(nowTick);
+                  const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
+                  const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+                  const dayAppts = appointmentsByDay[dayIndex] ?? [];
+
+                  return weekInstructors.map((instr, instrIdx) => {
+                    const color = INSTRUCTOR_COLORS[instrIdx % INSTRUCTOR_COLORS.length];
+                    const ranges = instr.days[dateKey] ?? [];
+                    const instrAppts = dayAppts.filter((a) => a.instructor?.id === instr.instructorId);
+
+                    return (
+                      <div
+                        key={`${day.toISOString()}-${instr.instructorId}`}
+                        className={cn("relative border-l border-border/40", isDayToday ? "bg-yellow-50/20" : "")}
+                        style={{ height: calendarHeight }}
+                      >
+                        {/* Availability bands */}
+                        {ranges.map((range, ri) => (
+                          <div key={ri} className={cn("absolute left-0 right-0", color.bg)} style={{ top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
+                        ))}
+                        {/* Hour grid lines */}
+                        {hourMarks.map((hour) => (
+                          <div key={hour} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />
+                        ))}
+                        {/* Now line */}
+                        {showNowLine && (
+                          <div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}>
+                                                        <span className="h-px flex-1 bg-red-500/70" />
+                          </div>
+                        )}
+                        {/* Appointments */}
+                        {instrAppts.map((item) => {
+                          const start = toDate(item.startsAt);
+                          const end = getAppointmentEnd(item);
+                          const clippedStart = start < dayStart ? dayStart : start;
+                          const clippedEnd = end > dayEnd ? dayEnd : end;
+                          const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                          const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                          const top = offsetMin * PIXELS_PER_MINUTE;
+                          const height = durMin * PIXELS_PER_MINUTE;
+                          const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                          const isCompact = height <= 40;
+                          const isPendingAction = pendingEventActionId === item.id;
+                          return (
+                            <DropdownMenu key={item.id}>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", statusMeta.className)}
+                                  style={{ top, height }}
+                                  title={`${item.student.firstName} ${item.student.lastName} · ${item.type} · ${formatTimeRange(start, end)}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className={cn("p-1", isCompact ? "p-0.5" : "")}>
+                                    <div className="font-bold truncate text-[10px]">{item.student.firstName} {item.student.lastName.charAt(0)}.</div>
+                                    <div className="text-[8px] text-muted-foreground truncate">{formatTimeRange(start, end)}</div>
+                                  </div>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                                <div className="space-y-2">
+                                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
+                                  <div className="rounded-xl border border-border bg-white p-3">
+                                    <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
+                                    <div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div>
+                                    <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
+                                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                      <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                      <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <Badge variant="secondary">{statusMeta.label}</Badge>
+                                      {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Check‑in</Button>
+                                  <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>No‑show</Button>
+                                  <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
+                                  <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
+                                </div>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })}
+              </div>
+            </div>
+          </div>
+          );
+        })()}
+
+        {/* ── INSTRUCTOR DAY VIEW ── */}
+        {agendaMode === "instructor" && viewMode === "day" && (
+        <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
           {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
           <AnimatePresence>
             {refreshing && (
@@ -668,47 +997,51 @@ export function AutoscuoleAgendaPage({
           </AnimatePresence>
           <div
             ref={calendarScrollRef}
-            className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card"
+            className="overflow-y-auto bg-white"
             style={{ height: "100%" }}
           >
-          {/* Sticky day headers */}
-          <div
-            className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${
-              viewMode === "week"
-                ? "grid-cols-[56px_repeat(7,1fr)]"
-                : "grid-cols-[56px_1fr]"
-            }`}
-          >
-            <div />
-            {visibleDays.map((day) => {
-              const isDayToday = day.getTime() === todayNormalized.getTime();
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={cn(
-                    "py-2.5 text-center text-xs font-semibold transition-colors border-l border-border/50",
-                    isDayToday
-                      ? "bg-yellow-50 text-yellow-700"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {day.toLocaleDateString("it-IT", {
-                    weekday: "short",
-                    day: "2-digit",
-                    month: "short",
-                  })}
+          {/* Sticky instructor headers */}
+          {(
+            <div
+              className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
+              style={{ gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
+            >
+              <div />
+              {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
+                const color = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
+                const initials = instr.name
+                  .split(" ")
+                  .map((w) => w[0])
+                  .join("")
+                  .toUpperCase()
+                  .slice(0, 2);
+                return (
+                  <div
+                    key={instr.id}
+                    className="flex flex-col items-center gap-1 py-2.5 border-l border-border/50"
+                  >
+                    <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", color.avatar)}>
+                      {initials}
+                    </div>
+                    <span className="text-[11px] font-semibold text-foreground truncate max-w-[90%]">{instr.name}</span>
+                  </div>
+                );
+              }) : (
+                <div className="py-2.5 text-center text-xs text-muted-foreground border-l border-border/50">
+                  Nessun istruttore
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Calendar body: time gutter + day columns */}
+          {/* Calendar body: time gutter + columns */}
           <div
-            className={`grid ${
-              viewMode === "week"
-                ? "grid-cols-[56px_repeat(7,1fr)]"
-                : "grid-cols-[56px_1fr]"
-            }`}
+            className="grid"
+            style={{
+              gridTemplateColumns: viewMode === "week"
+                ? `56px repeat(7, 1fr)`
+                : `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
+            }}
           >
             {/* Time gutter */}
             <div className="relative" style={{ height: calendarHeight }}>
@@ -744,389 +1077,183 @@ export function AutoscuoleAgendaPage({
               })()}
             </div>
 
-            {/* Day columns */}
-            {visibleDays.map((day, dayIndex) => {
+
+
+
+
+            {/* Day view: Instructor columns */}
+            {viewMode === "day" && (() => {
+              const day = dayFocus;
               const dayStart = new Date(day);
               dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
               const dayEnd = new Date(day);
               dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
-              const dayAppointments = appointmentsByDay[dayIndex] ?? [];
-              const { laneMap, overflowGroups } = computeLanes(dayAppointments);
               const isDayToday = day.getTime() === todayNormalized.getTime();
               const now = new Date(nowTick);
               const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
               const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+              const allDayAppointments = appointmentsByDay[0] ?? [];
 
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={cn(
-                    "relative cursor-pointer border-l border-border/50",
-                    isDayToday ? "bg-yellow-50/30" : "",
-                  )}
-                  style={{ height: calendarHeight }}
-                  onClick={(event) => {
-                    const target = event.target as HTMLElement;
-                    if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
-                    const minutes = Math.max(
-                      0,
-                      Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE),
-                    );
-                    const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
-                    const hours = Math.floor(rounded / 60);
-                    const mins = rounded % 60;
-                    setForm((prev) => ({
-                      ...prev,
-                      day: formatYmd(day),
-                      time: `${pad(hours)}:${pad(mins)}`,
-                    }));
-                    setCreateStep(0);
-                    setCreateOpen(true);
-                  }}
-                >
-                  {/* Hour grid lines */}
-                  {hourMarks.map((hour) => (
-                    <div
-                      key={hour}
-                      className="absolute left-0 right-0 h-px bg-border/40"
-                      style={{
-                        top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE,
-                      }}
-                    />
-                  ))}
-                  {/* Red "now" line */}
-                  {showNowLine && (
-                    <div
-                      className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
-                      style={{ top: nowMinutes * PIXELS_PER_MINUTE }}
-                    >
-                      <span className="size-2 shrink-0 rounded-full bg-red-500" />
-                      <span className="h-[1.5px] flex-1 bg-red-500" />
-                    </div>
-                  )}
-                  {/* Appointments */}
-                  {dayAppointments.map((item) => {
-                    const laneInfo = laneMap.get(item.id);
-                    const lane = laneInfo?.lane ?? 0;
-                    const totalLanes = laneInfo?.totalLanes ?? 1;
+              return dayViewInstructors.map((instr, instrIdx) => {
+                const color = INSTRUCTOR_COLORS[instrIdx % INSTRUCTOR_COLORS.length];
+                // Filter appointments for this instructor
+                const instrAppointments = allDayAppointments.filter(
+                  (a) => a.instructor?.id === instr.id,
+                );
 
-                    // Skip ALL events that belong to an overflow cluster — they're shown as a summary block
-                    if (totalLanes > MAX_VISIBLE_LANES) return null;
+                return (
+                  <div
+                    key={instr.id}
+                    className="relative cursor-pointer border-l border-border/50"
+                    style={{ height: calendarHeight }}
+                    onClick={(event) => {
+                      const target = event.target as HTMLElement;
+                      if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
+                      const minutes = Math.max(0, Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE));
+                      const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+                      const hours = Math.floor(rounded / 60);
+                      const mins = rounded % 60;
+                      setForm((prev) => ({
+                        ...prev,
+                        day: formatYmd(day),
+                        time: `${pad(hours)}:${pad(mins)}`,
+                        instructorId: instr.id,
+                      }));
+                      setCreateStep(0);
+                      setCreateOpen(true);
+                    }}
+                  >
+                    {/* Availability bands */}
+                    {instr.ranges.map((range, ri) => {
+                      const top = range.startMinutes * PIXELS_PER_MINUTE;
+                      const height = (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE;
+                      return (
+                        <div
+                          key={ri}
+                          className={cn("absolute left-0 right-0", color.bg)}
+                          style={{ top, height }}
+                        />
+                      );
+                    })}
+                    {/* Hour grid lines */}
+                    {hourMarks.map((hour) => (
+                      <div
+                        key={hour}
+                        className="absolute left-0 right-0 h-px bg-border/40"
+                        style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
+                      />
+                    ))}
+                    {/* Red "now" line */}
+                    {showNowLine && (
+                      <div
+                        className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
+                        style={{ top: nowMinutes * PIXELS_PER_MINUTE }}
+                      >
+                                                <span className="h-[1.5px] flex-1 bg-red-500" />
+                      </div>
+                    )}
+                    {/* Appointments for this instructor */}
+                    {instrAppointments.map((item) => {
+                      const start = toDate(item.startsAt);
+                      const end = getAppointmentEnd(item);
+                      const clippedStart = start < dayStart ? dayStart : start;
+                      const clippedEnd = end > dayEnd ? dayEnd : end;
+                      const offsetMinutes = Math.max(0, diffMinutes(clippedStart, dayStart));
+                      const durationMinutes = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                      const top = offsetMinutes * PIXELS_PER_MINUTE;
+                      const height = durationMinutes * PIXELS_PER_MINUTE;
+                      const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                      const isCompact = height <= 56;
+                      const isPendingAction = pendingEventActionId === item.id;
 
-                    const start = toDate(item.startsAt);
-                    const end = getAppointmentEnd(item);
-                    const clippedStart = start < dayStart ? dayStart : start;
-                    const clippedEnd = end > dayEnd ? dayEnd : end;
-                    const offsetMinutes = Math.max(
-                      0,
-                      diffMinutes(clippedStart, dayStart),
-                    );
-                    const durationMinutes = Math.max(
-                      15,
-                      diffMinutes(clippedEnd, clippedStart),
-                    );
-                    const top = offsetMinutes * PIXELS_PER_MINUTE;
-                    const height = durationMinutes * PIXELS_PER_MINUTE;
-                    const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
-                    const isCompact = height <= 56;
-
-                    const GAP_PX = 2;
-                    const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
-                    const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
-
-                    const isPendingAction = pendingEventActionId === item.id;
-                    return (
-                      <DropdownMenu key={item.id}>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className={cn(
-                              "absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
-                              isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
-                              isPendingAction ? "pointer-events-none opacity-75" : "",
-                              statusMeta.className,
-                            )}
-                            style={{ top, height, left: laneLeft, width: laneWidth }}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                            }}
-                          >
-                            {isPendingAction ? (
-                              <>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" />
-                                  <div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" />
-                                </div>
-                                <div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" />
-                              </>
-                            ) : (
-                              <>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div
-                                    className={cn(
-                                      "min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground",
-                                      isCompact ? "text-[10px]" : "text-[11px]",
-                                    )}
-                                  >
-                                    {item.student.firstName} {item.student.lastName}
+                      return (
+                        <DropdownMenu key={item.id}>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              className={cn(
+                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
+                                isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
+                                isPendingAction ? "pointer-events-none opacity-75" : "",
+                                statusMeta.className,
+                              )}
+                              style={{ top, height }}
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {isPendingAction ? (
+                                <>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" />
+                                    <div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" />
                                   </div>
-                                  <Badge
-                                    variant="secondary"
-                                    className={cn(
-                                      "shrink-0 border border-border bg-white font-medium text-foreground/80",
-                                      isCompact
-                                        ? "px-1.5 py-0 text-[9px]"
-                                        : "px-2 py-0.5 text-[10px]",
-                                    )}
-                                  >
-                                    {statusMeta.shortLabel}
-                                  </Badge>
-                                </div>
-                                <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
-                                  {item.type} · {formatTimeRange(start, end)}
-                                  {!isCompact
-                                    ? ` · ${Math.round(diffMinutes(end, start))}m`
-                                    : ""}
-                                </div>
-                              </>
-                            )}
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="start"
-                          side="right"
-                          sideOffset={12}
-                          className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                        >
-                          <div className="space-y-2">
-                            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                              Evento
-                            </div>
-                            <div className="rounded-xl border border-border bg-white p-3">
-                              <div className="text-sm font-semibold text-foreground">
-                                {item.student.firstName} {item.student.lastName}
-                              </div>
-                              <div className="mt-1 text-xs text-muted-foreground">
-                                {item.type} · {formatTimeRange(start, end)}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {start.toLocaleDateString("it-IT", {
-                                  weekday: "long",
-                                  day: "2-digit",
-                                  month: "long",
-                                })}
-                              </div>
-                              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                <div>
-                                  Istruttore:{" "}
-                                  <span className="font-medium text-foreground/85">
-                                    {item.instructor?.name ?? "Non assegnato"}
-                                  </span>
-                                </div>
-                                <div>
-                                  Veicolo:{" "}
-                                  <span className="font-medium text-foreground/85">
-                                    {item.vehicle?.name ?? "Non assegnato"}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="mt-2 flex items-center gap-2">
-                                <Badge variant="secondary">{statusMeta.label}</Badge>
-                                {!canUpdateStatus(item) ? (
-                                  <span className="text-[11px] text-muted-foreground">
-                                    Slot passato o chiuso
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!canUpdateStatus(item) || isPendingAction}
-                              onClick={() => handleStatusUpdate(item.id, "checked_in")}
-                            >
-                              Check‑in
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!canUpdateStatus(item) || isPendingAction}
-                              onClick={() => handleStatusUpdate(item.id, "no_show")}
-                            >
-                              No‑show
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!canCompleteStatus(item) || isPendingAction}
-                              onClick={() => handleStatusUpdate(item.id, "completed")}
-                            >
-                              Completa
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              disabled={!canUpdateStatus(item) || isPendingAction}
-                              onClick={() => handleCancel(item.id)}
-                            >
-                              Annulla
-                            </Button>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700"
-                            disabled={isPendingAction}
-                            onClick={() => handleDelete(item.id)}
-                          >
-                            Cancella e riposiziona
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
-                            disabled={isPendingAction}
-                            onClick={() => handlePermanentCancel(item.id)}
-                          >
-                            Elimina definitivamente
-                          </Button>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    );
-                  })}
-                  {/* Summary blocks for clusters with >2 simultaneous events */}
-                  {overflowGroups.map((group) => {
-                    const blockTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
-                    const blockHeight = Math.max(30, group.spanMinutes * PIXELS_PER_MINUTE);
-                    const earliest = toDate(group.allItems[0].startsAt);
-                    const latest = group.allItems.reduce((acc, a) => {
-                      const e = getAppointmentEnd(a);
-                      return e > acc ? e : acc;
-                    }, earliest);
-                    return (
-                      <DropdownMenu key={`overflow-${group.clusterId}`}>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="absolute left-1 right-1 z-10 box-border flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-pink-200 bg-pink-50 text-left shadow-sm transition hover:bg-pink-100 hover:shadow-md"
-                            style={{ top: blockTop, height: blockHeight }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span className="text-[12px] font-bold text-pink-600">
-                              {group.allItems.length} guide
-                            </span>
-                            <span className="text-[10px] text-pink-500/80">
-                              {formatTimeRange(earliest, latest)}
-                            </span>
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          align="start"
-                          side="right"
-                          sideOffset={12}
-                          className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                        >
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                            {group.allItems.length} guide sovrapposte
-                          </div>
-                          <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                            {group.allItems.map((item) => {
-                              const s = toDate(item.startsAt);
-                              const e = getAppointmentEnd(item);
-                              const meta = getStatusMeta(item.status, item, new Date(nowTick));
-                              const itemPending = pendingEventActionId === item.id;
-                              return (
-                                <DropdownMenu key={item.id}>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className={cn(
-                                        "w-full rounded-lg border p-2.5 text-left text-xs transition hover:shadow-sm",
-                                        itemPending ? "pointer-events-none opacity-75" : "",
-                                        meta.className,
-                                      )}
+                                  <div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" />
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
+                                      {item.student.firstName} {item.student.lastName}
+                                    </div>
+                                    <Badge
+                                      variant="secondary"
+                                      className={cn("shrink-0 border border-border bg-white font-medium text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
                                     >
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="font-semibold text-foreground truncate">
-                                          {item.student.firstName} {item.student.lastName}
-                                        </span>
-                                        <Badge
-                                          variant="secondary"
-                                          className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80"
-                                        >
-                                          {meta.shortLabel}
-                                        </Badge>
-                                      </div>
-                                      <div className="text-muted-foreground mt-0.5">
-                                        {item.type} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}
-                                      </div>
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent
-                                    align="start"
-                                    side="right"
-                                    sideOffset={8}
-                                    className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                                  >
-                                    <div className="space-y-2">
-                                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                                        Evento
-                                      </div>
-                                      <div className="rounded-xl border border-border bg-white p-3">
-                                        <div className="text-sm font-semibold text-foreground">
-                                          {item.student.firstName} {item.student.lastName}
-                                        </div>
-                                        <div className="mt-1 text-xs text-muted-foreground">
-                                          {item.type} · {formatTimeRange(s, e)}
-                                        </div>
-                                        <div className="text-xs text-muted-foreground">
-                                          {s.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
-                                        </div>
-                                        <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                          <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                          <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
-                                        </div>
-                                        <div className="mt-2 flex items-center gap-2">
-                                          <Badge variant="secondary">{meta.label}</Badge>
-                                          {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
-                                        </div>
-                                      </div>
-                                    </div>
-                                    <div className="mt-3 grid grid-cols-2 gap-2">
-                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Check‑in</Button>
-                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "no_show")}>No‑show</Button>
-                                      <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || itemPending} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                      <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || itemPending} onClick={() => handleCancel(item.id)}>Annulla</Button>
-                                    </div>
-                                    <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={itemPending} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
-                                    <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={itemPending} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              );
-                            })}
-                          </div>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    );
-                  })}
-                </div>
-              );
-            })}
+                                      {statusMeta.shortLabel}
+                                    </Badge>
+                                  </div>
+                                  <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
+                                    {item.type} · {formatTimeRange(start, end)}
+                                    {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
+                                  </div>
+                                </>
+                              )}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            align="start"
+                            side="right"
+                            sideOffset={12}
+                            className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
+                          >
+                            <div className="space-y-2">
+                              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
+                              <div className="rounded-xl border border-border bg-white p-3">
+                                <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div>
+                                <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
+                                <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                                  <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
+                                  <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
+                                </div>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Badge variant="secondary">{statusMeta.label}</Badge>
+                                  {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Check‑in</Button>
+                              <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>No‑show</Button>
+                              <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
+                              <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
+                            </div>
+                            <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                            <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      );
+                    })}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
         </div>
-          </>
         )}
+        </>)}
       </div>
 
       <Dialog

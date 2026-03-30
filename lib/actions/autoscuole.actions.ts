@@ -702,6 +702,107 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
   }
 }
 
+export async function getInstructorAvailabilityForAgenda(input: {
+  from: string;
+  to: string;
+}): Promise<{
+  success: boolean;
+  data?: Array<{
+    instructorId: string;
+    instructorName: string;
+    days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+  }>;
+  message?: string;
+}> {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const fromDate = toValidDate(input.from);
+    const toDate = toValidDate(input.to);
+    if (!fromDate || !toDate) {
+      return { success: false, message: "Date non valide." };
+    }
+
+    const instructors = await prisma.autoscuolaInstructor.findMany({
+      where: {
+        companyId,
+        status: { not: "inactive" },
+        userId: { not: null },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+
+    if (!instructors.length) {
+      return { success: true, data: [] };
+    }
+
+    const instructorIds = instructors.map((i) => i.id);
+
+    const resolver = await buildAvailabilityResolver(
+      companyId,
+      "instructor",
+      instructorIds,
+      fromDate,
+      toDate,
+    );
+
+    const DOW_MAP: Record<string, number> = {
+      Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+    };
+    const dowFormatter = new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      timeZone: "Europe/Rome",
+    });
+
+    // Build list of dates in range
+    const dates: Date[] = [];
+    const cursor = new Date(fromDate);
+    while (cursor < toDate) {
+      dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    const data: Array<{
+      instructorId: string;
+      instructorName: string;
+      days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+    }> = [];
+
+    for (const instructor of instructors) {
+      const days: Record<string, Array<{ startMinutes: number; endMinutes: number }>> = {};
+
+      for (const date of dates) {
+        const record = resolver.resolve(instructor.id, date);
+        if (!record) continue;
+
+        const romeDow = dowFormatter.format(date);
+        const dayOfWeek = DOW_MAP[romeDow] ?? date.getDay();
+        if (!record.daysOfWeek.includes(dayOfWeek)) continue;
+
+        if (record.ranges.length > 0) {
+          const ymd = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+          days[ymd] = record.ranges.map((r) => ({
+            startMinutes: r.startMinutes,
+            endMinutes: r.endMinutes,
+          }));
+        }
+      }
+
+      data.push({
+        instructorId: instructor.id,
+        instructorName: instructor.name,
+        days,
+      });
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function getAutoscuolaDeadlines() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -1090,6 +1191,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           paymentRequired: true,
           manualPaymentStatus: true,
           lateCancellationAction: true,
+          notes: true,
           createdAt: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
@@ -1135,6 +1237,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             paymentRequired: raw?.paymentRequired ?? false,
             manualPaymentStatus: raw?.manualPaymentStatus ?? null,
             lateCancellationAction: raw?.lateCancellationAction ?? null,
+            notes: raw?.notes ?? null,
             createdAt: raw?.createdAt ?? null,
           };
         }),
