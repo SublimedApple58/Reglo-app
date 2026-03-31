@@ -297,8 +297,23 @@ export async function provisionAutoscuolaVoiceLine(
     }
     const bundleSid = bundles[0].sid;
 
-    // 2. Search for an available Italian local number
-    const available = await client.availablePhoneNumbers("IT").local.list({ limit: 1 });
+    // 2. Search for an available Italian number (try national → mobile → local)
+    type AvailableNumber = { phoneNumber: string };
+    let available: AvailableNumber[] = [];
+    const itNumbers = client.availablePhoneNumbers("IT");
+    const searches = [
+      () => itNumbers.national.list({ limit: 1 }),
+      () => itNumbers.mobile.list({ limit: 1 }),
+      () => itNumbers.local.list({ limit: 1 }),
+    ];
+    for (const search of searches) {
+      try {
+        available = await search();
+        if (available.length) break;
+      } catch {
+        // Type not available for IT, try next
+      }
+    }
     if (!available.length) {
       return { success: false, message: "Nessun numero italiano disponibile su Twilio." };
     }
