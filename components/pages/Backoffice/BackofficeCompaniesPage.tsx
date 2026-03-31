@@ -46,6 +46,7 @@ import {
   assignAutoscuolaVoiceLine,
   deleteCompany,
   getCompanyStudentPlatforms,
+  provisionAutoscuolaVoiceLine,
   unassignAutoscuolaVoiceLine,
   updateCompanyService,
 } from "@/lib/actions/backoffice.actions";
@@ -79,14 +80,17 @@ function AutoscuolaDrawerContent({
   const toast = useFeedbackToast();
   const [isPending, startTransition] = useTransition();
   const [isAssigning, startAssigning] = useTransition();
+  const [isProvisioning, startProvisioning] = useTransition();
   const [isUnassigning, startUnassigning] = useTransition();
   const [status, setStatus] = useState(service?.status ?? "active");
   const [limits, setLimits] = useState<ServiceLimits>({
     ...DEFAULT_SERVICE_LIMITS.AUTOSCUOLE,
     ...(service?.limits ?? {}),
   });
+  const [provisionedNumber, setProvisionedNumber] = useState<string | null>(null);
 
-  // Voice line form
+  // Voice line form (manual fallback)
+  const [showManualForm, setShowManualForm] = useState(false);
   const [assignRoutingMode, setAssignRoutingMode] = useState<"sip" | "twilio">("sip");
   const [assignDisplayNumber, setAssignDisplayNumber] = useState("");
   const [assignTwilioNumber, setAssignTwilioNumber] = useState("");
@@ -120,6 +124,25 @@ function AutoscuolaDrawerContent({
       : "not_started";
   const voiceLineRef =
     typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
+
+  const handleProvision = () => {
+    startProvisioning(async () => {
+      const res = await provisionAutoscuolaVoiceLine({ companyId });
+      if (!res.success) {
+        toast.error({ description: ("message" in res ? res.message : null) ?? "Provisioning fallito." });
+        return;
+      }
+      const data = res.data as { lineId: string; phoneNumber: string; displayNumber: string; phoneSid: string };
+      toast.success({ description: `Segretaria attivata! Numero: ${data.displayNumber}` });
+      setProvisionedNumber(data.displayNumber);
+      setLimits((prev) => ({
+        ...prev,
+        voiceFeatureEnabled: true,
+        voiceProvisioningStatus: "ready" as ServiceLimits["voiceProvisioningStatus"],
+        voiceLineRef: data.lineId,
+      }));
+    });
+  };
 
   const handleAssign = () => {
     startAssigning(async () => {
@@ -231,108 +254,126 @@ function AutoscuolaDrawerContent({
         </div>
 
         <div className="space-y-4">
-          <label className="flex items-center justify-between gap-2 rounded-xl border border-border bg-gray-50/50 px-4 py-3">
-            <span className="text-sm font-medium text-foreground">Voice AI disponibile</span>
-            <Checkbox
-              checked={voiceFeatureEnabled}
-              onCheckedChange={(checked) =>
-                setLimits((prev) => ({
-                  ...prev,
-                  voiceFeatureEnabled: Boolean(checked),
-                  voiceProvisioningStatus: Boolean(checked)
-                    ? (typeof prev.voiceProvisioningStatus === "string"
-                        ? prev.voiceProvisioningStatus
-                        : "not_started")
-                    : "not_started",
-                  voiceLineRef: Boolean(checked) ? (prev.voiceLineRef ?? null) : null,
-                }))
-              }
-            />
-          </label>
-
-          {voiceFeatureEnabled && (
-            voiceProvisioningStatus === "ready" ? (
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
-                    <Phone className="h-3.5 w-3.5 text-emerald-700" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-700">Linea attiva</p>
-                    <p className="font-mono text-[10px] text-muted-foreground break-all">{voiceLineRef}</p>
-                  </div>
+          {voiceProvisioningStatus === "ready" ? (
+            /* ── Active line ── */
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
+                  <Phone className="h-3.5 w-3.5 text-emerald-700" />
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 gap-1.5 text-xs"
-                  onClick={handleUnassign}
-                  disabled={isUnassigning}
-                >
-                  {isUnassigning ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <PhoneOff className="h-3 w-3" />
-                  )}
-                  {isUnassigning ? "..." : "Scollega"}
-                </Button>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-700">Linea attiva</p>
+                  <p className="font-mono text-[10px] text-muted-foreground break-all">{voiceLineRef}</p>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-3 rounded-xl border border-border bg-gray-50/50 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
-                  Assegna linea
-                </p>
-                {/* Routing mode toggle */}
-                <div className="flex rounded-lg border border-border bg-white p-0.5 text-xs">
-                  {(["sip", "twilio"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setAssignRoutingMode(mode)}
-                      className={cn(
-                        "flex-1 cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
-                        assignRoutingMode === mode
-                          ? "bg-pink-500 text-white shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {mode === "sip" ? "SIP / Messagenet" : "Twilio diretto"}
-                    </button>
-                  ))}
-                </div>
-                <Input
-                  value={assignDisplayNumber}
-                  placeholder="Numero display (es. +39 02 1234567)"
-                  onChange={(e) => setAssignDisplayNumber(e.target.value)}
-                />
-                <Input
-                  value={assignTwilioNumber}
-                  placeholder="Numero E.164 (es. +390212345678)"
-                  onChange={(e) => setAssignTwilioNumber(e.target.value)}
-                />
-                {assignRoutingMode === "twilio" && (
-                  <Input
-                    value={assignTwilioSid}
-                    placeholder="Twilio Phone SID (PNxxx...)"
-                    onChange={(e) => setAssignTwilioSid(e.target.value)}
-                  />
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5 text-xs"
+                onClick={handleUnassign}
+                disabled={isUnassigning}
+              >
+                {isUnassigning ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <PhoneOff className="h-3 w-3" />
                 )}
-                <Button
-                  size="sm"
-                  className="w-full"
-                  onClick={handleAssign}
-                  disabled={
-                    isAssigning ||
-                    !assignDisplayNumber.trim() ||
-                    !assignTwilioNumber.trim() ||
-                    (assignRoutingMode === "twilio" && !assignTwilioSid.trim())
-                  }
-                >
-                  {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                  {isAssigning ? "Assegnazione..." : "Assegna linea"}
-                </Button>
-              </div>
-            )
+                {isUnassigning ? "..." : "Scollega"}
+              </Button>
+            </div>
+          ) : (
+            /* ── No line: auto-provision + manual fallback ── */
+            <div className="space-y-3">
+              {/* Auto-provision button */}
+              <Button
+                className="w-full gap-2"
+                onClick={handleProvision}
+                disabled={isProvisioning}
+              >
+                {isProvisioning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Phone className="h-4 w-4" />
+                )}
+                {isProvisioning ? "Acquisto numero in corso..." : "Attiva segretaria"}
+              </Button>
+              {isProvisioning && (
+                <p className="text-center text-[11px] text-muted-foreground">
+                  Acquisto numero italiano, configurazione webhook e attivazione...
+                </p>
+              )}
+              {provisionedNumber && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-center">
+                  <p className="text-xs text-emerald-700">
+                    Numero assegnato: <span className="font-semibold">{provisionedNumber}</span>
+                  </p>
+                </div>
+              )}
+
+              {/* Manual fallback */}
+              <button
+                type="button"
+                onClick={() => setShowManualForm((v) => !v)}
+                className="w-full cursor-pointer text-center text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showManualForm ? "Nascondi form manuale" : "Oppure assegna manualmente..."}
+              </button>
+              {showManualForm && (
+                <div className="space-y-3 rounded-xl border border-border bg-gray-50/50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                    Assegna linea manualmente
+                  </p>
+                  <div className="flex rounded-lg border border-border bg-white p-0.5 text-xs">
+                    {(["sip", "twilio"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setAssignRoutingMode(mode)}
+                        className={cn(
+                          "flex-1 cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
+                          assignRoutingMode === mode
+                            ? "bg-pink-500 text-white shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {mode === "sip" ? "SIP / Messagenet" : "Twilio diretto"}
+                      </button>
+                    ))}
+                  </div>
+                  <Input
+                    value={assignDisplayNumber}
+                    placeholder="Numero display (es. +39 02 1234567)"
+                    onChange={(e) => setAssignDisplayNumber(e.target.value)}
+                  />
+                  <Input
+                    value={assignTwilioNumber}
+                    placeholder="Numero E.164 (es. +390212345678)"
+                    onChange={(e) => setAssignTwilioNumber(e.target.value)}
+                  />
+                  {assignRoutingMode === "twilio" && (
+                    <Input
+                      value={assignTwilioSid}
+                      placeholder="Twilio Phone SID (PNxxx...)"
+                      onChange={(e) => setAssignTwilioSid(e.target.value)}
+                    />
+                  )}
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={handleAssign}
+                    disabled={
+                      isAssigning ||
+                      !assignDisplayNumber.trim() ||
+                      !assignTwilioNumber.trim() ||
+                      (assignRoutingMode === "twilio" && !assignTwilioSid.trim())
+                    }
+                  >
+                    {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    {isAssigning ? "Assegnazione..." : "Assegna linea"}
+                  </Button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </section>

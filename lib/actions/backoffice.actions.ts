@@ -6,6 +6,7 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
+import { getTwilioClient, VOICE_WEBHOOK_BASE_URL } from "@/lib/twilio";
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
 import { setBackofficeCookie, clearBackofficeCookie } from "@/lib/backoffice-auth";
 
@@ -252,6 +253,101 @@ export async function unassignAutoscuolaVoiceLine(
     });
 
     return { success: true };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ─── Auto-provision: buy Twilio number + configure webhooks + assign ─────────
+
+const provisionAutoscuolaVoiceLineSchema = z.object({
+  companyId: z.string().uuid(),
+});
+
+export async function provisionAutoscuolaVoiceLine(
+  input: z.infer<typeof provisionAutoscuolaVoiceLineSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const { companyId } = provisionAutoscuolaVoiceLineSchema.parse(input);
+
+    // Check the company doesn't already have a ready voice line
+    const existingService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const currentLimits = (existingService?.limits ?? {}) as Record<string, unknown>;
+    if (currentLimits.voiceProvisioningStatus === "ready") {
+      return { success: false, message: "Questa autoscuola ha già una linea vocale attiva." };
+    }
+
+    const client = getTwilioClient();
+
+    // 1. Find the regulatory bundle
+    const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+      friendlyName: "Reglo - Italy Local Numbers",
+      status: "twilio-approved",
+      limit: 1,
+    });
+    if (!bundles.length) {
+      return {
+        success: false,
+        message: "Bundle 'Reglo - Italy Local Numbers' non trovato o non approvato su Twilio.",
+      };
+    }
+    const bundleSid = bundles[0].sid;
+
+    // 2. Search for an available Italian local number
+    const available = await client.availablePhoneNumbers("IT").local.list({ limit: 1 });
+    if (!available.length) {
+      return { success: false, message: "Nessun numero italiano disponibile su Twilio." };
+    }
+    const phoneNumber = available[0].phoneNumber; // E.164
+
+    // 3. Buy the number with webhooks pre-configured
+    const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
+    const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
+
+    const purchased = await client.incomingPhoneNumbers.create({
+      phoneNumber,
+      voiceUrl,
+      voiceMethod: "POST",
+      statusCallback: statusUrl,
+      statusCallbackMethod: "POST",
+      bundleSid,
+      friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
+    });
+
+    // 4. Format display number: +39051234567 → +39 051 234567
+    const raw = purchased.phoneNumber; // E.164 e.g. +39051234567
+    const withoutPrefix = raw.replace(/^\+39/, "");
+    const displayNumber =
+      withoutPrefix.length >= 6
+        ? `+39 ${withoutPrefix.slice(0, 3)} ${withoutPrefix.slice(3)}`
+        : raw;
+
+    // 5. Assign line using existing logic
+    const result = await assignAutoscuolaVoiceLine({
+      companyId,
+      displayNumber,
+      twilioNumber: purchased.phoneNumber,
+      twilioPhoneSid: purchased.sid,
+      routingMode: "twilio",
+    });
+
+    if (!result.success) {
+      return result;
+    }
+
+    return {
+      success: true,
+      data: {
+        lineId: result.data!.lineId,
+        phoneNumber: purchased.phoneNumber,
+        displayNumber,
+        phoneSid: purchased.sid,
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
