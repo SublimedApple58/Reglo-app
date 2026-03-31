@@ -20,19 +20,29 @@ export const autoscuoleReminders = schedules.task({
   run: async () => {
     const prisma = await getPrisma();
     const now = new Date();
-    await processAutoscuolaAutoCompleteCheckedIn({ prisma });
-    await processAutoscuolaAutoPendingReview({ prisma });
-    await processAutoscuolaPenaltyCharges({ prisma });
-    await processAutoscuolaLessonSettlement({ prisma });
-    await processAutoscuolaPaymentRetries({ prisma });
-    await processAutoscuolaInvoiceFinalization({ prisma });
-    await processAutoscuolaPendingRepositions({ prisma, limit: 50 });
-    await processAutoscuolaConfiguredAppointmentReminders({ prisma });
-    await processAutoscuolaAppointmentReminders({ prisma });
-    await processAutoscuolaCaseDeadlines({ prisma });
+    const errors: string[] = [];
+    const safe = async (name: string, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[reminders] ${name} failed: ${msg}`);
+        errors.push(name);
+      }
+    };
+    await safe("autoComplete", () => processAutoscuolaAutoCompleteCheckedIn({ prisma }));
+    await safe("autoPendingReview", () => processAutoscuolaAutoPendingReview({ prisma }));
+    await safe("penaltyCharges", () => processAutoscuolaPenaltyCharges({ prisma }));
+    await safe("lessonSettlement", () => processAutoscuolaLessonSettlement({ prisma }));
+    await safe("paymentRetries", () => processAutoscuolaPaymentRetries({ prisma }));
+    await safe("invoiceFinalization", () => processAutoscuolaInvoiceFinalization({ prisma }));
+    await safe("pendingRepositions", () => processAutoscuolaPendingRepositions({ prisma, limit: 50 }));
+    await safe("configuredReminders", () => processAutoscuolaConfiguredAppointmentReminders({ prisma }));
+    await safe("appointmentReminders", () => processAutoscuolaAppointmentReminders({ prisma }));
+    await safe("caseDeadlines", () => processAutoscuolaCaseDeadlines({ prisma }));
     if (now.getUTCMinutes() === 0) {
-      await cleanupAutoscuolaVoiceRetention({ prisma, now });
+      await safe("voiceRetention", () => cleanupAutoscuolaVoiceRetention({ prisma, now }));
     }
-    return { ok: true };
+    return { ok: errors.length === 0, errors };
   },
 });
