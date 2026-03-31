@@ -319,7 +319,17 @@ export async function provisionAutoscuolaVoiceLine(
     }
     const phoneNumber = available[0].phoneNumber; // E.164
 
-    // 3. Buy the number with webhooks pre-configured
+    // 3. Find address on the Twilio account (required for Italian numbers)
+    const addresses = await client.addresses.list({ limit: 1 });
+    if (!addresses.length) {
+      return {
+        success: false,
+        message: "Nessun indirizzo configurato su Twilio. Aggiungine uno nella console Twilio.",
+      };
+    }
+    const addressSid = addresses[0].sid;
+
+    // 4. Buy the number with webhooks pre-configured
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
 
@@ -330,10 +340,11 @@ export async function provisionAutoscuolaVoiceLine(
       statusCallback: statusUrl,
       statusCallbackMethod: "POST",
       bundleSid,
+      addressSid,
       friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
     });
 
-    // 4. Format display number: +39051234567 → +39 051 234567
+    // 5. Format display number: +39051234567 → +39 051 234567
     const raw = purchased.phoneNumber; // E.164 e.g. +39051234567
     const withoutPrefix = raw.replace(/^\+39/, "");
     const displayNumber =
@@ -341,7 +352,7 @@ export async function provisionAutoscuolaVoiceLine(
         ? `+39 ${withoutPrefix.slice(0, 3)} ${withoutPrefix.slice(3)}`
         : raw;
 
-    // 5. Assign line using existing logic
+    // 6. Assign line using existing logic
     const result = await assignAutoscuolaVoiceLine({
       companyId,
       displayNumber,
