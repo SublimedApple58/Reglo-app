@@ -2162,10 +2162,14 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       lessonPolicy.lessonRequiredTypesEnabled &&
       lessonPolicy.lessonRequiredTypes.length > 0;
 
+    const governance = await getBookingGovernanceForCompany(membership.companyId);
+    const filterByStudentAvailability = governance.studentBookingMode === "engine";
+
     const [
       activeInstructors,
       activeVehicles,
       student,
+      studentAvailabilityRaw,
     ] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
@@ -2180,7 +2184,16 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         select: { id: true },
       }),
       ensureStudentMembership(membership.companyId, payload.studentId),
+      filterByStudentAvailability
+        ? prisma.autoscuolaWeeklyAvailability.findFirst({
+            where: { companyId: membership.companyId, ownerType: "student", ownerId: payload.studentId },
+          })
+        : Promise.resolve(null),
     ]);
+
+    const studentAvailability = studentAvailabilityRaw
+      ? defaultToAvailabilityRecord(studentAvailabilityRaw)
+      : null;
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
@@ -2307,6 +2320,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         if (startMs < now.getTime()) continue;
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
+
+        // In engine mode, filter by student's weekly availability
+        if (filterByStudentAvailability) {
+          if (!studentAvailability) continue; // no availability configured → no slots
+          if (!isOwnerAvailable(studentAvailability, dayOfWeek, minutes, minutes + payload.durationMinutes)) continue;
+        }
 
         if (
           enforceLessonTypeTimeConstraints &&
