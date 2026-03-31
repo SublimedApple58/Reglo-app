@@ -823,16 +823,15 @@ const emptySlotToTimeZoneDate = (
   hours: number,
   minutes: number,
 ) => {
-  const baseUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes, 0, 0);
-  const firstPass = new Date(baseUtc);
-  const firstOffset = emptySlotGetOffsetMinutes(firstPass);
-  let timestamp = baseUtc - firstOffset * 60000;
-  const secondPass = new Date(timestamp);
-  const secondOffset = emptySlotGetOffsetMinutes(secondPass);
-  if (secondOffset !== firstOffset) {
-    timestamp = baseUtc - secondOffset * 60000;
-  }
-  return new Date(timestamp);
+  // Probe at noon UTC on the target date to get a stable timezone offset
+  // (avoids DST ambiguity that can occur around midnight)
+  const probeUtc = Date.UTC(parts.year, parts.month - 1, parts.day, 12, 0, 0);
+  const probeZoned = emptySlotGetZonedParts(new Date(probeUtc));
+  const offsetMs =
+    Date.UTC(probeZoned.year, probeZoned.month - 1, probeZoned.day, probeZoned.hour, probeZoned.minute, 0) - probeUtc;
+  return new Date(
+    Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes, 0) - offsetMs,
+  );
 };
 
 type EmptySlotTimeRange = { startMinutes: number; endMinutes: number };
