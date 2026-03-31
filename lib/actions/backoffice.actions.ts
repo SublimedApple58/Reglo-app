@@ -283,21 +283,7 @@ export async function provisionAutoscuolaVoiceLine(
 
     const client = getTwilioClient();
 
-    // 1. Find the regulatory bundle
-    const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
-      friendlyName: "Reglo - Italy Local Numbers",
-      status: "twilio-approved",
-      limit: 1,
-    });
-    if (!bundles.length) {
-      return {
-        success: false,
-        message: "Bundle 'Reglo - Italy Local Numbers' non trovato o non approvato su Twilio.",
-      };
-    }
-    const bundleSid = bundles[0].sid;
-
-    // 2. Search for an available Italian number (try national → mobile → local)
+    // 1. Search for an available Italian number (try national → mobile → local)
     type AvailableNumber = { phoneNumber: string };
     let available: AvailableNumber[] = [];
     const itNumbers = client.availablePhoneNumbers("IT");
@@ -319,7 +305,7 @@ export async function provisionAutoscuolaVoiceLine(
     }
     const phoneNumber = available[0].phoneNumber; // E.164
 
-    // 3. Find address on the Twilio account (required for Italian numbers)
+    // 2. Find address on the Twilio account (required for Italian numbers)
     const addresses = await client.addresses.list({ limit: 1 });
     if (!addresses.length) {
       return {
@@ -329,20 +315,44 @@ export async function provisionAutoscuolaVoiceLine(
     }
     const addressSid = addresses[0].sid;
 
+    // 3. Find an approved regulatory bundle for IT
+    const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+      isoCountry: "IT",
+      status: "twilio-approved",
+      limit: 20,
+    });
+
     // 4. Buy the number with webhooks pre-configured
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
 
-    const purchased = await client.incomingPhoneNumbers.create({
-      phoneNumber,
-      voiceUrl,
-      voiceMethod: "POST",
-      statusCallback: statusUrl,
-      statusCallbackMethod: "POST",
-      bundleSid,
-      addressSid,
-      friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
-    });
+    // Try with each approved bundle, then without bundle as fallback
+    const bundleSids = [...bundles.map((b) => b.sid), null];
+    let purchased: Awaited<ReturnType<typeof client.incomingPhoneNumbers.create>> | null = null;
+    let lastError = "";
+
+    for (const sid of bundleSids) {
+      try {
+        purchased = await client.incomingPhoneNumbers.create({
+          phoneNumber,
+          voiceUrl,
+          voiceMethod: "POST",
+          statusCallback: statusUrl,
+          statusCallbackMethod: "POST",
+          ...(sid ? { bundleSid: sid } : {}),
+          addressSid,
+          friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
+        });
+        break;
+      } catch (e: unknown) {
+        lastError = e instanceof Error ? e.message : String(e);
+        // Try next bundle
+      }
+    }
+
+    if (!purchased) {
+      return { success: false, message: `Acquisto numero fallito: ${lastError}` };
+    }
 
     // 5. Format display number: +39051234567 → +39 051 234567
     const raw = purchased.phoneNumber; // E.164 e.g. +39051234567
