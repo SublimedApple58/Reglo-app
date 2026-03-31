@@ -1099,6 +1099,7 @@ export const processEmptySlotNotifications = async ({
     const durations = normalizeBookingSlotDurations(limits.bookingSlotDurations);
     const checkDuration = durations[0] ?? 60;
 
+    console.log(`[empty-slot] now=${now.toISOString()}, zonedNow=${JSON.stringify(zonedNow)}, tomorrowParts=${JSON.stringify(tomorrowParts)}`);
     console.log(`[empty-slot] Company ${companyId}: enabled, actors=${governance.appBookingActors}, duration=${checkDuration}`);
     console.log(`[empty-slot] Tomorrow: ${tomorrowDateStr} (dow=${tomorrowDow}), range: ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`);
 
