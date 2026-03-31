@@ -236,6 +236,8 @@ export function AutoscuoleResourcesPage({
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
+  const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
+  const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
@@ -414,6 +416,8 @@ export function AutoscuoleResourcesPage({
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
       setSwapEnabled(res.data.swapEnabled ?? false);
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+      setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
+      setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -549,6 +553,8 @@ export function AutoscuoleResourcesPage({
       roundedHoursOnly,
       swapEnabled,
       swapNotifyMode,
+      emptySlotNotificationEnabled,
+      emptySlotNotificationTarget,
       instructorPreferenceEnabled,
       appBookingActors,
       instructorBookingMode,
@@ -1632,6 +1638,42 @@ export function AutoscuoleResourcesPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="available_only">Solo allievi disponibili nello slot</SelectItem>
+                        <SelectItem value="all">Tutti gli allievi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={Bell}
+              title="Notifica slot vuoti"
+              description="Notifica automaticamente gli allievi quando ci sono guide disponibili per il giorno dopo."
+              expanded={expandedSection === "emptySlotNotification"}
+              onToggle={() => toggleSection("emptySlotNotification")}
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setEmptySlotNotificationEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Notifica slot disponibili domani</span>
+                    <span className="text-xs text-muted-foreground">
+                      Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere per il giorno dopo.
+                    </span>
+                  </div>
+                  <InlineToggle checked={emptySlotNotificationEnabled} size="sm" />
+                </div>
+
+                {emptySlotNotificationEnabled ? (
+                  <FieldGroup label="Destinatari">
+                    <Select value={emptySlotNotificationTarget} onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Destinatari" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="availability_matching">Solo allievi con disponibilità corrispondente</SelectItem>
                         <SelectItem value="all">Tutti gli allievi</SelectItem>
                       </SelectContent>
                     </Select>

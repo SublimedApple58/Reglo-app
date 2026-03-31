@@ -51,6 +51,12 @@ const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
 const DEFAULT_SWAP_ENABLED = false;
 const DEFAULT_SWAP_NOTIFY_MODE = "available_only" as const;
 const SWAP_NOTIFY_MODES = ["all", "available_only"] as const;
+const DEFAULT_EMPTY_SLOT_NOTIFICATION_ENABLED = false;
+const DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET = "availability_matching" as const;
+const EMPTY_SLOT_NOTIFICATION_TARGETS = [
+  "all",
+  "availability_matching",
+] as const;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
@@ -261,6 +267,10 @@ const autoscuolaSettingsPatchSchema = z
     roundedHoursOnly: z.boolean().optional(),
     swapEnabled: z.boolean().optional(),
     swapNotifyMode: z.enum(["all", "available_only"]).optional(),
+    emptySlotNotificationEnabled: z.boolean().optional(),
+    emptySlotNotificationTarget: z
+      .enum(["all", "availability_matching"])
+      .optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
@@ -309,6 +319,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentBookingMode !== undefined ||
       value.swapEnabled !== undefined ||
       value.swapNotifyMode !== undefined ||
+      value.emptySlotNotificationEnabled !== undefined ||
+      value.emptySlotNotificationTarget !== undefined ||
       value.instructorPreferenceEnabled !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
@@ -453,6 +465,8 @@ export type AutoscuolaSettingsData = {
   studentBookingMode: StudentBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
+  emptySlotNotificationEnabled: boolean;
+  emptySlotNotificationTarget: (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number];
   instructorPreferenceEnabled: boolean;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
@@ -565,6 +579,15 @@ const resolveAutoscuolaSettingsData = (
   )
     ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
     : DEFAULT_SWAP_NOTIFY_MODE;
+  const emptySlotNotificationEnabled =
+    typeof limits.emptySlotNotificationEnabled === "boolean"
+      ? limits.emptySlotNotificationEnabled
+      : DEFAULT_EMPTY_SLOT_NOTIFICATION_ENABLED;
+  const emptySlotNotificationTarget = (
+    EMPTY_SLOT_NOTIFICATION_TARGETS as readonly string[]
+  ).includes(limits.emptySlotNotificationTarget as string)
+    ? (limits.emptySlotNotificationTarget as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
+    : DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET;
   const instructorPreferenceEnabled =
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
@@ -661,6 +684,8 @@ const resolveAutoscuolaSettingsData = (
     studentBookingMode: bookingGovernance.studentBookingMode,
     swapEnabled,
     swapNotifyMode,
+    emptySlotNotificationEnabled,
+    emptySlotNotificationTarget,
     instructorPreferenceEnabled,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
@@ -797,6 +822,15 @@ export async function updateAutoscuolaSettings(
     )
       ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
       : DEFAULT_SWAP_NOTIFY_MODE;
+    const previousEmptySlotNotificationEnabled =
+      typeof limits.emptySlotNotificationEnabled === "boolean"
+        ? limits.emptySlotNotificationEnabled
+        : DEFAULT_EMPTY_SLOT_NOTIFICATION_ENABLED;
+    const previousEmptySlotNotificationTarget = (
+      EMPTY_SLOT_NOTIFICATION_TARGETS as readonly string[]
+    ).includes(limits.emptySlotNotificationTarget as string)
+      ? (limits.emptySlotNotificationTarget as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
+      : DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET;
     const previousInstructorPreferenceEnabled =
       typeof limits.instructorPreferenceEnabled === "boolean"
         ? limits.instructorPreferenceEnabled
@@ -901,6 +935,10 @@ export async function updateAutoscuolaSettings(
       payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
     const nextSwapEnabled = payload.swapEnabled ?? previousSwapEnabled;
     const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
+    const nextEmptySlotNotificationEnabled =
+      payload.emptySlotNotificationEnabled ?? previousEmptySlotNotificationEnabled;
+    const nextEmptySlotNotificationTarget =
+      payload.emptySlotNotificationTarget ?? previousEmptySlotNotificationTarget;
     const nextInstructorPreferenceEnabled =
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1030,6 +1068,8 @@ export async function updateAutoscuolaSettings(
       studentBookingMode: nextStudentBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
+      emptySlotNotificationEnabled: nextEmptySlotNotificationEnabled,
+      emptySlotNotificationTarget: nextEmptySlotNotificationTarget,
       instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
@@ -1102,6 +1142,8 @@ export async function updateAutoscuolaSettings(
         studentBookingMode: nextLimits.studentBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,
+        emptySlotNotificationEnabled: nextLimits.emptySlotNotificationEnabled,
+        emptySlotNotificationTarget: nextLimits.emptySlotNotificationTarget,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,

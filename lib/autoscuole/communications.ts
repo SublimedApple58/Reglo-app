@@ -11,6 +11,13 @@ import {
   processAutoscuolaPaymentRetries as processAutoscuolaPaymentRetriesJob,
   processAutoscuolaPenaltyCharges as processAutoscuolaPenaltyChargesJob,
 } from "@/lib/autoscuole/payments";
+import {
+  parseBookingGovernanceFromLimits,
+} from "@/lib/autoscuole/booking-governance";
+import {
+  normalizeBookingSlotDurations,
+} from "@/lib/autoscuole/lesson-policy";
+import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -768,3 +775,407 @@ export const processAutoscuolaInvoiceFinalization = async ({
   prisma?: PrismaClientLike;
   now?: Date;
 }) => processAutoscuolaInvoiceFinalizationJob({ prisma, now });
+
+// ── Empty slot notifications ─────────────────────────────
+
+const EMPTY_SLOT_MINUTES = 30;
+
+const emptySlotZonedFormatter = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Rome",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  weekday: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
+const WEEKDAY_TO_INDEX: Record<string, number> = {
+  Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+};
+
+type EmptySlotDateParts = { year: number; month: number; day: number };
+
+const emptySlotGetZonedParts = (date: Date) => {
+  const parts = emptySlotZonedFormatter.formatToParts(date);
+  const readPart = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    year: Number(readPart("year")),
+    month: Number(readPart("month")),
+    day: Number(readPart("day")),
+    weekday: readPart("weekday"),
+    hour: Number(readPart("hour")),
+    minute: Number(readPart("minute")),
+  };
+};
+
+const emptySlotGetOffsetMinutes = (date: Date) => {
+  const parts = emptySlotGetZonedParts(date);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, 0);
+  return (asUtc - date.getTime()) / 60000;
+};
+
+const emptySlotToTimeZoneDate = (
+  parts: EmptySlotDateParts,
+  hours: number,
+  minutes: number,
+) => {
+  const baseUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hours, minutes, 0, 0);
+  const firstPass = new Date(baseUtc);
+  const firstOffset = emptySlotGetOffsetMinutes(firstPass);
+  let timestamp = baseUtc - firstOffset * 60000;
+  const secondPass = new Date(timestamp);
+  const secondOffset = emptySlotGetOffsetMinutes(secondPass);
+  if (secondOffset !== firstOffset) {
+    timestamp = baseUtc - secondOffset * 60000;
+  }
+  return new Date(timestamp);
+};
+
+type EmptySlotTimeRange = { startMinutes: number; endMinutes: number };
+type EmptySlotAvailability = { daysOfWeek: number[]; ranges: EmptySlotTimeRange[] };
+
+const emptySlotParseRanges = (raw: unknown): EmptySlotTimeRange[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (e): e is EmptySlotTimeRange =>
+      typeof e === "object" && e !== null &&
+      typeof e.startMinutes === "number" && typeof e.endMinutes === "number",
+  );
+};
+
+const emptySlotDefaultToRecord = (record: {
+  daysOfWeek: number[];
+  startMinutes: number;
+  endMinutes: number;
+  startMinutes2?: number | null;
+  endMinutes2?: number | null;
+  ranges?: unknown;
+}): EmptySlotAvailability => {
+  const ranges = record.ranges ? emptySlotParseRanges(record.ranges) : [];
+  if (!ranges.length) {
+    ranges.push({ startMinutes: record.startMinutes, endMinutes: record.endMinutes });
+    if (record.startMinutes2 != null && record.endMinutes2 != null && record.endMinutes2 > record.startMinutes2) {
+      ranges.push({ startMinutes: record.startMinutes2, endMinutes: record.endMinutes2 });
+    }
+  }
+  return { daysOfWeek: record.daysOfWeek, ranges };
+};
+
+const EMPTY_SLOT_NOTIFICATION_TARGETS = ["all", "availability_matching"] as const;
+
+const resolveEmptySlotSettings = (limits: Record<string, unknown>) => {
+  const enabled =
+    typeof limits.emptySlotNotificationEnabled === "boolean"
+      ? limits.emptySlotNotificationEnabled
+      : false;
+  const targetRaw = limits.emptySlotNotificationTarget as string;
+  const target = (EMPTY_SLOT_NOTIFICATION_TARGETS as readonly string[]).includes(targetRaw)
+    ? (targetRaw as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
+    : "availability_matching";
+  return { enabled, target };
+};
+
+/**
+ * Check if at least 1 slot is free tomorrow for a company.
+ * Replicates the core logic of getAllAvailableSlots, but short-circuits on
+ * the first available slot and does not require auth context.
+ */
+const hasFreeSlotTomorrow = async ({
+  prisma,
+  companyId,
+  tomorrowParts,
+  tomorrowDow,
+  rangeStart,
+  rangeEnd,
+  durationMinutes,
+}: {
+  prisma: PrismaClientLike;
+  companyId: string;
+  tomorrowParts: EmptySlotDateParts;
+  tomorrowDow: number;
+  rangeStart: Date;
+  rangeEnd: Date;
+  durationMinutes: number;
+}) => {
+  const durationSlots = durationMinutes / EMPTY_SLOT_MINUTES;
+  if (!Number.isInteger(durationSlots) || durationSlots < 1) return false;
+
+  const [activeInstructors, activeVehicles] = await Promise.all([
+    prisma.autoscuolaInstructor.findMany({
+      where: { companyId, status: { not: "inactive" } },
+      select: { id: true },
+    }),
+    prisma.autoscuolaVehicle.findMany({
+      where: { companyId, status: { not: "inactive" } },
+      select: { id: true },
+    }),
+  ]);
+
+  const instructorIds = activeInstructors.map((i: { id: string }) => i.id);
+  const vehicleIds = activeVehicles.map((v: { id: string }) => v.id);
+  if (!instructorIds.length || !vehicleIds.length) return false;
+
+  // Fetch availability for instructors & vehicles
+  const [instructorDefaults, vehicleDefaults, instructorOverrides, vehicleOverrides] =
+    await Promise.all([
+      prisma.autoscuolaWeeklyAvailability.findMany({
+        where: { companyId, ownerType: "instructor", ownerId: { in: instructorIds } },
+      }),
+      prisma.autoscuolaWeeklyAvailability.findMany({
+        where: { companyId, ownerType: "vehicle", ownerId: { in: vehicleIds } },
+      }),
+      prisma.autoscuolaDailyAvailabilityOverride.findMany({
+        where: { companyId, ownerType: "instructor", ownerId: { in: instructorIds }, date: { gte: rangeStart, lte: rangeEnd } },
+      }),
+      prisma.autoscuolaDailyAvailabilityOverride.findMany({
+        where: { companyId, ownerType: "vehicle", ownerId: { in: vehicleIds }, date: { gte: rangeStart, lte: rangeEnd } },
+      }),
+    ]);
+
+  const dateISO = `${tomorrowParts.year}-${String(tomorrowParts.month).padStart(2, "0")}-${String(tomorrowParts.day).padStart(2, "0")}`;
+
+  const buildResolver = (
+    defaults: Array<{ ownerId: string; daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown }>,
+    overrides: Array<{ ownerId: string; date: Date; ranges: unknown }>,
+  ) => {
+    const overrideMap = new Map<string, EmptySlotTimeRange[]>();
+    for (const o of overrides) {
+      const d = new Date(o.date);
+      const oDateISO = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      overrideMap.set(`${o.ownerId}:${oDateISO}`, emptySlotParseRanges(o.ranges));
+    }
+    const defaultMap = new Map<string, EmptySlotAvailability>();
+    for (const d of defaults) {
+      defaultMap.set(d.ownerId, emptySlotDefaultToRecord(d));
+    }
+    return (ownerId: string): EmptySlotAvailability | null => {
+      const overrideRanges = overrideMap.get(`${ownerId}:${dateISO}`);
+      if (overrideRanges !== undefined) {
+        return { daysOfWeek: [tomorrowDow], ranges: overrideRanges };
+      }
+      return defaultMap.get(ownerId) ?? null;
+    };
+  };
+
+  const resolveInstructor = buildResolver(
+    instructorDefaults as Array<{ ownerId: string; daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown }>,
+    instructorOverrides as Array<{ ownerId: string; date: Date; ranges: unknown }>,
+  );
+  const resolveVehicle = buildResolver(
+    vehicleDefaults as Array<{ ownerId: string; daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown }>,
+    vehicleOverrides as Array<{ ownerId: string; date: Date; ranges: unknown }>,
+  );
+
+  // Fetch appointments for tomorrow
+  const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
+  const appointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      status: { notIn: ["cancelled"] },
+      startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+    },
+  });
+
+  const intervals = new Map<string, Array<{ start: number; end: number }>>();
+  for (const appt of appointments as Array<{ startsAt: Date; endsAt: Date | null; instructorId: string | null; vehicleId: string | null }>) {
+    const start = appt.startsAt.getTime();
+    const end = appt.endsAt?.getTime() ?? start + EMPTY_SLOT_MINUTES * 60 * 1000;
+    const addInterval = (ownerId: string) => {
+      const list = intervals.get(ownerId) ?? [];
+      list.push({ start, end });
+      intervals.set(ownerId, list);
+    };
+    if (appt.instructorId) addInterval(appt.instructorId);
+    if (appt.vehicleId) addInterval(appt.vehicleId);
+  }
+
+  const overlaps = (
+    ownerIntervals: Array<{ start: number; end: number }> | undefined,
+    start: number,
+    end: number,
+  ) => {
+    if (!ownerIntervals?.length) return false;
+    return ownerIntervals.some((i) => start < i.end && end > i.start);
+  };
+
+  const isAvailable = (
+    avail: EmptySlotAvailability | null,
+    dow: number,
+    startMin: number,
+    endMin: number,
+  ) => {
+    if (!avail) return false;
+    if (!avail.daysOfWeek.includes(dow)) return false;
+    return avail.ranges.some(
+      (r) => r.endMinutes > r.startMinutes && startMin >= r.startMinutes && endMin <= r.endMinutes,
+    );
+  };
+
+  // Scan the day for at least 1 free slot
+  const dayLastStart = 1440 - durationMinutes;
+  for (let minutes = 0; minutes <= dayLastStart; minutes += EMPTY_SLOT_MINUTES) {
+    const startDate = emptySlotToTimeZoneDate(tomorrowParts, Math.floor(minutes / 60), minutes % 60);
+    const endDate = new Date(startDate.getTime() + durationMinutes * 60 * 1000);
+    const startMs = startDate.getTime();
+    if (startDate < rangeStart || endDate > rangeEnd) continue;
+
+    const candidateEndMin = minutes + durationMinutes;
+
+    let hasInstructor = false;
+    for (const id of instructorIds) {
+      if (!isAvailable(resolveInstructor(id), tomorrowDow, minutes, candidateEndMin)) continue;
+      if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
+      hasInstructor = true;
+      break;
+    }
+    if (!hasInstructor) continue;
+
+    let hasVehicle = false;
+    for (const id of vehicleIds) {
+      if (!isAvailable(resolveVehicle(id), tomorrowDow, minutes, candidateEndMin)) continue;
+      if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
+      hasVehicle = true;
+      break;
+    }
+    if (!hasVehicle) continue;
+
+    return true; // At least 1 slot found
+  }
+
+  return false;
+};
+
+export const processEmptySlotNotifications = async ({
+  prisma = defaultPrisma,
+}: {
+  prisma?: PrismaClientLike;
+}) => {
+  const now = new Date();
+  const zonedNow = emptySlotGetZonedParts(now);
+  const tomorrowParts: EmptySlotDateParts = (() => {
+    const d = new Date(Date.UTC(zonedNow.year, zonedNow.month - 1, zonedNow.day));
+    d.setUTCDate(d.getUTCDate() + 1);
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+  })();
+  const tomorrowDateStr = `${tomorrowParts.year}-${String(tomorrowParts.month).padStart(2, "0")}-${String(tomorrowParts.day).padStart(2, "0")}`;
+  const tomorrowDow = new Date(Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day)).getUTCDay();
+  const rangeStart = emptySlotToTimeZoneDate(tomorrowParts, 0, 0);
+  const nextDayParts: EmptySlotDateParts = (() => {
+    const d = new Date(Date.UTC(tomorrowParts.year, tomorrowParts.month - 1, tomorrowParts.day));
+    d.setUTCDate(d.getUTCDate() + 1);
+    return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+  })();
+  const rangeEnd = emptySlotToTimeZoneDate(nextDayParts, 0, 0);
+
+  // Find all active autoscuole with the feature enabled
+  const services = await prisma.companyService.findMany({
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+  });
+
+  let totalNotified = 0;
+
+  for (const service of services) {
+
+    const limits = (service.limits ?? {}) as Record<string, unknown>;
+    const settings = resolveEmptySlotSettings(limits);
+    if (!settings.enabled) continue;
+
+    const companyId = service.companyId;
+
+    // Check that students can book from the app
+    const governance = parseBookingGovernanceFromLimits(limits);
+    if (governance.appBookingActors === "instructors") continue;
+
+    // Pick the suggested duration for the quick-check
+    const durations = normalizeBookingSlotDurations(limits.bookingSlotDurations);
+    const checkDuration = durations[0] ?? 60;
+
+    // Quick-check: does tomorrow have at least 1 free slot?
+    const hasFree = await hasFreeSlotTomorrow({
+      prisma,
+      companyId,
+      tomorrowParts,
+      tomorrowDow,
+      rangeStart,
+      rangeEnd,
+      durationMinutes: checkDuration,
+    });
+    if (!hasFree) continue;
+
+    // Get all students in this company
+    const studentMembers = await prisma.companyMember.findMany({
+      where: { companyId, autoscuolaRole: "STUDENT" },
+      select: { userId: true },
+    });
+    if (!studentMembers.length) continue;
+    const studentUserIds = studentMembers.map((m: { userId: string }) => m.userId);
+
+    // Filter by availability if target is "availability_matching"
+    let targetUserIds: string[];
+    if (settings.target === "availability_matching") {
+      const studentAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
+        where: { companyId, ownerType: "student", ownerId: { in: studentUserIds } },
+      });
+      targetUserIds = [];
+      for (const avail of studentAvailabilities) {
+        const record = emptySlotDefaultToRecord(avail as { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown });
+        if (record.daysOfWeek.includes(tomorrowDow)) {
+          targetUserIds.push(avail.ownerId);
+        }
+      }
+    } else {
+      targetUserIds = studentUserIds;
+    }
+
+    if (!targetUserIds.length) continue;
+
+    // Exclude students who already have an appointment tomorrow
+    const existingAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: { in: targetUserIds },
+        status: { notIn: ["cancelled"] },
+        startsAt: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { studentId: true },
+    });
+    const bookedStudentIds = new Set(existingAppointments.map((a: { studentId: string }) => a.studentId));
+    targetUserIds = targetUserIds.filter((id) => !bookedStudentIds.has(id));
+
+    if (!targetUserIds.length) continue;
+
+    // Exclude students without push tokens
+    const devicesWithToken = await prisma.mobilePushDevice.findMany({
+      where: { userId: { in: targetUserIds }, disabledAt: null },
+      select: { userId: true },
+    });
+    const usersWithToken = new Set(devicesWithToken.map((d: { userId: string }) => d.userId));
+    targetUserIds = targetUserIds.filter((id) => usersWithToken.has(id));
+
+    if (!targetUserIds.length) continue;
+
+    // Send push notifications
+    try {
+      await sendAutoscuolaPushToUsers({
+        prisma,
+        companyId,
+        userIds: targetUserIds,
+        title: "Guide disponibili domani!",
+        body: "Ci sono posti liberi per domani. Apri Reglo per prenotare.",
+        data: {
+          kind: "available_slots",
+          date: tomorrowDateStr,
+        },
+      });
+      totalNotified += targetUserIds.length;
+    } catch (error) {
+      console.error(`Empty slot notification push error for company ${companyId}`, error);
+    }
+  }
+
+  return { notified: totalNotified };
+};
