@@ -283,75 +283,87 @@ export async function provisionAutoscuolaVoiceLine(
 
     const client = getTwilioClient();
 
-    // 1. Search for an available Italian number (try national → mobile → local)
-    type AvailableNumber = { phoneNumber: string };
-    let available: AvailableNumber[] = [];
-    const itNumbers = client.availablePhoneNumbers("IT");
-    const searches = [
-      () => itNumbers.national.list({ limit: 1 }),
-      () => itNumbers.mobile.list({ limit: 1 }),
-      () => itNumbers.local.list({ limit: 1 }),
-    ];
-    for (const search of searches) {
-      try {
-        available = await search();
-        if (available.length) break;
-      } catch {
-        // Type not available for IT, try next
-      }
-    }
-    if (!available.length) {
-      return { success: false, message: "Nessun numero italiano disponibile su Twilio." };
-    }
-    const phoneNumber = available[0].phoneNumber; // E.164
-
-    // 2. Find address on the Twilio account (required for Italian numbers)
+    // 1. Find address on the Twilio account (required for Italian numbers)
     const addresses = await client.addresses.list({ limit: 1 });
-    if (!addresses.length) {
-      return {
-        success: false,
-        message: "Nessun indirizzo configurato su Twilio. Aggiungine uno nella console Twilio.",
-      };
-    }
-    const addressSid = addresses[0].sid;
+    const addressSid = addresses.length ? addresses[0].sid : undefined;
 
-    // 3. Find an approved regulatory bundle for IT
+    // 2. Find all approved regulatory bundles for IT
     const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
       isoCountry: "IT",
       status: "twilio-approved",
       limit: 20,
     });
+    // Also fetch bundles without country filter as fallback
+    if (!bundles.length) {
+      const allBundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+        status: "twilio-approved",
+        limit: 20,
+      });
+      bundles.push(...allBundles);
+    }
 
-    // 4. Buy the number with webhooks pre-configured
+    // 3. Search for available Italian numbers across all types, voice-only
+    const itNumbers = client.availablePhoneNumbers("IT");
+    type NumberCandidate = { phoneNumber: string; type: string };
+    const candidates: NumberCandidate[] = [];
+
+    const searchTypes = [
+      { name: "tollFree", fn: () => itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 }) },
+      { name: "national", fn: () => itNumbers.national.list({ voiceEnabled: true, limit: 3 }) },
+      { name: "local", fn: () => itNumbers.local.list({ voiceEnabled: true, limit: 3 }) },
+      { name: "mobile", fn: () => itNumbers.mobile.list({ voiceEnabled: true, limit: 3 }) },
+    ];
+
+    for (const { name, fn } of searchTypes) {
+      try {
+        const results = await fn();
+        for (const r of results) {
+          candidates.push({ phoneNumber: r.phoneNumber, type: name });
+        }
+      } catch {
+        // Type not available for IT
+      }
+    }
+
+    if (!candidates.length) {
+      return { success: false, message: "Nessun numero italiano disponibile su Twilio." };
+    }
+
+    // 4. Try to buy each candidate with each bundle until one succeeds
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
-
-    // Try with each approved bundle, then without bundle as fallback
     const bundleSids = [...bundles.map((b) => b.sid), null];
+
     let purchased: Awaited<ReturnType<typeof client.incomingPhoneNumbers.create>> | null = null;
     let lastError = "";
 
-    for (const sid of bundleSids) {
-      try {
-        purchased = await client.incomingPhoneNumbers.create({
-          phoneNumber,
-          voiceUrl,
-          voiceMethod: "POST",
-          statusCallback: statusUrl,
-          statusCallbackMethod: "POST",
-          ...(sid ? { bundleSid: sid } : {}),
-          addressSid,
-          friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
-        });
-        break;
-      } catch (e: unknown) {
-        lastError = e instanceof Error ? e.message : String(e);
-        // Try next bundle
+    outer: for (const candidate of candidates) {
+      for (const sid of bundleSids) {
+        try {
+          purchased = await client.incomingPhoneNumbers.create({
+            phoneNumber: candidate.phoneNumber,
+            voiceUrl,
+            voiceMethod: "POST",
+            statusCallback: statusUrl,
+            statusCallbackMethod: "POST",
+            ...(sid ? { bundleSid: sid } : {}),
+            ...(addressSid ? { addressSid } : {}),
+            friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
+          });
+          break outer;
+        } catch (e: unknown) {
+          lastError = e instanceof Error ? e.message : String(e);
+        }
       }
     }
 
     if (!purchased) {
-      return { success: false, message: `Acquisto numero fallito: ${lastError}` };
+      const types = [...new Set(candidates.map((c) => c.type))].join(", ");
+      const bundleCount = bundles.length;
+      return {
+        success: false,
+        message: `Acquisto fallito. Numeri trovati: ${candidates.length} (${types}), bundle provati: ${bundleCount}. Ultimo errore: ${lastError}`,
+      };
     }
 
     // 5. Format display number: +39051234567 → +39 051 234567
