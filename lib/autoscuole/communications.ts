@@ -917,6 +917,7 @@ const hasFreeSlotTomorrow = async ({
 
   const instructorIds = activeInstructors.map((i: { id: string }) => i.id);
   const vehicleIds = activeVehicles.map((v: { id: string }) => v.id);
+  console.log(`[empty-slot] hasFree: instructors=${instructorIds.length}, vehicles=${vehicleIds.length}`);
   if (!instructorIds.length || !vehicleIds.length) return false;
 
   // Fetch availability for instructors & vehicles
@@ -979,6 +980,8 @@ const hasFreeSlotTomorrow = async ({
       startsAt: { gte: appointmentScanStart, lt: rangeEnd },
     },
   });
+
+  console.log(`[empty-slot] hasFree: instrDefaults=${(instructorDefaults as unknown[]).length}, vehDefaults=${(vehicleDefaults as unknown[]).length}, appointments=${appointments.length}`);
 
   const intervals = new Map<string, Array<{ start: number; end: number }>>();
   for (const appt of appointments as Array<{ startsAt: Date; endsAt: Date | null; instructorId: string | null; vehicleId: string | null }>) {
@@ -1043,9 +1046,11 @@ const hasFreeSlotTomorrow = async ({
     }
     if (!hasVehicle) continue;
 
+    console.log(`[empty-slot] hasFree: found free slot at minute=${minutes}`);
     return true; // At least 1 slot found
   }
 
+  console.log(`[empty-slot] hasFree: no free slots found after scanning all minutes`);
   return false;
 };
 
@@ -1094,6 +1099,9 @@ export const processEmptySlotNotifications = async ({
     const durations = normalizeBookingSlotDurations(limits.bookingSlotDurations);
     const checkDuration = durations[0] ?? 60;
 
+    console.log(`[empty-slot] Company ${companyId}: enabled, actors=${governance.appBookingActors}, duration=${checkDuration}`);
+    console.log(`[empty-slot] Tomorrow: ${tomorrowDateStr} (dow=${tomorrowDow}), range: ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`);
+
     // Quick-check: does tomorrow have at least 1 free slot?
     const hasFree = await hasFreeSlotTomorrow({
       prisma,
@@ -1104,6 +1112,7 @@ export const processEmptySlotNotifications = async ({
       rangeEnd,
       durationMinutes: checkDuration,
     });
+    console.log(`[empty-slot] Company ${companyId}: hasFreeSlotTomorrow=${hasFree}`);
     if (!hasFree) continue;
 
     // Get all students in this company
