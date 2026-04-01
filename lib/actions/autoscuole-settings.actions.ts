@@ -51,6 +51,9 @@ const STRIPE_CONNECTED_ACCOUNT_ID_REGEX = /^acct_[A-Za-z0-9]+$/;
 const DEFAULT_SWAP_ENABLED = false;
 const DEFAULT_SWAP_NOTIFY_MODE = "available_only" as const;
 const SWAP_NOTIFY_MODES = ["all", "available_only"] as const;
+const DEFAULT_BOOKING_CUTOFF_ENABLED = false;
+const DEFAULT_BOOKING_CUTOFF_TIME = "18:00" as const;
+const BOOKING_CUTOFF_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"] as const;
 const DEFAULT_EMPTY_SLOT_NOTIFICATION_ENABLED = false;
 const DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET = "availability_matching" as const;
 const EMPTY_SLOT_NOTIFICATION_TARGETS = [
@@ -267,6 +270,8 @@ const autoscuolaSettingsPatchSchema = z
     roundedHoursOnly: z.boolean().optional(),
     swapEnabled: z.boolean().optional(),
     swapNotifyMode: z.enum(["all", "available_only"]).optional(),
+    bookingCutoffEnabled: z.boolean().optional(),
+    bookingCutoffTime: z.enum(BOOKING_CUTOFF_TIMES).optional(),
     emptySlotNotificationEnabled: z.boolean().optional(),
     emptySlotNotificationTarget: z
       .enum(["all", "availability_matching"])
@@ -319,6 +324,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentBookingMode !== undefined ||
       value.swapEnabled !== undefined ||
       value.swapNotifyMode !== undefined ||
+      value.bookingCutoffEnabled !== undefined ||
+      value.bookingCutoffTime !== undefined ||
       value.emptySlotNotificationEnabled !== undefined ||
       value.emptySlotNotificationTarget !== undefined ||
       value.instructorPreferenceEnabled !== undefined ||
@@ -465,6 +472,8 @@ export type AutoscuolaSettingsData = {
   studentBookingMode: StudentBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
+  bookingCutoffEnabled: boolean;
+  bookingCutoffTime: (typeof BOOKING_CUTOFF_TIMES)[number];
   emptySlotNotificationEnabled: boolean;
   emptySlotNotificationTarget: (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number];
   instructorPreferenceEnabled: boolean;
@@ -579,6 +588,15 @@ const resolveAutoscuolaSettingsData = (
   )
     ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
     : DEFAULT_SWAP_NOTIFY_MODE;
+  const bookingCutoffEnabled =
+    typeof limits.bookingCutoffEnabled === "boolean"
+      ? limits.bookingCutoffEnabled
+      : DEFAULT_BOOKING_CUTOFF_ENABLED;
+  const bookingCutoffTime = (BOOKING_CUTOFF_TIMES as readonly string[]).includes(
+    limits.bookingCutoffTime as string,
+  )
+    ? (limits.bookingCutoffTime as (typeof BOOKING_CUTOFF_TIMES)[number])
+    : DEFAULT_BOOKING_CUTOFF_TIME;
   const emptySlotNotificationEnabled =
     typeof limits.emptySlotNotificationEnabled === "boolean"
       ? limits.emptySlotNotificationEnabled
@@ -684,6 +702,8 @@ const resolveAutoscuolaSettingsData = (
     studentBookingMode: bookingGovernance.studentBookingMode,
     swapEnabled,
     swapNotifyMode,
+    bookingCutoffEnabled,
+    bookingCutoffTime,
     emptySlotNotificationEnabled,
     emptySlotNotificationTarget,
     instructorPreferenceEnabled,
@@ -822,6 +842,15 @@ export async function updateAutoscuolaSettings(
     )
       ? (limits.swapNotifyMode as (typeof SWAP_NOTIFY_MODES)[number])
       : DEFAULT_SWAP_NOTIFY_MODE;
+    const previousBookingCutoffEnabled =
+      typeof limits.bookingCutoffEnabled === "boolean"
+        ? limits.bookingCutoffEnabled
+        : DEFAULT_BOOKING_CUTOFF_ENABLED;
+    const previousBookingCutoffTime = (BOOKING_CUTOFF_TIMES as readonly string[]).includes(
+      limits.bookingCutoffTime as string,
+    )
+      ? (limits.bookingCutoffTime as (typeof BOOKING_CUTOFF_TIMES)[number])
+      : DEFAULT_BOOKING_CUTOFF_TIME;
     const previousEmptySlotNotificationEnabled =
       typeof limits.emptySlotNotificationEnabled === "boolean"
         ? limits.emptySlotNotificationEnabled
@@ -935,6 +964,8 @@ export async function updateAutoscuolaSettings(
       payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
     const nextSwapEnabled = payload.swapEnabled ?? previousSwapEnabled;
     const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
+    const nextBookingCutoffEnabled = payload.bookingCutoffEnabled ?? previousBookingCutoffEnabled;
+    const nextBookingCutoffTime = payload.bookingCutoffTime ?? previousBookingCutoffTime;
     const nextEmptySlotNotificationEnabled =
       payload.emptySlotNotificationEnabled ?? previousEmptySlotNotificationEnabled;
     const nextEmptySlotNotificationTarget =
@@ -1068,6 +1099,8 @@ export async function updateAutoscuolaSettings(
       studentBookingMode: nextStudentBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
+      bookingCutoffEnabled: nextBookingCutoffEnabled,
+      bookingCutoffTime: nextBookingCutoffTime,
       emptySlotNotificationEnabled: nextEmptySlotNotificationEnabled,
       emptySlotNotificationTarget: nextEmptySlotNotificationTarget,
       instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
@@ -1142,6 +1175,8 @@ export async function updateAutoscuolaSettings(
         studentBookingMode: nextLimits.studentBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,
+        bookingCutoffEnabled: nextLimits.bookingCutoffEnabled,
+        bookingCutoffTime: nextLimits.bookingCutoffTime,
         emptySlotNotificationEnabled: nextLimits.emptySlotNotificationEnabled,
         emptySlotNotificationTarget: nextLimits.emptySlotNotificationTarget,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,

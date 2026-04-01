@@ -236,6 +236,8 @@ export function AutoscuoleResourcesPage({
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
+  const [bookingCutoffEnabled, setBookingCutoffEnabled] = React.useState(false);
+  const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
@@ -416,6 +418,8 @@ export function AutoscuoleResourcesPage({
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
       setSwapEnabled(res.data.swapEnabled ?? false);
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+      setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
+      setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
       setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
       setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
@@ -553,6 +557,8 @@ export function AutoscuoleResourcesPage({
       roundedHoursOnly,
       swapEnabled,
       swapNotifyMode,
+      bookingCutoffEnabled,
+      bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
       emptySlotNotificationEnabled,
       emptySlotNotificationTarget,
       instructorPreferenceEnabled,
@@ -598,6 +604,8 @@ export function AutoscuoleResourcesPage({
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
     setSwapEnabled(res.data.swapEnabled ?? false);
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+    setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
+    setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -1609,12 +1617,52 @@ export function AutoscuoleResourcesPage({
           {/* ── Gestione allievi tab ── */}
           <div className="rounded-2xl border border-border bg-white shadow-card">
             <AccordionSection
+              icon={Clock}
+              title="Limite prenotazione"
+              description="Imposta un orario limite il giorno prima entro cui gli allievi possono prenotare."
+              expanded={expandedSection === "bookingCutoff"}
+              onToggle={() => toggleSection("bookingCutoff")}
+              isFirst
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setBookingCutoffEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Attiva limite prenotazione giorno prima</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi non potranno prenotare guide dopo l&apos;orario limite del giorno precedente. Le prenotazioni per il giorno stesso saranno bloccate.
+                    </span>
+                  </div>
+                  <InlineToggle checked={bookingCutoffEnabled} size="sm" />
+                </div>
+
+                {bookingCutoffEnabled ? (
+                  <FieldGroup label="Orario limite">
+                    <Select value={bookingCutoffTime} onValueChange={setBookingCutoffTime}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Orario" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="12:00">12:00</SelectItem>
+                        <SelectItem value="14:00">14:00</SelectItem>
+                        <SelectItem value="16:00">16:00</SelectItem>
+                        <SelectItem value="18:00">18:00</SelectItem>
+                        <SelectItem value="20:00">20:00</SelectItem>
+                        <SelectItem value="22:00">22:00</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
               icon={UserRoundCog}
               title="Sostituiscimi"
               description="Consenti agli allievi di proporre scambi guide tra loro."
               expanded={expandedSection === "swap"}
               onToggle={() => toggleSection("swap")}
-              isFirst
             >
               <div className="space-y-5 max-w-2xl">
                 <div

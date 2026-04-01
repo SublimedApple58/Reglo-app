@@ -1367,6 +1367,24 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
     }
 
+    // Booking cutoff: block if past the deadline (day before at cutoff time)
+    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
+    if (cutoffEnabled) {
+      const cutoffTime = typeof serviceLimits.bookingCutoffTime === "string"
+        ? serviceLimits.bookingCutoffTime
+        : "18:00";
+      const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
+      const prevDate = new Date(Date.UTC(preferredDateParts.year, preferredDateParts.month - 1, preferredDateParts.day - 1));
+      const prevParts = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
+      const cutoffDeadline = toTimeZoneDate(prevParts, cutoffH, cutoffM);
+      if (now >= cutoffDeadline) {
+        return {
+          success: false,
+          message: "Le prenotazioni per questa data sono chiuse dalle " + cutoffTime + " del giorno prima.",
+        };
+      }
+    }
+
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     const [activeInstructors, activeVehicles, studentAvailabilityRaw, autoscuolaService] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
@@ -2147,6 +2165,24 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       minDate.setHours(0, 0, 0, 0);
       if (dateStart < minDate) {
         return { success: false, message: "Data non disponibile per prenotazioni." };
+      }
+    }
+
+    // Booking cutoff: block if past the deadline (day before at cutoff time)
+    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
+    if (cutoffEnabled) {
+      const cutoffTime = typeof serviceLimits.bookingCutoffTime === "string"
+        ? serviceLimits.bookingCutoffTime
+        : "18:00";
+      const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
+      const prevDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day - 1));
+      const prevParts = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
+      const cutoffDeadline = toTimeZoneDate(prevParts, cutoffH, cutoffM);
+      if (now >= cutoffDeadline) {
+        return {
+          success: false,
+          message: "Le prenotazioni per questa data sono chiuse dalle " + cutoffTime + " del giorno prima.",
+        };
       }
     }
 
