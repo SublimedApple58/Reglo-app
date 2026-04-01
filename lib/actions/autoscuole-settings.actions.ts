@@ -53,7 +53,14 @@ const DEFAULT_SWAP_NOTIFY_MODE = "available_only" as const;
 const SWAP_NOTIFY_MODES = ["all", "available_only"] as const;
 const DEFAULT_BOOKING_CUTOFF_ENABLED = false;
 const DEFAULT_BOOKING_CUTOFF_TIME = "18:00" as const;
-const BOOKING_CUTOFF_TIMES = ["12:00", "14:00", "16:00", "18:00", "20:00", "22:00"] as const;
+const BOOKING_CUTOFF_TIMES = [
+  "12:00", "12:30", "13:00", "13:30",
+  "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30",
+  "20:00", "20:30", "21:00", "21:30",
+  "22:00",
+] as const;
 const DEFAULT_EMPTY_SLOT_NOTIFICATION_ENABLED = false;
 const DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET = "availability_matching" as const;
 const EMPTY_SLOT_NOTIFICATION_TARGETS = [

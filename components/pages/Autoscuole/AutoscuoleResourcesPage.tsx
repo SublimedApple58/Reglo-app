@@ -1645,12 +1645,16 @@ export function AutoscuoleResourcesPage({
                         <SelectValue placeholder="Orario" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="12:00">12:00</SelectItem>
-                        <SelectItem value="14:00">14:00</SelectItem>
-                        <SelectItem value="16:00">16:00</SelectItem>
-                        <SelectItem value="18:00">18:00</SelectItem>
-                        <SelectItem value="20:00">20:00</SelectItem>
-                        <SelectItem value="22:00">22:00</SelectItem>
+                        {[
+                          "12:00", "12:30", "13:00", "13:30",
+                          "14:00", "14:30", "15:00", "15:30",
+                          "16:00", "16:30", "17:00", "17:30",
+                          "18:00", "18:30", "19:00", "19:30",
+                          "20:00", "20:30", "21:00", "21:30",
+                          "22:00",
+                        ].map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </FieldGroup>
