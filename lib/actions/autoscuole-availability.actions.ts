@@ -2423,6 +2423,313 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
   }
 }
 
+const dateAvailabilityMapSchema = z.object({
+  studentId: z.string().uuid(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export async function getDateAvailabilityMap(
+  input: z.infer<typeof dateAvailabilityMapSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = dateAvailabilityMapSchema.parse(input);
+    const bookingAccess = await ensureStudentCanBookFromApp({
+      companyId: membership.companyId,
+      membership,
+      studentId: payload.studentId,
+    });
+    if (!bookingAccess.allowed) {
+      return { success: false, message: bookingAccess.message };
+    }
+
+    const now = new Date();
+
+    const fromParts = parseDateOnly(payload.from);
+    const toParts = parseDateOnly(payload.to);
+    if (!fromParts || !toParts) {
+      return { success: false, message: "Date non valide." };
+    }
+
+    // Service limits
+    const serviceForLimits = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const bookingMinStartDate =
+      typeof serviceLimits.bookingMinStartDate === "string"
+        ? serviceLimits.bookingMinStartDate.trim()
+        : null;
+    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
+    const cutoffTime =
+      typeof serviceLimits.bookingCutoffTime === "string"
+        ? serviceLimits.bookingCutoffTime
+        : "18:00";
+    const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
+    const defaultDuration = normalizeBookingSlotDurations(
+      serviceLimits.bookingSlotDurations,
+    )[0];
+
+    // Governance
+    const governance = await getBookingGovernanceForCompany(
+      membership.companyId,
+    );
+    const filterByStudentAvailability =
+      governance.studentBookingMode === "engine";
+
+    // Fetch resources in parallel
+    const [activeInstructors, activeVehicles, student, studentAvailabilityRaw] =
+      await Promise.all([
+        prisma.autoscuolaInstructor.findMany({
+          where: {
+            companyId: membership.companyId,
+            status: { not: "inactive" },
+          },
+          select: { id: true },
+        }),
+        prisma.autoscuolaVehicle.findMany({
+          where: {
+            companyId: membership.companyId,
+            status: { not: "inactive" },
+          },
+          select: { id: true },
+        }),
+        ensureStudentMembership(membership.companyId, payload.studentId),
+        filterByStudentAvailability
+          ? prisma.autoscuolaWeeklyAvailability.findFirst({
+              where: {
+                companyId: membership.companyId,
+                ownerType: "student",
+                ownerId: payload.studentId,
+              },
+            })
+          : Promise.resolve(null),
+      ]);
+
+    const studentAvailability = studentAvailabilityRaw
+      ? defaultToAvailabilityRecord(studentAvailabilityRaw)
+      : null;
+
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const activeInstructorIds = activeInstructors.map((i) => i.id);
+    const activeVehicleIds = activeVehicles.map((v) => v.id);
+
+    const result: Record<string, boolean> = {};
+
+    // No resources → all dates unavailable
+    if (!activeInstructorIds.length || !activeVehicleIds.length) {
+      let cur = { ...fromParts };
+      const toMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
+      for (;;) {
+        const key = `${cur.year}-${String(cur.month).padStart(2, "0")}-${String(cur.day).padStart(2, "0")}`;
+        result[key] = false;
+        if (Date.UTC(cur.year, cur.month - 1, cur.day) >= toMs) break;
+        cur = addDaysToDateParts(cur, 1);
+      }
+      return { success: true, data: result };
+    }
+
+    // Range for resolvers and appointments
+    const rangeStart = toTimeZoneDate(fromParts, 0, 0);
+    const rangeEnd = toTimeZoneDate(addDaysToDateParts(toParts, 1), 0, 0);
+
+    // Build resolvers for the entire range (4 queries total)
+    const [instructorResolver, vehicleResolver] = await Promise.all([
+      buildAvailabilityResolver(
+        membership.companyId,
+        "instructor",
+        activeInstructorIds,
+        rangeStart,
+        rangeEnd,
+      ),
+      buildAvailabilityResolver(
+        membership.companyId,
+        "vehicle",
+        activeVehicleIds,
+        rangeStart,
+        rangeEnd,
+      ),
+    ]);
+
+    // Fetch appointments for the entire range (1 query)
+    const appointmentScanStart = new Date(
+      rangeStart.getTime() - 60 * 60 * 1000,
+    );
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: membership.companyId,
+        status: { notIn: ["cancelled"] },
+        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+      },
+    });
+
+    // Build intervals map
+    const intervals = new Map<string, Array<{ start: number; end: number }>>();
+    for (const appt of appointments) {
+      const start = appt.startsAt.getTime();
+      const end =
+        appt.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
+      const addInterval = (ownerId: string) => {
+        const list = intervals.get(ownerId) ?? [];
+        list.push({ start, end });
+        intervals.set(ownerId, list);
+      };
+      addInterval(appt.studentId);
+      if (appt.instructorId) addInterval(appt.instructorId);
+      if (appt.vehicleId) addInterval(appt.vehicleId);
+    }
+
+    const overlaps = (
+      ownerIntervals: Array<{ start: number; end: number }> | undefined,
+      candidateStart: number,
+      candidateEnd: number,
+    ) => {
+      if (!ownerIntervals?.length) return false;
+      return ownerIntervals.some(
+        (i) => candidateStart < i.end && candidateEnd > i.start,
+      );
+    };
+
+    const isOwnerAvail = (
+      availability: AvailabilityRecord | null | undefined,
+      dow: number,
+      startMin: number,
+      endMin: number,
+    ) => {
+      if (!availability) return false;
+      if (!availability.daysOfWeek.includes(dow)) return false;
+      return availability.ranges.some(
+        (r) =>
+          r.endMinutes > r.startMinutes &&
+          startMin >= r.startMinutes &&
+          endMin <= r.endMinutes,
+      );
+    };
+
+    const nowParts = getZonedParts(now);
+    const todayStart = toTimeZoneDate(
+      { year: nowParts.year, month: nowParts.month, day: nowParts.day },
+      0,
+      0,
+    );
+    const minDate = bookingMinStartDate
+      ? new Date(bookingMinStartDate)
+      : null;
+    if (minDate) minDate.setHours(0, 0, 0, 0);
+
+    const studentIntervals = intervals.get(payload.studentId);
+    const dayLastStart = 1440 - defaultDuration;
+    const toMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
+
+    // ── Per-day scan (in-memory) ──
+    let dateParts = { ...fromParts };
+    for (;;) {
+      const key = `${dateParts.year}-${String(dateParts.month).padStart(2, "0")}-${String(dateParts.day).padStart(2, "0")}`;
+      const dateStart = toTimeZoneDate(dateParts, 0, 0);
+      const dateEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
+      const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
+
+      let available = false;
+
+      const isPast = dateStart < todayStart;
+      const isBeforeMin = minDate !== null && dateStart < minDate;
+      let isPastCutoff = false;
+      if (cutoffEnabled && !isPast) {
+        const prevDate = new Date(
+          Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day - 1),
+        );
+        const prevParts = {
+          year: prevDate.getUTCFullYear(),
+          month: prevDate.getUTCMonth() + 1,
+          day: prevDate.getUTCDate(),
+        };
+        const cutoffDeadline = toTimeZoneDate(prevParts, cutoffH, cutoffM);
+        isPastCutoff = now >= cutoffDeadline;
+      }
+
+      if (!isPast && !isBeforeMin && !isPastCutoff) {
+        for (
+          let minutes = 0;
+          minutes <= dayLastStart;
+          minutes += SLOT_MINUTES
+        ) {
+          const startDate = toTimeZoneDate(
+            dateParts,
+            Math.floor(minutes / 60),
+            minutes % 60,
+          );
+          const endDate = getSlotEnd(startDate, defaultDuration);
+          const startMs = startDate.getTime();
+
+          if (startMs < now.getTime()) continue;
+          if (startDate < dateStart || endDate > dateEnd) continue;
+          if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
+
+          if (filterByStudentAvailability) {
+            if (!studentAvailability) continue;
+            if (
+              !isOwnerAvail(
+                studentAvailability,
+                dayOfWeek,
+                minutes,
+                minutes + defaultDuration,
+              )
+            )
+              continue;
+          }
+
+          const candidateEnd = minutes + defaultDuration;
+
+          let hasInstructor = false;
+          for (const ownerId of activeInstructorIds) {
+            const avail = instructorResolver.resolve(ownerId, startDate);
+            if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
+              continue;
+            if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
+              continue;
+            hasInstructor = true;
+            break;
+          }
+          if (!hasInstructor) continue;
+
+          let hasVehicle = false;
+          for (const ownerId of activeVehicleIds) {
+            const avail = vehicleResolver.resolve(ownerId, startDate);
+            if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
+              continue;
+            if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
+              continue;
+            hasVehicle = true;
+            break;
+          }
+          if (!hasVehicle) continue;
+
+          available = true;
+          break; // short-circuit: at least one slot found for this day
+        }
+      }
+
+      result[key] = available;
+
+      if (Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day) >= toMs)
+        break;
+      dateParts = addDaysToDateParts(dateParts, 1);
+    }
+
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function suggestInstructorBooking(
   input: z.infer<typeof instructorBookingSuggestSchema>,
 ) {
