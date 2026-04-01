@@ -2374,6 +2374,18 @@ export async function updateAutoscuolaAppointmentStatus(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
+    // Block check-in / no-show on proposals — the student must accept first
+    const currentStatus = normalizeStatus(appointment.status);
+    if (
+      currentStatus === "proposal" &&
+      (nextStatus === "checked_in" || nextStatus === "no_show")
+    ) {
+      return {
+        success: false,
+        message: "Non puoi segnare check-in o no-show su una guida proposta. L'allievo deve prima accettarla.",
+      };
+    }
+
     if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
       const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
@@ -2404,8 +2416,6 @@ export async function updateAutoscuolaAppointmentStatus(
           message: "Come istruttore puoi segnare solo check-in o no-show.",
         };
       }
-
-      const currentStatus = normalizeStatus(appointment.status);
       const now = new Date();
       // pending_review lessons can be acted on at any time (no time window)
       if (currentStatus !== "pending_review" && !isWithinInstructorStatusWindow(appointment, now)) {
