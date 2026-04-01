@@ -160,7 +160,7 @@ export function AutoscuoleLateCancellationsPanel({
             <div className="flex items-center gap-1.5">
               {item.kind === "no_show" && (
                 <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
-                  No-show
+                  Assente
                 </Badge>
               )}
               <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">

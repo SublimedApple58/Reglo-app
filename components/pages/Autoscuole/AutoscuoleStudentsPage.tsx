@@ -168,8 +168,8 @@ const LESSON_TYPE_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   completed: "Completata",
-  checked_in: "Check-in",
-  no_show: "No-show",
+  checked_in: "Presente",
+  no_show: "Assente",
   scheduled: "Programmato",
   confirmed: "Programmato",
   cancelled: "Annullata",
@@ -1081,12 +1081,12 @@ export function AutoscuoleStudentsPage({
                                 <div className="flex items-center gap-1.5">
                                   {isPenaltyCharged && (
                                     <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
-                                      {isNoShow ? "No-show" : "Annullata"} — Da pagare
+                                      {isNoShow ? "Assente" : "Annullata"} — Da pagare
                                     </Badge>
                                   )}
                                   {isPenaltyPaid && (
                                     <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
-                                      {isNoShow ? "No-show" : "Annullata"} — Pagata
+                                      {isNoShow ? "Assente" : "Annullata"} — Pagata
                                     </Badge>
                                   )}
                                   {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "paid" && manualMode && (
