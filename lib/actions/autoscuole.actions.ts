@@ -2532,6 +2532,14 @@ export async function updateAutoscuolaAppointmentStatus(
       updateData.type = requestedLessonType;
     }
 
+    // Auto-complete if marking checked_in on a past lesson
+    if (nextStatus === "checked_in") {
+      const endTime = appointment.endsAt ?? new Date(appointment.startsAt.getTime() + 60 * 60 * 1000);
+      if (new Date() >= endTime) {
+        updateData.status = "completed";
+      }
+    }
+
     const wasCancelled = normalizeStatus(appointment.status) === "cancelled";
     if (nextStatus === "cancelled") {
       updateData.cancelledAt = appointment.cancelledAt ?? new Date();
