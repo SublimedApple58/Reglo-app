@@ -866,6 +866,8 @@ const emptySlotDefaultToRecord = (record: {
 
 const EMPTY_SLOT_NOTIFICATION_TARGETS = ["all", "availability_matching"] as const;
 
+const DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES = ["18:00"];
+
 const resolveEmptySlotSettings = (limits: Record<string, unknown>) => {
   const enabled =
     typeof limits.emptySlotNotificationEnabled === "boolean"
@@ -875,7 +877,12 @@ const resolveEmptySlotSettings = (limits: Record<string, unknown>) => {
   const target = (EMPTY_SLOT_NOTIFICATION_TARGETS as readonly string[]).includes(targetRaw)
     ? (targetRaw as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
     : "availability_matching";
-  return { enabled, target };
+  const times = Array.isArray(limits.emptySlotNotificationTimes)
+    ? limits.emptySlotNotificationTimes.filter(
+        (item): item is string => typeof item === "string" && /^\d{2}:\d{2}$/.test(item),
+      )
+    : DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES;
+  return { enabled, target, times: times.length ? times : DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES };
 };
 
 /**
@@ -1055,11 +1062,14 @@ const hasFreeSlotTomorrow = async ({
 
 export const processEmptySlotNotifications = async ({
   prisma = defaultPrisma,
+  companyId: filterCompanyId,
 }: {
   prisma?: PrismaClientLike;
+  companyId?: string;
 }) => {
   const now = new Date();
   const zonedNow = emptySlotGetZonedParts(now);
+  const currentTimeHHMM = `${String(zonedNow.hour).padStart(2, "0")}:${String(zonedNow.minute).padStart(2, "0")}`;
   const tomorrowParts: EmptySlotDateParts = (() => {
     const d = new Date(Date.UTC(zonedNow.year, zonedNow.month - 1, zonedNow.day));
     d.setUTCDate(d.getUTCDate() + 1);
@@ -1077,7 +1087,11 @@ export const processEmptySlotNotifications = async ({
 
   // Find all active autoscuole with the feature enabled
   const services = await prisma.companyService.findMany({
-    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    where: {
+      serviceKey: "AUTOSCUOLE",
+      status: "ACTIVE",
+      ...(filterCompanyId ? { companyId: filterCompanyId } : {}),
+    },
   });
 
   let totalNotified = 0;
@@ -1087,6 +1101,9 @@ export const processEmptySlotNotifications = async ({
     const limits = (service.limits ?? {}) as Record<string, unknown>;
     const settings = resolveEmptySlotSettings(limits);
     if (!settings.enabled) continue;
+
+    // If this is a cron invocation (no companyId filter), check if current time matches configured times
+    if (!filterCompanyId && !settings.times.includes(currentTimeHHMM)) continue;
 
     const companyId = service.companyId;
 

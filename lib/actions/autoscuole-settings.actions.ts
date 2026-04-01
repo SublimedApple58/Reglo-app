@@ -67,6 +67,17 @@ const EMPTY_SLOT_NOTIFICATION_TARGETS = [
   "all",
   "availability_matching",
 ] as const;
+const DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES = ["18:00"] as const;
+const EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS = [
+  "08:00", "08:30", "09:00", "09:30",
+  "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30",
+  "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30",
+  "20:00", "20:30", "21:00", "21:30",
+  "22:00",
+] as const;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
@@ -283,6 +294,11 @@ const autoscuolaSettingsPatchSchema = z
     emptySlotNotificationTarget: z
       .enum(["all", "availability_matching"])
       .optional(),
+    emptySlotNotificationTimes: z
+      .array(z.enum(EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS))
+      .min(1, "Seleziona almeno un orario.")
+      .transform((times) => Array.from(new Set(times)).sort())
+      .optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
@@ -335,6 +351,7 @@ const autoscuolaSettingsPatchSchema = z
       value.bookingCutoffTime !== undefined ||
       value.emptySlotNotificationEnabled !== undefined ||
       value.emptySlotNotificationTarget !== undefined ||
+      value.emptySlotNotificationTimes !== undefined ||
       value.instructorPreferenceEnabled !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
@@ -483,6 +500,7 @@ export type AutoscuolaSettingsData = {
   bookingCutoffTime: (typeof BOOKING_CUTOFF_TIMES)[number];
   emptySlotNotificationEnabled: boolean;
   emptySlotNotificationTarget: (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number];
+  emptySlotNotificationTimes: string[];
   instructorPreferenceEnabled: boolean;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
@@ -613,6 +631,17 @@ const resolveAutoscuolaSettingsData = (
   ).includes(limits.emptySlotNotificationTarget as string)
     ? (limits.emptySlotNotificationTarget as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
     : DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET;
+  const emptySlotNotificationTimes = Array.isArray(limits.emptySlotNotificationTimes)
+    ? Array.from(
+        new Set(
+          limits.emptySlotNotificationTimes.filter(
+            (item): item is string =>
+              typeof item === "string" &&
+              (EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS as readonly string[]).includes(item),
+          ),
+        ),
+      ).sort()
+    : [...DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES];
   const instructorPreferenceEnabled =
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
@@ -713,6 +742,7 @@ const resolveAutoscuolaSettingsData = (
     bookingCutoffTime,
     emptySlotNotificationEnabled,
     emptySlotNotificationTarget,
+    emptySlotNotificationTimes,
     instructorPreferenceEnabled,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
@@ -867,6 +897,17 @@ export async function updateAutoscuolaSettings(
     ).includes(limits.emptySlotNotificationTarget as string)
       ? (limits.emptySlotNotificationTarget as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
       : DEFAULT_EMPTY_SLOT_NOTIFICATION_TARGET;
+    const previousEmptySlotNotificationTimes = Array.isArray(limits.emptySlotNotificationTimes)
+      ? Array.from(
+          new Set(
+            limits.emptySlotNotificationTimes.filter(
+              (item): item is string =>
+                typeof item === "string" &&
+                (EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS as readonly string[]).includes(item),
+            ),
+          ),
+        ).sort()
+      : [...DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES];
     const previousInstructorPreferenceEnabled =
       typeof limits.instructorPreferenceEnabled === "boolean"
         ? limits.instructorPreferenceEnabled
@@ -977,6 +1018,8 @@ export async function updateAutoscuolaSettings(
       payload.emptySlotNotificationEnabled ?? previousEmptySlotNotificationEnabled;
     const nextEmptySlotNotificationTarget =
       payload.emptySlotNotificationTarget ?? previousEmptySlotNotificationTarget;
+    const nextEmptySlotNotificationTimes =
+      payload.emptySlotNotificationTimes ?? previousEmptySlotNotificationTimes;
     const nextInstructorPreferenceEnabled =
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1110,6 +1153,7 @@ export async function updateAutoscuolaSettings(
       bookingCutoffTime: nextBookingCutoffTime,
       emptySlotNotificationEnabled: nextEmptySlotNotificationEnabled,
       emptySlotNotificationTarget: nextEmptySlotNotificationTarget,
+      emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
       instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
@@ -1186,6 +1230,7 @@ export async function updateAutoscuolaSettings(
         bookingCutoffTime: nextLimits.bookingCutoffTime,
         emptySlotNotificationEnabled: nextLimits.emptySlotNotificationEnabled,
         emptySlotNotificationTarget: nextLimits.emptySlotNotificationTarget,
+        emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
@@ -1204,6 +1249,27 @@ export async function updateAutoscuolaSettings(
         voiceAllowedActions: nextLimits.voiceAllowedActions,
       },
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function triggerEmptySlotNotification() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+
+    const { processEmptySlotNotifications } = await import(
+      "@/lib/autoscuole/communications"
+    );
+    const result = await processEmptySlotNotifications({
+      prisma,
+      companyId: membership.companyId,
+    });
+
+    return { success: true, data: { notified: result.notified } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

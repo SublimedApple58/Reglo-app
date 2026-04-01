@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
@@ -59,6 +59,7 @@ import { Input } from "@/components/ui/input";
 import {
   getAutoscuolaSettings,
   updateAutoscuolaSettings,
+  triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
@@ -240,6 +241,8 @@ export function AutoscuoleResourcesPage({
   const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
+  const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
+  const [triggeringNotification, setTriggeringNotification] = React.useState(false);
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
@@ -422,6 +425,7 @@ export function AutoscuoleResourcesPage({
       setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
       setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
       setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
+      setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -561,6 +565,7 @@ export function AutoscuoleResourcesPage({
       bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
       emptySlotNotificationEnabled,
       emptySlotNotificationTarget,
+      emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
       instructorPreferenceEnabled,
       appBookingActors,
       instructorBookingMode,
@@ -1719,17 +1724,91 @@ export function AutoscuoleResourcesPage({
                 </div>
 
                 {emptySlotNotificationEnabled ? (
-                  <FieldGroup label="Destinatari">
-                    <Select value={emptySlotNotificationTarget} onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Destinatari" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="availability_matching">Solo allievi con disponibilità corrispondente</SelectItem>
-                        <SelectItem value="all">Tutti gli allievi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
+                  <>
+                    <FieldGroup label="Destinatari">
+                      <Select value={emptySlotNotificationTarget} onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Destinatari" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="availability_matching">Solo allievi con disponibilità corrispondente</SelectItem>
+                          <SelectItem value="all">Tutti gli allievi</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+
+                    <FieldGroup label="Orari di invio">
+                      <div className="flex flex-wrap gap-1.5">
+                        {([
+                          "08:00", "08:30", "09:00", "09:30",
+                          "10:00", "10:30", "11:00", "11:30",
+                          "12:00", "12:30", "13:00", "13:30",
+                          "14:00", "14:30", "15:00", "15:30",
+                          "16:00", "16:30", "17:00", "17:30",
+                          "18:00", "18:30", "19:00", "19:30",
+                          "20:00", "20:30", "21:00", "21:30",
+                          "22:00",
+                        ] as const).map((time) => (
+                          <ToggleChip
+                            key={time}
+                            active={emptySlotNotificationTimes.includes(time)}
+                            onClick={() => {
+                              setEmptySlotNotificationTimes((prev) => {
+                                if (prev.includes(time)) {
+                                  if (prev.length <= 1) return prev;
+                                  return prev.filter((t) => t !== time);
+                                }
+                                return [...prev, time].sort();
+                              });
+                            }}
+                          >
+                            {time}
+                          </ToggleChip>
+                        ))}
+                      </div>
+                    </FieldGroup>
+
+                    <div className="rounded-xl border border-border/60 bg-white/70 px-4 py-3">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium">Invia ora per domani</span>
+                        <span className="text-xs text-muted-foreground">
+                          Invia subito la notifica di guide disponibili per domani a tutti gli allievi idonei.
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-1 w-fit"
+                          disabled={triggeringNotification}
+                          onClick={async () => {
+                            setTriggeringNotification(true);
+                            try {
+                              const res = await triggerEmptySlotNotification();
+                              if (res.success && res.data) {
+                                toast.success({
+                                  description: `Notifica inviata a ${res.data.notified} alliev${res.data.notified === 1 ? "o" : "i"}.`,
+                                });
+                              } else {
+                                toast.error({
+                                  description: res.message ?? "Impossibile inviare la notifica.",
+                                });
+                              }
+                            } catch {
+                              toast.error({ description: "Impossibile inviare la notifica." });
+                            } finally {
+                              setTriggeringNotification(false);
+                            }
+                          }}
+                        >
+                          {triggeringNotification ? (
+                            <Loader2 className="size-4 animate-spin mr-1.5" />
+                          ) : (
+                            <Send className="size-4 mr-1.5" />
+                          )}
+                          {triggeringNotification ? "Invio in corso…" : "Invia notifica"}
+                        </Button>
+                      </div>
+                    </div>
+                  </>
                 ) : null}
               </div>
             </AccordionSection>
