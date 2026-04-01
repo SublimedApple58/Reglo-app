@@ -1214,8 +1214,11 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     ).length;
     const manualUnpaid = lessons.filter(
       (l) =>
-        normalizeStatus(l.status) === "completed" &&
-        l.manualPaymentStatus === "unpaid",
+        (normalizeStatus(l.status) === "completed" &&
+          l.manualPaymentStatus === "unpaid") ||
+        (["cancelled", "no_show"].includes(normalizeStatus(l.status)) &&
+          l.lateCancellationAction === "charged" &&
+          l.manualPaymentStatus === "unpaid"),
     ).length;
 
     return {
@@ -3806,10 +3809,11 @@ export async function getLateCancellations() {
     const cancellations = await prisma.$queryRaw<
       Array<{
         id: string;
+        status: string;
         startsAt: Date;
-        cancelledAt: Date;
+        cancelledAt: Date | null;
         createdAt: Date;
-        penaltyCutoffAt: Date;
+        penaltyCutoffAt: Date | null;
         studentId: string;
         studentName: string | null;
         instructorName: string | null;
@@ -3819,6 +3823,7 @@ export async function getLateCancellations() {
     >`
       SELECT
         a.id,
+        a.status,
         a."startsAt",
         a."cancelledAt",
         a."createdAt",
@@ -3832,13 +3837,19 @@ export async function getLateCancellations() {
       JOIN "User" u ON u.id = a."studentId"
       LEFT JOIN "AutoscuolaInstructor" i ON i.id = a."instructorId"
       WHERE a."companyId" = ${companyId}::uuid
-        AND a.status = 'cancelled'
-        AND a."cancelledAt" IS NOT NULL
-        AND a."penaltyCutoffAt" IS NOT NULL
-        AND a."cancelledAt" > a."penaltyCutoffAt"
-        AND a."cancellationKind" = 'manual_cancel'
         AND a."lateCancellationAction" IS NULL
-      ORDER BY a."cancelledAt" DESC
+        AND (
+          -- Late cancellations
+          (a.status = 'cancelled'
+           AND a."cancelledAt" IS NOT NULL
+           AND a."penaltyCutoffAt" IS NOT NULL
+           AND a."cancelledAt" > a."penaltyCutoffAt"
+           AND a."cancellationKind" = 'manual_cancel')
+          OR
+          -- No-shows
+          (a.status = 'no_show')
+        )
+      ORDER BY COALESCE(a."cancelledAt", a."startsAt") DESC
       LIMIT 200
     `;
 
@@ -3855,13 +3866,18 @@ export async function getLateCancellations() {
         SELECT a."studentId", COUNT(*)::bigint AS cnt
         FROM "AutoscuolaAppointment" a
         WHERE a."companyId" = ${companyId}::uuid
-          AND a.status = 'cancelled'
-          AND a."cancelledAt" IS NOT NULL
-          AND a."penaltyCutoffAt" IS NOT NULL
-          AND a."cancelledAt" > a."penaltyCutoffAt"
-          AND a."cancellationKind" = 'manual_cancel'
-          AND a."cancelledAt" >= ${fourWeeksAgo}
           AND a."studentId" = ANY(${studentIds}::uuid[])
+          AND (
+            (a.status = 'cancelled'
+             AND a."cancelledAt" IS NOT NULL
+             AND a."penaltyCutoffAt" IS NOT NULL
+             AND a."cancelledAt" > a."penaltyCutoffAt"
+             AND a."cancellationKind" = 'manual_cancel'
+             AND a."cancelledAt" >= ${fourWeeksAgo})
+            OR
+            (a.status = 'no_show'
+             AND a."startsAt" >= ${fourWeeksAgo})
+          )
         GROUP BY a."studentId"
       `;
       for (const row of counts) {
@@ -3872,18 +3888,20 @@ export async function getLateCancellations() {
     const config = await getAutoscuolaPaymentConfig({ companyId });
 
     const data = cancellations.map((c) => {
+      const isNoShow = c.status === "no_show";
       const startsAt = new Date(c.startsAt);
-      const cancelledAt = new Date(c.cancelledAt);
+      const cancelledAt = c.cancelledAt ? new Date(c.cancelledAt) : null;
       const endsAt = c.endsAt ? new Date(c.endsAt) : new Date(startsAt.getTime() + 30 * 60 * 1000);
       const durationMinutes = Math.max(
         30,
         Math.round((endsAt.getTime() - startsAt.getTime()) / 60000),
       );
-      const timeDeltaMinutes = Math.round(
-        (startsAt.getTime() - cancelledAt.getTime()) / 60000,
-      );
+      const timeDeltaMinutes = cancelledAt
+        ? Math.round((startsAt.getTime() - cancelledAt.getTime()) / 60000)
+        : null;
       return {
         id: c.id,
+        kind: isNoShow ? ("no_show" as const) : ("late_cancellation" as const),
         startsAt: c.startsAt,
         cancelledAt: c.cancelledAt,
         createdAt: c.createdAt,
@@ -3927,7 +3945,7 @@ export async function resolveLateCancellation(
       where: {
         id: payload.appointmentId,
         companyId: membership.companyId,
-        status: "cancelled",
+        status: { in: ["cancelled", "no_show"] },
         lateCancellationAction: null,
       },
       select: {

@@ -1037,12 +1037,12 @@ export function AutoscuoleStudentsPage({
                     const aUnpaid = a.manualPaymentStatus !== "paid" && (
                       (["completed", "checked_in"].includes(a.status) && manualMode) ||
                       a.manualPaymentStatus === "unpaid" ||
-                      (a.status === "cancelled" && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
+                      (["cancelled", "no_show"].includes(a.status) && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
                     );
                     const bUnpaid = b.manualPaymentStatus !== "paid" && (
                       (["completed", "checked_in"].includes(b.status) && manualMode) ||
                       b.manualPaymentStatus === "unpaid" ||
-                      (b.status === "cancelled" && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
+                      (["cancelled", "no_show"].includes(b.status) && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
                     );
                     if (aUnpaid && !bUnpaid) return -1;
                     if (!aUnpaid && bUnpaid) return 1;
@@ -1056,13 +1056,18 @@ export function AutoscuoleStudentsPage({
                           const isCompleted = lesson.status === "completed";
                           const isCheckedIn = lesson.status === "checked_in";
                           const isCancelled = lesson.status === "cancelled";
+                          const isNoShow = lesson.status === "no_show";
                           const showPaymentToggle =
                             manualMode &&
                             (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid");
-                          const isCancelledCharged =
-                            isCancelled &&
+                          const isPenaltyCharged =
+                            (isCancelled || isNoShow) &&
                             lesson.lateCancellationAction === "charged" &&
                             lesson.manualPaymentStatus === "unpaid";
+                          const isPenaltyPaid =
+                            (isCancelled || isNoShow) &&
+                            lesson.lateCancellationAction === "charged" &&
+                            lesson.manualPaymentStatus === "paid";
 
                           return (
                             <div
@@ -1074,17 +1079,22 @@ export function AutoscuoleStudentsPage({
                                   {formatDate(lesson.startsAt, true)}
                                 </p>
                                 <div className="flex items-center gap-1.5">
-                                  {isCancelledCharged && (
+                                  {isPenaltyCharged && (
                                     <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
-                                      Annullata — Da pagare
+                                      {isNoShow ? "No-show" : "Annullata"} — Da pagare
                                     </Badge>
                                   )}
-                                  {!isCancelledCharged && lesson.manualPaymentStatus === "paid" && manualMode && (
+                                  {isPenaltyPaid && (
+                                    <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
+                                      {isNoShow ? "No-show" : "Annullata"} — Pagata
+                                    </Badge>
+                                  )}
+                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "paid" && manualMode && (
                                     <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
                                       Pagata
                                     </Badge>
                                   )}
-                                  {!isCancelledCharged && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && (
+                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && !isNoShow && (
                                     <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
                                       Da pagare
                                     </Badge>
@@ -1100,7 +1110,7 @@ export function AutoscuoleStudentsPage({
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {formatLessonType(lesson.type)} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                               </p>
-                              {(showPaymentToggle || isCancelledCharged) && (
+                              {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && (
                                 <div className="mt-2 flex gap-2">
                                   {(lesson.manualPaymentStatus !== "paid") && (
                                     <Button

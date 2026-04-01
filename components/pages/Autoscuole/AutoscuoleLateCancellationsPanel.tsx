@@ -13,10 +13,11 @@ import {
 
 type LateCancellation = {
   id: string;
+  kind: "late_cancellation" | "no_show";
   startsAt: string | Date;
-  cancelledAt: string | Date;
+  cancelledAt: string | Date | null;
   createdAt: string | Date;
-  timeDeltaMinutes: number;
+  timeDeltaMinutes: number | null;
   penaltyCutoffHours: number;
   studentName: string | null;
   studentId: string;
@@ -139,7 +140,7 @@ export function AutoscuoleLateCancellationsPanel({
     return (
       <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-12 shadow-card">
         <p className="text-sm text-muted-foreground">
-          Nessuna cancellazione tardiva da gestire.
+          Nessuna cancellazione tardiva o no-show da gestire.
         </p>
       </div>
     );
@@ -156,9 +157,16 @@ export function AutoscuoleLateCancellationsPanel({
             <p className="text-sm font-semibold text-foreground">
               {item.studentName ?? "Allievo sconosciuto"}
             </p>
-            <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-              {item.studentLateCancellationsCount} tardiv{item.studentLateCancellationsCount === 1 ? "a" : "e"} (4 sett.)
-            </Badge>
+            <div className="flex items-center gap-1.5">
+              {item.kind === "no_show" && (
+                <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
+                  No-show
+                </Badge>
+              )}
+              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+                {item.studentLateCancellationsCount} tardiv{item.studentLateCancellationsCount === 1 ? "a" : "e"} (4 sett.)
+              </Badge>
+            </div>
           </div>
 
           <div className="space-y-1 text-sm text-muted-foreground">
@@ -170,14 +178,26 @@ export function AutoscuoleLateCancellationsPanel({
               <span className="inline-block w-36 font-medium text-foreground">Prenotata il:</span>
               {formatDateOnly(item.createdAt)}
             </p>
-            <p>
-              <span className="inline-block w-36 font-medium text-foreground">Annullata il:</span>
-              {formatDateTime(item.cancelledAt)}
-            </p>
-            <p>
-              <span className="inline-block w-36 font-medium text-foreground">Preavviso dato:</span>
-              {formatNoticeGiven(item.timeDeltaMinutes, item.penaltyCutoffHours)}
-            </p>
+            {item.kind === "late_cancellation" && (
+              <>
+                <p>
+                  <span className="inline-block w-36 font-medium text-foreground">Annullata il:</span>
+                  {item.cancelledAt ? formatDateTime(item.cancelledAt) : "—"}
+                </p>
+                <p>
+                  <span className="inline-block w-36 font-medium text-foreground">Preavviso dato:</span>
+                  {item.timeDeltaMinutes != null
+                    ? formatNoticeGiven(item.timeDeltaMinutes, item.penaltyCutoffHours)
+                    : "—"}
+                </p>
+              </>
+            )}
+            {item.kind === "no_show" && (
+              <p>
+                <span className="inline-block w-36 font-medium text-foreground">Esito:</span>
+                Non presentato
+              </p>
+            )}
             <p>
               <span className="inline-block w-36 font-medium text-foreground">Istruttore:</span>
               {item.instructorName ?? "—"} · Tipo: {formatLessonType(item.lessonType)}
