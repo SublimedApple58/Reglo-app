@@ -27,7 +27,9 @@ export default function CompanyInviteEmail({
   invitedByName,
 }: CompanyInviteEmailProps) {
   const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'https://app.reglo.it';
-  const logoUrl = `${serverUrl.replace(/\/$/, '')}/images/reglo_new_logo.png`;
+  const baseUrl = serverUrl.replace(/\/$/, '');
+  const logoFullUrl = `${baseUrl}/images/reglo_logo_full.png`;
+  const logoIconUrl = `${baseUrl}/images/reglo_new_logo.png`;
 
   return (
     <Html>
@@ -36,13 +38,13 @@ export default function CompanyInviteEmail({
         <Head />
         <Body className="font-sans" style={{ backgroundColor: '#FFFFFF' }}>
           <Container className="max-w-[480px] mx-auto" style={{ padding: '40px 20px' }}>
-            <Section style={{ paddingBottom: 32 }}>
+            <Section style={{ paddingBottom: 28 }}>
               <Img
-                src={logoUrl}
-                width="36"
-                height="36"
+                src={logoFullUrl}
+                width="140"
+                height="38"
                 alt="Reglo"
-                style={{ display: 'block' }}
+                style={{ display: 'block', width: 140, height: 'auto' }}
               />
             </Section>
 
@@ -84,12 +86,19 @@ export default function CompanyInviteEmail({
             </Section>
 
             <Section style={{ paddingTop: 32 }}>
-              <div style={{ height: 1, background: '#E2E8F0', marginBottom: 16 }} />
-              <Text className="m-0 text-xs" style={{ color: '#CBD5E1' }}>
-                <Link href={serverUrl} style={{ color: '#CBD5E1', textDecoration: 'none' }}>
-                  Reglo
-                </Link>
-              </Text>
+              <div style={{ height: 1, background: '#F1F5F9', marginBottom: 16 }} />
+              <table role="presentation" cellPadding="0" cellSpacing="0" style={{ border: 'none' }}>
+                <tr>
+                  <td valign="middle" style={{ paddingRight: 8 }}>
+                    <Img src={logoIconUrl} width="20" height="20" alt="" style={{ display: 'block', borderRadius: 4 }} />
+                  </td>
+                  <td valign="middle">
+                    <Text className="m-0 text-xs" style={{ color: '#94A3B8' }}>
+                      <Link href={serverUrl} style={{ color: '#94A3B8', textDecoration: 'none' }}>reglo.it</Link> · La tua autoscuola, semplice.
+                    </Text>
+                  </td>
+                </tr>
+              </table>
             </Section>
           </Container>
         </Body>

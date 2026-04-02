@@ -22,7 +22,9 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const logoUrl = `${SERVER_URL.replace(/\/$/, '')}/images/reglo_new_logo.png`;
+const baseUrl = SERVER_URL.replace(/\/$/, '');
+const logoFullUrl = `${baseUrl}/images/reglo_logo_full.png`;
+const logoIconUrl = `${baseUrl}/images/reglo_new_logo.png`;
 
 const FONT_STACK =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
@@ -37,8 +39,8 @@ const buildEmailBody = (content: string) => {
         <td align="center" style="padding:40px 20px;">
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:480px;">
             <tr>
-              <td style="padding:0 0 32px;">
-                <img src="${logoUrl}" width="36" height="36" alt="Reglo" style="display:block; border-radius:8px;" />
+              <td style="padding:0 0 28px;">
+                <img src="${logoFullUrl}" width="140" height="38" alt="Reglo" style="display:block; width:140px; height:auto;" />
               </td>
             </tr>
             <tr>
@@ -48,10 +50,17 @@ const buildEmailBody = (content: string) => {
             </tr>
             <tr>
               <td style="padding:32px 0 0;">
-                <div style="height:1px; background:#E2E8F0; margin:0 0 16px;"></div>
-                <div style="font-family:${FONT_STACK}; font-size:12px; color:#CBD5E1;">
-                  <a href="${SERVER_URL}" style="color:#CBD5E1; text-decoration:none;">Reglo</a>
-                </div>
+                <div style="height:1px; background:#F1F5F9; margin:0 0 16px;"></div>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td valign="middle" style="padding-right:8px;">
+                      <img src="${logoIconUrl}" width="20" height="20" alt="" style="display:block; border-radius:4px;" />
+                    </td>
+                    <td valign="middle" style="font-family:${FONT_STACK}; font-size:12px; color:#94A3B8;">
+                      <a href="${SERVER_URL}" style="color:#94A3B8; text-decoration:none;">reglo.it</a> · La tua autoscuola, semplice.
+                    </td>
+                  </tr>
+                </table>
               </td>
             </tr>
           </table>
