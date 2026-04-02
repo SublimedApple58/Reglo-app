@@ -1704,10 +1704,11 @@ export function AutoscuoleAgendaPage({
               return null;
             })()}
           </div>
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
+              className="w-full rounded-lg"
               disabled={holidayPending}
               onClick={async () => {
                 if (!holidayDialogDate) return;
@@ -1735,6 +1736,7 @@ export function AutoscuoleAgendaPage({
             <Button
               type="button"
               variant="destructive"
+              className="w-full rounded-lg"
               disabled={holidayPending}
               onClick={async () => {
                 if (!holidayDialogDate) return;
@@ -1764,7 +1766,7 @@ export function AutoscuoleAgendaPage({
             >
               Chiudi e cancella guide
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
