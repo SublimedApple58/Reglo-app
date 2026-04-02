@@ -82,6 +82,7 @@ type PaymentsBootstrapPayload = {
   settings: {
     autoPaymentsEnabled?: boolean;
     lessonCreditFlowEnabled?: boolean;
+    lessonCreditsRequired?: boolean;
     lessonPrice30?: number;
     lessonPrice60?: number;
     penaltyCutoffHoursPreset?: number;
@@ -201,6 +202,7 @@ export function AutoscuolePaymentsPage({
   const [autoPaymentsEnabled, setAutoPaymentsEnabled] = React.useState(false);
   const [paymentSection, setPaymentSection] = React.useState<string | null>("pricing");
   const [lessonCreditFlowEnabled, setLessonCreditFlowEnabled] = React.useState(false);
+  const [lessonCreditsRequired, setLessonCreditsRequired] = React.useState(true);
   const [lessonPrice30, setLessonPrice30] = React.useState("25");
   const [lessonPrice60, setLessonPrice60] = React.useState("50");
   const [penaltyCutoffHoursPreset, setPenaltyCutoffHoursPreset] = React.useState("24");
@@ -325,6 +327,7 @@ export function AutoscuolePaymentsPage({
       const settings = payload.data.settings ?? {};
       setAutoPaymentsEnabled(Boolean(settings.autoPaymentsEnabled));
       setLessonCreditFlowEnabled(Boolean(settings.lessonCreditFlowEnabled));
+      setLessonCreditsRequired(settings.lessonCreditsRequired !== false);
       setLessonPrice30(String(settings.lessonPrice30 ?? 25));
       setLessonPrice60(String(settings.lessonPrice60 ?? 50));
       setPenaltyCutoffHoursPreset(String(settings.penaltyCutoffHoursPreset ?? 24));
@@ -493,6 +496,7 @@ export function AutoscuolePaymentsPage({
       const res = await updateAutoscuolaSettings({
         autoPaymentsEnabled,
         lessonCreditFlowEnabled,
+        lessonCreditsRequired,
         lessonPrice30: parsedPrice30,
         lessonPrice60: parsedPrice60,
         penaltyCutoffHoursPreset: parsedCutoff as 1 | 2 | 4 | 6 | 12 | 24 | 48,
@@ -660,6 +664,26 @@ export function AutoscuolePaymentsPage({
             <InlineToggle checked={lessonCreditFlowEnabled} />
           </div>
 
+          {lessonCreditFlowEnabled && (
+            <div
+              role="switch"
+              tabIndex={0}
+              aria-checked={lessonCreditsRequired}
+              onClick={() => setLessonCreditsRequired((v) => !v)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLessonCreditsRequired((v) => !v); } }}
+              className={cn(
+                "flex cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors",
+                lessonCreditsRequired ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+              )}
+            >
+              <div>
+                <h3 className="text-sm font-semibold text-foreground">Crediti obbligatori per prenotare</h3>
+                <p className="text-xs text-muted-foreground">Se disattivato, gli allievi possono prenotare anche senza crediti. Le guide senza credito risulteranno da pagare.</p>
+              </div>
+              <InlineToggle checked={lessonCreditsRequired} />
+            </div>
+          )}
+
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving} size="sm">
               {saving ? "Salvataggio..." : "Salva"}
@@ -724,6 +748,26 @@ export function AutoscuolePaymentsPage({
                 </div>
                 <InlineToggle checked={lessonCreditFlowEnabled} />
               </div>
+
+              {lessonCreditFlowEnabled && (
+                <div
+                  role="switch"
+                  tabIndex={0}
+                  aria-checked={lessonCreditsRequired}
+                  onClick={() => setLessonCreditsRequired((v) => !v)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setLessonCreditsRequired((v) => !v); } }}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 transition-colors",
+                    lessonCreditsRequired ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+                  )}
+                >
+                  <div>
+                    <span className="text-sm font-medium text-foreground">Crediti obbligatori per prenotare</span>
+                    <p className="text-xs text-muted-foreground">Se disattivato, gli allievi possono prenotare anche senza crediti. Le guide senza credito risulteranno da pagare.</p>
+                  </div>
+                  <InlineToggle checked={lessonCreditsRequired} />
+                </div>
+              )}
 
               <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
                 <FieldGroup label="Prezzo guida 30m">

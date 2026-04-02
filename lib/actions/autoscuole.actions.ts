@@ -1907,6 +1907,7 @@ export async function createAutoscuolaAppointment(
           paidAmount: paymentSnapshot.paidAmount,
           invoiceStatus: paymentSnapshot.invoiceStatus,
           creditApplied: paymentSnapshot.creditApplied,
+          manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
         },
       });
     });
@@ -3823,6 +3824,7 @@ export async function getPaymentMode() {
       data: {
         autoPaymentsEnabled: config.enabled,
         lessonCreditFlowEnabled: config.lessonCreditFlowEnabled,
+        lessonCreditsRequired: config.lessonCreditsRequired,
       },
     };
   } catch (error) {

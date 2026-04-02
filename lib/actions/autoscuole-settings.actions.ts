@@ -244,6 +244,7 @@ const autoscuolaSettingsPatchSchema = z
     instructorReminderChannels: channelListSchema.optional(),
     autoPaymentsEnabled: z.boolean().optional(),
     lessonCreditFlowEnabled: z.boolean().optional(),
+    lessonCreditsRequired: z.boolean().optional(),
     lessonPrice30: z.number().positive().max(999).optional(),
     lessonPrice60: z.number().positive().max(999).optional(),
     penaltyCutoffHoursPreset: z
@@ -468,6 +469,7 @@ export type AutoscuolaSettingsData = {
   instructorReminderChannels: string[];
   autoPaymentsEnabled: boolean;
   lessonCreditFlowEnabled: boolean;
+  lessonCreditsRequired: boolean;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHoursPreset: (typeof PAYMENT_CUTOFF_PRESETS)[number];
@@ -562,6 +564,7 @@ const resolveAutoscuolaSettingsData = (
     typeof limits.lessonCreditFlowEnabled === "boolean"
       ? limits.lessonCreditFlowEnabled
       : DEFAULT_LESSON_CREDIT_FLOW_ENABLED;
+  const lessonCreditsRequired = limits.lessonCreditsRequired !== false;
   const lessonPrice30 =
     typeof limits.lessonPrice30 === "number"
       ? limits.lessonPrice30
@@ -716,6 +719,7 @@ const resolveAutoscuolaSettingsData = (
     instructorReminderChannels,
     autoPaymentsEnabled,
     lessonCreditFlowEnabled,
+    lessonCreditsRequired,
     lessonPrice30,
     lessonPrice60,
     penaltyCutoffHoursPreset,

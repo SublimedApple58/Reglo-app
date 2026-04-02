@@ -25,6 +25,7 @@ type PaymentChannel = "push" | "email";
 type AutoscuolaPaymentConfig = {
   enabled: boolean;
   lessonCreditFlowEnabled: boolean;
+  lessonCreditsRequired: boolean;
   lessonPrice30: number;
   lessonPrice60: number;
   penaltyCutoffHours: (typeof AUTOSCUOLA_PAYMENT_CUTOFF_PRESETS)[number];
@@ -43,6 +44,7 @@ type AppointmentPricingSnapshot = {
   paidAmount: Prisma.Decimal;
   invoiceStatus: string | null;
   creditApplied: boolean;
+  manualPaymentStatus: "unpaid" | null;
 };
 
 export type LessonCreditLedgerReason =
@@ -585,6 +587,7 @@ export async function getAutoscuolaPaymentConfig({
   return {
     enabled: Boolean(limits.autoPaymentsEnabled),
     lessonCreditFlowEnabled: Boolean(limits.lessonCreditFlowEnabled),
+    lessonCreditsRequired: limits.lessonCreditsRequired !== false,
     lessonPrice30: normalizePrice(limits.lessonPrice30, 25),
     lessonPrice60: normalizePrice(limits.lessonPrice60, 50),
     penaltyCutoffHours: normalizeCutoffPreset(limits.penaltyCutoffHoursPreset),
@@ -1193,6 +1196,7 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: null,
       creditApplied: false,
+      manualPaymentStatus: null,
     };
   }
 
@@ -1226,10 +1230,11 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: "not_required",
       creditApplied: true,
+      manualPaymentStatus: null,
     };
   }
 
-  // Credit flow only (no Stripe): no credit available, no payment required
+  // Credit flow only (no Stripe): no credit available
   if (!config.enabled && config.lessonCreditFlowEnabled) {
     return {
       paymentRequired: false,
@@ -1240,6 +1245,7 @@ export async function prepareAppointmentPaymentSnapshot({
       paidAmount: toDecimal(0),
       invoiceStatus: null,
       creditApplied: false,
+      manualPaymentStatus: !config.lessonCreditsRequired ? "unpaid" as const : null,
     };
   }
 
@@ -1282,6 +1288,7 @@ export async function prepareAppointmentPaymentSnapshot({
     paidAmount: toDecimal(0),
     invoiceStatus: "pending",
     creditApplied: false,
+    manualPaymentStatus: null,
   };
 }
 
@@ -2266,6 +2273,7 @@ export async function getMobileStudentPaymentProfile({
   return {
     autoPaymentsEnabled: config.enabled,
     lessonCreditFlowEnabled: config.lessonCreditFlowEnabled,
+    lessonCreditsRequired: config.lessonCreditsRequired,
     hasPaymentMethod: Boolean(paymentMethodSummary),
     paymentMethod: paymentMethodSummary,
     blockedByInsoluti: outstanding.length > 0,

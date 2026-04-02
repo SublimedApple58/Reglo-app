@@ -152,6 +152,7 @@ type StudentCredits = {
 type PaymentModeState = {
   auto: boolean;
   credits: boolean;
+  creditsRequired: boolean;
 };
 
 const LESSON_TYPE_LABELS: Record<string, string> = {
@@ -248,7 +249,10 @@ export function AutoscuoleStudentsPage({
 
   // Payment mode
   const [paymentMode, setPaymentMode] = React.useState<PaymentModeState | null>(null);
-  const manualMode = paymentMode !== null && !paymentMode.auto && !paymentMode.credits;
+  const manualMode = paymentMode !== null && (
+    (!paymentMode.auto && !paymentMode.credits) ||
+    (paymentMode.credits && !paymentMode.creditsRequired)
+  );
 
   // Sub-tabs
   const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
@@ -469,6 +473,7 @@ export function AutoscuoleStudentsPage({
         setPaymentMode({
           auto: res.data.autoPaymentsEnabled,
           credits: res.data.lessonCreditFlowEnabled,
+          creditsRequired: res.data.lessonCreditsRequired ?? true,
         });
       }
     });
