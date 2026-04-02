@@ -978,6 +978,9 @@ export async function updateAutoscuolaSettings(
         : DEFAULT_LESSON_CREDIT_FLOW_ENABLED;
     const nextLessonCreditFlowEnabled =
       payload.lessonCreditFlowEnabled ?? previousLessonCreditFlowEnabled;
+    const previousLessonCreditsRequired = limits.lessonCreditsRequired !== false;
+    const nextLessonCreditsRequired =
+      payload.lessonCreditsRequired ?? previousLessonCreditsRequired;
     const nextLessonPrice30 = payload.lessonPrice30 ?? previousLessonPrice30;
     const nextLessonPrice60 = payload.lessonPrice60 ?? previousLessonPrice60;
     const nextPenaltyCutoffHoursPreset =
@@ -1135,6 +1138,7 @@ export async function updateAutoscuolaSettings(
         payload.instructorReminderChannels ?? previousInstructorReminderChannels,
       autoPaymentsEnabled: nextAutoPaymentsEnabled,
       lessonCreditFlowEnabled: nextLessonCreditFlowEnabled,
+      lessonCreditsRequired: nextLessonCreditsRequired,
       lessonPrice30: nextLessonPrice30,
       lessonPrice60: nextLessonPrice60,
       penaltyCutoffHoursPreset: nextPenaltyCutoffHoursPreset,
