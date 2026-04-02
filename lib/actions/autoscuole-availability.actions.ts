@@ -2523,6 +2523,7 @@ export async function getDateAvailabilityMap(
     const activeVehicleIds = activeVehicles.map((v) => v.id);
 
     const result: Record<string, boolean> = {};
+    const instructorsByDate: Record<string, string[]> = {};
 
     // No resources → all dates unavailable
     if (!activeInstructorIds.length || !activeVehicleIds.length) {
@@ -2534,7 +2535,7 @@ export async function getDateAvailabilityMap(
         if (Date.UTC(cur.year, cur.month - 1, cur.day) >= toMs) break;
         cur = addDaysToDateParts(cur, 1);
       }
-      return { success: true, data: result };
+      return { success: true, data: { dates: result, instructorsByDate } };
     }
 
     // Range for resolvers and appointments
@@ -2638,6 +2639,7 @@ export async function getDateAvailabilityMap(
       const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
 
       let available = false;
+      const dayInstructors = new Set<string>();
 
       const isPast = dateStart < todayStart;
       const isBeforeMin = minDate !== null && dateStart < minDate;
@@ -2688,17 +2690,17 @@ export async function getDateAvailabilityMap(
 
           const candidateEnd = minutes + defaultDuration;
 
-          let hasInstructor = false;
+          // Collect ALL available instructors for this slot
+          const slotInstructors: string[] = [];
           for (const ownerId of activeInstructorIds) {
             const avail = instructorResolver.resolve(ownerId, startDate);
             if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
               continue;
             if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
               continue;
-            hasInstructor = true;
-            break;
+            slotInstructors.push(ownerId);
           }
-          if (!hasInstructor) continue;
+          if (!slotInstructors.length) continue;
 
           let hasVehicle = false;
           for (const ownerId of activeVehicleIds) {
@@ -2712,19 +2714,29 @@ export async function getDateAvailabilityMap(
           }
           if (!hasVehicle) continue;
 
+          // Valid slot — record available instructors
           available = true;
-          break; // short-circuit: at least one slot found for this day
+          for (const id of slotInstructors) dayInstructors.add(id);
+
+          // Short-circuit when all instructors found
+          if (dayInstructors.size >= activeInstructorIds.length) break;
         }
       }
 
       result[key] = available;
+      if (dayInstructors.size > 0) {
+        instructorsByDate[key] = Array.from(dayInstructors);
+      }
 
       if (Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day) >= toMs)
         break;
       dateParts = addDaysToDateParts(dateParts, 1);
     }
 
-    return { success: true, data: result };
+    return {
+      success: true,
+      data: { dates: result, instructorsByDate },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
