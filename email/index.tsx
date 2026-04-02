@@ -22,7 +22,7 @@ const escapeHtml = (value: string) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const logoUrl = `${SERVER_URL.replace(/\/$/, '')}/images/R_logo.png`;
+const logoUrl = `${SERVER_URL.replace(/\/$/, '')}/images/reglo_new_logo.png`;
 
 const FONT_STACK =
   "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif";
@@ -38,7 +38,7 @@ const buildEmailBody = (content: string) => {
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:480px;">
             <tr>
               <td style="padding:0 0 32px;">
-                <img src="${logoUrl}" width="36" height="36" alt="Reglo" style="display:block;" />
+                <img src="${logoUrl}" width="36" height="36" alt="Reglo" style="display:block; border-radius:8px;" />
               </td>
             </tr>
             <tr>

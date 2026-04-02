@@ -27,7 +27,7 @@ export default function CompanyInviteEmail({
   invitedByName,
 }: CompanyInviteEmailProps) {
   const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'https://app.reglo.it';
-  const logoUrl = `${serverUrl.replace(/\/$/, '')}/images/R_logo.png`;
+  const logoUrl = `${serverUrl.replace(/\/$/, '')}/images/reglo_new_logo.png`;
 
   return (
     <Html>
