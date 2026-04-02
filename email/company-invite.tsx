@@ -34,23 +34,19 @@ export default function CompanyInviteEmail({
       <Preview>Invito a {companyName}</Preview>
       <Tailwind>
         <Head />
-        <Body className="font-sans" style={{ backgroundColor: '#F8FAFC' }}>
-          <Container className="max-w-[520px] mx-auto" style={{ padding: '40px 16px' }}>
-            <Section className="text-center" style={{ paddingBottom: 28 }}>
+        <Body className="font-sans" style={{ backgroundColor: '#FFFFFF' }}>
+          <Container className="max-w-[480px] mx-auto" style={{ padding: '40px 20px' }}>
+            <Section style={{ paddingBottom: 32 }}>
               <Img
                 src={logoUrl}
-                width="44"
-                height="44"
+                width="36"
+                height="36"
                 alt="Reglo"
-                className="mx-auto"
-                style={{ display: 'block', margin: '0 auto' }}
+                style={{ display: 'block' }}
               />
             </Section>
 
-            <Section
-              className="rounded-2xl"
-              style={{ backgroundColor: '#FFFFFF', padding: '32px 28px', borderRadius: 16 }}
-            >
+            <Section>
               <Heading className="m-0 text-[20px] font-semibold" style={{ color: '#1E293B' }}>
                 Invito a {companyName}
               </Heading>
@@ -87,9 +83,10 @@ export default function CompanyInviteEmail({
               ) : null}
             </Section>
 
-            <Section className="text-center" style={{ paddingTop: 24 }}>
-              <Text className="m-0 text-xs" style={{ color: '#94A3B8' }}>
-                <Link href={serverUrl} style={{ color: '#94A3B8', textDecoration: 'none' }}>
+            <Section style={{ paddingTop: 32 }}>
+              <div style={{ height: 1, background: '#E2E8F0', marginBottom: 16 }} />
+              <Text className="m-0 text-xs" style={{ color: '#CBD5E1' }}>
+                <Link href={serverUrl} style={{ color: '#CBD5E1', textDecoration: 'none' }}>
                   Reglo
                 </Link>
               </Text>
