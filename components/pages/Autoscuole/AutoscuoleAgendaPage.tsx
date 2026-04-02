@@ -3,13 +3,14 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -66,6 +67,7 @@ type AgendaBootstrapPayload = {
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
+  holidays?: Array<{ date: string; label: string | null }>;
   meta: {
     from: string | Date;
     to: string | Date;
@@ -177,11 +179,27 @@ export function AutoscuoleAgendaPage({
   const [instructorAvailability, setInstructorAvailability] = React.useState<InstructorAvailabilityWeek[]>([]);
   const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
+  const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
+  const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
+  const [holidayDialogDate, setHolidayDialogDate] = React.useState<Date | null>(null);
+  const [holidayLabel, setHolidayLabel] = React.useState("");
+  const [holidayPending, setHolidayPending] = React.useState(false);
+  const [removeHolidayDialogOpen, setRemoveHolidayDialogOpen] = React.useState(false);
+  const [removeHolidayDate, setRemoveHolidayDate] = React.useState<Date | null>(null);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const todayNormalized = React.useMemo(() => normalizeDay(new Date(nowTick)), [nowTick]);
   const bootstrapRequestRef = React.useRef(0);
   const calendarScrollRef = React.useRef<HTMLDivElement>(null);
   const hasAutoScrolled = React.useRef(false);
+
+  const holidaySet = React.useMemo(() => {
+    const set = new Map<string, string | null>();
+    for (const h of holidays) {
+      const d = new Date(h.date);
+      set.set(formatYmd(d), h.label);
+    }
+    return set;
+  }, [holidays]);
 
   const weekEnd = React.useMemo(() => addDays(weekStart, 7), [weekStart]);
   const rangeStart = React.useMemo(
@@ -248,6 +266,7 @@ export function AutoscuoleAgendaPage({
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
+        setHolidays(payload.data.holidays ?? []);
       }
     } catch (error) {
       if (!prefetch) {
@@ -617,6 +636,32 @@ export function AutoscuoleAgendaPage({
             )}
           </div>
 
+          {/* Holiday toggle (day view) */}
+          {viewMode === "day" && (
+            <div className="flex items-center gap-1.5">
+              <div className="h-5 w-px bg-border" />
+              {holidaySet.has(formatYmd(dayFocus)) ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={() => { setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
+                >
+                  <Ban className="size-3" /> Rimuovi festivo
+                </Button>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2.5 text-xs"
+                  onClick={() => { setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
+                >
+                  <Ban className="size-3" /> Segna festivo
+                </Button>
+              )}
+            </div>
+          )}
+
           {/* Spacer + CTA */}
           <div className="ml-auto">
             <Button size="sm" onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
@@ -818,17 +863,31 @@ export function AutoscuoleAgendaPage({
                 <div className="row-span-2" />
                 {days.map((day) => {
                   const isDayToday = day.getTime() === todayNormalized.getTime();
+                  const dayHolidayLabel = holidaySet.get(formatYmd(day));
+                  const isDayHoliday = dayHolidayLabel !== undefined;
                   return (
                     <div
                       key={`day-${day.toISOString()}`}
                       className={cn(
                         "text-center text-xs font-semibold py-1.5 border-l border-border cursor-pointer hover:bg-gray-50 transition-colors",
-                        isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground",
+                        isDayHoliday ? "bg-red-50 text-red-600" : isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground",
                       )}
                       style={{ gridColumn: `span ${instrCount}` }}
                       onClick={() => { setDayFocus(normalizeDay(day)); setViewMode("day"); }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (isDayHoliday) {
+                          setRemoveHolidayDate(normalizeDay(day));
+                          setRemoveHolidayDialogOpen(true);
+                        } else {
+                          setHolidayDialogDate(normalizeDay(day));
+                          setHolidayLabel("");
+                          setHolidayDialogOpen(true);
+                        }
+                      }}
                     >
-                      {day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
+                      <span>{day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}</span>
+                      {isDayHoliday && <span className="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">{dayHolidayLabel || "Festivo"}</span>}
                     </div>
                   );
                 })}
@@ -881,6 +940,7 @@ export function AutoscuoleAgendaPage({
                   const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
                   const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
                   const dayAppts = appointmentsByDay[dayIndex] ?? [];
+                  const isColumnHoliday = holidaySet.has(dateKey);
 
                   return weekInstructors.map((instr, instrIdx) => {
                     const color = INSTRUCTOR_COLORS[instrIdx % INSTRUCTOR_COLORS.length];
@@ -890,9 +950,14 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative border-l border-border/40", isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative border-l border-border/40", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
                       >
+                        {isColumnHoliday && (
+                          <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
+                            {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
+                          </div>
+                        )}
                         {/* Availability bands */}
                         {ranges.map((range, ri) => (
                           <div key={ri} className={cn("absolute left-0 right-0", color.bg)} style={{ top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
@@ -978,6 +1043,27 @@ export function AutoscuoleAgendaPage({
         {/* ── INSTRUCTOR DAY VIEW ── */}
         {agendaMode === "instructor" && viewMode === "day" && (
         <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+          {/* Holiday banner */}
+          {holidaySet.has(formatYmd(dayFocus)) && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 mb-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-red-700">
+                <Ban className="size-4" />
+                Giorno festivo{holidaySet.get(formatYmd(dayFocus)) ? ` — ${holidaySet.get(formatYmd(dayFocus))}` : ""}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-red-600 hover:bg-red-100 hover:text-red-700"
+                onClick={() => {
+                  setRemoveHolidayDate(dayFocus);
+                  setRemoveHolidayDialogOpen(true);
+                }}
+              >
+                Rimuovi festivo
+              </Button>
+            </div>
+          )}
           {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
           <AnimatePresence>
             {refreshing && (
@@ -1575,6 +1661,150 @@ export function AutoscuoleAgendaPage({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Holiday Creation Dialog ── */}
+      <Dialog open={holidayDialogOpen} onOpenChange={(open) => { if (!holidayPending) setHolidayDialogOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Segna come festivo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              {holidayDialogDate?.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            </p>
+            <div>
+              <label htmlFor="holiday-label" className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Nome festività (opzionale)
+              </label>
+              <Input
+                id="holiday-label"
+                placeholder="es. Ferragosto, Ferie estive..."
+                value={holidayLabel}
+                onChange={(e) => setHolidayLabel(e.target.value)}
+                disabled={holidayPending}
+              />
+            </div>
+            {(() => {
+              const dayApptCount = holidayDialogDate
+                ? appointments.filter((a) => {
+                    const d = new Date(a.startsAt);
+                    return formatYmd(d) === formatYmd(holidayDialogDate) && a.status !== "cancelled";
+                  }).length
+                : 0;
+              if (dayApptCount > 0) {
+                return (
+                  <p className="text-sm text-amber-600">
+                    <AlertTriangle className="mr-1 inline size-4" />
+                    {dayApptCount === 1
+                      ? "C'è 1 guida prenotata questo giorno."
+                      : `Ci sono ${dayApptCount} guide prenotate questo giorno.`}
+                  </p>
+                );
+              }
+              return null;
+            })()}
+          </div>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={holidayPending}
+              onClick={async () => {
+                if (!holidayDialogDate) return;
+                setHolidayPending(true);
+                try {
+                  const res = await fetch("/api/autoscuole/holidays", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: false }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    toast.success({ description: "Giorno festivo aggiunto." });
+                    setHolidayDialogOpen(false);
+                    load({ silent: true });
+                  } else {
+                    toast.error({ description: data.message ?? "Errore." });
+                  }
+                } catch { toast.error({ description: "Errore di rete." }); }
+                finally { setHolidayPending(false); }
+              }}
+            >
+              Chiudi e mantieni guide
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={holidayPending}
+              onClick={async () => {
+                if (!holidayDialogDate) return;
+                setHolidayPending(true);
+                try {
+                  const res = await fetch("/api/autoscuole/holidays", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: true }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    const count = data.data?.cancelledCount ?? 0;
+                    toast.success({
+                      description: count > 0
+                        ? `Giorno festivo aggiunto. ${count} ${count === 1 ? "guida cancellata" : "guide cancellate"}.`
+                        : "Giorno festivo aggiunto.",
+                    });
+                    setHolidayDialogOpen(false);
+                    load({ silent: true });
+                  } else {
+                    toast.error({ description: data.message ?? "Errore." });
+                  }
+                } catch { toast.error({ description: "Errore di rete." }); }
+                finally { setHolidayPending(false); }
+              }}
+            >
+              Chiudi e cancella guide
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Holiday Removal AlertDialog ── */}
+      <AlertDialog open={removeHolidayDialogOpen} onOpenChange={setRemoveHolidayDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Rimuovere il giorno festivo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              La disponibilità normale verrà ripristinata per il{" "}
+              {removeHolidayDate?.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={async () => {
+                if (!removeHolidayDate) return;
+                try {
+                  const res = await fetch("/api/autoscuole/holidays", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ date: formatYmd(removeHolidayDate) }),
+                  });
+                  const data = await res.json();
+                  if (data.success) {
+                    toast.success({ description: "Giorno festivo rimosso." });
+                    load({ silent: true });
+                  } else {
+                    toast.error({ description: data.message ?? "Errore." });
+                  }
+                } catch { toast.error({ description: "Errore di rete." }); }
+              }}
+            >
+              Rimuovi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </PageWrapper>
   );

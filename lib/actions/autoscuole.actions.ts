@@ -601,7 +601,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         ? Math.max(1, Math.min(600, Math.trunc(input.limit)))
         : 500;
 
-    const [appointments, students, instructors, vehicles, instructorBlocks] = await Promise.all([
+    const [appointments, students, instructors, vehicles, instructorBlocks, holidays] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: {
           companyId,
@@ -675,6 +675,17 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         },
         orderBy: { startsAt: "asc" },
       }),
+      prisma.autoscuolaHoliday.findMany({
+        where: {
+          companyId,
+          date: { gte: from, lte: to },
+        },
+        select: {
+          date: true,
+          label: true,
+        },
+        orderBy: { date: "asc" },
+      }),
     ]);
 
     return {
@@ -689,6 +700,10 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         instructors,
         vehicles,
         instructorBlocks,
+        holidays: holidays.map((h) => ({
+          date: h.date.toISOString(),
+          label: h.label,
+        })),
         meta: {
           from,
           to,

@@ -192,6 +192,7 @@ model Company {
   services                       CompanyService[]
   mobileTokens                   MobileAccessToken[]
   pushDevices                    MobilePushDevice[]
+  autoscuolaHolidays             AutoscuolaHoliday[]
 }
 
 model CompanyService {
@@ -584,6 +585,20 @@ model AutoscuolaDailyAvailabilityOverride {
   @@unique([companyId, ownerType, ownerId, date], map: "AutoscuolaDailyAvailabilityOverride_company_owner_date_key")
   @@index([companyId, ownerType, ownerId], map: "AutoscuolaDailyAvailabilityOverride_company_owner_idx")
   @@index([ownerId, date])
+}
+
+model AutoscuolaHoliday {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  date      DateTime @db.Date
+  label     String?
+  createdBy String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, date])
+  @@index([companyId, date])
 }
 
 model AutoscuolaAvailabilitySlot {

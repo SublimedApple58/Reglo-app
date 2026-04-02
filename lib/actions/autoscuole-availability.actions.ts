@@ -2150,6 +2150,17 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: false, message: "Non puoi prenotare una guida nel passato." };
     }
 
+    // Check if date is a holiday
+    const isHoliday = await prisma.autoscuolaHoliday.findFirst({
+      where: {
+        companyId: membership.companyId,
+        date: dateStart,
+      },
+    });
+    if (isHoliday) {
+      return { success: true, data: [] };
+    }
+
     const serviceForLimits = await prisma.companyService.findFirst({
       where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
       select: { limits: true },
@@ -2542,6 +2553,21 @@ export async function getDateAvailabilityMap(
     const rangeStart = toTimeZoneDate(fromParts, 0, 0);
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(toParts, 1), 0, 0);
 
+    // Fetch holidays for the range
+    const holidays = await prisma.autoscuolaHoliday.findMany({
+      where: {
+        companyId: membership.companyId,
+        date: { gte: rangeStart, lte: rangeEnd },
+      },
+      select: { date: true },
+    });
+    const holidaySet = new Set<string>(
+      holidays.map((h) => {
+        const d = new Date(h.date);
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      }),
+    );
+
     // Build resolvers for the entire range (4 queries total)
     const [instructorResolver, vehicleResolver] = await Promise.all([
       buildAvailabilityResolver(
@@ -2637,6 +2663,15 @@ export async function getDateAvailabilityMap(
       const dateStart = toTimeZoneDate(dateParts, 0, 0);
       const dateEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
       const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
+
+      // Holiday → mark unavailable, skip scan
+      if (holidaySet.has(key)) {
+        result[key] = false;
+        if (Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day) >= toMs)
+          break;
+        dateParts = addDaysToDateParts(dateParts, 1);
+        continue;
+      }
 
       let available = false;
       const dayInstructors = new Set<string>();
@@ -2735,7 +2770,7 @@ export async function getDateAvailabilityMap(
 
     return {
       success: true,
-      data: { dates: result, instructorsByDate },
+      data: { dates: result, instructorsByDate, holidays: Array.from(holidaySet) },
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
