@@ -42,9 +42,22 @@ export async function getMobileToken(token: string) {
     where: { tokenHash, expiresAt: { gt: now } },
   });
   if (!record) return null;
+
+  // Sliding expiration: extend token TTL on each use so active users
+  // are never logged out. Only extend when less than half the TTL remains
+  // to avoid writing on every single request.
+  const halfTtlMs = (TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000) / 2;
+  const remainingMs = record.expiresAt.getTime() - now.getTime();
+  const newExpiresAt = remainingMs < halfTtlMs
+    ? new Date(now.getTime() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000)
+    : undefined;
+
   await prisma.mobileAccessToken.update({
     where: { id: record.id },
-    data: { lastUsedAt: now },
+    data: {
+      lastUsedAt: now,
+      ...(newExpiresAt ? { expiresAt: newExpiresAt } : {}),
+    },
   });
   return record;
 }
