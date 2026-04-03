@@ -2150,11 +2150,15 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: false, message: "Non puoi prenotare una guida nel passato." };
     }
 
-    // Check if date is a holiday
+    // Check if date is a holiday — use UTC midnight because the column is
+    // Postgres DATE and holidays are stored at 00:00 UTC.  Using the
+    // timezone-adjusted dateStart (e.g. April 6 22:00 UTC for April 7 CEST)
+    // would incorrectly match the previous day's holiday.
+    const holidayDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day));
     const isHoliday = await prisma.autoscuolaHoliday.findFirst({
       where: {
         companyId: membership.companyId,
-        date: dateStart,
+        date: holidayDate,
       },
     });
     if (isHoliday) {
@@ -2553,11 +2557,14 @@ export async function getDateAvailabilityMap(
     const rangeStart = toTimeZoneDate(fromParts, 0, 0);
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(toParts, 1), 0, 0);
 
-    // Fetch holidays for the range
+    // Fetch holidays for the range — use UTC midnight bounds because the
+    // column is Postgres DATE and holidays are stored at 00:00 UTC.
+    const holidayFrom = new Date(Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day));
+    const holidayTo = new Date(Date.UTC(toParts.year, toParts.month - 1, toParts.day));
     const holidays = await prisma.autoscuolaHoliday.findMany({
       where: {
         companyId: membership.companyId,
-        date: { gte: rangeStart, lte: rangeEnd },
+        date: { gte: holidayFrom, lte: holidayTo },
       },
       select: { date: true },
     });
