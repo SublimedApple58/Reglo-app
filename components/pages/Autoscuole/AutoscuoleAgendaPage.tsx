@@ -56,6 +56,7 @@ type AppointmentRow = {
   student: StudentOption;
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
+  replacedByAppointmentId?: string | null;
 };
 
 type AgendaBootstrapPayload = {
@@ -369,21 +370,51 @@ export function AutoscuoleAgendaPage({
     return Array.from(instrMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [viewMode, instructors, instructorAvailability, dayFocus]);
 
-  const filtered = appointments.filter((item) => {
-    if ((item.status ?? "").toLowerCase() === "cancelled") return false;
-    const term = search.trim().toLowerCase();
-    if (
-      term &&
-      !item.student.firstName.toLowerCase().includes(term) &&
-      !item.student.lastName.toLowerCase().includes(term) &&
-      !item.type.toLowerCase().includes(term)
-    ) {
-      return false;
+  const filtered = React.useMemo(() => {
+    // Build a set of active (non-cancelled) appointments keyed by instructor id + time overlap
+    const activeByInstructor = new Map<string, { start: Date; end: Date }[]>();
+    for (const item of appointments) {
+      if ((item.status ?? "").toLowerCase() === "cancelled") continue;
+      if (!item.instructor?.id) continue;
+      const start = toDate(item.startsAt);
+      const end = getAppointmentEnd(item);
+      const list = activeByInstructor.get(item.instructor.id) ?? [];
+      list.push({ start, end });
+      activeByInstructor.set(item.instructor.id, list);
     }
-    const start = toDate(item.startsAt);
-    const end = getAppointmentEnd(item);
-    return start < rangeEnd && end > rangeStart;
-  });
+
+    return appointments.filter((item) => {
+      const isCancelled = (item.status ?? "").toLowerCase() === "cancelled";
+
+      // Hide cancelled appointments that have been replaced
+      if (isCancelled) {
+        // Explicitly replaced via repositioning
+        if (item.replacedByAppointmentId) return false;
+        // Implicitly replaced: another active appointment overlaps the same instructor slot
+        if (item.instructor?.id) {
+          const slots = activeByInstructor.get(item.instructor.id);
+          if (slots) {
+            const cStart = toDate(item.startsAt);
+            const cEnd = getAppointmentEnd(item);
+            if (slots.some((s) => s.start < cEnd && s.end > cStart)) return false;
+          }
+        }
+      }
+
+      const term = search.trim().toLowerCase();
+      if (
+        term &&
+        !item.student.firstName.toLowerCase().includes(term) &&
+        !item.student.lastName.toLowerCase().includes(term) &&
+        !item.type.toLowerCase().includes(term)
+      ) {
+        return false;
+      }
+      const start = toDate(item.startsAt);
+      const end = getAppointmentEnd(item);
+      return start < rangeEnd && end > rangeStart;
+    });
+  }, [appointments, search, rangeStart, rangeEnd]);
 
   const handleCreate = async () => {
     if (!form.studentId || !form.day || !form.time || !form.instructorId || !form.vehicleId) {
@@ -2074,6 +2105,13 @@ function getStatusMeta(
       label: "Da confermare",
       shortLabel: "Da confermare",
       className: "border-orange-200/70 bg-orange-100/80",
+    };
+  }
+  if (normalized === "cancelled") {
+    return {
+      label: "Annullata",
+      shortLabel: "Annullata",
+      className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through",
     };
   }
   return {

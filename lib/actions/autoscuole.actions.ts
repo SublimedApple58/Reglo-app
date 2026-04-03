@@ -2390,8 +2390,9 @@ export async function updateAutoscuolaAppointmentStatus(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
-    // Block check-in / no-show on proposals — the student must accept first
     const currentStatus = normalizeStatus(appointment.status);
+
+    // Block check-in / no-show on proposals — the student must accept first
     if (
       currentStatus === "proposal" &&
       (nextStatus === "checked_in" || nextStatus === "no_show")
@@ -2399,6 +2400,17 @@ export async function updateAutoscuolaAppointmentStatus(
       return {
         success: false,
         message: "Non puoi segnare check-in o no-show su una guida proposta. L'allievo deve prima accettarla.",
+      };
+    }
+
+    // Block check-in / no-show on cancelled appointments
+    if (
+      currentStatus === "cancelled" &&
+      (nextStatus === "checked_in" || nextStatus === "no_show")
+    ) {
+      return {
+        success: false,
+        message: "Non puoi segnare check-in o assente su una guida già annullata.",
       };
     }
 
