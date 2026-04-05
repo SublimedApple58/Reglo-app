@@ -3,7 +3,7 @@ import { requireServiceAccess } from "@/lib/service-access";
 
 const ALLOWED_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
 const PREVIEW_TEXT =
-  "Buongiorno, sono l'assistente virtuale della sua autoscuola. Come posso aiutarla?";
+  "Buongiorno e benvenuto! Sono l'assistente virtuale della sua autoscuola. Posso aiutarla a prenotare una lezione di guida, verificare gli orari disponibili, o rispondere alle sue domande. Come posso esserle utile oggi?";
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "tts-1",
+        model: "tts-1-hd",
         voice,
         input: PREVIEW_TEXT,
         response_format: "mp3",
