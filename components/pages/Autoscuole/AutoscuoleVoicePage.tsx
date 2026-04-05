@@ -181,6 +181,7 @@ export function AutoscuoleVoicePage() {
   const [voiceProvisioningStatus, setVoiceProvisioningStatus] =
     React.useState<VoiceProvisioningStatus>("not_started");
   const [voiceLineRef, setVoiceLineRef] = React.useState<string | null>(null);
+  const [voiceDisplayNumber, setVoiceDisplayNumber] = React.useState<string | null>(null);
   const [voiceAssistantEnabled, setVoiceAssistantEnabled] = React.useState(false);
   const [voiceBookingEnabled, setVoiceBookingEnabled] = React.useState(false);
   const [voiceLegalGreetingEnabled, setVoiceLegalGreetingEnabled] = React.useState(true);
@@ -218,6 +219,7 @@ export function AutoscuoleVoicePage() {
         (d.voiceProvisioningStatus as VoiceProvisioningStatus) ?? "not_started",
       );
       setVoiceLineRef(d.voiceLineRef ?? null);
+      setVoiceDisplayNumber(d.voiceDisplayNumber ?? null);
       setVoiceAssistantEnabled(Boolean(d.voiceAssistantEnabled));
       setVoiceBookingEnabled(Boolean(d.voiceBookingEnabled));
       setVoiceLegalGreetingEnabled(d.voiceLegalGreetingEnabled !== false);
@@ -378,7 +380,9 @@ export function AutoscuoleVoicePage() {
             <span className={cn("text-sm font-semibold", isReady ? "text-emerald-700" : "text-amber-700")}>
               {isReady ? "Linea attiva" : "Linea in configurazione"}
             </span>
-            {voiceLineRef && <span className="text-xs text-muted-foreground">{voiceLineRef}</span>}
+            {voiceDisplayNumber && (
+              <span className="font-mono text-xs text-muted-foreground">{voiceDisplayNumber}</span>
+            )}
             <ProvisioningBadge status={voiceProvisioningStatus} />
           </div>
           <div className="flex items-center gap-3">

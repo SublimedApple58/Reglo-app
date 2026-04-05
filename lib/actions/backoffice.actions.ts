@@ -188,6 +188,7 @@ export async function assignAutoscuolaVoiceLine(
       voiceFeatureEnabled: true,
       voiceProvisioningStatus: "ready",
       voiceLineRef: line.id,
+      voiceDisplayNumber: payload.displayNumber,
     };
 
     if (existingService) {

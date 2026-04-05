@@ -124,6 +124,8 @@ function AutoscuolaDrawerContent({
       : "not_started";
   const voiceLineRef =
     typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
+  const voiceDisplayNumber =
+    typeof limits.voiceDisplayNumber === "string" ? limits.voiceDisplayNumber : "";
 
   const handleProvision = () => {
     startProvisioning(async () => {
@@ -263,6 +265,9 @@ function AutoscuolaDrawerContent({
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-emerald-700">Linea attiva</p>
+                  {voiceDisplayNumber && (
+                    <p className="font-mono text-xs text-emerald-700">{voiceDisplayNumber}</p>
+                  )}
                   <p className="font-mono text-[10px] text-muted-foreground break-all">{voiceLineRef}</p>
                 </div>
               </div>

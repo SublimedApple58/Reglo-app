@@ -507,6 +507,7 @@ export type AutoscuolaSettingsData = {
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
   voiceLineRef: string | null;
+  voiceDisplayNumber: string | null;
   voiceAssistantEnabled: boolean;
   voiceBookingEnabled: boolean;
   voiceLanguage: "it-IT";
@@ -662,6 +663,10 @@ const resolveAutoscuolaSettingsData = (
     typeof limits.voiceLineRef === "string" && limits.voiceLineRef.trim().length
       ? limits.voiceLineRef.trim()
       : null;
+  const voiceDisplayNumber =
+    typeof limits.voiceDisplayNumber === "string" && limits.voiceDisplayNumber.trim().length
+      ? limits.voiceDisplayNumber.trim()
+      : null;
   const voiceAssistantEnabled =
     typeof limits.voiceAssistantEnabled === "boolean"
       ? limits.voiceAssistantEnabled
@@ -751,6 +756,7 @@ const resolveAutoscuolaSettingsData = (
     voiceFeatureEnabled,
     voiceProvisioningStatus,
     voiceLineRef,
+    voiceDisplayNumber,
     voiceAssistantEnabled,
     voiceBookingEnabled,
     voiceLanguage,
@@ -929,6 +935,10 @@ export async function updateAutoscuolaSettings(
       typeof limits.voiceLineRef === "string" && limits.voiceLineRef.trim().length
         ? limits.voiceLineRef.trim()
         : null;
+    const previousVoiceDisplayNumber =
+      typeof limits.voiceDisplayNumber === "string" && limits.voiceDisplayNumber.trim().length
+        ? limits.voiceDisplayNumber.trim()
+        : null;
     const previousVoiceAssistantEnabled =
       typeof limits.voiceAssistantEnabled === "boolean"
         ? limits.voiceAssistantEnabled
@@ -1032,6 +1042,7 @@ export async function updateAutoscuolaSettings(
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
+    const nextVoiceDisplayNumber = previousVoiceDisplayNumber;
     const nextVoiceAssistantEnabled = nextVoiceFeatureEnabled
       ? payload.voiceAssistantEnabled ?? previousVoiceAssistantEnabled
       : false;
@@ -1166,6 +1177,7 @@ export async function updateAutoscuolaSettings(
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
       voiceLineRef: nextVoiceLineRef,
+      voiceDisplayNumber: nextVoiceDisplayNumber,
       voiceAssistantEnabled: nextVoiceAssistantEnabled,
       voiceBookingEnabled: nextVoiceBookingEnabled,
       voiceLanguage: DEFAULT_VOICE_LANGUAGE,
@@ -1243,6 +1255,7 @@ export async function updateAutoscuolaSettings(
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
         voiceLineRef: nextLimits.voiceLineRef,
+        voiceDisplayNumber: nextLimits.voiceDisplayNumber,
         voiceAssistantEnabled: nextLimits.voiceAssistantEnabled,
         voiceBookingEnabled: nextLimits.voiceBookingEnabled,
         voiceLanguage: nextLimits.voiceLanguage,
