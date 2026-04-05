@@ -404,6 +404,19 @@ export async function backofficeSignOut() {
   await clearBackofficeCookie();
 }
 
+export async function getVoiceLineDisplayNumber(lineId: string) {
+  try {
+    await requireGlobalAdmin();
+    const line = await prisma.autoscuolaVoiceLine.findUnique({
+      where: { id: lineId },
+      select: { displayNumber: true },
+    });
+    return { success: true as const, displayNumber: line?.displayNumber ?? null };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function deleteCompany(companyId: string) {
   try {
     await requireGlobalAdmin();

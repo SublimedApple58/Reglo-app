@@ -46,6 +46,7 @@ import {
   assignAutoscuolaVoiceLine,
   deleteCompany,
   getCompanyStudentPlatforms,
+  getVoiceLineDisplayNumber,
   provisionAutoscuolaVoiceLine,
   unassignAutoscuolaVoiceLine,
   updateCompanyService,
@@ -124,8 +125,17 @@ function AutoscuolaDrawerContent({
       : "not_started";
   const voiceLineRef =
     typeof limits.voiceLineRef === "string" ? limits.voiceLineRef : "";
-  const voiceDisplayNumber =
-    typeof limits.voiceDisplayNumber === "string" ? limits.voiceDisplayNumber : "";
+  const [voiceDisplayNumber, setVoiceDisplayNumber] = useState(
+    typeof limits.voiceDisplayNumber === "string" ? limits.voiceDisplayNumber : "",
+  );
+
+  useEffect(() => {
+    if (!voiceDisplayNumber && voiceLineRef) {
+      getVoiceLineDisplayNumber(voiceLineRef).then((res) => {
+        if (res.success && res.displayNumber) setVoiceDisplayNumber(res.displayNumber);
+      });
+    }
+  }, [voiceDisplayNumber, voiceLineRef]);
 
   const handleProvision = () => {
     startProvisioning(async () => {

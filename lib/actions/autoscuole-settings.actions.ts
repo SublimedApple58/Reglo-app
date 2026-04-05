@@ -663,10 +663,17 @@ const resolveAutoscuolaSettingsData = (
     typeof limits.voiceLineRef === "string" && limits.voiceLineRef.trim().length
       ? limits.voiceLineRef.trim()
       : null;
-  const voiceDisplayNumber =
+  let voiceDisplayNumber =
     typeof limits.voiceDisplayNumber === "string" && limits.voiceDisplayNumber.trim().length
       ? limits.voiceDisplayNumber.trim()
       : null;
+  if (!voiceDisplayNumber && voiceLineRef) {
+    const voiceLine = await prisma.autoscuolaVoiceLine.findUnique({
+      where: { id: voiceLineRef },
+      select: { displayNumber: true },
+    });
+    voiceDisplayNumber = voiceLine?.displayNumber ?? null;
+  }
   const voiceAssistantEnabled =
     typeof limits.voiceAssistantEnabled === "boolean"
       ? limits.voiceAssistantEnabled
