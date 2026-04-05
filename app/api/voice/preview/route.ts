@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireServiceAccess } from "@/lib/service-access";
 
-const ALLOWED_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse"];
+const ALLOWED_VOICES = ["alloy", "ash", "coral", "sage", "shimmer"];
 const PREVIEW_TEXT =
   "Buongiorno e benvenuto! Sono l'assistente virtuale della sua autoscuola. Posso aiutarla a prenotare una lezione di guida, verificare gli orari disponibili, o rispondere alle sue domande. Come posso esserle utile oggi?";
 

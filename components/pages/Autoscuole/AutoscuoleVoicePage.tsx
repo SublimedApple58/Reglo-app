@@ -77,12 +77,9 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
 const VOICE_OPTIONS = [
   { value: "coral", label: "Coral", description: "Femminile, calda" },
   { value: "sage", label: "Sage", description: "Femminile, professionale" },
-  { value: "alloy", label: "Alloy", description: "Neutra, bilanciata" },
-  { value: "ash", label: "Ash", description: "Maschile, naturale" },
-  { value: "ballad", label: "Ballad", description: "Maschile, morbida" },
-  { value: "echo", label: "Echo", description: "Maschile, chiara" },
   { value: "shimmer", label: "Shimmer", description: "Femminile, vivace" },
-  { value: "verse", label: "Verse", description: "Neutra, espressiva" },
+  { value: "ash", label: "Ash", description: "Maschile, naturale" },
+  { value: "alloy", label: "Alloy", description: "Neutra, bilanciata" },
 ] as const;
 
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
