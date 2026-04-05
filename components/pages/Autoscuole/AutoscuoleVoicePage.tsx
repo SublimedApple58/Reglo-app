@@ -36,6 +36,8 @@ import {
   CheckCircle2,
   Loader2,
   ChevronDown,
+  Play,
+  Square,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -71,6 +73,17 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
   { value: "lesson_info" as const, label: "Info lezioni", description: "Dettagli su corsi e lezioni" },
   { value: "booking" as const, label: "Prenota guida", description: "Prenotazione diretta sull'agenda" },
 ];
+
+const VOICE_OPTIONS = [
+  { value: "coral", label: "Coral", description: "Femminile, calda" },
+  { value: "sage", label: "Sage", description: "Femminile, professionale" },
+  { value: "alloy", label: "Alloy", description: "Neutra, bilanciata" },
+  { value: "ash", label: "Ash", description: "Maschile, naturale" },
+  { value: "ballad", label: "Ballad", description: "Maschile, morbida" },
+  { value: "echo", label: "Echo", description: "Maschile, chiara" },
+  { value: "shimmer", label: "Shimmer", description: "Femminile, vivace" },
+  { value: "verse", label: "Verse", description: "Neutra, espressiva" },
+] as const;
 
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
 const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 30);
@@ -196,6 +209,9 @@ export function AutoscuoleVoicePage() {
     "lesson_info",
   ]);
   const [voiceInstructions, setVoiceInstructions] = React.useState("");
+  const [voiceAssistantVoice, setVoiceAssistantVoice] = React.useState("coral");
+  const [previewPlaying, setPreviewPlaying] = React.useState(false);
+  const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
   // Callbacks state
   const [callbackTasks, setCallbackTasks] = React.useState<CallbackTask[]>([]);
@@ -230,6 +246,7 @@ export function AutoscuoleVoicePage() {
       setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
       setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
       setVoiceInstructions(d.voiceInstructions ?? "");
+      setVoiceAssistantVoice(d.voiceAssistantVoice || "coral");
       const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
       const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
         VALID_ACTIONS.includes(a as VoiceAllowedAction),
@@ -315,6 +332,7 @@ export function AutoscuoleVoicePage() {
       voiceRetentionDays: 90,
       voiceInstructions,
       voiceAllowedActions,
+      voiceAssistantVoice,
     });
     setSaving(false);
 
@@ -334,12 +352,39 @@ export function AutoscuoleVoicePage() {
     setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
     setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
     setVoiceInstructions(d.voiceInstructions ?? "");
+    setVoiceAssistantVoice(d.voiceAssistantVoice || "coral");
     const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
     const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
       VALID_ACTIONS.includes(a as VoiceAllowedAction),
     );
     setVoiceAllowedActions(loaded.length ? loaded : ["faq", "lesson_info"]);
     toast.success({ description: "Impostazioni segretaria salvate." });
+  };
+
+  const handlePreviewVoice = async () => {
+    if (previewPlaying) {
+      previewAudioRef.current?.pause();
+      previewAudioRef.current = null;
+      setPreviewPlaying(false);
+      return;
+    }
+    setPreviewPlaying(true);
+    try {
+      const audio = new Audio(`/api/voice/preview?voice=${voiceAssistantVoice}`);
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        setPreviewPlaying(false);
+        previewAudioRef.current = null;
+      };
+      audio.onerror = () => {
+        setPreviewPlaying(false);
+        previewAudioRef.current = null;
+        toast.error({ description: "Impossibile riprodurre l'anteprima." });
+      };
+      await audio.play();
+    } catch {
+      setPreviewPlaying(false);
+    }
   };
 
   const isReady = voiceProvisioningStatus === "ready";
@@ -500,6 +545,49 @@ export function AutoscuoleVoicePage() {
                 <ToggleRow label="Registra audio" description="Salva una registrazione audio della chiamata" checked={voiceRecordingEnabled} onCheckedChange={setVoiceRecordingEnabled} />
                 <ToggleRow label="Trascrivi chiamate" description="Genera trascrizione testuale della conversazione" checked={voiceTranscriptionEnabled} onCheckedChange={setVoiceTranscriptionEnabled} />
               </div>
+            </div>
+          </VoiceAccordion>
+
+          {/* Voce assistente */}
+          <VoiceAccordion
+            title="Voce assistente"
+            description="Scegli la voce dell'assistente AI"
+            expanded={voiceSection === "voice"}
+            onToggle={() => toggleVoiceSection("voice")}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Select value={voiceAssistantVoice} onValueChange={setVoiceAssistantVoice}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Seleziona voce" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {VOICE_OPTIONS.map((v) => (
+                      <SelectItem key={v.value} value={v.value}>
+                        <span className="font-medium">{v.label}</span>
+                        <span className="ml-2 text-muted-foreground">{v.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 shrink-0"
+                  onClick={handlePreviewVoice}
+                  disabled={false}
+                >
+                  {previewPlaying ? (
+                    <><Square className="size-3.5" /> Stop</>
+                  ) : (
+                    <><Play className="size-3.5" /> Anteprima</>
+                  )}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                La voce selezionata sarà utilizzata per tutte le chiamate in entrata.
+              </p>
             </div>
           </VoiceAccordion>
 

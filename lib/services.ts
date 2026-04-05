@@ -40,6 +40,7 @@ export type ServiceLimits = {
   voiceRetentionDays?: 90;
   voiceInstructions?: string;
   voiceAllowedActions?: Array<"faq" | "lesson_info" | "booking">;
+  voiceAssistantVoice?: string;
 };
 
 export type CompanyServiceInfo = {

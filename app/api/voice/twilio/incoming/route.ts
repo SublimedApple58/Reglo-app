@@ -225,6 +225,7 @@ export async function POST(request: Request) {
       <Parameter name="voiceAllowedActions" value="${escapeXml(
         lineContext.settings.voiceAllowedActions.join(","),
       )}" />
+      <Parameter name="voiceAssistantVoice" value="${escapeXml(lineContext.settings.voiceAssistantVoice || "coral")}" />
     </Stream>
   </Connect>
 </Response>`;

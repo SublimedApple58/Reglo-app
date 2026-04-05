@@ -27,6 +27,7 @@ export type AutoscuolaVoiceSettings = {
   voiceRetentionDays: 90;
   voiceInstructions: string;
   voiceAllowedActions: VoiceAllowedAction[];
+  voiceAssistantVoice: string;
 };
 
 type VoiceLineContext = {
@@ -147,6 +148,7 @@ const mapVoiceSettings = async (companyId: string): Promise<AutoscuolaVoiceSetti
       (item): item is VoiceAllowedAction =>
         VOICE_ALLOWED_ACTIONS.includes(item as VoiceAllowedAction),
     ) ?? ["faq", "lesson_info"]) as VoiceAllowedAction[],
+    voiceAssistantVoice: settings.voiceAssistantVoice || "coral",
   };
 };
 
@@ -1103,6 +1105,7 @@ export async function getVoiceCompanyConfig({
   return {
     voiceInstructions: settings.voiceInstructions || null,
     voiceAllowedActions: settings.voiceAllowedActions,
+    voiceAssistantVoice: settings.voiceAssistantVoice || "coral",
   };
 }
 

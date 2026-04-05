@@ -241,6 +241,7 @@ const createCallState = (twilioSocket) => ({
   toNumber: null,
   voiceBookingEnabled: false,
   voiceAllowedActions: [],
+  voiceAssistantVoice: assistantVoice,
   pendingAudio: [],
   handledFunctionCalls: new Set(),
   connectedAt: Date.now(),
@@ -404,7 +405,7 @@ const setupOpenAiSocket = (state) => {
       type: "session.update",
       session: {
         modalities: ["audio", "text"],
-        voice: assistantVoice,
+        voice: state.voiceAssistantVoice || assistantVoice,
         input_audio_format: "g711_ulaw",
         output_audio_format: "g711_ulaw",
         turn_detection: { type: "server_vad" },
@@ -582,6 +583,10 @@ wsServer.on("connection", (socket) => {
               .map((entry) => entry.trim())
               .filter(Boolean)
           : [];
+      state.voiceAssistantVoice =
+        typeof params.voiceAssistantVoice === "string" && params.voiceAssistantVoice.trim()
+          ? params.voiceAssistantVoice.trim()
+          : assistantVoice;
 
       try {
         setupOpenAiSocket(state);

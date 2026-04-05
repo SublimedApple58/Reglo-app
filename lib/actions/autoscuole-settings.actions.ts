@@ -320,6 +320,7 @@ const autoscuolaSettingsPatchSchema = z
       .min(1)
       .transform((items) => Array.from(new Set(items)))
       .optional(),
+    voiceAssistantVoice: z.string().min(1).max(50).optional(),
   })
   .refine(
     (value) =>
@@ -524,6 +525,7 @@ export type AutoscuolaSettingsData = {
   voiceRetentionDays: 90;
   voiceInstructions: string;
   voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
+  voiceAssistantVoice: string;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -720,6 +722,10 @@ const resolveAutoscuolaSettingsData = async (
         ),
       )
     : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
+  const voiceAssistantVoice =
+    typeof limits.voiceAssistantVoice === "string" && limits.voiceAssistantVoice.trim().length
+      ? limits.voiceAssistantVoice.trim()
+      : "coral";
 
   return {
     availabilityWeeks,
@@ -776,6 +782,7 @@ const resolveAutoscuolaSettingsData = async (
     voiceRetentionDays,
     voiceInstructions,
     voiceAllowedActions,
+    voiceAssistantVoice,
   };
 };
 
@@ -986,6 +993,10 @@ export async function updateAutoscuolaSettings(
           ),
         )
       : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
+    const previousVoiceAssistantVoice =
+      typeof limits.voiceAssistantVoice === "string" && limits.voiceAssistantVoice.trim().length
+        ? limits.voiceAssistantVoice.trim()
+        : "coral";
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
@@ -1082,6 +1093,9 @@ export async function updateAutoscuolaSettings(
     const nextVoiceAllowedActions = nextVoiceFeatureEnabled
       ? payload.voiceAllowedActions ?? previousVoiceAllowedActions
       : [...DEFAULT_VOICE_ALLOWED_ACTIONS];
+    const nextVoiceAssistantVoice = nextVoiceFeatureEnabled
+      ? payload.voiceAssistantVoice ?? previousVoiceAssistantVoice
+      : "coral";
 
     if (nextAutoPaymentsEnabled) {
       const stripe = await isAutoscuolaStripeConnectReady({
@@ -1115,6 +1129,7 @@ export async function updateAutoscuolaSettings(
       payload.voiceOfficeHours !== undefined ||
       payload.voiceHandoffPhone !== undefined ||
       payload.voiceAllowedActions !== undefined ||
+      payload.voiceAssistantVoice !== undefined ||
       payload.voiceInstructions !== undefined ||
       payload.voiceLegalGreetingEnabled !== undefined ||
       payload.voiceRecordingEnabled !== undefined ||
@@ -1197,6 +1212,7 @@ export async function updateAutoscuolaSettings(
       voiceRetentionDays: DEFAULT_VOICE_RETENTION_DAYS,
       voiceInstructions: nextVoiceInstructions,
       voiceAllowedActions: nextVoiceAllowedActions,
+      voiceAssistantVoice: nextVoiceAssistantVoice,
     };
 
     if (service) {
@@ -1275,6 +1291,7 @@ export async function updateAutoscuolaSettings(
         voiceRetentionDays: nextLimits.voiceRetentionDays,
         voiceInstructions: nextLimits.voiceInstructions,
         voiceAllowedActions: nextLimits.voiceAllowedActions,
+        voiceAssistantVoice: nextLimits.voiceAssistantVoice,
       },
     };
   } catch (error) {
