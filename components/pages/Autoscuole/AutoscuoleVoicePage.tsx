@@ -38,7 +38,15 @@ import {
   ChevronDown,
   Play,
   Square,
+  HelpCircle,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -444,6 +452,27 @@ export function AutoscuoleVoicePage() {
           </div>
         )}
 
+        {/* Setup guide link */}
+        {isReady && voiceDisplayNumber && (
+          <Dialog>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs text-pink-600 hover:text-pink-700 transition-colors cursor-pointer"
+              >
+                <HelpCircle className="size-3.5" />
+                Come collegare il numero della segretaria al tuo telefono
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Collega il numero della segretaria</DialogTitle>
+              </DialogHeader>
+              <VoiceSetupGuide phoneNumber={voiceDisplayNumber} />
+            </DialogContent>
+          </Dialog>
+        )}
+
         {/* Settings accordion */}
         <div className="rounded-2xl border border-border bg-white shadow-card">
           {/* Comportamento e azioni */}
@@ -713,6 +742,169 @@ function VoiceAccordion({
           </motion.div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Voice Setup Guide (modal content) ───────────────────────────────────────
+
+function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
+  const num = phoneNumber.replace(/\s/g, "");
+
+  return (
+    <div className="space-y-6 text-sm text-foreground">
+      <p className="text-muted-foreground">
+        Per far arrivare le chiamate alla segretaria AI, devi impostare la <strong>deviazione di chiamata</strong> dal
+        tuo numero aziendale verso il numero della segretaria: <strong className="font-mono">{phoneNumber}</strong>
+      </p>
+
+      {/* Quick start */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Metodo rapido</h3>
+        <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Da cellulare</p>
+          <p className="text-xs">Digita il seguente codice e premi Chiama:</p>
+          <code className="block rounded-lg bg-white border border-border px-3 py-2 font-mono text-sm select-all">
+            **21*{num}#
+          </code>
+          <p className="text-[11px] text-muted-foreground">
+            Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">##21#</code>
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Da telefono fisso</p>
+          <p className="text-xs">Digita il seguente codice dal telefono collegato alla linea:</p>
+          <code className="block rounded-lg bg-white border border-border px-3 py-2 font-mono text-sm select-all">
+            *21*{num}#
+          </code>
+          <p className="text-[11px] text-muted-foreground">
+            Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">#21#</code>
+          </p>
+        </div>
+      </section>
+
+      {/* Per carrier */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Istruzioni per operatore</h3>
+
+        <CarrierBlock
+          name="TIM"
+          type="mobile"
+          code={`**21*${num}#`}
+          disableCode="##21#"
+          notes="Funziona subito, nessuna attivazione necessaria."
+        />
+        <CarrierBlock
+          name="TIM"
+          type="fisso"
+          code={`*21*${num}#`}
+          disableCode="#21#"
+          notes="Il servizio potrebbe dover essere attivato chiamando il 187 (privati) o 191 (business). Attivazione in 24-48 ore. Gratuito su linee fibra, 3 EUR/mese su ADSL."
+        />
+        <CarrierBlock
+          name="Vodafone"
+          type="mobile e fisso"
+          code={`**21*${num}#`}
+          disableCode="##21#"
+          notes="Su fisso si pu&ograve; gestire anche dal pannello Vodafone Station."
+        />
+        <CarrierBlock
+          name="WindTre"
+          type="mobile"
+          code={`**21*${num}*#`}
+          disableCode="##21#"
+          notes={<>Attenzione alla sintassi: c&apos;&egrave; un <code className="font-mono bg-white border border-border px-1 rounded">*</code> in pi&ugrave; prima del <code className="font-mono bg-white border border-border px-1 rounded">#</code> finale.</>}
+        />
+        <CarrierBlock
+          name="Fastweb"
+          type="fisso"
+          code={`*21*${num}#`}
+          disableCode="#21#"
+          notes="Gestibile anche dal portale MyFastweb. Costo: circa 0,05 EUR/chiamata deviata."
+        />
+        <CarrierBlock
+          name="Iliad"
+          type="mobile"
+          code={`**21*+39${num.replace(/^\+39/, "")}#`}
+          disableCode="##21#"
+          notes="Iliad richiede il prefisso +39. Costo: 0,05 EUR/min per le chiamate deviate."
+        />
+      </section>
+
+      {/* Alternative: smartphone settings */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">In alternativa: dalle impostazioni del telefono</h3>
+        <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-3 text-xs">
+          <div>
+            <p className="font-semibold">iPhone</p>
+            <p className="text-muted-foreground">
+              Impostazioni &rarr; Telefono &rarr; Inoltro chiamate &rarr; attiva e inserisci{" "}
+              <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">{num}</code>
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold">Android</p>
+            <p className="text-muted-foreground">
+              App Telefono &rarr; Menu (&hellip;) &rarr; Impostazioni &rarr; Deviazione chiamate &rarr; Devia sempre &rarr; inserisci{" "}
+              <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">{num}</code>
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Tips */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold">Consigli utili</h3>
+        <ul className="list-disc pl-4 space-y-1.5 text-xs text-muted-foreground">
+          <li>
+            <strong className="text-foreground">Testa subito:</strong> dopo aver attivato la deviazione, chiama il tuo numero da un altro telefono per verificare che risponda la segretaria AI.
+          </li>
+          <li>
+            <strong className="text-foreground">Deviazione condizionata:</strong> se vuoi deviare solo quando non rispondi, usa <code className="font-mono bg-white border border-border px-1 rounded">**61*{num}#</code> (cellulare) o <code className="font-mono bg-white border border-border px-1 rounded">*23*{num}#</code> (fisso TIM/Fastweb).
+          </li>
+          <li>
+            <strong className="text-foreground">Disattiva la segreteria telefonica</strong> del tuo operatore prima di impostare la deviazione, altrimenti potrebbe intercettare le chiamate prima del trasferimento.
+          </li>
+          <li>
+            <strong className="text-foreground">Centralino (PBX):</strong> se la tua autoscuola usa un centralino, la deviazione va configurata direttamente sul centralino dal tecnico.
+          </li>
+          <li>
+            <strong className="text-foreground">Per annullare tutto:</strong> digita <code className="font-mono bg-white border border-border px-1 rounded">##002#</code> dal cellulare per rimuovere tutte le deviazioni attive.
+          </li>
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+function CarrierBlock({
+  name,
+  type,
+  code,
+  disableCode,
+  notes,
+}: {
+  name: string;
+  type: string;
+  code: string;
+  disableCode: string;
+  notes: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold">{name}</span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{type}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">Attiva:</span>
+        <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs select-all">{code}</code>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">Disattiva:</span>
+        <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs">{disableCode}</code>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{notes}</p>
     </div>
   );
 }
