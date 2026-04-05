@@ -262,6 +262,7 @@ export async function unassignAutoscuolaVoiceLine(
 
 const provisionAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
+  bundleSid: z.string().startsWith("BU").optional(),
 });
 
 export async function provisionAutoscuolaVoiceLine(
@@ -269,7 +270,7 @@ export async function provisionAutoscuolaVoiceLine(
 ) {
   try {
     await requireGlobalAdmin();
-    const { companyId } = provisionAutoscuolaVoiceLineSchema.parse(input);
+    const { companyId, bundleSid: inputBundleSid } = provisionAutoscuolaVoiceLineSchema.parse(input);
 
     // Check the company doesn't already have a ready voice line
     const existingService = await prisma.companyService.findFirst({
@@ -287,20 +288,26 @@ export async function provisionAutoscuolaVoiceLine(
     const addresses = await client.addresses.list({ limit: 1 });
     const addressSid = addresses.length ? addresses[0].sid : undefined;
 
-    // 2. Find all approved regulatory bundles for IT
-    const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
-      isoCountry: "IT",
-      status: "twilio-approved",
-      limit: 20,
-    });
-    // Also fetch bundles without country filter as fallback
-    if (!bundles.length) {
-      const allBundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+    // 2. Resolve bundle SIDs: prefer explicit input, then search approved IT bundles
+    const bundleSids: (string | null)[] = [];
+    if (inputBundleSid) {
+      bundleSids.push(inputBundleSid);
+    } else {
+      const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+        isoCountry: "IT",
         status: "twilio-approved",
         limit: 20,
       });
-      bundles.push(...allBundles);
+      if (!bundles.length) {
+        const allBundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
+          status: "twilio-approved",
+          limit: 20,
+        });
+        bundles.push(...allBundles);
+      }
+      bundleSids.push(...bundles.map((b) => b.sid));
     }
+    bundleSids.push(null); // last-resort: try without bundle
 
     // 3. Search for available Italian numbers across all types, voice-only
     const itNumbers = client.availablePhoneNumbers("IT");
@@ -332,7 +339,6 @@ export async function provisionAutoscuolaVoiceLine(
     // 4. Try to buy each candidate with each bundle until one succeeds
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
-    const bundleSids = [...bundles.map((b) => b.sid), null];
 
     let purchased: Awaited<ReturnType<typeof client.incomingPhoneNumbers.create>> | null = null;
     let lastError = "";
@@ -359,10 +365,9 @@ export async function provisionAutoscuolaVoiceLine(
 
     if (!purchased) {
       const types = [...new Set(candidates.map((c) => c.type))].join(", ");
-      const bundleCount = bundles.length;
       return {
         success: false,
-        message: `Acquisto fallito. Numeri trovati: ${candidates.length} (${types}), bundle provati: ${bundleCount}. Ultimo errore: ${lastError}`,
+        message: `Acquisto fallito. Numeri trovati: ${candidates.length} (${types}), bundle provati: ${bundleSids.filter(Boolean).length}. Ultimo errore: ${lastError}`,
       };
     }
 
