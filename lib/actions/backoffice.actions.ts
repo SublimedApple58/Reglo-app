@@ -285,7 +285,16 @@ export async function provisionAutoscuolaVoiceLine(
 
     const client = getTwilioClient();
 
-    // 1. Search for available Italian toll-free numbers
+    // 1. Get the address from the bundle's item assignments
+    const itemAssignments = await client.numbers.v2.regulatoryCompliance
+      .bundles(TWILIO_IT_TOLL_FREE_BUNDLE_SID)
+      .itemAssignments.list({ limit: 20 });
+    const addressAssignment = itemAssignments.find((item) =>
+      item.objectSid.startsWith("AD"),
+    );
+    const addressSid = addressAssignment?.objectSid;
+
+    // 2. Search for available Italian toll-free numbers
     const itNumbers = client.availablePhoneNumbers("IT");
     const candidates = await itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 });
 
@@ -293,7 +302,7 @@ export async function provisionAutoscuolaVoiceLine(
       return { success: false, message: "Nessun numero toll-free italiano disponibile su Twilio." };
     }
 
-    // 2. Buy the first available number with the IT toll-free bundle
+    // 3. Buy the first available number with the IT toll-free bundle
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
 
@@ -309,6 +318,7 @@ export async function provisionAutoscuolaVoiceLine(
           statusCallback: statusUrl,
           statusCallbackMethod: "POST",
           bundleSid: TWILIO_IT_TOLL_FREE_BUNDLE_SID,
+          ...(addressSid ? { addressSid } : {}),
           friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
         });
         break;
