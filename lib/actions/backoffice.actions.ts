@@ -261,6 +261,7 @@ export async function unassignAutoscuolaVoiceLine(
 // ─── Auto-provision: buy Twilio number + configure webhooks + assign ─────────
 
 const TWILIO_IT_TOLL_FREE_BUNDLE_SID = "BU50f69fd58b0c82b194b8536870491f8b";
+const TWILIO_IT_ADDRESS_SID = "ADe3e5816900a9a5e88290019bceccb70c";
 
 const provisionAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
@@ -285,16 +286,7 @@ export async function provisionAutoscuolaVoiceLine(
 
     const client = getTwilioClient();
 
-    // 1. Get the address from the bundle's item assignments
-    const itemAssignments = await client.numbers.v2.regulatoryCompliance
-      .bundles(TWILIO_IT_TOLL_FREE_BUNDLE_SID)
-      .itemAssignments.list({ limit: 20 });
-    const addressAssignment = itemAssignments.find((item) =>
-      item.objectSid.startsWith("AD"),
-    );
-    const addressSid = addressAssignment?.objectSid;
-
-    // 2. Search for available Italian toll-free numbers
+    // 1. Search for available Italian toll-free numbers
     const itNumbers = client.availablePhoneNumbers("IT");
     const candidates = await itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 });
 
@@ -318,7 +310,7 @@ export async function provisionAutoscuolaVoiceLine(
           statusCallback: statusUrl,
           statusCallbackMethod: "POST",
           bundleSid: TWILIO_IT_TOLL_FREE_BUNDLE_SID,
-          ...(addressSid ? { addressSid } : {}),
+          addressSid: TWILIO_IT_ADDRESS_SID,
           friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
         });
         break;
