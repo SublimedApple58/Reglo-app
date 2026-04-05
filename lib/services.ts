@@ -23,6 +23,7 @@ export type ServiceLimits = {
   voiceFeatureEnabled?: boolean;
   voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
   voiceLineRef?: string | null;
+  voiceDisplayNumber?: string | null;
   voiceAssistantEnabled?: boolean;
   voiceBookingEnabled?: boolean;
   voiceLanguage?: "it-IT";
