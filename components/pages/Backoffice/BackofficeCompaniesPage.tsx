@@ -95,7 +95,6 @@ function AutoscuolaDrawerContent({
   const [assignDisplayNumber, setAssignDisplayNumber] = useState("");
   const [assignTwilioNumber, setAssignTwilioNumber] = useState("");
   const [assignTwilioSid, setAssignTwilioSid] = useState("");
-  const [provisionBundleSid, setProvisionBundleSid] = useState("");
 
   // Students
   type StudentRow = { id: string; email: string; platform: string | null; status: string; createdAt: string };
@@ -128,10 +127,7 @@ function AutoscuolaDrawerContent({
 
   const handleProvision = () => {
     startProvisioning(async () => {
-      const res = await provisionAutoscuolaVoiceLine({
-        companyId,
-        ...(provisionBundleSid.trim() ? { bundleSid: provisionBundleSid.trim() } : {}),
-      });
+      const res = await provisionAutoscuolaVoiceLine({ companyId });
       if (!res.success) {
         toast.error({ description: ("message" in res ? res.message : null) ?? "Provisioning fallito." });
         return;
@@ -288,13 +284,6 @@ function AutoscuolaDrawerContent({
           ) : (
             /* ── No line: auto-provision + manual fallback ── */
             <div className="space-y-3">
-              {/* Bundle SID (optional) */}
-              <Input
-                value={provisionBundleSid}
-                placeholder="Bundle SID (opzionale, es. BUxxx...)"
-                onChange={(e) => setProvisionBundleSid(e.target.value)}
-                className="font-mono text-xs"
-              />
               {/* Auto-provision button */}
               <Button
                 className="w-full gap-2"

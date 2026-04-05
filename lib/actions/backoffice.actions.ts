@@ -260,9 +260,10 @@ export async function unassignAutoscuolaVoiceLine(
 
 // ─── Auto-provision: buy Twilio number + configure webhooks + assign ─────────
 
+const TWILIO_IT_TOLL_FREE_BUNDLE_SID = "BU50f69fd58b0c82b194b8536870491f8b";
+
 const provisionAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
-  bundleSid: z.string().startsWith("BU").optional(),
 });
 
 export async function provisionAutoscuolaVoiceLine(
@@ -270,7 +271,7 @@ export async function provisionAutoscuolaVoiceLine(
 ) {
   try {
     await requireGlobalAdmin();
-    const { companyId, bundleSid: inputBundleSid } = provisionAutoscuolaVoiceLineSchema.parse(input);
+    const { companyId } = provisionAutoscuolaVoiceLineSchema.parse(input);
 
     // Check the company doesn't already have a ready voice line
     const existingService = await prisma.companyService.findFirst({
@@ -288,86 +289,43 @@ export async function provisionAutoscuolaVoiceLine(
     const addresses = await client.addresses.list({ limit: 1 });
     const addressSid = addresses.length ? addresses[0].sid : undefined;
 
-    // 2. Resolve bundle SIDs: prefer explicit input, then search approved IT bundles
-    const bundleSids: (string | null)[] = [];
-    if (inputBundleSid) {
-      bundleSids.push(inputBundleSid);
-    } else {
-      const bundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
-        isoCountry: "IT",
-        status: "twilio-approved",
-        limit: 20,
-      });
-      if (!bundles.length) {
-        const allBundles = await client.numbers.v2.regulatoryCompliance.bundles.list({
-          status: "twilio-approved",
-          limit: 20,
-        });
-        bundles.push(...allBundles);
-      }
-      bundleSids.push(...bundles.map((b) => b.sid));
-    }
-    bundleSids.push(null); // last-resort: try without bundle
-
-    // 3. Search for available Italian numbers across all types, voice-only
+    // 2. Search for available Italian toll-free numbers
     const itNumbers = client.availablePhoneNumbers("IT");
-    type NumberCandidate = { phoneNumber: string; type: string };
-    const candidates: NumberCandidate[] = [];
-
-    const searchTypes = [
-      { name: "tollFree", fn: () => itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 }) },
-      { name: "national", fn: () => itNumbers.national.list({ voiceEnabled: true, limit: 3 }) },
-      { name: "local", fn: () => itNumbers.local.list({ voiceEnabled: true, limit: 3 }) },
-      { name: "mobile", fn: () => itNumbers.mobile.list({ voiceEnabled: true, limit: 3 }) },
-    ];
-
-    for (const { name, fn } of searchTypes) {
-      try {
-        const results = await fn();
-        for (const r of results) {
-          candidates.push({ phoneNumber: r.phoneNumber, type: name });
-        }
-      } catch {
-        // Type not available for IT
-      }
-    }
+    const candidates = await itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 });
 
     if (!candidates.length) {
-      return { success: false, message: "Nessun numero italiano disponibile su Twilio." };
+      return { success: false, message: "Nessun numero toll-free italiano disponibile su Twilio." };
     }
 
-    // 4. Try to buy each candidate with each bundle until one succeeds
+    // 3. Buy the first available number with the IT toll-free bundle
     const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
     const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
 
     let purchased: Awaited<ReturnType<typeof client.incomingPhoneNumbers.create>> | null = null;
     let lastError = "";
 
-    outer: for (const candidate of candidates) {
-      for (const sid of bundleSids) {
-        try {
-          purchased = await client.incomingPhoneNumbers.create({
-            phoneNumber: candidate.phoneNumber,
-            voiceUrl,
-            voiceMethod: "POST",
-            statusCallback: statusUrl,
-            statusCallbackMethod: "POST",
-            ...(sid ? { bundleSid: sid } : {}),
-            ...(addressSid ? { addressSid } : {}),
-            friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
-          });
-          break outer;
-        } catch (e: unknown) {
-          lastError = e instanceof Error ? e.message : String(e);
-        }
+    for (const candidate of candidates) {
+      try {
+        purchased = await client.incomingPhoneNumbers.create({
+          phoneNumber: candidate.phoneNumber,
+          voiceUrl,
+          voiceMethod: "POST",
+          statusCallback: statusUrl,
+          statusCallbackMethod: "POST",
+          bundleSid: TWILIO_IT_TOLL_FREE_BUNDLE_SID,
+          ...(addressSid ? { addressSid } : {}),
+          friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
+        });
+        break;
+      } catch (e: unknown) {
+        lastError = e instanceof Error ? e.message : String(e);
       }
     }
 
     if (!purchased) {
-      const types = [...new Set(candidates.map((c) => c.type))].join(", ");
       return {
         success: false,
-        message: `Acquisto fallito. Numeri trovati: ${candidates.length} (${types}), bundle provati: ${bundleSids.filter(Boolean).length}. Ultimo errore: ${lastError}`,
+        message: `Acquisto fallito. Numeri provati: ${candidates.length}. Errore: ${lastError}`,
       };
     }
 
