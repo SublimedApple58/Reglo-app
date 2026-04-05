@@ -526,9 +526,9 @@ export type AutoscuolaSettingsData = {
   voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
 };
 
-const resolveAutoscuolaSettingsData = (
+const resolveAutoscuolaSettingsData = async (
   limits: Record<string, unknown>,
-): AutoscuolaSettingsData => {
+): Promise<AutoscuolaSettingsData> => {
   const availabilityWeeks =
     typeof limits.availabilityWeeks === "number"
       ? limits.availabilityWeeks
@@ -789,7 +789,7 @@ export async function getAutoscuolaSettingsForCompany(
     },
   });
   const limits = (service?.limits ?? {}) as Record<string, unknown>;
-  return resolveAutoscuolaSettingsData(limits);
+  return await resolveAutoscuolaSettingsData(limits);
 }
 
 export async function getAutoscuolaSettings() {
