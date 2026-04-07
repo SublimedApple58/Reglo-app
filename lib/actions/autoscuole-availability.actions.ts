@@ -833,7 +833,8 @@ export async function setWeeklyAvailabilityOverride(
 
     // Validate each entry
     for (const entry of payload.schedule) {
-      if (entry.endMinutes <= entry.startMinutes) {
+      const isDayOff = entry.startMinutes === 0 && entry.endMinutes === 0;
+      if (!isDayOff && entry.endMinutes <= entry.startMinutes) {
         return { success: false as const, message: `Intervallo non valido per giorno ${entry.dayOfWeek}.` };
       }
       if (entry.startMinutes2 != null && entry.endMinutes2 != null && entry.endMinutes2 <= entry.startMinutes2) {
