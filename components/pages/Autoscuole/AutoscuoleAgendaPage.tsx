@@ -1788,7 +1788,7 @@ export function AutoscuoleAgendaPage({
             </div>
             <div>
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Data</label>
-              <Input type="date" value={blockForm.date} onChange={(e) => setBlockForm((f) => ({ ...f, date: e.target.value }))} />
+              <DatePicker value={blockForm.date} onChange={(v) => setBlockForm((f) => ({ ...f, date: v }))} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
