@@ -453,30 +453,18 @@ const setupOpenAiSocket = (state) => {
       );
     }
 
-    // Send initial greeting. If custom instructions mention a greeting, let the AI use it.
-    // Otherwise use a default greeting.
-    const hasCustomGreeting = customInstructions &&
-      /salut[oa]|benvenut[oa]|rispond[ie].*con|greeting|accoglienza|presentati/i.test(customInstructions);
-
-    if (hasCustomGreeting) {
-      sendToOpenAi(state, {
-        type: "response.create",
-        response: {
-          modalities: ["audio", "text"],
-          instructions: "Saluta il chiamante seguendo le istruzioni personalizzate. Sii breve, massimo 1-2 frasi.",
-        },
-      });
-    } else {
-      sendToOpenAi(state, {
-        type: "response.create",
-        response: {
-          modalities: ["audio", "text"],
-          instructions: `Saluta brevemente: "${normalizeCompanyName(
-            state.companyName,
-          )}, buongiorno. Come posso aiutarla?" Non aggiungere altro.`,
-        },
-      });
-    }
+    // Send initial greeting — always use the fixed default.
+    // If custom instructions specify a custom greeting, the system instructions
+    // already tell the AI to use it (see buildSessionInstructions).
+    sendToOpenAi(state, {
+      type: "response.create",
+      response: {
+        modalities: ["audio", "text"],
+        instructions: `Saluta brevemente: "${normalizeCompanyName(
+          state.companyName,
+        )}, buongiorno. Come posso aiutarla?" Non aggiungere altro.`,
+      },
+    });
   });
 
   socket.on("message", async (raw) => {
