@@ -216,8 +216,9 @@ model CompanyMember {
   userId         String         @db.Uuid
   role           String         @default("member")
   autoscuolaRole AutoscuolaRole @default(STUDENT)
-  bookingBlocked Boolean        @default(false)
-  createdAt      DateTime       @default(now()) @db.Timestamp(6)
+  bookingBlocked             Boolean        @default(false)
+  weeklyBookingLimitExempt   Boolean        @default(false)
+  createdAt                  DateTime       @default(now()) @db.Timestamp(6)
   updatedAt      DateTime       @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

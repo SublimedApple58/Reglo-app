@@ -20,6 +20,8 @@ export type ServiceLimits = {
   instructorReminderChannels?: ("push" | "whatsapp" | "email")[];
   appBookingActors?: "students" | "instructors" | "both";
   instructorBookingMode?: "manual_full" | "manual_engine" | "guided_proposal";
+  weeklyBookingLimitEnabled?: boolean;
+  weeklyBookingLimit?: number;
   voiceFeatureEnabled?: boolean;
   voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
   voiceLineRef?: string | null;

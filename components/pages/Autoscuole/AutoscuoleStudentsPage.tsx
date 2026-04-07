@@ -44,8 +44,10 @@ import {
   getCompanyInviteCode,
   getPaymentMode,
   toggleStudentBookingBlock,
+  toggleWeeklyBookingLimitExempt,
   setManualPaymentStatus,
 } from "@/lib/actions/autoscuole.actions";
+import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,6 +118,7 @@ type LessonEntry = {
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
+  weeklyBookingLimitExempt?: boolean;
   activeCase: {
     id: string;
     status: string;
@@ -233,6 +236,8 @@ export function AutoscuoleStudentsPage({
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
+  const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
+  const [exemptSaving, setExemptSaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -467,6 +472,11 @@ export function AutoscuoleStudentsPage({
   React.useEffect(() => {
     getCompanyInviteCode().then((res) => {
       if (res.success && res.data) setInviteCode(res.data);
+    });
+    getAutoscuolaSettings().then((res) => {
+      if (res.success && res.data) {
+        setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
+      }
     });
     getPaymentMode().then((res) => {
       if (res.success && res.data) {
@@ -869,6 +879,43 @@ export function AutoscuoleStudentsPage({
                             </Button>
                           </div>
                         </div>
+                        {weeklyLimitActive && (
+                          <div>
+                            <p className="text-[11px] text-muted-foreground">Limite guide settimanali</p>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={register.weeklyBookingLimitExempt ? "secondary" : "outline"} className="text-[11px]">
+                                {register.weeklyBookingLimitExempt ? "Esente" : "Soggetto al limite"}
+                              </Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-[11px]"
+                                disabled={exemptSaving}
+                                onClick={async () => {
+                                  if (!selectedStudentId || exemptSaving) return;
+                                  setExemptSaving(true);
+                                  const res = await toggleWeeklyBookingLimitExempt({
+                                    studentId: selectedStudentId,
+                                    exempt: !register.weeklyBookingLimitExempt,
+                                  });
+                                  setExemptSaving(false);
+                                  if (!res.success) {
+                                    toast.error({ description: res.message ?? "Errore aggiornamento." });
+                                    return;
+                                  }
+                                  setRegister((prev) => prev ? { ...prev, weeklyBookingLimitExempt: !prev.weeklyBookingLimitExempt } : prev);
+                                  toast.success({ description: register.weeklyBookingLimitExempt ? "Limite riattivato." : "Allievo esente dal limite." });
+                                }}
+                              >
+                                {exemptSaving
+                                  ? "Salvo..."
+                                  : register.weeklyBookingLimitExempt
+                                    ? "Riattiva limite"
+                                    : "Rendi esente"}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </section>
 

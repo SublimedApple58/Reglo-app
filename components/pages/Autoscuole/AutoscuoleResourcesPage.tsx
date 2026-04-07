@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
@@ -239,6 +239,8 @@ export function AutoscuoleResourcesPage({
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
   const [bookingCutoffEnabled, setBookingCutoffEnabled] = React.useState(false);
   const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
+  const [weeklyBookingLimitEnabled, setWeeklyBookingLimitEnabled] = React.useState(false);
+  const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
@@ -423,6 +425,8 @@ export function AutoscuoleResourcesPage({
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
       setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
       setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
+      setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
+      setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
       setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
       setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
       setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
@@ -563,6 +567,8 @@ export function AutoscuoleResourcesPage({
       swapNotifyMode,
       bookingCutoffEnabled,
       bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
+      weeklyBookingLimitEnabled,
+      weeklyBookingLimit,
       emptySlotNotificationEnabled,
       emptySlotNotificationTarget,
       emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
@@ -611,6 +617,8 @@ export function AutoscuoleResourcesPage({
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
     setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
     setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
+    setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
+    setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -1662,6 +1670,41 @@ export function AutoscuoleResourcesPage({
                         ))}
                       </SelectContent>
                     </Select>
+                  </FieldGroup>
+                ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={CalendarCheck}
+              title="Limite guide settimanali"
+              description="Limita il numero massimo di guide prenotabili da un allievo per settimana."
+              expanded={expandedSection === "weeklyLimit"}
+              onToggle={() => toggleSection("weeklyLimit")}
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setWeeklyBookingLimitEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Attiva limite settimanale</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi non potranno prenotare pi&ugrave; di un certo numero di guide a settimana (lun-dom). Titolare e istruttori possono scavalcare il limite con conferma.
+                    </span>
+                  </div>
+                  <InlineToggle checked={weeklyBookingLimitEnabled} size="sm" />
+                </div>
+
+                {weeklyBookingLimitEnabled ? (
+                  <FieldGroup label="Guide massime per settimana">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={weeklyBookingLimit}
+                      onChange={(e) => setWeeklyBookingLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                      className="w-24"
+                    />
                   </FieldGroup>
                 ) : null}
               </div>

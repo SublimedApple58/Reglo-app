@@ -77,6 +77,7 @@ const createAppointmentSchema = z.object({
   vehicleId: z.string().uuid(),
   notes: z.string().optional(),
   sendProposal: z.boolean().optional().default(false),
+  skipWeeklyLimitCheck: z.boolean().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -1241,6 +1242,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
       data: {
         student,
         bookingBlocked: studentMembership.bookingBlocked,
+        weeklyBookingLimitExempt: studentMembership.weeklyBookingLimitExempt,
         activeCase: register.activeCase,
         summary: register.summary,
         extendedSummary: { booked, completed, cancelled, upcoming, manualUnpaid },
@@ -1730,6 +1732,69 @@ export async function createAutoscuolaAppointment(
         };
       }
       // Owner/Admin: soft warning — don't block, just flag
+    }
+
+    // Weekly booking limit enforcement
+    const weeklyLimitSettings = await (async () => {
+      const svc = await prisma.companyService.findFirst({
+        where: { companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      });
+      const lim = (svc?.limits ?? {}) as Record<string, unknown>;
+      const enabled = lim.weeklyBookingLimitEnabled === true;
+      const limit = typeof lim.weeklyBookingLimit === "number" && lim.weeklyBookingLimit >= 1
+        ? lim.weeklyBookingLimit
+        : 3;
+      return { enabled, limit };
+    })();
+
+    if (weeklyLimitSettings.enabled && !payload.skipWeeklyLimitCheck) {
+      // Check if student is exempt
+      const memberRecord = await prisma.companyMember.findFirst({
+        where: { companyId, userId: payload.studentId },
+        select: { weeklyBookingLimitExempt: true },
+      });
+      const isExempt = memberRecord?.weeklyBookingLimitExempt === true;
+
+      if (!isExempt) {
+        // Calculate current ISO week bounds (Monday-Sunday) for the slot being booked
+        const slotDate = new Date(payload.startsAt);
+        const dayOfWeek = slotDate.getUTCDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const weekStart = new Date(slotDate);
+        weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+        weekStart.setUTCHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+        const weekCount = await prisma.autoscuolaAppointment.count({
+          where: {
+            companyId,
+            studentId: payload.studentId,
+            status: { notIn: ["cancelled"] },
+            startsAt: { gte: weekStart, lt: weekEnd },
+          },
+        });
+
+        if (weekCount >= weeklyLimitSettings.limit) {
+          if (isStudentActor) {
+            return {
+              success: false,
+              message: `Hai raggiunto il limite massimo di ${weeklyLimitSettings.limit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
+              code: "WEEKLY_LIMIT_REACHED" as const,
+            };
+          }
+          // Instructor or Admin: return warning but don't block (unless skipWeeklyLimitCheck is false and they haven't confirmed)
+          if (isInstructorActor || isOwnerOrAdminActor) {
+            return {
+              success: false,
+              message: `L'allievo ha già raggiunto il limite di ${weeklyLimitSettings.limit} guide settimanali (${weekCount} prenotate). Vuoi procedere comunque?`,
+              code: "WEEKLY_LIMIT_CONFIRM" as const,
+              weeklyLimitData: { current: weekCount, limit: weeklyLimitSettings.limit },
+            };
+          }
+        }
+      }
     }
 
     const shouldSendProposal =
@@ -3761,6 +3826,43 @@ export async function toggleStudentBookingBlock(
       message: payload.blocked
         ? "Prenotazioni bloccate per l'allievo."
         : "Prenotazioni riattivate per l'allievo.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Weekly booking limit exemption
+// ---------------------------------------------------------------------------
+
+const toggleWeeklyBookingLimitExemptSchema = z.object({
+  studentId: z.string().uuid(),
+  exempt: z.boolean(),
+});
+
+export async function toggleWeeklyBookingLimitExempt(
+  input: z.infer<typeof toggleWeeklyBookingLimitExemptSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = toggleWeeklyBookingLimitExemptSchema.parse(input);
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { weeklyBookingLimitExempt: payload.exempt },
+    });
+
+    return {
+      success: true,
+      data: { weeklyBookingLimitExempt: payload.exempt },
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

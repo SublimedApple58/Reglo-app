@@ -2088,6 +2088,41 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         ? limits.instructorPreferenceEnabled
         : false;
 
+    // Weekly booking limit info
+    const weeklyBookingLimitEnabled = limits.weeklyBookingLimitEnabled === true;
+    const weeklyBookingLimit = typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
+      ? limits.weeklyBookingLimit
+      : 3;
+    let weeklyLimitReached = false;
+    let weeklyBookingCount = 0;
+    if (weeklyBookingLimitEnabled) {
+      const memberRecord = await prisma.companyMember.findFirst({
+        where: { companyId: membership.companyId, userId: payload.studentId },
+        select: { weeklyBookingLimitExempt: true },
+      });
+      if (!memberRecord?.weeklyBookingLimitExempt) {
+        // Count bookings for current week (Mon-Sun)
+        const now = new Date();
+        const dayOfWeek = now.getUTCDay();
+        const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const weekStart = new Date(now);
+        weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+        weekStart.setUTCHours(0, 0, 0, 0);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+        weeklyBookingCount = await prisma.autoscuolaAppointment.count({
+          where: {
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            status: { notIn: ["cancelled"] },
+            startsAt: { gte: weekStart, lt: weekEnd },
+          },
+        });
+        weeklyLimitReached = weeklyBookingCount >= weeklyBookingLimit;
+      }
+    }
+
     return {
       success: true,
       data: {
@@ -2096,6 +2131,12 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         availableLessonTypes,
         studentBookingMode: governance.studentBookingMode,
         instructorPreferenceEnabled,
+        weeklyBookingLimit: weeklyBookingLimitEnabled ? {
+          enabled: true,
+          limit: weeklyBookingLimit,
+          current: weeklyBookingCount,
+          reached: weeklyLimitReached,
+        } : { enabled: false },
       },
     };
   } catch (error) {
