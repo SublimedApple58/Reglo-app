@@ -26,6 +26,8 @@ import {
   permanentlyCancelAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
+  createInstructorBlock,
+  deleteInstructorBlock,
 } from "@/lib/actions/autoscuole.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -69,6 +71,7 @@ type AgendaBootstrapPayload = {
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
   holidays?: Array<{ date: string; label: string | null }>;
+  instructorBlocks?: Array<Record<string, unknown>>;
   meta: {
     from: string | Date;
     to: string | Date;
@@ -181,6 +184,13 @@ export function AutoscuoleAgendaPage({
   const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
+  const [instructorBlocks, setInstructorBlocks] = React.useState<Array<{
+    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null;
+  }>>([]);
+  const [blockDialogOpen, setBlockDialogOpen] = React.useState(false);
+  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", endTime: "10:00", reason: "" });
+  const [blockCreating, setBlockCreating] = React.useState(false);
+  const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
   const [holidayDialogDate, setHolidayDialogDate] = React.useState<Date | null>(null);
   const [holidayLabel, setHolidayLabel] = React.useState("");
@@ -268,6 +278,13 @@ export function AutoscuoleAgendaPage({
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
         setHolidays(payload.data.holidays ?? []);
+        setInstructorBlocks((payload.data.instructorBlocks ?? []).map((b: Record<string, unknown>) => ({
+          id: b.id as string,
+          instructorId: b.instructorId as string,
+          startsAt: typeof b.startsAt === "string" ? b.startsAt : (b.startsAt as Date).toISOString(),
+          endsAt: typeof b.endsAt === "string" ? b.endsAt : (b.endsAt as Date).toISOString(),
+          reason: (b.reason as string | null) ?? null,
+        })));
       }
     } catch (error) {
       if (!prefetch) {
@@ -694,7 +711,11 @@ export function AutoscuoleAgendaPage({
           )}
 
           {/* Spacer + CTA */}
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", endTime: "10:00", reason: "" }); setBlockDialogOpen(true); }}>
+              <Ban className="mr-1.5 size-3.5" />
+              Nuovo evento
+            </Button>
             <Button size="sm" onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
               <Plus className="mr-1.5 size-3.5" />
               Nuovo appuntamento
@@ -858,6 +879,60 @@ export function AutoscuoleAgendaPage({
                           </DropdownMenu>
                         );
                       })}
+                      {/* Instructor blocks for this day */}
+                      {instructorBlocks
+                        .filter((b) => {
+                          const bStart = toDate(b.startsAt);
+                          return bStart >= dayStart && bStart < dayEnd;
+                        })
+                        .map((b) => {
+                          const bStart = toDate(b.startsAt);
+                          const bEnd = toDate(b.endsAt);
+                          const offsetMin = Math.max(0, diffMinutes(bStart < dayStart ? dayStart : bStart, dayStart));
+                          const durMin = Math.max(15, diffMinutes(bEnd > dayEnd ? dayEnd : bEnd, bStart < dayStart ? dayStart : bStart));
+                          const top = offsetMin * PIXELS_PER_MINUTE;
+                          const height = durMin * PIXELS_PER_MINUTE;
+                          const instrName = instructors.find((i) => i.id === b.instructorId)?.name ?? "";
+                          return (
+                            <DropdownMenu key={`block-${b.id}`}>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
+                                  style={{ top, height }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
+                                  <span className="truncate text-[10px] text-slate-500">{instrName} · {formatTimeRange(bStart, bEnd)}</span>
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                                <div className="space-y-2">
+                                  <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                  <div className="text-xs text-muted-foreground">{instrName}</div>
+                                  <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  disabled={blockDeleting === b.id}
+                                  onClick={async () => {
+                                    setBlockDeleting(b.id);
+                                    const res = await deleteInstructorBlock(b.id);
+                                    setBlockDeleting(null);
+                                    if (!res.success) { toast.error({ description: res.message ?? "Errore eliminazione." }); return; }
+                                    setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
+                                    toast.success({ description: "Blocco eliminato." });
+                                  }}
+                                >
+                                  {blockDeleting === b.id ? "Elimino..." : "Elimina blocco"}
+                                </Button>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          );
+                        })}
                     </div>
                   );
                 })}
@@ -1689,6 +1764,92 @@ export function AutoscuoleAgendaPage({
                 </Button>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Instructor Block Creation Dialog ── */}
+      <Dialog open={blockDialogOpen} onOpenChange={(open) => { if (!blockCreating) setBlockDialogOpen(open); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuovo evento bloccante</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Istruttore</label>
+              <Select value={blockForm.instructorId} onValueChange={(v) => setBlockForm((f) => ({ ...f, instructorId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
+                <SelectContent>
+                  {instructors.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Data</label>
+              <Input type="date" value={blockForm.date} onChange={(e) => setBlockForm((f) => ({ ...f, date: e.target.value }))} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Ora inizio</label>
+                <Select value={blockForm.startTime} onValueChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 48 }, (_, i) => { const h = Math.floor(i * 30 / 60); const m = (i * 30) % 60; const v = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; return <SelectItem key={v} value={v}>{v}</SelectItem>; })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Ora fine</label>
+                <Select value={blockForm.endTime} onValueChange={(v) => setBlockForm((f) => ({ ...f, endTime: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 48 }, (_, i) => { const h = Math.floor((i + 1) * 30 / 60); const m = ((i + 1) * 30) % 60; const v = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; return <SelectItem key={v} value={v}>{v}</SelectItem>; })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titolo (opzionale)</label>
+              <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setBlockDialogOpen(false)} disabled={blockCreating}>Annulla</Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={blockCreating || !blockForm.instructorId || !blockForm.date}
+              onClick={async () => {
+                setBlockCreating(true);
+                const startsAt = new Date(`${blockForm.date}T${blockForm.startTime}:00`).toISOString();
+                const endsAt = new Date(`${blockForm.date}T${blockForm.endTime}:00`).toISOString();
+                const res = await createInstructorBlock({
+                  instructorId: blockForm.instructorId,
+                  startsAt,
+                  endsAt,
+                  reason: blockForm.reason.trim() || undefined,
+                });
+                setBlockCreating(false);
+                if (!res.success) {
+                  toast.error({ description: res.message ?? "Errore creazione evento." });
+                  return;
+                }
+                const d = res.data as { id: string; instructorId: string; startsAt: Date; endsAt: Date; reason: string | null };
+                setInstructorBlocks((prev) => [...prev, {
+                  id: d.id,
+                  instructorId: d.instructorId,
+                  startsAt: d.startsAt instanceof Date ? d.startsAt.toISOString() : String(d.startsAt),
+                  endsAt: d.endsAt instanceof Date ? d.endsAt.toISOString() : String(d.endsAt),
+                  reason: d.reason,
+                }]);
+                setBlockDialogOpen(false);
+                toast.success({ description: "Evento creato." });
+              }}
+            >
+              {blockCreating ? "Creazione..." : "Crea evento"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

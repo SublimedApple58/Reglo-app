@@ -3708,6 +3708,7 @@ export async function getCompanyInviteCode() {
 // ─── Instructor Blocks ──────────────────────────────────────────────────────
 
 const createInstructorBlockSchema = z.object({
+  instructorId: z.string().uuid().optional(),
   startsAt: z.string(),
   endsAt: z.string(),
   reason: z.string().optional(),
@@ -3719,24 +3720,41 @@ export async function createInstructorBlock(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = createInstructorBlockSchema.parse(input);
+    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
 
-    const instructor = await prisma.autoscuolaInstructor.findFirst({
-      where: {
-        companyId: membership.companyId,
-        userId: membership.userId,
-        status: { not: "inactive" },
-      },
+    let resolvedInstructorId = payload.instructorId;
+
+    if (!resolvedInstructorId) {
+      // Instructor creating block for themselves
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: membership.userId,
+          status: { not: "inactive" },
+        },
+        select: { id: true },
+      });
+      if (!instructor) {
+        return { success: false as const, message: "Profilo istruttore non trovato." };
+      }
+      resolvedInstructorId = instructor.id;
+    } else if (!isOwnerOrAdmin) {
+      return { success: false as const, message: "Solo il titolare può creare blocchi per altri istruttori." };
+    }
+
+    // Verify the instructor exists in this company
+    const targetInstructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: resolvedInstructorId, companyId: membership.companyId, status: { not: "inactive" } },
       select: { id: true },
     });
-
-    if (!instructor) {
-      return { success: false as const, message: "Profilo istruttore non trovato." };
+    if (!targetInstructor) {
+      return { success: false as const, message: "Istruttore non trovato." };
     }
 
     const block = await prisma.autoscuolaInstructorBlock.create({
       data: {
         companyId: membership.companyId,
-        instructorId: instructor.id,
+        instructorId: targetInstructor.id,
         startsAt: new Date(payload.startsAt),
         endsAt: new Date(payload.endsAt),
         reason: payload.reason ?? null,
@@ -3754,30 +3772,28 @@ export async function createInstructorBlock(
 export async function deleteInstructorBlock(blockId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-
-    const instructor = await prisma.autoscuolaInstructor.findFirst({
-      where: {
-        companyId: membership.companyId,
-        userId: membership.userId,
-        status: { not: "inactive" },
-      },
-      select: { id: true },
-    });
-
-    if (!instructor) {
-      return { success: false as const, message: "Profilo istruttore non trovato." };
-    }
+    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
 
     const block = await prisma.autoscuolaInstructorBlock.findFirst({
       where: {
         id: blockId,
         companyId: membership.companyId,
-        instructorId: instructor.id,
       },
     });
 
     if (!block) {
       return { success: false as const, message: "Blocco non trovato." };
+    }
+
+    // Instructors can only delete their own blocks
+    if (!isOwnerOrAdmin) {
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId: membership.companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instructor || block.instructorId !== instructor.id) {
+        return { success: false as const, message: "Non puoi eliminare blocchi di altri istruttori." };
+      }
     }
 
     await prisma.autoscuolaInstructorBlock.delete({
