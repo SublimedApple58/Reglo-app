@@ -807,9 +807,9 @@ export async function getDefaultAvailability(input: z.infer<typeof getDefaultAva
 const dayScheduleEntrySchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   startMinutes: z.number().int().min(0).max(1410),
-  endMinutes: z.number().int().min(30).max(1440),
+  endMinutes: z.number().int().min(0).max(1440),
   startMinutes2: z.number().int().min(0).max(1410).optional().nullable(),
-  endMinutes2: z.number().int().min(30).max(1440).optional().nullable(),
+  endMinutes2: z.number().int().min(0).max(1440).optional().nullable(),
   ranges: z.array(z.object({
     startMinutes: z.number().int().min(0).max(1440),
     endMinutes: z.number().int().min(0).max(1440),
