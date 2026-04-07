@@ -95,6 +95,7 @@ const buildSessionInstructions = (state, customInstructions = "") => {
     "- NON fare premesse, NON ripetere la domanda, NON dire 'certo', 'assolutamente', 'capisco'.",
     "- NON inventare mai informazioni. Se non sai qualcosa, dillo subito.",
     "- Se hai il tool giusto, USALO subito senza annunciare che lo userai.",
+    "- RUMORI DI FONDO: se senti solo rumori, respiri, o suoni non chiari, NON rispondere. Aspetta che il chiamante parli chiaramente. NON ripetere la stessa domanda piu' di una volta di seguito.",
     "AZIONI CONSENTITE: " + actions + ".",
     "STRUMENTI:",
     "- search_knowledge: per info su corsi, prezzi, regolamenti.",
@@ -408,7 +409,12 @@ const setupOpenAiSocket = (state) => {
         voice: state.voiceAssistantVoice || assistantVoice,
         input_audio_format: "g711_ulaw",
         output_audio_format: "g711_ulaw",
-        turn_detection: { type: "server_vad" },
+        turn_detection: {
+          type: "server_vad",
+          threshold: 0.65,
+          prefix_padding_ms: 400,
+          silence_duration_ms: 800,
+        },
         input_audio_transcription: { model: "whisper-1" },
         instructions: buildSessionInstructions(state, ""),
         tools: buildRealtimeTools(state),
@@ -421,24 +427,15 @@ const setupOpenAiSocket = (state) => {
     }
     state.pendingAudio = [];
 
-    sendToOpenAi(state, {
-      type: "response.create",
-      response: {
-        modalities: ["audio", "text"],
-        instructions: `Saluta brevemente: "${normalizeCompanyName(
-          state.companyName,
-        )}, buongiorno. Mi dica." Non aggiungere altro.`,
-      },
-    });
-
-    // Load custom instructions in the background and update session if present.
-    // 4-second timeout so a slow API never blocks the call.
+    // Load custom instructions before greeting so we can use a custom greeting if configured.
+    // 3-second timeout so a slow API never blocks the call too long.
+    let customInstructions = "";
     try {
       const configResult = await callTool(
         { companyId: state.companyId, tool: "get_config", input: {} },
-        { timeoutMs: 4000 },
+        { timeoutMs: 3000 },
       );
-      const customInstructions =
+      customInstructions =
         configResult.success && configResult.data?.voiceInstructions
           ? configResult.data.voiceInstructions
           : "";
@@ -454,6 +451,31 @@ const setupOpenAiSocket = (state) => {
           error instanceof Error ? error.message : "unknown"
         }\n`,
       );
+    }
+
+    // Send initial greeting. If custom instructions mention a greeting, let the AI use it.
+    // Otherwise use a default greeting.
+    const hasCustomGreeting = customInstructions &&
+      /salut[oa]|benvenut[oa]|rispond[ie].*con|greeting|accoglienza|presentati/i.test(customInstructions);
+
+    if (hasCustomGreeting) {
+      sendToOpenAi(state, {
+        type: "response.create",
+        response: {
+          modalities: ["audio", "text"],
+          instructions: "Saluta il chiamante seguendo le istruzioni personalizzate. Sii breve, massimo 1-2 frasi.",
+        },
+      });
+    } else {
+      sendToOpenAi(state, {
+        type: "response.create",
+        response: {
+          modalities: ["audio", "text"],
+          instructions: `Saluta brevemente: "${normalizeCompanyName(
+            state.companyName,
+          )}, buongiorno. Come posso aiutarla?" Non aggiungere altro.`,
+        },
+      });
     }
   });
 
