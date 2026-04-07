@@ -96,6 +96,7 @@ const buildSessionInstructions = (state, customInstructions = "") => {
     "- NON inventare mai informazioni. Se non sai qualcosa, dillo subito.",
     "- Se hai il tool giusto, USALO subito senza annunciare che lo userai.",
     "- RUMORI DI FONDO: se senti solo rumori, respiri, o suoni non chiari, NON rispondere. Aspetta che il chiamante parli chiaramente. NON ripetere la stessa domanda piu' di una volta di seguito.",
+    "- COMPORTAMENTO INIZIALE: dopo il saluto, aspetta che il chiamante ti dica cosa vuole. NON proporre nulla, NON chiedere il numero di cellulare, NON iniziare il flusso prenotazione a meno che il chiamante non lo chieda esplicitamente.",
     "AZIONI CONSENTITE: " + actions + ".",
     "STRUMENTI:",
     "- search_knowledge: per info su corsi, prezzi, regolamenti.",
@@ -104,8 +105,8 @@ const buildSessionInstructions = (state, customInstructions = "") => {
   if (state.voiceBookingEnabled) {
     parts.push(
       "PRONUNCIA ORARI: usa sempre il campo 'spoken' restituito da check_availability. Es: 'alle 9', 'alle 10 e mezza'. MAI leggere orari in formato HH:MM.",
-      "FLUSSO PRENOTAZIONE LEZIONE — seguilo ESATTAMENTE in questo ordine:",
-      "PASSO 1: quando lo studente chiede di prenotare, di': 'Dimmi il tuo numero di cellulare.' Poi chiama find_student col numero.",
+      "FLUSSO PRENOTAZIONE LEZIONE — IMPORTANTE: avvia questo flusso SOLO quando il chiamante chiede ESPLICITAMENTE di prenotare una guida/lezione. MAI avviarlo di tua iniziativa.",
+      "PASSO 1: SOLO dopo che il chiamante ha chiesto di prenotare, di': 'Dimmi il tuo numero di cellulare.' Poi chiama find_student col numero.",
       "PASSO 2: se find_student non trova nessuno di': 'Non ti trovo in archivio. Vuoi che ti richiamiamo?' e usa create_callback. FINE.",
       "PASSO 3: se find_student trova lo studente, di' SOLO il nome e cognome trovato e chiedi: 'Sei tu?' Aspetta conferma.",
       "PASSO 4: se nega o e' incerto, di': 'Non posso procedere. Vuoi che ti richiamiamo?' FINE.",
@@ -453,16 +454,22 @@ const setupOpenAiSocket = (state) => {
       );
     }
 
-    // Send initial greeting — always use the fixed default.
-    // If custom instructions specify a custom greeting, the system instructions
-    // already tell the AI to use it (see buildSessionInstructions).
+    // Send initial greeting with time-appropriate salutation (Europe/Rome)
+    const romeHour = parseInt(
+      new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Rome", hour: "numeric", hour12: false })
+        .formatToParts(new Date())
+        .find((p) => p.type === "hour")?.value ?? "12",
+      10,
+    );
+    const saluto = romeHour < 13 ? "buongiorno" : "buonasera";
+
     sendToOpenAi(state, {
       type: "response.create",
       response: {
         modalities: ["audio", "text"],
         instructions: `Saluta brevemente: "${normalizeCompanyName(
           state.companyName,
-        )}, buongiorno. Come posso aiutarla?" Non aggiungere altro.`,
+        )}, ${saluto}. Come posso aiutarla?" Non aggiungere altro.`,
       },
     });
   });
