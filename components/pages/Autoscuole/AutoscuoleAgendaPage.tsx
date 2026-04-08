@@ -1144,7 +1144,7 @@ export function AutoscuoleAgendaPage({
                     const color = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
-                      <div key={`${day.toISOString()}-${instr.instructorId}`} className="flex flex-col items-center gap-0.5 py-1.5 border-l border-border/40">
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-border" : "border-border/30")}>
                         <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", color.avatar)}>{initials}</div>
                         <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
                       </div>
@@ -1248,7 +1248,7 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative overflow-hidden border-l border-border/40", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative overflow-hidden border-l", instrIdx === 0 ? "border-border" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
                       >
                         {isColumnHoliday && (
