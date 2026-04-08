@@ -985,8 +985,8 @@ export async function applyLessonCreditToExistingAppointment({
     return { applied: false };
   }
 
-  // Only apply to appointments with unpaid manual status
-  if (appointment.manualPaymentStatus !== "unpaid") {
+  // Only apply to appointments not already marked as paid
+  if (appointment.manualPaymentStatus === "paid") {
     return { applied: false };
   }
 
