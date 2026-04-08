@@ -110,6 +110,7 @@ type LessonEntry = {
   cancellationReason: string | null;
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
+  creditApplied: boolean;
   lateCancellationAction: string | null;
   notes: string | null;
   createdAt: string | Date | null;
@@ -1136,9 +1137,14 @@ export function AutoscuoleStudentsPage({
                                   {formatDate(lesson.startsAt, true)}
                                 </p>
                                 <div className="flex items-center gap-1.5">
-                                  {isPenaltyCharged && (
+                                  {isPenaltyCharged && !lesson.creditApplied && (
                                     <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
                                       {isNoShow ? "Assente" : "Annullata"} — Da pagare
+                                    </Badge>
+                                  )}
+                                  {isPenaltyCharged && lesson.creditApplied && (
+                                    <Badge variant="secondary" className="border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
+                                      {isNoShow ? "Assente" : "Annullata"} — Coperta da credito
                                     </Badge>
                                   )}
                                   {isPenaltyPaid && (
@@ -1146,7 +1152,12 @@ export function AutoscuoleStudentsPage({
                                       {isNoShow ? "Assente" : "Annullata"} — Pagata
                                     </Badge>
                                   )}
-                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "paid" && manualMode && (
+                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.creditApplied && (
+                                    <Badge variant="secondary" className="border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
+                                      Coperta da credito
+                                    </Badge>
+                                  )}
+                                  {!isPenaltyCharged && !isPenaltyPaid && !lesson.creditApplied && lesson.manualPaymentStatus === "paid" && manualMode && (
                                     <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
                                       Pagata
                                     </Badge>
