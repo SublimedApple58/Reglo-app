@@ -1109,9 +1109,14 @@ export function AutoscuoleStudentsPage({
                           const isCheckedIn = lesson.status === "checked_in";
                           const isCancelled = lesson.status === "cancelled";
                           const isNoShow = lesson.status === "no_show";
+                          const creditsActiveNotRequired = paymentMode?.credits && !paymentMode?.creditsRequired;
+                          const creditsActiveRequired = paymentMode?.credits && paymentMode?.creditsRequired;
                           const showPaymentToggle =
                             manualMode &&
-                            (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid");
+                            !creditsActiveRequired &&
+                            (creditsActiveNotRequired
+                              ? (isCompleted || isCheckedIn)
+                              : (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid"));
                           const isPenaltyCharged =
                             (isCancelled || isNoShow) &&
                             lesson.lateCancellationAction === "charged" &&
