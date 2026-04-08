@@ -3,7 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2 } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -28,6 +28,12 @@ import {
   getInstructorAvailabilityForAgenda,
   createInstructorBlock,
   deleteInstructorBlock,
+  deleteInstructorBlockRecurrence,
+  createExamEvent,
+  addExamStudent,
+  removeExamStudent,
+  updateExamInstructor,
+  cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -59,6 +65,17 @@ type AppointmentRow = {
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
   replacedByAppointmentId?: string | null;
+  notes?: string | null;
+};
+
+type ExamGroup = {
+  key: string;
+  startsAt: string;
+  endsAt: string;
+  instructorId: string | null;
+  instructor: ResourceOption | null;
+  appointments: AppointmentRow[];
+  notes: string | null;
 };
 
 type AgendaBootstrapPayload = {
@@ -185,10 +202,18 @@ export function AutoscuoleAgendaPage({
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
   const [instructorBlocks, setInstructorBlocks] = React.useState<Array<{
-    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null;
+    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; recurrenceGroupId: string | null;
   }>>([]);
   const [blockDialogOpen, setBlockDialogOpen] = React.useState(false);
-  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", endTime: "10:00", reason: "" });
+  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", endTime: "10:00", reason: "", recurring: false, recurringWeeks: 12 });
+  const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
+  const [examDialogOpen, setExamDialogOpen] = React.useState(false);
+  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", instructorId: "", studentIds: [] as string[], note: "" });
+  const [examCreating, setExamCreating] = React.useState(false);
+  const [examStudentSearch, setExamStudentSearch] = React.useState("");
+  const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
+  const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
+  const [examPanelPending, setExamPanelPending] = React.useState(false);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
@@ -199,6 +224,37 @@ export function AutoscuoleAgendaPage({
   const [removeHolidayDate, setRemoveHolidayDate] = React.useState<Date | null>(null);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
   const todayNormalized = React.useMemo(() => normalizeDay(new Date(nowTick)), [nowTick]);
+
+  // Separate exam appointments and group them; keep non-exam appointments as-is
+  const { regularAppointments, examGroups } = React.useMemo(() => {
+    const regular: AppointmentRow[] = [];
+    const examMap = new Map<string, AppointmentRow[]>();
+    for (const a of appointments) {
+      if (a.type === "esame" && a.status !== "cancelled") {
+        const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}`;
+        const list = examMap.get(key) ?? [];
+        list.push(a);
+        examMap.set(key, list);
+      } else {
+        regular.push(a);
+      }
+    }
+    const groups: ExamGroup[] = [];
+    for (const [key, appts] of examMap) {
+      const first = appts[0];
+      groups.push({
+        key,
+        startsAt: typeof first.startsAt === "string" ? first.startsAt : (first.startsAt as Date).toISOString(),
+        endsAt: first.endsAt ? (typeof first.endsAt === "string" ? first.endsAt : (first.endsAt as Date).toISOString()) : "",
+        instructorId: first.instructor?.id ?? null,
+        instructor: first.instructor ?? null,
+        appointments: appts,
+        notes: first.notes ?? null,
+      });
+    }
+    return { regularAppointments: regular, examGroups: groups };
+  }, [appointments]);
+
   const bootstrapRequestRef = React.useRef(0);
   const calendarScrollRef = React.useRef<HTMLDivElement>(null);
   const hasAutoScrolled = React.useRef(false);
@@ -284,6 +340,7 @@ export function AutoscuoleAgendaPage({
           startsAt: typeof b.startsAt === "string" ? b.startsAt : (b.startsAt as Date).toISOString(),
           endsAt: typeof b.endsAt === "string" ? b.endsAt : (b.endsAt as Date).toISOString(),
           reason: (b.reason as string | null) ?? null,
+          recurrenceGroupId: (b.recurrenceGroupId as string | null) ?? null,
         })));
       }
     } catch (error) {
@@ -390,7 +447,7 @@ export function AutoscuoleAgendaPage({
   const filtered = React.useMemo(() => {
     // Build a set of active (non-cancelled) appointments keyed by instructor id + time overlap
     const activeByInstructor = new Map<string, { start: Date; end: Date }[]>();
-    for (const item of appointments) {
+    for (const item of regularAppointments) {
       if ((item.status ?? "").toLowerCase() === "cancelled") continue;
       if (!item.instructor?.id) continue;
       const start = toDate(item.startsAt);
@@ -400,7 +457,7 @@ export function AutoscuoleAgendaPage({
       activeByInstructor.set(item.instructor.id, list);
     }
 
-    return appointments.filter((item) => {
+    return regularAppointments.filter((item) => {
       const isCancelled = (item.status ?? "").toLowerCase() === "cancelled";
 
       // Hide cancelled appointments that have been replaced
@@ -445,7 +502,7 @@ export function AutoscuoleAgendaPage({
     }
     setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
-    const res = await createAutoscuolaAppointment({
+    const makePayload = (skip?: boolean) => ({
       studentId: form.studentId,
       type: form.type,
       startsAt: startDate.toISOString(),
@@ -453,13 +510,29 @@ export function AutoscuoleAgendaPage({
       instructorId: form.instructorId,
       vehicleId: form.vehicleId,
       sendProposal: form.sendProposal,
+      ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
+    const res = await createAutoscuolaAppointment(makePayload());
     if (!res.success) {
-      setCreating(false);
-      toast.error({
-        description: res.message ?? "Impossibile creare l'appuntamento.",
-      });
-      return;
+      const code = (res as { code?: string }).code;
+      if (code === "WEEKLY_LIMIT_CONFIRM") {
+        setCreating(false);
+        const confirmed = window.confirm(res.message ?? "L'allievo ha raggiunto il limite settimanale. Procedere comunque?");
+        if (!confirmed) return;
+        setCreating(true);
+        const retryRes = await createAutoscuolaAppointment(makePayload(true));
+        if (!retryRes.success) {
+          setCreating(false);
+          toast.error({ description: retryRes.message ?? "Impossibile creare l'appuntamento." });
+          return;
+        }
+      } else {
+        setCreating(false);
+        toast.error({
+          description: res.message ?? "Impossibile creare l'appuntamento.",
+        });
+        return;
+      }
     }
     setCreating(false);
     setCreateOpen(false);
@@ -710,16 +783,42 @@ export function AutoscuoleAgendaPage({
             </div>
           )}
 
-          {/* Spacer + CTA */}
-          <div className="ml-auto flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", endTime: "10:00", reason: "" }); setBlockDialogOpen(true); }}>
-              <Ban className="mr-1.5 size-3.5" />
-              Nuovo evento
-            </Button>
-            <Button size="sm" onClick={() => { setCreateStep(0); setCreateOpen(true); }}>
-              <Plus className="mr-1.5 size-3.5" />
-              Nuovo appuntamento
-            </Button>
+          {/* CTA */}
+          <div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm">
+                  <Plus className="mr-1.5 size-3.5" />
+                  Nuovo
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => { setCreateStep(0); setCreateOpen(true); }}
+                >
+                  <Plus className="size-3.5 text-pink-500" />
+                  Appuntamento
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                >
+                  <GraduationCap className="size-3.5 text-violet-500" />
+                  Esame
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", endTime: "10:00", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                >
+                  <Ban className="size-3.5 text-slate-500" />
+                  Evento bloccante
+                </button>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -828,15 +927,19 @@ export function AutoscuoleAgendaPage({
                         const durationMinutes = Math.max(15, diffMinutes(clippedEnd, clippedStart));
                         const top = offsetMinutes * PIXELS_PER_MINUTE; const height = durationMinutes * PIXELS_PER_MINUTE;
                         const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                        const isExam = item.type === "esame";
                         const isCompact = height <= 56; const GAP_PX = 2;
                         const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
                         const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
                         const isPendingAction = pendingEventActionId === item.id;
+                        const cardClassName = isExam
+                          ? "border-violet-300/80 bg-violet-100/90"
+                          : statusMeta.className;
                         return (
                           <DropdownMenu key={item.id}>
                             <DropdownMenuTrigger asChild>
-                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", statusMeta.className)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
-                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 border border-border bg-white font-medium text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{statusMeta.shortLabel}</Badge></div><div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">{item.type} · {formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}</div></>)}
+                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
+                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam ? ` · ${item.type}` : ""}</div></>)}
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
@@ -912,25 +1015,62 @@ export function AutoscuoleAgendaPage({
                                   <div className="text-xs text-muted-foreground">{instrName}</div>
                                   <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700"
-                                  disabled={blockDeleting === b.id}
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
                                   onClick={async () => {
-                                    setBlockDeleting(b.id);
-                                    const res = await deleteInstructorBlock(b.id);
-                                    setBlockDeleting(null);
-                                    if (!res.success) { toast.error({ description: res.message ?? "Errore eliminazione." }); return; }
-                                    setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
-                                    toast.success({ description: "Blocco eliminato." });
+                                    if (b.recurrenceGroupId) {
+                                      setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
+                                    } else {
+                                      setBlockDeleting(b.id);
+                                      const res = await deleteInstructorBlock(b.id);
+                                      setBlockDeleting(null);
+                                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                                      setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
+                                      toast.success({ description: "Evento eliminato." });
+                                    }
                                   }}
-                                >
-                                  {blockDeleting === b.id ? "Elimino..." : "Elimina blocco"}
-                                </Button>
+                                >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
                               </DropdownMenuContent>
                             </DropdownMenu>
+                          );
+                        })}
+                      {/* Exam groups for this day */}
+                      {examGroups
+                        .filter((eg) => {
+                          const egStart = toDate(eg.startsAt);
+                          return egStart >= dayStart && egStart < dayEnd;
+                        })
+                        .map((eg) => {
+                          const egStart = toDate(eg.startsAt);
+                          const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
+                          const offsetMin = Math.max(0, diffMinutes(egStart < dayStart ? dayStart : egStart, dayStart));
+                          const durMin = Math.max(30, diffMinutes(egEnd > dayEnd ? dayEnd : egEnd, egStart < dayStart ? dayStart : egStart));
+                          const top = offsetMin * PIXELS_PER_MINUTE;
+                          const height = durMin * PIXELS_PER_MINUTE;
+                          return (
+                            <button
+                              key={`exam-${eg.key}`}
+                              type="button"
+                              className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50 p-2 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
+                              style={{ top, height }}
+                              onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <GraduationCap className="size-3.5 text-violet-600 shrink-0" />
+                                <span className="text-[11px] font-bold text-violet-700 uppercase tracking-wider">Esame</span>
+                                <Badge variant="secondary" className="ml-auto shrink-0 border-violet-200 bg-violet-200/60 text-violet-700 px-1.5 py-0 text-[9px] font-bold">
+                                  {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
+                                </Badge>
+                              </div>
+                              <div className="mt-1 text-[10px] text-violet-600">
+                                {formatTimeRange(egStart, egEnd)}
+                                {eg.instructor ? ` · ${eg.instructor.name}` : ""}
+                              </div>
+                              {height > 60 && (
+                                <div className="mt-1 text-[9px] text-violet-500 truncate">
+                                  {eg.appointments.map((a) => `${a.student.firstName} ${a.student.lastName.charAt(0)}.`).join(", ")}
+                                </div>
+                              )}
+                            </button>
                           );
                         })}
                     </div>
@@ -962,9 +1102,10 @@ export function AutoscuoleAgendaPage({
                 </motion.div>
               )}
             </AnimatePresence>
-            <div ref={calendarScrollRef} className="overflow-auto bg-white" style={{ height: "100%" }}>
-              {/* Two-row sticky header: Day names → Instructor names */}
-              <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-sm border-b border-border" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+            <div className="flex flex-col bg-white" style={{ height: "100%" }}>
+              {/* Fixed header — scrolls horizontally in sync with body */}
+              <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
+                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
                 <div className="row-span-2" />
                 {days.map((day) => {
@@ -1010,12 +1151,63 @@ export function AutoscuoleAgendaPage({
                     );
                   })
                 )}
+                </div>
               </div>
+
+              {/* Exam banners row — sticky between header and body */}
+              {examGroups.length > 0 && (
+                <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
+                  <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                    <div />
+                    {days.map((day, dayIdx) => {
+                      const dateKey = formatYmd(day);
+                      const dayExams = examGroups.filter((eg) => formatYmd(toDate(eg.startsAt)) === dateKey);
+                      return (
+                        <div
+                          key={`exam-banner-${dateKey}`}
+                          className="border-l border-border/40"
+                          style={{ gridColumn: `${2 + dayIdx * instrCount} / span ${instrCount}` }}
+                        >
+                          {dayExams.length > 0 ? (
+                            <div className="flex flex-wrap gap-0.5 px-1 py-0.5">
+                              {dayExams.map((eg) => {
+                                const egStart = toDate(eg.startsAt);
+                                const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 3600000);
+                                return (
+                                  <button
+                                    key={`exam-hdr-${eg.key}`}
+                                    type="button"
+                                    onClick={() => { setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
+                                    className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[9px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer"
+                                  >
+                                    <GraduationCap className="size-3 shrink-0" />
+                                    <span>Esame {formatTimeRange(egStart, egEnd)}</span>
+                                    <span className="text-violet-500">· {eg.appointments.length} all.</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Scrollable body — syncs horizontal scroll with header + exam row */}
+              <div className="overflow-auto flex-1" ref={calendarScrollRef} onScroll={(e) => {
+                const parent = e.currentTarget.parentElement;
+                const headerWrap = parent?.querySelector<HTMLElement>("[data-agenda-header-wrap]");
+                const examWrap = parent?.querySelector<HTMLElement>("[data-agenda-exam-wrap]");
+                if (headerWrap) headerWrap.scrollLeft = e.currentTarget.scrollLeft;
+                if (examWrap) examWrap.scrollLeft = e.currentTarget.scrollLeft;
+              }}>
 
               {/* Calendar body */}
               <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
-                {/* Time gutter */}
-                <div className="relative" style={{ height: calendarHeight }}>
+                {/* Time gutter — sticky left */}
+                <div className="sticky left-0 z-20 bg-white relative" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
                       <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
@@ -1056,7 +1248,7 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative border-l border-border/40", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative overflow-hidden border-l border-border/40", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
                       >
                         {isColumnHoliday && (
@@ -1089,21 +1281,25 @@ export function AutoscuoleAgendaPage({
                           const top = offsetMin * PIXELS_PER_MINUTE;
                           const height = durMin * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                          const isExamInstr = item.type === "esame";
                           const isCompact = height <= 40;
                           const isPendingAction = pendingEventActionId === item.id;
+                          const instrCardClass = isExamInstr
+                            ? "border-violet-300/80 bg-violet-100/90"
+                            : statusMeta.className;
                           return (
                             <DropdownMenu key={item.id}>
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", statusMeta.className)}
+                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height }}
-                                  title={`${item.student.firstName} ${item.student.lastName} · ${item.type} · ${formatTimeRange(start, end)}`}
+                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${item.type} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className={cn("p-1", isCompact ? "p-0.5" : "")}>
-                                    <div className="font-bold truncate text-[10px]">{item.student.firstName} {item.student.lastName.charAt(0)}.</div>
-                                    <div className="text-[8px] text-muted-foreground truncate">{formatTimeRange(start, end)}</div>
+                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName} {item.student.lastName.charAt(0)}.</div>
+                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : "text-muted-foreground")}>{isExamInstr ? "Esame · " : ""}{formatTimeRange(start, end)}</div>
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
@@ -1136,10 +1332,40 @@ export function AutoscuoleAgendaPage({
                             </DropdownMenu>
                           );
                         })}
+                        {/* Exam blocks for this instructor on this day */}
+                        {examGroups
+                          .filter((eg) => eg.instructorId === instr.instructorId && formatYmd(toDate(eg.startsAt)) === dateKey)
+                          .map((eg) => {
+                            const egStart = toDate(eg.startsAt);
+                            const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 3600000);
+                            const clippedStart = egStart < dayStart ? dayStart : egStart;
+                            const clippedEnd = egEnd > dayEnd ? dayEnd : egEnd;
+                            const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                            const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                            const top = offsetMin * PIXELS_PER_MINUTE;
+                            const height = durMin * PIXELS_PER_MINUTE;
+                            return (
+                              <button
+                                key={`exam-instr-${eg.key}`}
+                                type="button"
+                                className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                style={{ top, height }}
+                                onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
+                              >
+                                <div className="p-1">
+                                  <div className="font-bold text-[10px] text-violet-700 flex items-center gap-0.5">
+                                    <GraduationCap className="size-2.5 shrink-0" /> Esame
+                                  </div>
+                                  <div className="text-[8px] text-violet-500 truncate">{eg.appointments.length} all. · {formatTimeRange(egStart, egEnd)}</div>
+                                </div>
+                              </button>
+                            );
+                          })}
                       </div>
                     );
                   });
                 })}
+              </div>
               </div>
             </div>
           </div>
@@ -1355,8 +1581,12 @@ export function AutoscuoleAgendaPage({
                       const top = offsetMinutes * PIXELS_PER_MINUTE;
                       const height = durationMinutes * PIXELS_PER_MINUTE;
                       const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
+                      const isExamDay = item.type === "esame";
                       const isCompact = height <= 56;
                       const isPendingAction = pendingEventActionId === item.id;
+                      const dayCardClass = isExamDay
+                        ? "border-violet-300/80 bg-violet-100/90"
+                        : statusMeta.className;
 
                       return (
                         <DropdownMenu key={item.id}>
@@ -1367,7 +1597,7 @@ export function AutoscuoleAgendaPage({
                                 "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
                                 isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
-                                statusMeta.className,
+                                dayCardClass,
                               )}
                               style={{ top, height }}
                               onClick={(event) => event.stopPropagation()}
@@ -1383,19 +1613,20 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <>
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
-                                      {item.student.firstName} {item.student.lastName}
+                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
+                                      {isExamDay && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}
                                     </div>
                                     <Badge
                                       variant="secondary"
-                                      className={cn("shrink-0 border border-border bg-white font-medium text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
+                                      className={cn("shrink-0 font-medium", isExamDay ? "border-violet-200 bg-violet-200/60 text-violet-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
                                     >
-                                      {statusMeta.shortLabel}
+                                      {isExamDay ? "Esame" : statusMeta.shortLabel}
                                     </Badge>
                                   </div>
-                                  <div className="truncate whitespace-nowrap text-[11px] text-muted-foreground">
-                                    {item.type} · {formatTimeRange(start, end)}
+                                  <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : "text-muted-foreground")}>
+                                    {formatTimeRange(start, end)}
                                     {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
+                                    {!isExamDay ? ` · ${item.type}` : ""}
                                   </div>
                                 </>
                               )}
@@ -1768,6 +1999,434 @@ export function AutoscuoleAgendaPage({
         </DialogContent>
       </Dialog>
 
+      {/* ── Recurring Block Delete Confirmation ── */}
+      <Dialog open={blockDeleteConfirm !== null} onOpenChange={(open) => { if (!open) setBlockDeleteConfirm(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Elimina evento ricorrente</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Questo evento fa parte di una ricorrenza. Cosa vuoi eliminare?
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={blockDeleting !== null}
+              onClick={async () => {
+                if (!blockDeleteConfirm) return;
+                setBlockDeleting(blockDeleteConfirm.id);
+                const res = await deleteInstructorBlock(blockDeleteConfirm.id);
+                setBlockDeleting(null);
+                if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                setInstructorBlocks((prev) => prev.filter((x) => x.id !== blockDeleteConfirm.id));
+                setBlockDeleteConfirm(null);
+                toast.success({ description: "Singolo evento eliminato." });
+              }}
+            >
+              Solo questo evento
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+              disabled={blockDeleting !== null}
+              onClick={async () => {
+                if (!blockDeleteConfirm?.recurrenceGroupId) return;
+                setBlockDeleting(blockDeleteConfirm.id);
+                const res = await deleteInstructorBlockRecurrence(blockDeleteConfirm.recurrenceGroupId);
+                setBlockDeleting(null);
+                if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                setInstructorBlocks((prev) => prev.filter((x) => x.recurrenceGroupId !== blockDeleteConfirm.recurrenceGroupId));
+                setBlockDeleteConfirm(null);
+                toast.success({ description: `${(res.data as { deleted: number }).deleted} eventi futuri eliminati.` });
+              }}
+            >
+              Elimina tutta la ricorrenza futura
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setBlockDeleteConfirm(null)} disabled={blockDeleting !== null}>
+              Annulla
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Exam Detail Panel ── */}
+      <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }}>
+        <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
+          {examPanelGroup && (() => {
+            const eg = examPanelGroup;
+            const egStart = toDate(eg.startsAt);
+            const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
+            return (
+              <>
+                {/* Header */}
+                <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
+                    <GraduationCap className="h-5 w-5 text-violet-600" />
+                  </div>
+                  <div className="flex-1">
+                    <DialogTitle className="text-sm font-semibold">Esame</DialogTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })} · {formatTimeRange(egStart, egEnd)}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="border-violet-200 bg-violet-100 text-violet-700 text-xs font-bold">
+                    {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
+                  </Badge>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                  {/* Istruttore */}
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={eg.instructorId ?? "__none__"}
+                        onValueChange={async (v) => {
+                          setExamPanelPending(true);
+                          const newInstrId = v === "__none__" ? null : v;
+                          const res = await updateExamInstructor({
+                            appointmentIds: eg.appointments.map((a) => a.id),
+                            instructorId: newInstrId,
+                          });
+                          setExamPanelPending(false);
+                          if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                          const newInstr = newInstrId ? instructors.find((i) => i.id === newInstrId) ?? null : null;
+                          setExamPanelGroup({ ...eg, instructorId: newInstrId, instructor: newInstr });
+                          load({ silent: true });
+                        }}
+                      >
+                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
+                          <SelectValue placeholder="Nessuno" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Nessuno</SelectItem>
+                          {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Allievi */}
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Allievi iscritti</p>
+                    <div className="rounded-xl border border-border divide-y divide-border">
+                      {eg.appointments.map((a) => (
+                        <div key={a.id} className="flex items-center justify-between px-3.5 py-2.5">
+                          <span className="text-xs font-medium text-foreground">{a.student.firstName} {a.student.lastName}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50"
+                            disabled={examPanelPending || eg.appointments.length <= 1}
+                            onClick={async () => {
+                              setExamPanelPending(true);
+                              const res = await removeExamStudent(a.id);
+                              setExamPanelPending(false);
+                              if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                              const updated = { ...eg, appointments: eg.appointments.filter((x) => x.id !== a.id) };
+                              setExamPanelGroup(updated);
+                              load({ silent: true });
+                              toast.success({ description: "Allievo rimosso dall'esame." });
+                            }}
+                          >
+                            Rimuovi
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Aggiungi allievo */}
+                    <div className="mt-3">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+                        <Input
+                          value={examPanelStudentSearch}
+                          onChange={(e) => setExamPanelStudentSearch(e.target.value)}
+                          placeholder="Aggiungi allievo..."
+                          className="pl-9 h-8 text-xs"
+                        />
+                      </div>
+                      {examPanelStudentSearch.trim().length >= 2 && (() => {
+                        const q = examPanelStudentSearch.toLowerCase();
+                        const existingIds = new Set(eg.appointments.map((a) => a.student.id));
+                        const results = students
+                          .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+                          .filter((s) => !existingIds.has(s.id))
+                          .slice(0, 10);
+                        return results.length > 0 ? (
+                          <div className="mt-1.5 max-h-[120px] overflow-y-auto rounded-lg border border-border">
+                            {results.map((s) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                disabled={examPanelPending}
+                                onClick={async () => {
+                                  setExamPanelPending(true);
+                                  const res = await addExamStudent({
+                                    studentId: s.id,
+                                    startsAt: eg.startsAt,
+                                    endsAt: eg.endsAt,
+                                    instructorId: eg.instructorId,
+                                    notes: eg.notes ?? undefined,
+                                  });
+                                  setExamPanelPending(false);
+                                  if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                                  const newAppt: AppointmentRow = {
+                                    id: (res.data as { appointmentId: string }).appointmentId,
+                                    type: "esame",
+                                    status: "scheduled",
+                                    startsAt: eg.startsAt,
+                                    endsAt: eg.endsAt,
+                                    student: s,
+                                    instructor: eg.instructor,
+                                  };
+                                  setExamPanelGroup({ ...eg, appointments: [...eg.appointments, newAppt] });
+                                  setExamPanelStudentSearch("");
+                                  load({ silent: true });
+                                  toast.success({ description: `${s.firstName} aggiunto all'esame.` });
+                                }}
+                                className="flex w-full items-center gap-2.5 px-3 py-2 text-xs hover:bg-violet-50 text-left transition-colors border-b border-border last:border-b-0"
+                              >
+                                <Plus className="size-3 text-violet-500 shrink-0" />
+                                <span className="font-medium">{s.firstName} {s.lastName}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Nessun allievo trovato</p>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Note */}
+                  {eg.notes && (
+                    <div>
+                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
+                      <p className="text-xs text-muted-foreground">{eg.notes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-border px-6 py-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                    disabled={examPanelPending}
+                    onClick={async () => {
+                      setExamPanelPending(true);
+                      const res = await cancelExamEvent(eg.appointments.map((a) => a.id));
+                      setExamPanelPending(false);
+                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                      setExamPanelGroup(null);
+                      load({ silent: true });
+                      toast.success({ description: "Esame annullato." });
+                    }}
+                  >
+                    {examPanelPending ? "Annullamento..." : "Annulla esame"}
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Exam Creation Dialog ── */}
+      <Dialog open={examDialogOpen} onOpenChange={(open) => { if (!examCreating) setExamDialogOpen(open); }}>
+        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
+          <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-50">
+              <GraduationCap className="h-4 w-4 text-yellow-600" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-semibold">Nuovo esame</DialogTitle>
+              <p className="text-xs text-muted-foreground">Pianifica un esame per uno o più allievi</p>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {/* Data e orario */}
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Quando</p>
+              <div className="space-y-3">
+                <FieldGroup label="Giorno" required>
+                  <DatePicker value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
+                </FieldGroup>
+                <div className="grid grid-cols-2 gap-3">
+                  <FieldGroup label="Orario" required>
+                    <Select value={examForm.time} onValueChange={(v) => setExamForm((f) => ({ ...f, time: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                  <FieldGroup label="Durata">
+                    <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                </div>
+              </div>
+            </div>
+
+            {/* Istruttore */}
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
+              <Select value={examForm.instructorId} onValueChange={(v) => setExamForm((f) => ({ ...f, instructorId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Nessuno (facoltativo)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nessuno</SelectItem>
+                  {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Allievi */}
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                Allievi
+                {examForm.studentIds.length > 0 && (
+                  <span className="ml-2 inline-flex items-center justify-center rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-700">
+                    {examForm.studentIds.length}
+                  </span>
+                )}
+              </p>
+
+              {/* Selected students chips */}
+              {examForm.studentIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {examForm.studentIds.map((id) => {
+                    const s = students.find((st) => st.id === id);
+                    if (!s) return null;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
+                        className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-[11px] font-medium text-yellow-700 transition-colors hover:bg-yellow-100 hover:border-yellow-300 cursor-pointer"
+                      >
+                        {s.firstName} {s.lastName}
+                        <span className="text-yellow-400 hover:text-yellow-600">&times;</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={examStudentSearch}
+                  onChange={(e) => setExamStudentSearch(e.target.value)}
+                  placeholder="Cerca allievo per nome..."
+                  className="pl-9 h-9 text-xs"
+                />
+              </div>
+
+              {/* Student results — only shown when searching */}
+              {examStudentSearch.trim().length >= 2 && (() => {
+                const q = examStudentSearch.toLowerCase();
+                const results = students
+                  .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+                  .filter((s) => !examForm.studentIds.includes(s.id))
+                  .slice(0, 20);
+                return (
+                  <div className="mt-2 max-h-[160px] overflow-y-auto rounded-xl border border-border">
+                    {results.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, s.id] }));
+                          setExamStudentSearch("");
+                        }}
+                        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs cursor-pointer transition-colors border-b border-border last:border-b-0 hover:bg-yellow-50/60 text-left"
+                      >
+                        <Plus className="size-3 text-muted-foreground shrink-0" />
+                        <span className="font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                      </button>
+                    ))}
+                    {results.length === 0 && (
+                      <p className="px-4 py-4 text-center text-xs text-muted-foreground">Nessun allievo trovato</p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Note */}
+            <div>
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
+              <Input
+                value={examForm.note}
+                onChange={(e) => setExamForm((f) => ({ ...f, note: e.target.value }))}
+                placeholder="Es: Esame pratico patente B, sede Motorizzazione..."
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t border-border px-6 py-4">
+            <p className="text-[11px] text-muted-foreground">
+              {examForm.studentIds.length === 0
+                ? "Seleziona almeno un allievo"
+                : `${examForm.studentIds.length} alliev${examForm.studentIds.length === 1 ? "o" : "i"} selezionat${examForm.studentIds.length === 1 ? "o" : "i"}`}
+            </p>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" onClick={() => setExamDialogOpen(false)} disabled={examCreating}>Annulla</Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={examCreating || !examForm.date || !examForm.studentIds.length}
+                onClick={async () => {
+                  setExamCreating(true);
+                  const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
+                  const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
+                  const endsAt = new Date(startsAt.getTime() + durationMs);
+                  const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
+
+                  const res = await createExamEvent({
+                    studentIds: examForm.studentIds,
+                    startsAt: startsAt.toISOString(),
+                    endsAt: endsAt.toISOString(),
+                    instructorId: instrId,
+                    notes: examForm.note.trim() || undefined,
+                  });
+
+                  setExamCreating(false);
+                  if (res.success) {
+                    const count = (res.data as { count: number }).count;
+                    toast.success({
+                      description: `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.`,
+                    });
+                    setExamDialogOpen(false);
+                    load({ silent: true });
+                  } else {
+                    toast.error({ description: res.message ?? "Impossibile creare l'esame." });
+                  }
+                }}
+              >
+                {examCreating ? (
+                  <><Loader2 className="size-3.5 animate-spin mr-1.5" />Creazione...</>
+                ) : (
+                  <><GraduationCap className="size-3.5 mr-1.5" />Crea esame</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Instructor Block Creation Dialog ── */}
       <Dialog open={blockDialogOpen} onOpenChange={(open) => { if (!blockCreating) setBlockDialogOpen(open); }}>
         <DialogContent className="sm:max-w-md">
@@ -1814,6 +2473,30 @@ export function AutoscuoleAgendaPage({
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titolo (opzionale)</label>
               <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
             </div>
+            {/* Ricorrenza */}
+            <div className="space-y-2">
+              <div
+                className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2.5 cursor-pointer"
+                onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
+              >
+                <span className="text-xs font-medium">Evento ricorrente</span>
+                <InlineToggle checked={blockForm.recurring} size="sm" />
+              </div>
+              {blockForm.recurring && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Ripeti per</span>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={52}
+                    value={blockForm.recurringWeeks}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
+                    className="w-16 h-8 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">settimane</span>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setBlockDialogOpen(false)} disabled={blockCreating}>Annulla</Button>
@@ -1830,22 +2513,18 @@ export function AutoscuoleAgendaPage({
                   startsAt,
                   endsAt,
                   reason: blockForm.reason.trim() || undefined,
+                  recurring: blockForm.recurring,
+                  recurringWeeks: blockForm.recurring ? blockForm.recurringWeeks : undefined,
                 });
                 setBlockCreating(false);
                 if (!res.success) {
                   toast.error({ description: res.message ?? "Errore creazione evento." });
                   return;
                 }
-                const d = res.data as { id: string; instructorId: string; startsAt: Date; endsAt: Date; reason: string | null };
-                setInstructorBlocks((prev) => [...prev, {
-                  id: d.id,
-                  instructorId: d.instructorId,
-                  startsAt: d.startsAt instanceof Date ? d.startsAt.toISOString() : String(d.startsAt),
-                  endsAt: d.endsAt instanceof Date ? d.endsAt.toISOString() : String(d.endsAt),
-                  reason: d.reason,
-                }]);
                 setBlockDialogOpen(false);
-                toast.success({ description: "Evento creato." });
+                load({ silent: true });
+                const count = (res as { count?: number }).count ?? 1;
+                toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
               }}
             >
               {blockCreating ? "Creazione..." : "Crea evento"}

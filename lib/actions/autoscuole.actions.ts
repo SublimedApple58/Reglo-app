@@ -33,6 +33,7 @@ import {
   getStudentLessonCredits,
   prepareAppointmentPaymentSnapshot,
   refundLessonCreditIfEligible,
+  applyLessonCreditToExistingAppointment,
 } from "@/lib/autoscuole/payments";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 import {
@@ -78,6 +79,7 @@ const createAppointmentSchema = z.object({
   notes: z.string().optional(),
   sendProposal: z.boolean().optional().default(false),
   skipWeeklyLimitCheck: z.boolean().optional(),
+  skipConflictCheck: z.boolean().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -671,6 +673,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           startsAt: true,
           endsAt: true,
           reason: true,
+          recurrenceGroupId: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1932,7 +1935,7 @@ export async function createAutoscuolaAppointment(
       const end = item.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
       return start < slotEnd && end > slotTime;
     });
-    if (hasConflict) {
+    if (hasConflict && !payload.skipConflictCheck) {
       return {
         success: false,
         message: "Slot non disponibile per istruttore o veicolo.",
@@ -2646,6 +2649,16 @@ export async function updateAutoscuolaAppointmentStatus(
     });
 
     if (nextStatus === "checked_in") {
+      // Try to apply lesson credit for appointments created without credits (optional credits flow)
+      try {
+        await applyLessonCreditToExistingAppointment({
+          appointmentId: updated.id,
+          actorUserId: membership.userId,
+        });
+      } catch (error) {
+        console.error("Autoscuola credit apply at check-in error", error);
+      }
+
       try {
         await processAutoscuolaAppointmentSettlementNow({
           appointmentId: updated.id,
@@ -3712,6 +3725,8 @@ const createInstructorBlockSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string(),
   reason: z.string().optional(),
+  recurring: z.boolean().optional(),
+  recurringWeeks: z.number().int().min(2).max(52).optional(),
 });
 
 export async function createInstructorBlock(
@@ -3751,19 +3766,30 @@ export async function createInstructorBlock(
       return { success: false as const, message: "Istruttore non trovato." };
     }
 
-    const block = await prisma.autoscuolaInstructorBlock.create({
-      data: {
-        companyId: membership.companyId,
-        instructorId: targetInstructor.id,
-        startsAt: new Date(payload.startsAt),
-        endsAt: new Date(payload.endsAt),
-        reason: payload.reason ?? null,
-      },
-    });
+    const startsAt = new Date(payload.startsAt);
+    const endsAt = new Date(payload.endsAt);
+    const weeks = payload.recurring ? Math.min(52, payload.recurringWeeks ?? 12) : 1;
+    const recurrenceGroupId = payload.recurring ? randomUUID() : null;
+    const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+    const blocks = await prisma.$transaction(
+      Array.from({ length: weeks }, (_, i) =>
+        prisma.autoscuolaInstructorBlock.create({
+          data: {
+            companyId: membership.companyId,
+            instructorId: targetInstructor.id,
+            startsAt: new Date(startsAt.getTime() + i * WEEK_MS),
+            endsAt: new Date(endsAt.getTime() + i * WEEK_MS),
+            reason: payload.reason ?? null,
+            recurrenceGroupId,
+          },
+        }),
+      ),
+    );
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
-    return { success: true as const, data: block };
+    return { success: true as const, data: blocks[0], count: blocks.length };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -3808,6 +3834,29 @@ export async function deleteInstructorBlock(blockId: string) {
   }
 }
 
+export async function deleteInstructorBlockRecurrence(recurrenceGroupId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    const result = await prisma.autoscuolaInstructorBlock.deleteMany({
+      where: {
+        companyId: membership.companyId,
+        recurrenceGroupId,
+        startsAt: { gte: new Date() },
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+
+    return { success: true as const, data: { deleted: result.count } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Booking block management
 // ---------------------------------------------------------------------------
@@ -3845,6 +3894,197 @@ export async function toggleStudentBookingBlock(
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exam events
+// ---------------------------------------------------------------------------
+
+const createExamEventSchema = z.object({
+  studentIds: z.array(z.string().uuid()).min(1),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  instructorId: z.string().uuid().optional().nullable(),
+  notes: z.string().optional(),
+});
+
+export async function createExamEvent(
+  input: z.infer<typeof createExamEventSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Solo il titolare può creare esami." };
+    }
+    const payload = createExamEventSchema.parse(input);
+    const companyId = membership.companyId;
+    const startsAt = new Date(payload.startsAt);
+    const endsAt = new Date(payload.endsAt);
+
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      return { success: false as const, message: "Orario non valido." };
+    }
+
+    // Validate instructor if provided
+    if (payload.instructorId) {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { id: payload.instructorId, companyId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Istruttore non trovato." };
+    }
+
+    // Validate all students belong to this company
+    const members = await prisma.companyMember.findMany({
+      where: { companyId, userId: { in: payload.studentIds }, autoscuolaRole: "STUDENT" },
+      select: { userId: true },
+    });
+    const validIds = new Set(members.map((m) => m.userId));
+    const invalidIds = payload.studentIds.filter((id) => !validIds.has(id));
+    if (invalidIds.length) {
+      return { success: false as const, message: `${invalidIds.length} allievi non trovati.` };
+    }
+
+    // Create one appointment per student
+    const appointments = await prisma.$transaction(
+      payload.studentIds.map((studentId) =>
+        prisma.autoscuolaAppointment.create({
+          data: {
+            companyId,
+            studentId,
+            type: "esame",
+            startsAt,
+            endsAt,
+            status: "scheduled",
+            instructorId: payload.instructorId ?? null,
+            vehicleId: null,
+            notes: payload.notes ?? null,
+            paymentRequired: false,
+          },
+        }),
+      ),
+    );
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+
+    return { success: true as const, data: { count: appointments.length } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const addExamStudentSchema = z.object({
+  studentId: z.string().uuid(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  instructorId: z.string().uuid().optional().nullable(),
+  notes: z.string().optional(),
+});
+
+export async function addExamStudent(
+  input: z.infer<typeof addExamStudentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = addExamStudentSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
+      select: { userId: true },
+    });
+    if (!member) return { success: false as const, message: "Allievo non trovato." };
+
+    const appointment = await prisma.autoscuolaAppointment.create({
+      data: {
+        companyId,
+        studentId: payload.studentId,
+        type: "esame",
+        startsAt: new Date(payload.startsAt),
+        endsAt: new Date(payload.endsAt),
+        status: "scheduled",
+        instructorId: payload.instructorId ?? null,
+        vehicleId: null,
+        notes: payload.notes ?? null,
+        paymentRequired: false,
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const, data: { appointmentId: appointment.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function removeExamStudent(appointmentId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    const appt = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: appointmentId, companyId: membership.companyId, type: "esame" },
+      select: { id: true },
+    });
+    if (!appt) return { success: false as const, message: "Appuntamento esame non trovato." };
+
+    await prisma.autoscuolaAppointment.delete({ where: { id: appointmentId } });
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const updateExamEventSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  instructorId: z.string().uuid().optional().nullable(),
+});
+
+export async function updateExamInstructor(
+  input: z.infer<typeof updateExamEventSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = updateExamEventSchema.parse(input);
+
+    await prisma.autoscuolaAppointment.updateMany({
+      where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
+      data: { instructorId: payload.instructorId ?? null },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function cancelExamEvent(appointmentIds: string[]) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    await prisma.autoscuolaAppointment.updateMany({
+      where: { id: { in: appointmentIds }, companyId: membership.companyId, type: "esame" },
+      data: { status: "cancelled", cancelledAt: new Date() },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }
 
@@ -4161,11 +4401,29 @@ export async function resolveLateCancellation(
           actorUserId: membership.userId,
           appointmentId: appointment.id,
         });
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "charged" },
+        });
+      } else if (!appointment.creditApplied) {
+        // Optional credits flow: try to consume a credit for this late cancellation
+        const applied = await applyLessonCreditToExistingAppointment({
+          appointmentId: appointment.id,
+          actorUserId: membership.userId,
+        });
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: {
+            lateCancellationAction: "charged",
+            ...(applied.applied ? {} : { manualPaymentStatus: "unpaid" }),
+          },
+        });
+      } else {
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "charged" },
+        });
       }
-      await prisma.autoscuolaAppointment.update({
-        where: { id: appointment.id },
-        data: { lateCancellationAction: "charged" },
-      });
     } else {
       // Manual mode: mark as unpaid for the student
       await prisma.autoscuolaAppointment.update({

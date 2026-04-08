@@ -955,6 +955,70 @@ const consumeLessonCreditIfAvailable = async ({
   };
 };
 
+/**
+ * Try to apply a lesson credit to an existing appointment that was created
+ * without credits (lessonCreditsRequired=false flow).
+ * Used at check-in and late cancellation charge.
+ */
+export async function applyLessonCreditToExistingAppointment({
+  prisma = defaultPrisma,
+  appointmentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  appointmentId: string;
+  actorUserId?: string | null;
+}): Promise<{ applied: boolean }> {
+  const appointment = await prisma.autoscuolaAppointment.findUnique({
+    where: { id: appointmentId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      creditApplied: true,
+      manualPaymentStatus: true,
+      type: true,
+    },
+  });
+
+  if (!appointment || appointment.creditApplied || appointment.type === "esame") {
+    return { applied: false };
+  }
+
+  // Only apply to appointments with unpaid manual status
+  if (appointment.manualPaymentStatus !== "unpaid") {
+    return { applied: false };
+  }
+
+  const config = await getAutoscuolaPaymentConfig({ prisma, companyId: appointment.companyId });
+  // Only for credit flow with credits NOT required (optional credits)
+  if (!config.lessonCreditFlowEnabled || config.lessonCreditsRequired) {
+    return { applied: false };
+  }
+
+  const credit = await consumeLessonCreditIfAvailable({
+    prisma,
+    companyId: appointment.companyId,
+    studentId: appointment.studentId,
+    appointmentId,
+    actorUserId,
+  });
+
+  if (!credit.consumed) {
+    return { applied: false };
+  }
+
+  await prisma.autoscuolaAppointment.update({
+    where: { id: appointmentId },
+    data: {
+      creditApplied: true,
+      manualPaymentStatus: null,
+    },
+  });
+
+  return { applied: true };
+}
+
 export async function getStudentLessonCredits({
   prisma = defaultPrisma,
   companyId,
