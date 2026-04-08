@@ -1,7 +1,7 @@
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || 'Reglo';
 export const APP_DESCRIPTION =
   process.env.NEXT_PUBLIC_APP_DESCRIPTION ||
-  'From draft to signature in just a few clicks: Reglo orchestrates your documents and delivers them wherever they’re needed.';
+  "Reglo semplifica la gestione della tua autoscuola: agenda, allievi, guide, pagamenti e segretaria AI in un’unica piattaforma.";
 export const SERVER_URL =
   process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000';
 
