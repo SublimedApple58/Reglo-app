@@ -45,6 +45,7 @@ import {
   getPaymentMode,
   toggleStudentBookingBlock,
   toggleWeeklyBookingLimitExempt,
+  setExamPriorityOverride,
   setManualPaymentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
@@ -120,6 +121,9 @@ type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
   weeklyBookingLimitExempt?: boolean;
+  examPriorityOverride?: boolean | null;
+  examPriorityActive?: boolean;
+  examDate?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -238,7 +242,9 @@ export function AutoscuoleStudentsPage({
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
+  const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
   const [exemptSaving, setExemptSaving] = React.useState(false);
+  const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -477,6 +483,7 @@ export function AutoscuoleStudentsPage({
     getAutoscuolaSettings().then((res) => {
       if (res.success && res.data) {
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
+        setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
       }
     });
     getPaymentMode().then((res) => {
@@ -914,6 +921,58 @@ export function AutoscuoleStudentsPage({
                                     ? "Riattiva limite"
                                     : "Rendi esente"}
                               </Button>
+                            </div>
+                          </div>
+                        )}
+                        {weeklyLimitActive && examPriorityEnabledGlobal && (
+                          <div>
+                            <p className="text-[11px] text-muted-foreground">Priorit&agrave; esame</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge variant={register.examPriorityActive ? "secondary" : "outline"} className="text-[11px]">
+                                {register.examPriorityActive ? "Priorit\u00e0 attiva" : "Nessuna priorit\u00e0"}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground">
+                                {register.examPriorityOverride === null || register.examPriorityOverride === undefined
+                                  ? "(automatico)"
+                                  : register.examPriorityOverride
+                                    ? "(forzato attivo)"
+                                    : "(forzato disattivo)"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 mt-1.5">
+                              {([
+                                { label: "Auto", value: null },
+                                { label: "Forza attivo", value: true },
+                                { label: "Forza disattivo", value: false },
+                              ] as const).map((opt) => (
+                                <Button
+                                  key={String(opt.value)}
+                                  variant={register.examPriorityOverride === opt.value ? "default" : "ghost"}
+                                  size="sm"
+                                  className="h-6 px-2 text-[11px]"
+                                  disabled={examPrioritySaving}
+                                  onClick={async () => {
+                                    if (!selectedStudentId || examPrioritySaving) return;
+                                    if (register.examPriorityOverride === opt.value) return;
+                                    setExamPrioritySaving(true);
+                                    const res = await setExamPriorityOverride({
+                                      studentId: selectedStudentId,
+                                      override: opt.value,
+                                    });
+                                    setExamPrioritySaving(false);
+                                    if (!res.success) {
+                                      toast.error({ description: res.message ?? "Errore aggiornamento." });
+                                      return;
+                                    }
+                                    setRegister((prev) =>
+                                      prev ? { ...prev, examPriorityOverride: opt.value } : prev,
+                                    );
+                                    toast.success({ description: "Priorit\u00e0 esame aggiornata." });
+                                  }}
+                                >
+                                  {examPrioritySaving ? "..." : opt.label}
+                                </Button>
+                              ))}
                             </div>
                           </div>
                         )}

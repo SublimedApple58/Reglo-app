@@ -22,6 +22,8 @@ export type ServiceLimits = {
   instructorBookingMode?: "manual_full" | "manual_engine" | "guided_proposal";
   weeklyBookingLimitEnabled?: boolean;
   weeklyBookingLimit?: number;
+  examPriorityEnabled?: boolean;
+  examPriorityLimit?: number;
   voiceFeatureEnabled?: boolean;
   voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
   voiceLineRef?: string | null;

@@ -80,6 +80,8 @@ const EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS = [
 ] as const;
 const DEFAULT_WEEKLY_BOOKING_LIMIT_ENABLED = false;
 const DEFAULT_WEEKLY_BOOKING_LIMIT = 3;
+const DEFAULT_EXAM_PRIORITY_ENABLED = false;
+const DEFAULT_EXAM_PRIORITY_LIMIT = 5;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
@@ -304,6 +306,8 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     weeklyBookingLimitEnabled: z.boolean().optional(),
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+    examPriorityEnabled: z.boolean().optional(),
+    examPriorityLimit: z.number().int().min(1).max(50).optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
@@ -360,6 +364,8 @@ const autoscuolaSettingsPatchSchema = z
       value.emptySlotNotificationTimes !== undefined ||
       value.weeklyBookingLimitEnabled !== undefined ||
       value.weeklyBookingLimit !== undefined ||
+      value.examPriorityEnabled !== undefined ||
+      value.examPriorityLimit !== undefined ||
       value.instructorPreferenceEnabled !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
@@ -512,6 +518,8 @@ export type AutoscuolaSettingsData = {
   emptySlotNotificationTimes: string[];
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  examPriorityEnabled: boolean;
+  examPriorityLimit: number;
   instructorPreferenceEnabled: boolean;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
@@ -664,6 +672,14 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
       ? limits.weeklyBookingLimit
       : DEFAULT_WEEKLY_BOOKING_LIMIT;
+  const examPriorityEnabled =
+    typeof limits.examPriorityEnabled === "boolean"
+      ? limits.examPriorityEnabled
+      : DEFAULT_EXAM_PRIORITY_ENABLED;
+  const examPriorityLimit =
+    typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
+      ? limits.examPriorityLimit
+      : DEFAULT_EXAM_PRIORITY_LIMIT;
   const instructorPreferenceEnabled =
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
@@ -783,6 +799,8 @@ const resolveAutoscuolaSettingsData = async (
     emptySlotNotificationTimes,
     weeklyBookingLimitEnabled,
     weeklyBookingLimit,
+    examPriorityEnabled,
+    examPriorityLimit,
     instructorPreferenceEnabled,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
@@ -958,6 +976,14 @@ export async function updateAutoscuolaSettings(
       typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
         ? limits.weeklyBookingLimit
         : DEFAULT_WEEKLY_BOOKING_LIMIT;
+    const previousExamPriorityEnabled =
+      typeof limits.examPriorityEnabled === "boolean"
+        ? limits.examPriorityEnabled
+        : DEFAULT_EXAM_PRIORITY_ENABLED;
+    const previousExamPriorityLimit =
+      typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
+        ? limits.examPriorityLimit
+        : DEFAULT_EXAM_PRIORITY_LIMIT;
     const previousInstructorPreferenceEnabled =
       typeof limits.instructorPreferenceEnabled === "boolean"
         ? limits.instructorPreferenceEnabled
@@ -1085,6 +1111,10 @@ export async function updateAutoscuolaSettings(
       payload.weeklyBookingLimitEnabled ?? previousWeeklyBookingLimitEnabled;
     const nextWeeklyBookingLimit =
       payload.weeklyBookingLimit ?? previousWeeklyBookingLimit;
+    const nextExamPriorityEnabled =
+      payload.examPriorityEnabled ?? previousExamPriorityEnabled;
+    const nextExamPriorityLimit =
+      payload.examPriorityLimit ?? previousExamPriorityLimit;
     const nextInstructorPreferenceEnabled =
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1227,6 +1257,8 @@ export async function updateAutoscuolaSettings(
       emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
       weeklyBookingLimitEnabled: nextWeeklyBookingLimitEnabled,
       weeklyBookingLimit: nextWeeklyBookingLimit,
+      examPriorityEnabled: nextExamPriorityEnabled,
+      examPriorityLimit: nextExamPriorityLimit,
       instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,

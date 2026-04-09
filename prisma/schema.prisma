@@ -218,6 +218,7 @@ model CompanyMember {
   autoscuolaRole AutoscuolaRole @default(STUDENT)
   bookingBlocked             Boolean        @default(false)
   weeklyBookingLimitExempt   Boolean        @default(false)
+  examPriorityOverride       Boolean?
   createdAt                  DateTime       @default(now()) @db.Timestamp(6)
   updatedAt      DateTime       @updatedAt
 

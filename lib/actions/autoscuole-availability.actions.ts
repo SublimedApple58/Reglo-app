@@ -2094,14 +2094,33 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     const weeklyBookingLimit = typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
       ? limits.weeklyBookingLimit
       : 3;
+    const examPriorityEnabled = limits.examPriorityEnabled === true;
+    const examPriorityLimit =
+      typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
+        ? limits.examPriorityLimit
+        : 5;
+
     let weeklyLimitReached = false;
     let weeklyBookingCount = 0;
+    let examPriorityInfo: { active: boolean; examDate: string | null } | null = null;
+    let effectiveLimit = weeklyBookingLimit;
+
     if (weeklyBookingLimitEnabled) {
       const memberRecord = await prisma.companyMember.findFirst({
         where: { companyId: membership.companyId, userId: payload.studentId },
         select: { weeklyBookingLimitExempt: true },
       });
       if (!memberRecord?.weeklyBookingLimitExempt) {
+        // Check exam priority
+        if (examPriorityEnabled) {
+          const { getExamPriorityInfo } = await import("@/lib/autoscuole/exam-priority");
+          const info = await getExamPriorityInfo(membership.companyId, payload.studentId);
+          examPriorityInfo = { active: info.active, examDate: info.examDate };
+          if (info.active) {
+            effectiveLimit = examPriorityLimit;
+          }
+        }
+
         // Count bookings for current week (Mon-Sun)
         const now = new Date();
         const dayOfWeek = now.getUTCDay();
@@ -2120,7 +2139,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
             startsAt: { gte: weekStart, lt: weekEnd },
           },
         });
-        weeklyLimitReached = weeklyBookingCount >= weeklyBookingLimit;
+        weeklyLimitReached = weeklyBookingCount >= effectiveLimit;
       }
     }
 
@@ -2134,9 +2153,10 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         instructorPreferenceEnabled,
         weeklyBookingLimit: weeklyBookingLimitEnabled ? {
           enabled: true,
-          limit: weeklyBookingLimit,
+          limit: effectiveLimit,
           current: weeklyBookingCount,
           reached: weeklyLimitReached,
+          examPriority: examPriorityInfo,
         } : { enabled: false },
       },
     };

@@ -1223,6 +1223,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     const register = buildDrivingRegisterData({ cases, lessons });
     const student = toStudentProfile(studentMembership.user, studentMembership.createdAt);
 
+    // Exam priority info
+    const { getExamPriorityInfo } = await import("@/lib/autoscuole/exam-priority");
+    const examPriorityInfo = await getExamPriorityInfo(companyId, studentId);
+
     const now = new Date();
     const booked = lessons.length;
     const completed = lessons.filter((l) => normalizeStatus(l.status) === "completed").length;
@@ -1247,6 +1251,9 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         student,
         bookingBlocked: studentMembership.bookingBlocked,
         weeklyBookingLimitExempt: studentMembership.weeklyBookingLimitExempt,
+        examPriorityOverride: studentMembership.examPriorityOverride,
+        examPriorityActive: examPriorityInfo.active,
+        examDate: examPriorityInfo.examDate,
         activeCase: register.activeCase,
         summary: register.summary,
         extendedSummary: { booked, completed, cancelled, upcoming, manualUnpaid },
@@ -1750,7 +1757,12 @@ export async function createAutoscuolaAppointment(
       const limit = typeof lim.weeklyBookingLimit === "number" && lim.weeklyBookingLimit >= 1
         ? lim.weeklyBookingLimit
         : 3;
-      return { enabled, limit };
+      const examPriorityEnabled = lim.examPriorityEnabled === true;
+      const examPriorityLimit =
+        typeof lim.examPriorityLimit === "number" && lim.examPriorityLimit >= 1
+          ? lim.examPriorityLimit
+          : 5;
+      return { enabled, limit, examPriorityEnabled, examPriorityLimit };
     })();
 
     if (weeklyLimitSettings.enabled && !payload.skipWeeklyLimitCheck) {
@@ -1762,6 +1774,16 @@ export async function createAutoscuolaAppointment(
       const isExempt = memberRecord?.weeklyBookingLimitExempt === true;
 
       if (!isExempt) {
+        // Determine effective limit (exam priority may raise it)
+        let effectiveLimit = weeklyLimitSettings.limit;
+        if (weeklyLimitSettings.examPriorityEnabled) {
+          const { hasExamPriority } = await import("@/lib/autoscuole/exam-priority");
+          const hasPriority = await hasExamPriority(companyId, payload.studentId);
+          if (hasPriority) {
+            effectiveLimit = weeklyLimitSettings.examPriorityLimit;
+          }
+        }
+
         // Calculate current ISO week bounds (Monday-Sunday) for the slot being booked
         const slotDate = new Date(payload.startsAt);
         const dayOfWeek = slotDate.getUTCDay();
@@ -1781,11 +1803,11 @@ export async function createAutoscuolaAppointment(
           },
         });
 
-        if (weekCount >= weeklyLimitSettings.limit) {
+        if (weekCount >= effectiveLimit) {
           if (isStudentActor) {
             return {
               success: false,
-              message: `Hai raggiunto il limite massimo di ${weeklyLimitSettings.limit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
+              message: `Hai raggiunto il limite massimo di ${effectiveLimit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
               code: "WEEKLY_LIMIT_REACHED" as const,
             };
           }
@@ -1793,9 +1815,9 @@ export async function createAutoscuolaAppointment(
           if (isInstructorActor || isOwnerOrAdminActor) {
             return {
               success: false,
-              message: `L'allievo ha già raggiunto il limite di ${weeklyLimitSettings.limit} guide settimanali (${weekCount} prenotate). Vuoi procedere comunque?`,
+              message: `L'allievo ha già raggiunto il limite di ${effectiveLimit} guide settimanali (${weekCount} prenotate). Vuoi procedere comunque?`,
               code: "WEEKLY_LIMIT_CONFIRM" as const,
-              weeklyLimitData: { current: weekCount, limit: weeklyLimitSettings.limit },
+              weeklyLimitData: { current: weekCount, limit: effectiveLimit },
             };
           }
         }
@@ -4121,6 +4143,43 @@ export async function toggleWeeklyBookingLimitExempt(
     return {
       success: true,
       data: { weeklyBookingLimitExempt: payload.exempt },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exam priority override
+// ---------------------------------------------------------------------------
+
+const setExamPriorityOverrideSchema = z.object({
+  studentId: z.string().uuid(),
+  override: z.boolean().nullable(),
+});
+
+export async function setExamPriorityOverride(
+  input: z.infer<typeof setExamPriorityOverrideSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = setExamPriorityOverrideSchema.parse(input);
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { examPriorityOverride: payload.override },
+    });
+
+    return {
+      success: true,
+      data: { examPriorityOverride: payload.override },
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
