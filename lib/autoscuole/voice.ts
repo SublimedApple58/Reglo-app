@@ -1471,7 +1471,7 @@ export async function transferVoiceCall({
   }
 
   const webhookBase = process.env.TWILIO_WEBHOOK_BASE_URL?.replace(/\/$/, "") || "https://app.reglo.it";
-  const fallbackUrl = `${webhookBase}/api/voice/twilio/transfer-fallback?companyId=${companyId}&callId=${callId}`;
+  const fallbackUrl = `${webhookBase}/api/voice/twilio/transfer-fallback?companyId=${companyId}&amp;callId=${callId}`;
 
   const twilio = getTwilioClient();
   await twilio.calls(call.twilioCallSid).update({
