@@ -446,7 +446,7 @@ const setupOpenAiSocket = (state) => {
         output_audio_format: "g711_ulaw",
         turn_detection: {
           type: "server_vad",
-          threshold: 0.8,
+          threshold: 0.9,
           prefix_padding_ms: 500,
           silence_duration_ms: 1000,
         },
