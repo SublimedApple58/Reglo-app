@@ -53,7 +53,7 @@ import {
   type OutOfAvailabilityAppointment,
 } from "@/components/pages/Autoscuole/OutOfAvailabilitySheet";
 
-type StudentOption = { id: string; firstName: string; lastName: string };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
 type ResourceOption = { id: string; name: string };
 type AppointmentRow = {
   id: string;
@@ -148,6 +148,85 @@ type FilterOption = {
   value: string;
   label: string;
 };
+
+function StudentSearchSelect({
+  students,
+  value,
+  onChange,
+}: {
+  students: StudentOption[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [query, setQuery] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  const selected = students.find((s) => s.id === value);
+
+  const filtered = React.useMemo(() => {
+    if (!query.trim()) return students;
+    const q = query.toLowerCase();
+    return students.filter(
+      (s) =>
+        s.firstName.toLowerCase().includes(q) ||
+        s.lastName.toLowerCase().includes(q) ||
+        (s.email && s.email.toLowerCase().includes(q)),
+    );
+  }, [students, query]);
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
+        placeholder="Cerca allievo..."
+        value={open ? query : selected ? `${selected.firstName} ${selected.lastName}` : query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          if (!open) setOpen(true);
+        }}
+        onFocus={() => {
+          setOpen(true);
+          setQuery("");
+        }}
+      />
+      {open && (
+        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
+          ) : (
+            filtered.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={cn(
+                  "flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
+                  s.id === value && "bg-muted",
+                )}
+                onClick={() => {
+                  onChange(s.id);
+                  setQuery("");
+                  setOpen(false);
+                }}
+              >
+                <span className="font-medium">{s.firstName} {s.lastName}</span>
+                {s.email && <span className="text-[11px] text-muted-foreground">{s.email}</span>}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AutoscuoleAgendaPage({
   tabs,
@@ -1851,19 +1930,11 @@ export function AutoscuoleAgendaPage({
                       </Select>
                     </FieldGroup>
                     <FieldGroup label="Allievo" required>
-                      <Select
+                      <StudentSearchSelect
+                        students={students}
                         value={form.studentId}
-                        onValueChange={(value) => setForm((prev) => ({ ...prev, studentId: value }))}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Seleziona allievo" /></SelectTrigger>
-                        <SelectContent>
-                          {students.map((student) => (
-                            <SelectItem key={student.id} value={student.id}>
-                              {student.firstName} {student.lastName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        onChange={(id) => setForm((prev) => ({ ...prev, studentId: id }))}
+                      />
                     </FieldGroup>
                     <div className="grid grid-cols-2 gap-3">
                       <FieldGroup label="Istruttore" required>
