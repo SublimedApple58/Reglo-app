@@ -13,8 +13,5 @@ export async function POST(request: Request) {
     sendProposal: false,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
   });
-  if (!res.success && "code" in res && res.code === "WEEKLY_LIMIT_CONFIRM") {
-    return NextResponse.json(res, { status: 200 });
-  }
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
