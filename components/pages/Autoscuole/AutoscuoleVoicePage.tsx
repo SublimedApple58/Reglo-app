@@ -786,9 +786,12 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
       {/* Quick start */}
       <section className="space-y-2">
         <h3 className="text-sm font-semibold">Metodo rapido</h3>
+        <p className="text-xs text-muted-foreground">
+          Scegli una delle due modalità in base alle tue esigenze:
+        </p>
         <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Da cellulare</p>
-          <p className="text-xs">Digita il seguente codice e premi Chiama:</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Deviazione sempre (consigliata)</p>
+          <p className="text-xs">Tutte le chiamate vanno alla segretaria AI. Il telefono non squilla mai.</p>
           <code className="block rounded-lg bg-white border border-border px-3 py-2 font-mono text-sm select-all">
             **21*{num}#
           </code>
@@ -797,13 +800,13 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
           </p>
         </div>
         <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-2">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Da telefono fisso</p>
-          <p className="text-xs">Digita il seguente codice dal telefono collegato alla linea:</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Deviazione su mancata risposta</p>
+          <p className="text-xs">Il telefono squilla brevemente (~5 sec). Se non rispondi, parte la segretaria AI.</p>
           <code className="block rounded-lg bg-white border border-border px-3 py-2 font-mono text-sm select-all">
-            *21*{num}#
+            **61*{num}*5#
           </code>
           <p className="text-[11px] text-muted-foreground">
-            Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">#21#</code>
+            Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">##61#</code>
           </p>
         </div>
       </section>
@@ -815,43 +818,43 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
         <CarrierBlock
           name="TIM"
           type="mobile"
-          code={`**21*${num}#`}
-          disableCode="##21#"
+          unconditional={{ code: `**21*${num}#`, disableCode: "##21#" }}
+          noAnswer={{ code: `**61*${num}*5#`, disableCode: "##61#" }}
           notes="Funziona subito, nessuna attivazione necessaria."
         />
         <CarrierBlock
           name="TIM"
           type="fisso"
-          code={`*21*${num}#`}
-          disableCode="#21#"
-          notes="Il servizio potrebbe dover essere attivato chiamando il 187 (privati) o 191 (business). Attivazione in 24-48 ore. Gratuito su linee fibra, 3 EUR/mese su ADSL."
+          unconditional={{ code: `*21*${num}#`, disableCode: "#21#" }}
+          noAnswer={{ code: `*61*${num}#`, disableCode: "#61#" }}
+          notes="Il servizio potrebbe dover essere attivato chiamando il 187 (privati) o 191 (business). Attivazione in 24-48 ore. Gratuito su linee fibra, 3 EUR/mese su ADSL. Su fisso il timeout non è configurabile da codice, contattare il 187."
         />
         <CarrierBlock
           name="Vodafone"
           type="mobile e fisso"
-          code={`**21*${num}#`}
-          disableCode="##21#"
-          notes="Su fisso si pu&ograve; gestire anche dal pannello Vodafone Station."
+          unconditional={{ code: `**21*${num}#`, disableCode: "##21#" }}
+          noAnswer={{ code: `**61*${num}*5#`, disableCode: "##61#" }}
+          notes="Su fisso si può gestire anche dal pannello Vodafone Station."
         />
         <CarrierBlock
           name="WindTre"
           type="mobile"
-          code={`**21*${num}*#`}
-          disableCode="##21#"
-          notes={<>Attenzione alla sintassi: c&apos;&egrave; un <code className="font-mono bg-white border border-border px-1 rounded">*</code> in pi&ugrave; prima del <code className="font-mono bg-white border border-border px-1 rounded">#</code> finale.</>}
+          unconditional={{ code: `**21*${num}*#`, disableCode: "##21#" }}
+          noAnswer={{ code: `**61*${num}*5#`, disableCode: "##61#" }}
+          notes={<>Per la deviazione sempre: attenzione alla sintassi, c&apos;&egrave; un <code className="font-mono bg-white border border-border px-1 rounded">*</code> in più prima del <code className="font-mono bg-white border border-border px-1 rounded">#</code> finale.</>}
         />
         <CarrierBlock
           name="Fastweb"
           type="fisso"
-          code={`*21*${num}#`}
-          disableCode="#21#"
-          notes="Gestibile anche dal portale MyFastweb. Costo: circa 0,05 EUR/chiamata deviata."
+          unconditional={{ code: `*21*${num}#`, disableCode: "#21#" }}
+          noAnswer={{ code: `*61*${num}#`, disableCode: "#61#" }}
+          notes="Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box. Con Fritz!Box è possibile configurare regole avanzate per numero chiamante. Costo: circa 0,05 EUR/chiamata deviata."
         />
         <CarrierBlock
           name="Iliad"
           type="mobile"
-          code={`**21*+39${num.replace(/^\+39/, "")}#`}
-          disableCode="##21#"
+          unconditional={{ code: `**21*+39${num.replace(/^\+39/, "")}#`, disableCode: "##21#" }}
+          noAnswer={{ code: `**61*+39${num.replace(/^\+39/, "")}*5#`, disableCode: "##61#" }}
           notes="Iliad richiede il prefisso +39. Costo: 0,05 EUR/min per le chiamate deviate."
         />
       </section>
@@ -863,14 +866,17 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
           <div>
             <p className="font-semibold">iPhone</p>
             <p className="text-muted-foreground">
-              Impostazioni &rarr; Telefono &rarr; Inoltro chiamate &rarr; attiva e inserisci{" "}
+              <strong>Devia sempre:</strong> Impostazioni &rarr; Telefono &rarr; Inoltro chiamate &rarr; attiva e inserisci{" "}
               <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">{num}</code>
+            </p>
+            <p className="text-muted-foreground mt-1">
+              <strong>Su mancata risposta:</strong> non configurabile da interfaccia, usa il codice <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">**61*{num}*5#</code>
             </p>
           </div>
           <div>
             <p className="font-semibold">Android</p>
             <p className="text-muted-foreground">
-              App Telefono &rarr; Menu (&hellip;) &rarr; Impostazioni &rarr; Deviazione chiamate &rarr; Devia sempre &rarr; inserisci{" "}
+              App Telefono &rarr; Menu (&hellip;) &rarr; Impostazioni &rarr; Deviazione chiamate &rarr; scegli &ldquo;Devia sempre&rdquo; oppure &ldquo;Devia se non rispondo&rdquo; &rarr; inserisci{" "}
               <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">{num}</code>
             </p>
           </div>
@@ -885,7 +891,7 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
             <strong className="text-foreground">Testa subito:</strong> dopo aver attivato la deviazione, chiama il tuo numero da un altro telefono per verificare che risponda la segretaria AI.
           </li>
           <li>
-            <strong className="text-foreground">Deviazione condizionata:</strong> se vuoi deviare solo quando non rispondi, usa <code className="font-mono bg-white border border-border px-1 rounded">**61*{num}#</code> (cellulare) o <code className="font-mono bg-white border border-border px-1 rounded">*23*{num}#</code> (fisso TIM/Fastweb).
+            <strong className="text-foreground">Quale modalità scegliere?</strong> Con la deviazione &ldquo;sempre&rdquo; il telefono non squilla mai e tutte le chiamate vanno all&apos;AI. Se hai attivato il trasferimento a segreteria durante la chiamata, il numero di trasferimento <strong>deve essere diverso</strong> dal numero deviato (es. il tuo cellulare personale), altrimenti si crea un loop. Con la deviazione &ldquo;su mancata risposta&rdquo; il telefono squilla brevemente per ogni chiamata (~5 sec), ma la segretaria AI può ritrasferire allo stesso numero senza problemi.
           </li>
           <li>
             <strong className="text-foreground">Disattiva la segreteria telefonica</strong> del tuo operatore prima di impostare la deviazione, altrimenti potrebbe intercettare le chiamate prima del trasferimento.
@@ -905,29 +911,43 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
 function CarrierBlock({
   name,
   type,
-  code,
-  disableCode,
+  unconditional,
+  noAnswer,
   notes,
 }: {
   name: string;
   type: string;
-  code: string;
-  disableCode: string;
+  unconditional: { code: string; disableCode: string };
+  noAnswer: { code: string; disableCode: string };
   notes: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-1.5">
+    <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <span className="text-xs font-semibold">{name}</span>
         <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{type}</span>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">Attiva:</span>
-        <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs select-all">{code}</code>
+      <div className="space-y-1">
+        <p className="text-[11px] font-medium text-foreground">Deviazione sempre (tutte le chiamate)</p>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Attiva:</span>
+          <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs select-all">{unconditional.code}</code>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Disattiva:</span>
+          <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs">{unconditional.disableCode}</code>
+        </div>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">Disattiva:</span>
-        <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs">{disableCode}</code>
+      <div className="space-y-1">
+        <p className="text-[11px] font-medium text-foreground">Deviazione su mancata risposta (dopo ~5 sec)</p>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Attiva:</span>
+          <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs select-all">{noAnswer.code}</code>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-muted-foreground">Disattiva:</span>
+          <code className="rounded bg-white border border-border px-2 py-0.5 font-mono text-xs">{noAnswer.disableCode}</code>
+        </div>
       </div>
       <p className="text-[11px] text-muted-foreground">{notes}</p>
     </div>
