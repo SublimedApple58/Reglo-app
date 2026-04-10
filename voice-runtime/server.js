@@ -124,6 +124,13 @@ const buildSessionInstructions = (state, customInstructions = "") => {
     "STRUMENTO create_callback: usalo se non riesci a completare la richiesta. Non condividere dati sensibili non richiesti.",
   );
 
+  if (state.voiceHandoffDuringCallEnabled && state.voiceHandoffDuringCallInstructions.trim()) {
+    parts.push(
+      "TRASFERIMENTO CHIAMATA: hai a disposizione lo strumento transfer_call. Usalo per trasferire la chiamata a una persona fisica. Prima di trasferire, avvisa il chiamante con una frase tipo 'Ti passo la segreteria, un momento.'",
+      "REGOLE DI TRASFERIMENTO: " + state.voiceHandoffDuringCallInstructions.trim(),
+    );
+  }
+
   if (customInstructions.trim()) {
     parts.push("ISTRUZIONI AGGIUNTIVE: " + customInstructions.trim());
   }
@@ -228,6 +235,19 @@ const buildRealtimeTools = (state) => {
     );
   }
 
+  if (state.voiceHandoffDuringCallEnabled) {
+    tools.push({
+      type: "function",
+      name: "transfer_call",
+      description:
+        "Trasferisce la chiamata a una persona fisica della segreteria. Usalo SOLO quando le regole di trasferimento lo indicano. Prima di chiamarlo, avvisa il chiamante.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    });
+  }
+
   return tools;
 };
 
@@ -244,6 +264,8 @@ const createCallState = (twilioSocket) => ({
   voiceBookingEnabled: false,
   voiceAllowedActions: [],
   voiceAssistantVoice: assistantVoice,
+  voiceHandoffDuringCallEnabled: false,
+  voiceHandoffDuringCallInstructions: "",
   pendingAudio: [],
   handledFunctionCalls: new Set(),
   connectedAt: Date.now(),
@@ -310,9 +332,12 @@ const handleFunctionCall = async ({ state, name, callId, rawArguments }) => {
 
   const input = typeof rawArguments === "string" ? safeJsonParse(rawArguments, {}) : {};
   const baseAllowed = ["search_knowledge", "create_callback"];
-  const allowed = state.voiceBookingEnabled
+  let allowed = state.voiceBookingEnabled
     ? [...baseAllowed, "find_student", "verify_student_dob", "check_availability", "create_appointment"]
-    : baseAllowed;
+    : [...baseAllowed];
+  if (state.voiceHandoffDuringCallEnabled) {
+    allowed.push("transfer_call");
+  }
   const tool = allowed.includes(name) ? name : null;
   if (!tool) {
     sendToOpenAi(state, {
@@ -604,6 +629,12 @@ wsServer.on("connection", (socket) => {
         typeof params.voiceAssistantVoice === "string" && params.voiceAssistantVoice.trim()
           ? params.voiceAssistantVoice.trim()
           : assistantVoice;
+      state.voiceHandoffDuringCallEnabled =
+        params.voiceHandoffDuringCallEnabled === "1" || params.voiceHandoffDuringCallEnabled === "true";
+      state.voiceHandoffDuringCallInstructions =
+        typeof params.voiceHandoffDuringCallInstructions === "string"
+          ? params.voiceHandoffDuringCallInstructions.trim()
+          : "";
 
       try {
         setupOpenAiSocket(state);

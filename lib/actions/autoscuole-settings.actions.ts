@@ -318,6 +318,8 @@ const autoscuolaSettingsPatchSchema = z
     voiceLegalGreetingEnabled: z.boolean().optional(),
     voiceOfficeHours: voiceOfficeHoursSchema.nullable().optional(),
     voiceHandoffPhone: optionalNullableIdSchema,
+    voiceHandoffDuringCallEnabled: z.boolean().optional(),
+    voiceHandoffDuringCallInstructions: z.string().max(1000).optional(),
     voiceFallbackMode: z.literal("transfer_or_callback").optional(),
     voiceRecordingEnabled: z.boolean().optional(),
     voiceTranscriptionEnabled: z.boolean().optional(),
@@ -373,6 +375,8 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceLegalGreetingEnabled !== undefined ||
       value.voiceOfficeHours !== undefined ||
       value.voiceHandoffPhone !== undefined ||
+      value.voiceHandoffDuringCallEnabled !== undefined ||
+      value.voiceHandoffDuringCallInstructions !== undefined ||
       value.voiceFallbackMode !== undefined ||
       value.voiceRecordingEnabled !== undefined ||
       value.voiceTranscriptionEnabled !== undefined ||
@@ -535,6 +539,8 @@ export type AutoscuolaSettingsData = {
     endMinutes: number;
   } | null;
   voiceHandoffPhone: string | null;
+  voiceHandoffDuringCallEnabled: boolean;
+  voiceHandoffDuringCallInstructions: string;
   voiceFallbackMode: "transfer_or_callback";
   voiceRecordingEnabled: boolean;
   voiceTranscriptionEnabled: boolean;
@@ -732,6 +738,11 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.voiceHandoffPhone === "string" && limits.voiceHandoffPhone.trim().length
       ? limits.voiceHandoffPhone.trim()
       : null;
+  const voiceHandoffDuringCallEnabled = limits.voiceHandoffDuringCallEnabled === true;
+  const voiceHandoffDuringCallInstructions =
+    typeof limits.voiceHandoffDuringCallInstructions === "string"
+      ? limits.voiceHandoffDuringCallInstructions.trim()
+      : "";
   const voiceFallbackMode = DEFAULT_VOICE_FALLBACK_MODE;
   const voiceRecordingEnabled =
     typeof limits.voiceRecordingEnabled === "boolean"
@@ -812,6 +823,8 @@ const resolveAutoscuolaSettingsData = async (
     voiceLegalGreetingEnabled,
     voiceOfficeHours,
     voiceHandoffPhone,
+    voiceHandoffDuringCallEnabled,
+    voiceHandoffDuringCallInstructions,
     voiceFallbackMode,
     voiceRecordingEnabled,
     voiceTranscriptionEnabled,
@@ -1025,6 +1038,11 @@ export async function updateAutoscuolaSettings(
       typeof limits.voiceHandoffPhone === "string" && limits.voiceHandoffPhone.trim().length
         ? limits.voiceHandoffPhone.trim()
         : null;
+    const previousVoiceHandoffDuringCallEnabled = limits.voiceHandoffDuringCallEnabled === true;
+    const previousVoiceHandoffDuringCallInstructions =
+      typeof limits.voiceHandoffDuringCallInstructions === "string"
+        ? limits.voiceHandoffDuringCallInstructions.trim()
+        : "";
     const previousVoiceRecordingEnabled =
       typeof limits.voiceRecordingEnabled === "boolean"
         ? limits.voiceRecordingEnabled
@@ -1141,6 +1159,12 @@ export async function updateAutoscuolaSettings(
         ? payload.voiceHandoffPhone
         : previousVoiceHandoffPhone
       : null;
+    const nextVoiceHandoffDuringCallEnabled = nextVoiceFeatureEnabled
+      ? payload.voiceHandoffDuringCallEnabled ?? previousVoiceHandoffDuringCallEnabled
+      : false;
+    const nextVoiceHandoffDuringCallInstructions = nextVoiceFeatureEnabled
+      ? payload.voiceHandoffDuringCallInstructions ?? previousVoiceHandoffDuringCallInstructions
+      : "";
     const nextVoiceRecordingEnabled = nextVoiceFeatureEnabled
       ? payload.voiceRecordingEnabled ?? previousVoiceRecordingEnabled
       : DEFAULT_VOICE_RECORDING_ENABLED;
@@ -1270,6 +1294,8 @@ export async function updateAutoscuolaSettings(
       voiceLegalGreetingEnabled: nextVoiceLegalGreetingEnabled,
       voiceOfficeHours: nextVoiceOfficeHours,
       voiceHandoffPhone: nextVoiceHandoffPhone,
+      voiceHandoffDuringCallEnabled: nextVoiceHandoffDuringCallEnabled,
+      voiceHandoffDuringCallInstructions: nextVoiceHandoffDuringCallInstructions,
       voiceFallbackMode: DEFAULT_VOICE_FALLBACK_MODE,
       voiceRecordingEnabled: nextVoiceRecordingEnabled,
       voiceTranscriptionEnabled: nextVoiceTranscriptionEnabled,
@@ -1351,6 +1377,8 @@ export async function updateAutoscuolaSettings(
         voiceLegalGreetingEnabled: nextLimits.voiceLegalGreetingEnabled,
         voiceOfficeHours: nextLimits.voiceOfficeHours,
         voiceHandoffPhone: nextLimits.voiceHandoffPhone,
+        voiceHandoffDuringCallEnabled: nextLimits.voiceHandoffDuringCallEnabled,
+        voiceHandoffDuringCallInstructions: nextLimits.voiceHandoffDuringCallInstructions,
         voiceFallbackMode: nextLimits.voiceFallbackMode,
         voiceRecordingEnabled: nextLimits.voiceRecordingEnabled,
         voiceTranscriptionEnabled: nextLimits.voiceTranscriptionEnabled,

@@ -9,6 +9,7 @@ import {
   getVoiceCompanyConfig,
   getVoiceStudentByPhone,
   searchAutoscuolaVoiceKnowledge,
+  transferVoiceCall,
   verifyRuntimeHmacSignature,
   verifyVoiceStudentDob,
 } from "@/lib/autoscuole/voice";
@@ -27,6 +28,7 @@ const payloadSchema = z.object({
     "log_turn",
     "search_knowledge",
     "check_availability",
+    "transfer_call",
   ]),
   input: z.record(z.string(), z.any()).optional(),
 });
@@ -187,6 +189,17 @@ export async function POST(request: Request) {
         limit,
       });
       return NextResponse.json({ success: true, data: { chunks } });
+    }
+
+    if (tool === "transfer_call") {
+      if (!callId) {
+        return NextResponse.json(
+          { success: false, message: "callId obbligatorio per transfer_call." },
+          { status: 400 },
+        );
+      }
+      const result = await transferVoiceCall({ companyId, callId });
+      return NextResponse.json({ success: true, data: result });
     }
 
     return NextResponse.json(

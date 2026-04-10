@@ -206,6 +206,8 @@ export function AutoscuoleVoicePage() {
   const [voiceRecordingEnabled, setVoiceRecordingEnabled] = React.useState(true);
   const [voiceTranscriptionEnabled, setVoiceTranscriptionEnabled] = React.useState(true);
   const [voiceHandoffPhone, setVoiceHandoffPhone] = React.useState<string | null>(null);
+  const [voiceHandoffDuringCallEnabled, setVoiceHandoffDuringCallEnabled] = React.useState(false);
+  const [voiceHandoffDuringCallInstructions, setVoiceHandoffDuringCallInstructions] = React.useState("");
   const [voiceOfficeDays, setVoiceOfficeDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
   const [voiceOfficeStartMinutes, setVoiceOfficeStartMinutes] = React.useState(9 * 60);
   const [voiceOfficeEndMinutes, setVoiceOfficeEndMinutes] = React.useState(19 * 60);
@@ -247,6 +249,8 @@ export function AutoscuoleVoicePage() {
       setVoiceRecordingEnabled(d.voiceRecordingEnabled !== false);
       setVoiceTranscriptionEnabled(d.voiceTranscriptionEnabled !== false);
       setVoiceHandoffPhone(d.voiceHandoffPhone ?? null);
+      setVoiceHandoffDuringCallEnabled(d.voiceHandoffDuringCallEnabled ?? false);
+      setVoiceHandoffDuringCallInstructions(d.voiceHandoffDuringCallInstructions ?? "");
       setVoiceOfficeDays(normalizeDays(Array.from(d.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])));
       setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
       setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
@@ -331,6 +335,8 @@ export function AutoscuoleVoicePage() {
         endMinutes: voiceOfficeEndMinutes,
       },
       voiceHandoffPhone: voiceHandoffPhone?.trim() || null,
+      voiceHandoffDuringCallEnabled,
+      voiceHandoffDuringCallInstructions,
       voiceFallbackMode: "transfer_or_callback",
       voiceRecordingEnabled,
       voiceTranscriptionEnabled,
@@ -566,6 +572,25 @@ export function AutoscuoleVoicePage() {
                   placeholder="+39..."
                 />
               </FieldGroup>
+              {/* Handoff during call */}
+              <ToggleRow
+                label="Trasferimento durante chiamata"
+                description="Consenti alla segretaria AI di trasferire la chiamata al numero handoff in base a regole personalizzate"
+                checked={voiceHandoffDuringCallEnabled}
+                onCheckedChange={setVoiceHandoffDuringCallEnabled}
+              />
+              {voiceHandoffDuringCallEnabled && (
+                <FieldGroup label="Regole di trasferimento" description="Descrivi quando la segretaria deve trasferire la chiamata. Es: &laquo;Se chiedono insistentemente i prezzi&raquo; oppure &laquo;Se vogliono parlare con una persona fisica&raquo;">
+                  <textarea
+                    value={voiceHandoffDuringCallInstructions}
+                    onChange={(e) => setVoiceHandoffDuringCallInstructions(e.target.value)}
+                    maxLength={1000}
+                    rows={3}
+                    className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none transition focus:border-primary resize-none"
+                    placeholder="Es: Se il chiamante chiede insistentemente di parlare con una persona, trasferisci la chiamata."
+                  />
+                </FieldGroup>
+              )}
               {/* Recording toggles */}
               <div className="space-y-2">
                 <ToggleRow label="Registra audio" description="Salva una registrazione audio della chiamata" checked={voiceRecordingEnabled} onCheckedChange={setVoiceRecordingEnabled} />

@@ -38,6 +38,8 @@ export type ServiceLimits = {
     endMinutes: number;
   } | null;
   voiceHandoffPhone?: string | null;
+  voiceHandoffDuringCallEnabled?: boolean;
+  voiceHandoffDuringCallInstructions?: string;
   voiceFallbackMode?: "transfer_or_callback";
   voiceRecordingEnabled?: boolean;
   voiceTranscriptionEnabled?: boolean;

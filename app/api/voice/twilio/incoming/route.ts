@@ -226,6 +226,8 @@ export async function POST(request: Request) {
         lineContext.settings.voiceAllowedActions.join(","),
       )}" />
       <Parameter name="voiceAssistantVoice" value="${escapeXml(lineContext.settings.voiceAssistantVoice || "coral")}" />
+      <Parameter name="voiceHandoffDuringCallEnabled" value="${lineContext.settings.voiceHandoffDuringCallEnabled ? "1" : "0"}" />
+      <Parameter name="voiceHandoffDuringCallInstructions" value="${escapeXml(lineContext.settings.voiceHandoffDuringCallInstructions || "")}" />
     </Stream>
   </Connect>
 </Response>`;

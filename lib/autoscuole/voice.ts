@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { prisma as defaultPrisma } from "@/db/prisma";
+import { getTwilioClient } from "@/lib/twilio";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 
 type PrismaClientLike = typeof defaultPrisma;
@@ -21,6 +22,8 @@ export type AutoscuolaVoiceSettings = {
     endMinutes: number;
   } | null;
   voiceHandoffPhone: string | null;
+  voiceHandoffDuringCallEnabled: boolean;
+  voiceHandoffDuringCallInstructions: string;
   voiceFallbackMode: "transfer_or_callback";
   voiceRecordingEnabled: boolean;
   voiceTranscriptionEnabled: boolean;
@@ -139,6 +142,8 @@ const mapVoiceSettings = async (companyId: string): Promise<AutoscuolaVoiceSetti
     voiceLegalGreetingEnabled: settings.voiceLegalGreetingEnabled !== false,
     voiceOfficeHours: settings.voiceOfficeHours,
     voiceHandoffPhone: settings.voiceHandoffPhone,
+    voiceHandoffDuringCallEnabled: Boolean(settings.voiceHandoffDuringCallEnabled),
+    voiceHandoffDuringCallInstructions: settings.voiceHandoffDuringCallInstructions ?? "",
     voiceFallbackMode: settings.voiceFallbackMode,
     voiceRecordingEnabled: settings.voiceRecordingEnabled !== false,
     voiceTranscriptionEnabled: settings.voiceTranscriptionEnabled !== false,
@@ -1438,4 +1443,37 @@ export function verifyRuntimeHmacSignature({
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Transfer call to handoff phone
+// ---------------------------------------------------------------------------
+
+export async function transferVoiceCall({
+  companyId,
+  callId,
+}: {
+  companyId: string;
+  callId: string;
+}) {
+  const call = await defaultPrisma.autoscuolaVoiceCall.findFirst({
+    where: { id: callId, companyId },
+    select: { twilioCallSid: true },
+  });
+  if (!call?.twilioCallSid) {
+    throw new Error("Chiamata non trovata.");
+  }
+
+  const settings = await mapVoiceSettings(companyId);
+  const handoffPhone = settings.voiceHandoffPhone?.trim();
+  if (!handoffPhone) {
+    throw new Error("Numero handoff non configurato.");
+  }
+
+  const twilio = getTwilioClient();
+  await twilio.calls(call.twilioCallSid).update({
+    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="it-IT">Ti passo la segreteria. Un momento.</Say><Dial>${handoffPhone}</Dial></Response>`,
+  });
+
+  return { transferred: true };
 }
