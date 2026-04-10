@@ -137,7 +137,9 @@ const buildSessionInstructions = (state, customInstructions = "") => {
 
   if (state.transferFailed) {
     parts.push(
-      "SITUAZIONE ATTUALE: hai appena provato a trasferire la chiamata alla segreteria ma nessuno ha risposto. Il chiamante è ancora in linea. Scusati brevemente dicendo che la segreteria non è disponibile al momento e chiedi se puoi aiutarlo tu o se preferisce essere richiamato. Se vuole essere richiamato usa create_callback.",
+      "OVERRIDE COMPORTAMENTO INIZIALE: IGNORA la regola di aspettare che il chiamante parli. Devi parlare TU subito appena la connessione si apre.",
+      "PRIMA COSA DA DIRE: 'Mi scusi, purtroppo la segreteria non risponde al momento. Se vuole mi lascia il suo numero di cellulare e la faccio richiamare appena possibile.'",
+      "Se il chiamante fornisce il numero, usa create_callback con il numero fornito. Se vuole altro aiuto, assistilo normalmente.",
     );
   }
 
