@@ -1472,7 +1472,7 @@ export async function transferVoiceCall({
 
   const twilio = getTwilioClient();
   await twilio.calls(call.twilioCallSid).update({
-    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Say language="it-IT">Ti passo la segreteria. Un momento.</Say><Dial>${handoffPhone}</Dial></Response>`,
+    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Dial>${handoffPhone}</Dial></Response>`,
   });
 
   return { transferred: true };
