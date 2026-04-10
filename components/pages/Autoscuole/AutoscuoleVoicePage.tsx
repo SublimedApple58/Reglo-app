@@ -799,15 +799,50 @@ function VoiceSetupGuide({ phoneNumber }: { phoneNumber: string }) {
             Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">##21#</code>
           </p>
         </div>
-        <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-2">
+        <div className="rounded-xl border border-border bg-gray-50 p-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Deviazione su mancata risposta</p>
-          <p className="text-xs">Il telefono squilla brevemente (~5 sec). Se non rispondi, parte la segretaria AI.</p>
+          <p className="text-xs">Il telefono squilla per il tempo scelto. Se non rispondi, parte la segretaria AI.</p>
           <code className="block rounded-lg bg-white border border-border px-3 py-2 font-mono text-sm select-all">
             **61*{num}*5#
           </code>
           <p className="text-[11px] text-muted-foreground">
             Per disattivare: <code className="font-mono bg-white border border-border px-1.5 py-0.5 rounded">##61#</code>
           </p>
+          <div className="border-t border-border pt-2 space-y-1.5">
+            <p className="text-[11px] font-medium text-foreground">Quanto tempo impostare?</p>
+            <p className="text-[11px] text-muted-foreground">
+              Il numero finale nel codice indica i secondi di squillo prima che parta l&apos;AI. Valori possibili: 5, 10, 15, 20, 25, 30.
+            </p>
+            <div className="grid grid-cols-3 gap-1.5 text-[11px]">
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*5#</span>
+                <p className="text-muted-foreground">~1 squillo</p>
+              </div>
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*10#</span>
+                <p className="text-muted-foreground">~2 squilli</p>
+              </div>
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*15#</span>
+                <p className="text-muted-foreground">~3 squilli</p>
+              </div>
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*20#</span>
+                <p className="text-muted-foreground">~4 squilli</p>
+              </div>
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*25#</span>
+                <p className="text-muted-foreground">~5 squilli</p>
+              </div>
+              <div className="rounded-lg bg-white border border-border px-2 py-1.5 text-center">
+                <span className="font-mono font-semibold">*30#</span>
+                <p className="text-muted-foreground">~6 squilli</p>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              <strong className="text-foreground">Consiglio:</strong> usa <strong>5 secondi</strong> se vuoi che l&apos;AI risponda quasi subito con il minimo disturbo. Usa <strong>15-20 secondi</strong> se vuoi avere il tempo di rispondere di persona quando sei in ufficio e far intervenire l&apos;AI solo quando non ci sei.
+            </p>
+          </div>
         </div>
       </section>
 
