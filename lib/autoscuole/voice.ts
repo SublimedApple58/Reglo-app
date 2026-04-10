@@ -1475,7 +1475,7 @@ export async function transferVoiceCall({
 
   const twilio = getTwilioClient();
   await twilio.calls(call.twilioCallSid).update({
-    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Dial action="${fallbackUrl}" timeout="25">${handoffPhone}</Dial></Response>`,
+    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Dial action="${fallbackUrl}" timeout="15">${handoffPhone}</Dial></Response>`,
   });
 
   return { transferred: true };
