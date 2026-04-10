@@ -135,6 +135,12 @@ const buildSessionInstructions = (state, customInstructions = "") => {
     parts.push("ISTRUZIONI AGGIUNTIVE: " + customInstructions.trim());
   }
 
+  if (state.transferFailed) {
+    parts.push(
+      "SITUAZIONE ATTUALE: hai appena provato a trasferire la chiamata alla segreteria ma nessuno ha risposto. Il chiamante è ancora in linea. Scusati brevemente dicendo che la segreteria non è disponibile al momento e chiedi se puoi aiutarlo tu o se preferisce essere richiamato. Se vuole essere richiamato usa create_callback.",
+    );
+  }
+
   return parts.join(" ");
 };
 
@@ -266,6 +272,7 @@ const createCallState = (twilioSocket) => ({
   voiceAssistantVoice: assistantVoice,
   voiceHandoffDuringCallEnabled: false,
   voiceHandoffDuringCallInstructions: "",
+  transferFailed: false,
   pendingAudio: [],
   handledFunctionCalls: new Set(),
   connectedAt: Date.now(),
@@ -635,6 +642,8 @@ wsServer.on("connection", (socket) => {
         typeof params.voiceHandoffDuringCallInstructions === "string"
           ? params.voiceHandoffDuringCallInstructions.trim()
           : "";
+      state.transferFailed =
+        params.transferFailed === "1" || params.transferFailed === "true";
 
       try {
         setupOpenAiSocket(state);

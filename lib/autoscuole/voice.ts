@@ -1470,9 +1470,12 @@ export async function transferVoiceCall({
     throw new Error("Numero handoff non configurato.");
   }
 
+  const webhookBase = process.env.TWILIO_WEBHOOK_BASE_URL?.replace(/\/$/, "") || "https://app.reglo.it";
+  const fallbackUrl = `${webhookBase}/api/voice/twilio/transfer-fallback?companyId=${companyId}&callId=${callId}`;
+
   const twilio = getTwilioClient();
   await twilio.calls(call.twilioCallSid).update({
-    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Dial>${handoffPhone}</Dial></Response>`,
+    twiml: `<?xml version="1.0" encoding="UTF-8"?><Response><Dial action="${fallbackUrl}" timeout="25">${handoffPhone}</Dial></Response>`,
   });
 
   return { transferred: true };
