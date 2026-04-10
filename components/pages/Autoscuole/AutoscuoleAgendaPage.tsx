@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
 import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2 } from "lucide-react";
@@ -160,7 +161,9 @@ function StudentSearchSelect({
 }) {
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const [pos, setPos] = React.useState({ top: 0, left: 0, width: 0 });
 
   const selected = students.find((s) => s.id === value);
 
@@ -175,17 +178,40 @@ function StudentSearchSelect({
     );
   }, [students, query]);
 
+  const updatePos = React.useCallback(() => {
+    if (!inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    updatePos();
+    window.addEventListener("scroll", updatePos, true);
+    window.addEventListener("resize", updatePos);
+    return () => {
+      window.removeEventListener("scroll", updatePos, true);
+      window.removeEventListener("resize", updatePos);
+    };
+  }, [open, updatePos]);
+
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (
+        inputRef.current?.contains(target) ||
+        dropdownRef.current?.contains(target)
+      ) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   return (
-    <div ref={ref} className="relative">
+    <div>
       <input
+        ref={inputRef}
         className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
         placeholder="Cerca allievo..."
         value={open ? query : selected ? `${selected.firstName} ${selected.lastName}` : query}
@@ -198,8 +224,12 @@ function StudentSearchSelect({
           setQuery("");
         }}
       />
-      {open && (
-        <div className="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-lg">
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          className="fixed z-[9999] max-h-48 overflow-y-auto rounded-lg border border-border bg-white shadow-lg"
+          style={{ top: pos.top, left: pos.left, width: pos.width }}
+        >
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
           ) : (
@@ -222,7 +252,8 @@ function StudentSearchSelect({
               </button>
             ))
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
