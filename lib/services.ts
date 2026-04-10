@@ -47,6 +47,7 @@ export type ServiceLimits = {
   voiceInstructions?: string;
   voiceAllowedActions?: Array<"faq" | "lesson_info" | "booking">;
   voiceAssistantVoice?: string;
+  studentNotesEnabled?: boolean;
 };
 
 export type CompanyServiceInfo = {

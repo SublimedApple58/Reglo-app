@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, FileText, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
@@ -248,6 +248,7 @@ export function AutoscuoleResourcesPage({
   const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
   const [triggeringNotification, setTriggeringNotification] = React.useState(false);
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
+  const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -435,6 +436,7 @@ export function AutoscuoleResourcesPage({
       setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
       setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
+      setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
           ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -579,6 +581,7 @@ export function AutoscuoleResourcesPage({
       emptySlotNotificationTarget,
       emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
       instructorPreferenceEnabled,
+      studentNotesEnabled,
       appBookingActors,
       instructorBookingMode,
       studentBookingMode,
@@ -626,6 +629,7 @@ export function AutoscuoleResourcesPage({
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
+    setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -1777,6 +1781,28 @@ export function AutoscuoleResourcesPage({
                     </Select>
                   </FieldGroup>
                 ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={FileText}
+              title="Note allievi"
+              description="Consenti agli allievi di vedere le note delle guide dall'app."
+              expanded={expandedSection === "studentNotes"}
+              onToggle={() => toggleSection("studentNotes")}
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setStudentNotesEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Mostra note nell&apos;app allievi</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi potranno consultare le note rilasciate dagli istruttori dopo ogni guida, direttamente dalla loro app.
+                    </span>
+                  </div>
+                  <InlineToggle checked={studentNotesEnabled} size="sm" />
+                </div>
               </div>
             </AccordionSection>
             <AccordionSection

@@ -83,6 +83,7 @@ const DEFAULT_WEEKLY_BOOKING_LIMIT = 3;
 const DEFAULT_EXAM_PRIORITY_ENABLED = false;
 const DEFAULT_EXAM_PRIORITY_LIMIT = 5;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
+const DEFAULT_STUDENT_NOTES_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
   "not_started",
@@ -331,6 +332,7 @@ const autoscuolaSettingsPatchSchema = z
       .transform((items) => Array.from(new Set(items)))
       .optional(),
     voiceAssistantVoice: z.string().min(1).max(50).optional(),
+    studentNotesEnabled: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -382,7 +384,8 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceTranscriptionEnabled !== undefined ||
       value.voiceRetentionDays !== undefined ||
       value.voiceInstructions !== undefined ||
-      value.voiceAllowedActions !== undefined,
+      value.voiceAllowedActions !== undefined ||
+      value.studentNotesEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -548,6 +551,7 @@ export type AutoscuolaSettingsData = {
   voiceInstructions: string;
   voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
   voiceAssistantVoice: string;
+  studentNotesEnabled: boolean;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -690,6 +694,10 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
       : DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED;
+  const studentNotesEnabled =
+    typeof limits.studentNotesEnabled === "boolean"
+      ? limits.studentNotesEnabled
+      : DEFAULT_STUDENT_NOTES_ENABLED;
   const voiceFeatureEnabled =
     typeof limits.voiceFeatureEnabled === "boolean"
       ? limits.voiceFeatureEnabled
@@ -832,6 +840,7 @@ const resolveAutoscuolaSettingsData = async (
     voiceInstructions,
     voiceAllowedActions,
     voiceAssistantVoice,
+    studentNotesEnabled,
   };
 };
 
@@ -1001,6 +1010,10 @@ export async function updateAutoscuolaSettings(
       typeof limits.instructorPreferenceEnabled === "boolean"
         ? limits.instructorPreferenceEnabled
         : DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED;
+    const previousStudentNotesEnabled =
+      typeof limits.studentNotesEnabled === "boolean"
+        ? limits.studentNotesEnabled
+        : DEFAULT_STUDENT_NOTES_ENABLED;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -1135,6 +1148,8 @@ export async function updateAutoscuolaSettings(
       payload.examPriorityLimit ?? previousExamPriorityLimit;
     const nextInstructorPreferenceEnabled =
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
+    const nextStudentNotesEnabled =
+      payload.studentNotesEnabled ?? previousStudentNotesEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1303,6 +1318,7 @@ export async function updateAutoscuolaSettings(
       voiceInstructions: nextVoiceInstructions,
       voiceAllowedActions: nextVoiceAllowedActions,
       voiceAssistantVoice: nextVoiceAssistantVoice,
+      studentNotesEnabled: nextStudentNotesEnabled,
     };
 
     if (service) {
