@@ -437,9 +437,9 @@ const setupOpenAiSocket = (state) => {
         output_audio_format: "g711_ulaw",
         turn_detection: {
           type: "server_vad",
-          threshold: 0.65,
-          prefix_padding_ms: 400,
-          silence_duration_ms: 800,
+          threshold: 0.8,
+          prefix_padding_ms: 500,
+          silence_duration_ms: 1000,
         },
         input_audio_transcription: { model: "whisper-1" },
         instructions: buildSessionInstructions(state, ""),
