@@ -497,13 +497,17 @@ const setupOpenAiSocket = (state) => {
     );
     const saluto = romeHour < 13 ? "buongiorno" : "buonasera";
 
+    const initialInstructions = state.transferFailed
+      ? `Di' esattamente: "Mi scusi, purtroppo la segreteria non risponde al momento. Se vuole mi lascia il suo numero di cellulare e la faccio richiamare appena possibile." Non aggiungere altro.`
+      : `Saluta brevemente: "${normalizeCompanyName(
+          state.companyName,
+        )}, ${saluto}. Come posso aiutarla?" Non aggiungere altro.`;
+
     sendToOpenAi(state, {
       type: "response.create",
       response: {
         modalities: ["audio", "text"],
-        instructions: `Saluta brevemente: "${normalizeCompanyName(
-          state.companyName,
-        )}, ${saluto}. Come posso aiutarla?" Non aggiungere altro.`,
+        instructions: initialInstructions,
       },
     });
   });
