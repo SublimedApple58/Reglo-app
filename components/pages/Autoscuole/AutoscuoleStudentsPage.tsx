@@ -101,6 +101,8 @@ type ExtendedSummary = {
 type LessonEntry = {
   id: string;
   type: string;
+  types?: string[];
+  rating?: number | null;
   status: string;
   startsAt: string | Date;
   durationMinutes: number;
@@ -1235,7 +1237,7 @@ export function AutoscuoleStudentsPage({
                                 </div>
                               </div>
                               <p className="mt-1 text-xs text-muted-foreground">
-                                {formatLessonType(lesson.type)} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
+                                {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string) => formatLessonType(t)).join(", ")} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                               </p>
                               {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && (
                                 <div className="mt-2 flex gap-2">
@@ -1322,9 +1324,18 @@ export function AutoscuoleStudentsPage({
                                     {" – "}
                                     {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                                   </span>
-                                  <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
-                                    {formatLessonType(lesson.type)}
-                                  </span>
+                                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                                    <span key={i} className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                                      {formatLessonType(t)}
+                                    </span>
+                                  ))}
+                                  {lesson.rating != null && (
+                                    <span className="ml-auto flex items-center gap-0.5 text-[10px]">
+                                      {Array.from({ length: 5 }, (_, i) => (
+                                        <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
+                                      ))}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}

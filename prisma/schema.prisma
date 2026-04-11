@@ -307,6 +307,8 @@ model AutoscuolaAppointment {
   caseId                  String?   @db.Uuid
   slotId                  String?   @db.Uuid
   type                    String
+  types                   String[]  @default([])
+  rating                  Int?
   startsAt                DateTime  @db.Timestamp(6)
   endsAt                  DateTime? @db.Timestamp(6)
   status                  String    @default("scheduled")

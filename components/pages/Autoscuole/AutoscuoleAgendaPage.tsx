@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
 import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2 } from "lucide-react";
@@ -59,6 +58,8 @@ type ResourceOption = { id: string; name: string };
 type AppointmentRow = {
   id: string;
   type: string;
+  types?: string[];
+  rating?: number | null;
   status: string;
   startsAt: string | Date;
   endsAt?: string | Date | null;
@@ -163,7 +164,6 @@ function StudentSearchSelect({
   const [open, setOpen] = React.useState(false);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
-  const [pos, setPos] = React.useState({ top: 0, left: 0, width: 0 });
 
   const selected = students.find((s) => s.id === value);
 
@@ -177,23 +177,6 @@ function StudentSearchSelect({
         (s.email && s.email.toLowerCase().includes(q)),
     );
   }, [students, query]);
-
-  const updatePos = React.useCallback(() => {
-    if (!inputRef.current) return;
-    const rect = inputRef.current.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-  }, []);
-
-  React.useEffect(() => {
-    if (!open) return;
-    updatePos();
-    window.addEventListener("scroll", updatePos, true);
-    window.addEventListener("resize", updatePos);
-    return () => {
-      window.removeEventListener("scroll", updatePos, true);
-      window.removeEventListener("resize", updatePos);
-    };
-  }, [open, updatePos]);
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -209,7 +192,7 @@ function StudentSearchSelect({
   }, []);
 
   return (
-    <div>
+    <div className="relative">
       <input
         ref={inputRef}
         className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
@@ -224,11 +207,10 @@ function StudentSearchSelect({
           setQuery("");
         }}
       />
-      {open && createPortal(
+      {open && (
         <div
           ref={dropdownRef}
-          className="fixed z-[9999] max-h-48 overflow-y-auto rounded-lg border border-border bg-white shadow-lg"
-          style={{ top: pos.top, left: pos.left, width: pos.width }}
+          className="absolute left-0 top-full z-[9999] mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-lg"
         >
           {filtered.length === 0 ? (
             <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
@@ -252,8 +234,7 @@ function StudentSearchSelect({
               </button>
             ))
           )}
-        </div>,
-        document.body,
+        </div>
       )}
     </div>
   );
@@ -300,6 +281,7 @@ export function AutoscuoleAgendaPage({
   const [form, setForm] = React.useState({
     studentId: "",
     type: "guida",
+    types: ["guida"] as string[],
     day: "",
     time: "09:00",
     instructorId: "",
@@ -614,7 +596,8 @@ export function AutoscuoleAgendaPage({
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const makePayload = (skip?: boolean) => ({
       studentId: form.studentId,
-      type: form.type,
+      type: form.types[0] || form.type,
+      types: form.types,
       startsAt: startDate.toISOString(),
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
@@ -649,6 +632,7 @@ export function AutoscuoleAgendaPage({
     setForm({
       studentId: "",
       type: "guida",
+      types: ["guida"],
       day: "",
       time: "09:00",
       instructorId: "",
@@ -1948,17 +1932,34 @@ export function AutoscuoleAgendaPage({
                       <p className="mt-0.5 text-xs text-muted-foreground">Tipo di guida, istruttore, allievo e veicolo</p>
                     </div>
                     <FieldGroup label="Tipo guida" required>
-                      <Select
-                        value={form.type}
-                        onValueChange={(value) => setForm((prev) => ({ ...prev, type: value }))}
-                      >
-                        <SelectTrigger><SelectValue placeholder="Seleziona tipo" /></SelectTrigger>
-                        <SelectContent>
-                          {LESSON_TYPE_OPTIONS.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex flex-wrap gap-1.5">
+                        {LESSON_TYPE_OPTIONS.map((option) => {
+                          const active = form.types.includes(option.value);
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() =>
+                                setForm((prev) => {
+                                  const next = active
+                                    ? prev.types.filter((t) => t !== option.value)
+                                    : [...prev.types, option.value];
+                                  const types = next.length ? next : [option.value];
+                                  return { ...prev, types, type: types[0] };
+                                })
+                              }
+                              className={cn(
+                                "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                                active
+                                  ? "border-yellow-400 bg-yellow-50 text-yellow-700"
+                                  : "border-border bg-gray-50 text-muted-foreground hover:bg-gray-100",
+                              )}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </FieldGroup>
                     <FieldGroup label="Allievo" required>
                       <StudentSearchSelect
@@ -2015,7 +2016,7 @@ export function AutoscuoleAgendaPage({
                     <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
                       <SummaryRow label="Giorno" value={form.day || "—"} />
                       <SummaryRow label="Orario" value={`${form.time} · ${form.duration} min`} />
-                      <SummaryRow label="Tipo" value={LESSON_TYPE_OPTIONS.find((o) => o.value === form.type)?.label ?? form.type} />
+                      <SummaryRow label="Tipo" value={form.types.map((t) => LESSON_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t).join(", ")} />
                       <SummaryRow label="Allievo" value={
                         students.find((s) => s.id === form.studentId)
                           ? `${students.find((s) => s.id === form.studentId)!.firstName} ${students.find((s) => s.id === form.studentId)!.lastName}`

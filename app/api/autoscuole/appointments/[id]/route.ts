@@ -10,6 +10,8 @@ export async function PATCH(
   const res = await updateAutoscuolaAppointmentDetails({
     appointmentId: id,
     lessonType: payload.lessonType,
+    lessonTypes: payload.lessonTypes,
+    rating: payload.rating,
     notes: payload.notes,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });

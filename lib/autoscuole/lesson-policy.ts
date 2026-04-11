@@ -222,6 +222,24 @@ const getDayAndMinutes = (date: Date) => {
   return { dayOfWeek, minutes };
 };
 
+export const validateLessonTypes = (types: string[]): boolean =>
+  types.length > 0 && types.every((t) => LESSON_ALL_ALLOWED_TYPE_SET.has(normalizeLessonType(t)));
+
+export const isLessonTypesAllowedForInterval = ({
+  policy,
+  types,
+  startsAt,
+  endsAt,
+}: {
+  policy: LessonPolicyConfig;
+  types: string[];
+  startsAt: Date;
+  endsAt: Date;
+}) =>
+  types.every((t) =>
+    isLessonTypeAllowedForInterval({ policy, lessonType: t, startsAt, endsAt }),
+  );
+
 export const isLessonTypeAllowedForInterval = ({
   policy,
   lessonType,
@@ -337,15 +355,19 @@ export const getStudentLessonPolicyCoverage = async ({
     },
     select: {
       type: true,
+      types: true,
     },
   });
 
   const completedTypes = new Set<LessonPolicyType>();
   for (const lesson of completedLessons) {
-    if (!isDrivingLessonType(lesson.type)) continue;
-    const normalized = normalizeLessonType(lesson.type);
-    if (LESSON_POLICY_TYPE_SET.has(normalized)) {
-      completedTypes.add(normalized as LessonPolicyType);
+    const allTypes = lesson.types?.length ? lesson.types : lesson.type ? [lesson.type] : [];
+    for (const t of allTypes) {
+      if (!isDrivingLessonType(t)) continue;
+      const normalized = normalizeLessonType(t);
+      if (LESSON_POLICY_TYPE_SET.has(normalized)) {
+        completedTypes.add(normalized as LessonPolicyType);
+      }
     }
   }
 

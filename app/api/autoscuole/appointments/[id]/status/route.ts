@@ -11,6 +11,7 @@ export async function PATCH(
     appointmentId: id,
     status: payload.status,
     lessonType: payload.lessonType,
+    lessonTypes: payload.lessonTypes,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
