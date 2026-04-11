@@ -1313,41 +1313,49 @@ export function AutoscuoleStudentsPage({
                               </div>
 
                               {/* Card */}
+                              {isExam ? (
+                                <div className="mb-2.5 flex flex-1 overflow-hidden rounded-2xl border border-violet-200 bg-violet-50/80 shadow-sm shadow-violet-200/50">
+                                  <div className="w-1 shrink-0 bg-violet-500" />
+                                  <div className="flex-1 p-3.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex size-6 items-center justify-center rounded-full bg-violet-500">
+                                        <GraduationCap className="size-3.5 text-white" />
+                                      </span>
+                                      <span className="text-[11px] font-bold uppercase tracking-wider text-violet-700">Esame</span>
+                                      <span className="text-xs font-semibold text-violet-400">
+                                        {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                        {" – "}
+                                        {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                      </span>
+                                    </div>
+                                    <p className="mt-0.5 text-[11px] text-violet-500">
+                                      {lesson.instructorName || "Istruttore n/d"}
+                                    </p>
+                                    {hasNote && (
+                                      <p className="mt-2 text-sm leading-relaxed text-foreground">{lesson.notes!.trim()}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
                               <div
                                 className={cn(
                                   "mb-2.5 flex-1 rounded-2xl border p-3.5",
-                                  isExam
-                                    ? "border-violet-300 bg-violet-50"
-                                    : hasNote
-                                      ? "border-border/50 bg-white"
-                                      : "border-border/30 bg-gray-50/50",
+                                  hasNote
+                                    ? "border-border/50 bg-white"
+                                    : "border-border/30 bg-gray-50/50",
                                 )}
                               >
                                 <div className="flex items-center gap-2">
-                                  {isExam ? (
-                                    <>
-                                      <GraduationCap className="size-3.5 text-violet-600" />
-                                      <span className="text-[11px] font-bold uppercase tracking-wider text-violet-700">Esame</span>
-                                      <span className="text-xs font-semibold text-violet-600">
-                                        {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                        {" – "}
-                                        {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <span className="text-xs font-semibold text-foreground">
-                                        {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                        {" – "}
-                                        {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                      </span>
-                                      {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
-                                        <span key={i} className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
-                                          {formatLessonType(t)}
-                                        </span>
-                                      ))}
-                                    </>
-                                  )}
+                                  <span className="text-xs font-semibold text-foreground">
+                                    {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                    {" – "}
+                                    {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                                  </span>
+                                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                                    <span key={i} className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
+                                      {formatLessonType(t)}
+                                    </span>
+                                  ))}
                                   {lesson.rating != null && (
                                     <span className="ml-auto flex items-center gap-0.5 text-[10px]">
                                       {Array.from({ length: 5 }, (_, i) => (
@@ -1356,23 +1364,18 @@ export function AutoscuoleStudentsPage({
                                     </span>
                                   )}
                                 </div>
-                                <p className={cn("mt-0.5 text-[11px]", isExam ? "text-violet-600" : "text-muted-foreground")}>
+                                <p className="mt-0.5 text-[11px] text-muted-foreground">
                                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                                 </p>
-                                {isExam ? (
-                                  hasNote ? (
-                                    <p className="mt-2 text-sm leading-relaxed text-foreground">{lesson.notes!.trim()}</p>
-                                  ) : null
-                                ) : (
-                                  <p
+                                <p
                                     className={`mt-2 text-sm leading-relaxed ${
                                       hasNote ? "text-foreground" : "text-muted-foreground/50 italic"
                                     }`}
                                   >
                                     {lesson.notes?.trim() || "Nessuna nota"}
                                   </p>
-                                )}
                               </div>
+                              )}
                             </div>
                           );
                         })}
