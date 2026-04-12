@@ -643,7 +643,6 @@ export function AutoscuoleResourcesPage({
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
-    setInstructorClustersEnabled(res.data.instructorClustersEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
