@@ -129,12 +129,20 @@ const createVehicleSchema = z.object({
   plate: z.string().optional(),
 });
 
+const instructorSettingsSchema = z.object({
+  bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
+  roundedHoursOnly: z.boolean().optional(),
+}).optional();
+
 const updateInstructorSchema = z.object({
   instructorId: z.string().uuid(),
   name: z.string().min(1).optional(),
   phone: z.string().optional().nullable(),
   status: z.string().optional(),
   userId: z.string().uuid().optional(),
+  autonomousMode: z.boolean().optional(),
+  settings: instructorSettingsSchema,
+  assignStudentIds: z.array(z.string().uuid()).optional(),
 });
 
 const updateVehicleSchema = z.object({
@@ -466,7 +474,10 @@ const listDirectoryStudents = async (companyId: string) => {
     take: 500,
   });
 
-  return members.map((member) => toStudentProfile(member.user, member.createdAt));
+  return members.map((member) => ({
+    ...toStudentProfile(member.user, member.createdAt),
+    assignedInstructorId: member.assignedInstructorId ?? null,
+  }));
 };
 
 const buildStudentSearchWhere = (companyId: string, search?: string) => {
@@ -498,6 +509,9 @@ const listAutoscuolaInstructorsReadOnly = async (companyId: string) =>
           some: { companyId, autoscuolaRole: "INSTRUCTOR" },
         },
       },
+    },
+    include: {
+      _count: { select: { assignedStudents: true } },
     },
     orderBy: { name: "asc" },
   });
@@ -906,7 +920,13 @@ export async function getAutoscuolaStudents(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    return { success: true, data: members.map((m) => toStudentProfile(m.user, m.createdAt)) };
+    return {
+      success: true,
+      data: members.map((m) => ({
+        ...toStudentProfile(m.user, m.createdAt),
+        assignedInstructorId: m.assignedInstructorId ?? null,
+      })),
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -1028,7 +1048,10 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
-    const students = members.map((m) => toStudentProfile(m.user, m.createdAt));
+    const students = members.map((m) => ({
+      ...toStudentProfile(m.user, m.createdAt),
+      assignedInstructorId: m.assignedInstructorId ?? null,
+    }));
     if (!students.length) return { success: true, data: [] };
 
     const bookingBlockedMap = new Map<string, boolean>();
@@ -1754,6 +1777,23 @@ export async function createAutoscuolaAppointment(
       resolvedInstructorId = ownInstructor.id;
     } else if (!isOwnerOrAdminActor) {
       return { success: false, message: "Operazione non consentita." };
+    }
+
+    // Instructor cluster lock enforcement for students
+    if (isStudentActor) {
+      const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+      const clusterSettings = await resolveEffectiveBookingSettings(companyId, payload.studentId, {
+        bookingSlotDurations: [],
+        roundedHoursOnly: false,
+      });
+      if (clusterSettings.isLockedToInstructor && clusterSettings.assignedInstructorId) {
+        if (resolvedInstructorId !== clusterSettings.assignedInstructorId) {
+          return {
+            success: false,
+            message: "Puoi prenotare solo con il tuo istruttore assegnato.",
+          };
+        }
+      }
     }
 
     // Booking block enforcement
@@ -3166,6 +3206,8 @@ export async function updateAutoscuolaInstructor(
         phone: payload.phone ?? undefined,
         status: payload.status,
         userId: payload.userId ?? undefined,
+        ...(payload.autonomousMode !== undefined ? { autonomousMode: payload.autonomousMode } : {}),
+        ...(payload.settings !== undefined ? { settings: payload.settings ?? null } : {}),
       },
     });
 
@@ -3190,6 +3232,41 @@ export async function updateAutoscuolaInstructor(
         reason: updated.status === "inactive" ? "instructor_inactive" : "directory_instructor_removed",
         actorUserId: membership.userId,
       });
+    }
+
+    // If instructor became inactive, unassign all students
+    if (existing.status !== "inactive" && updated.status === "inactive") {
+      await prisma.companyMember.updateMany({
+        where: {
+          companyId: membership.companyId,
+          assignedInstructorId: existing.id,
+        },
+        data: { assignedInstructorId: null },
+      });
+    }
+
+    // Handle student assignment changes
+    if (payload.assignStudentIds !== undefined) {
+      // Remove current assignments for this instructor
+      await prisma.companyMember.updateMany({
+        where: {
+          companyId: membership.companyId,
+          assignedInstructorId: existing.id,
+        },
+        data: { assignedInstructorId: null },
+      });
+
+      // Assign new students
+      if (payload.assignStudentIds.length > 0) {
+        await prisma.companyMember.updateMany({
+          where: {
+            companyId: membership.companyId,
+            userId: { in: payload.assignStudentIds },
+            autoscuolaRole: "STUDENT",
+          },
+          data: { assignedInstructorId: existing.id },
+        });
+      }
     }
 
     await invalidateAutoscuoleCache({

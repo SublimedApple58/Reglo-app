@@ -32,6 +32,8 @@ import {
   getAutoscuolaInstructorWeeklyAvailabilities,
   setAutoscuolaInstructorWeeklyAvailability,
   deleteAutoscuolaInstructorWeeklyAvailability,
+  updateAutoscuolaInstructor,
+  getAutoscuolaStudentsWithProgress,
 } from "@/lib/actions/autoscuole.actions";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
 import {
@@ -66,7 +68,7 @@ import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
-type InstructorDetail = { id: string; name: string; status: string };
+type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; _count?: { assignedStudents: number } };
 type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
@@ -250,6 +252,16 @@ export function AutoscuoleResourcesPage({
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
+
+  // ── Instructor cluster panel state
+  const [clusterInstructor, setClusterInstructor] = React.useState<InstructorDetail | null>(null);
+  const [clusterAutonomous, setClusterAutonomous] = React.useState(false);
+  const [clusterDurations, setClusterDurations] = React.useState<number[]>([30, 60]);
+  const [clusterRoundedHours, setClusterRoundedHours] = React.useState(false);
+  const [clusterStudentIds, setClusterStudentIds] = React.useState<string[]>([]);
+  const [clusterSaving, setClusterSaving] = React.useState(false);
+  const [clusterStudentSearch, setClusterStudentSearch] = React.useState("");
+  const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [studentBookingMode, setStudentBookingMode] = React.useState<StudentBookingModeValue>("engine");
@@ -437,6 +449,7 @@ export function AutoscuoleResourcesPage({
       setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
+
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
           ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -630,6 +643,7 @@ export function AutoscuoleResourcesPage({
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
+    setInstructorClustersEnabled(res.data.instructorClustersEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -790,6 +804,55 @@ export function AutoscuoleResourcesPage({
       startMinutes: current.startMinutes,
       endMinutes: current.endMinutes,
     }));
+  };
+
+  const openClusterPanel = async (instructor: InstructorDetail) => {
+    setClusterInstructor(instructor);
+    setClusterAutonomous(instructor.autonomousMode ?? false);
+    setClusterStudentSearch("");
+    const settings = (instructor.settings ?? {}) as Record<string, unknown>;
+    setClusterDurations(
+      Array.isArray(settings.bookingSlotDurations)
+        ? (settings.bookingSlotDurations as number[]).filter((d) => [30, 60, 90, 120].includes(d))
+        : [30, 60],
+    );
+    setClusterRoundedHours(settings.roundedHoursOnly === true);
+    const studRes = await getAutoscuolaStudentsWithProgress();
+    if (studRes.success && studRes.data) {
+      setAllStudents(studRes.data.map((s) => ({
+        id: s.id,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        assignedInstructorId: (s as Record<string, unknown>).assignedInstructorId as string | null,
+      })));
+      setClusterStudentIds(
+        studRes.data
+          .filter((s) => (s as Record<string, unknown>).assignedInstructorId === instructor.id)
+          .map((s) => s.id),
+      );
+    }
+  };
+
+  const saveClusterSettings = async () => {
+    if (!clusterInstructor) return;
+    setClusterSaving(true);
+    const res = await updateAutoscuolaInstructor({
+      instructorId: clusterInstructor.id,
+      autonomousMode: clusterAutonomous,
+      settings: clusterAutonomous ? { bookingSlotDurations: clusterDurations, roundedHoursOnly: clusterRoundedHours } : undefined,
+      assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
+    });
+    setClusterSaving(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Errore salvataggio." });
+      return;
+    }
+    toast.success({ description: "Impostazioni istruttore salvate." });
+    const instrRes = await getAutoscuolaInstructors();
+    if (instrRes.success && instrRes.data) {
+      setInstructors(instrRes.data);
+    }
+    setClusterInstructor(null);
   };
 
   const handleSelectInstrWeek = (weekStart: string | null) => {
@@ -1594,13 +1657,26 @@ export function AutoscuoleResourcesPage({
                   key={instructor.id}
                   name={instructor.name}
                   inactive={instructor.status === "inactive"}
+                  subtitle={
+                    instructor.autonomousMode
+                      ? `Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`
+                      : undefined
+                  }
                   actions={
-                    <ResourceCardAction
-                      onClick={() => openInstructorAvailabilityDialog(instructor)}
-                      title="Modifica disponibilità"
-                    >
-                      <Clock className="size-3.5" />
-                    </ResourceCardAction>
+                    <>
+                      <ResourceCardAction
+                        onClick={() => openClusterPanel(instructor)}
+                        title="Gestione autonoma"
+                      >
+                        <Settings2 className="size-3.5" />
+                      </ResourceCardAction>
+                      <ResourceCardAction
+                        onClick={() => openInstructorAvailabilityDialog(instructor)}
+                        title="Modifica disponibilità"
+                      >
+                        <Clock className="size-3.5" />
+                      </ResourceCardAction>
+                    </>
                   }
                   availabilitySummary={
                     wa ? (
@@ -1634,6 +1710,147 @@ export function AutoscuoleResourcesPage({
               </div>
             ) : null}
           </div>
+
+          {/* ── Cluster panel dialog ── */}
+          <Dialog open={Boolean(clusterInstructor)} onOpenChange={(open) => !open && setClusterInstructor(null)}>
+            <DialogContent className="sm:max-w-[520px] gap-0 p-0 overflow-hidden max-h-[80vh] overflow-y-auto">
+              <div className="px-6 pt-5 pb-4 border-b border-border">
+                <DialogHeader>
+                  <DialogTitle>Gestione autonoma — {clusterInstructor?.name}</DialogTitle>
+                </DialogHeader>
+              </div>
+              <div className="px-6 py-5 space-y-5">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setClusterAutonomous((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Modalità autonoma</span>
+                    <span className="text-xs text-muted-foreground">
+                      L&apos;istruttore gestisce i propri allievi e impostazioni.
+                    </span>
+                  </div>
+                  <InlineToggle checked={clusterAutonomous} size="sm" />
+                </div>
+
+                {clusterAutonomous ? (
+                  <>
+                    <FieldGroup label="Durata guide">
+                      <div className="flex flex-wrap gap-1.5">
+                        {BOOKING_DURATION_OPTIONS.map((dur) => (
+                          <ToggleChip
+                            key={dur}
+                            active={clusterDurations.includes(dur)}
+                            onClick={() =>
+                              setClusterDurations((prev) =>
+                                prev.includes(dur) ? prev.filter((d) => d !== dur) : [...prev, dur].sort((a, b) => a - b),
+                              )
+                            }
+                            size="sm"
+                          >
+                            {dur} min
+                          </ToggleChip>
+                        ))}
+                      </div>
+                    </FieldGroup>
+
+                    <div
+                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                      onClick={() => setClusterRoundedHours((prev) => !prev)}
+                    >
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium">Solo orari tondi</span>
+                        <span className="text-xs text-muted-foreground">
+                          Proponi solo slot che iniziano a ore piene.
+                        </span>
+                      </div>
+                      <InlineToggle checked={clusterRoundedHours} size="sm" />
+                    </div>
+
+                    <FieldGroup label={`Allievi assegnati (${clusterStudentIds.length})`}>
+                      <Input
+                        placeholder="Cerca allievo..."
+                        value={clusterStudentSearch}
+                        onChange={(e) => setClusterStudentSearch(e.target.value)}
+                        className="mb-2"
+                      />
+                      <div className="space-y-0.5 max-h-[280px] overflow-y-auto rounded-xl border border-border/60 bg-gray-50/30">
+                        {(() => {
+                          const q = clusterStudentSearch.toLowerCase().trim();
+                          const filtered = q
+                            ? allStudents.filter((s) =>
+                                `${s.firstName} ${s.lastName}`.toLowerCase().includes(q),
+                              )
+                            : allStudents;
+                          // Sort: assigned first, then alphabetically
+                          const sorted = [...filtered].sort((a, b) => {
+                            const aAssigned = clusterStudentIds.includes(a.id) ? 0 : 1;
+                            const bAssigned = clusterStudentIds.includes(b.id) ? 0 : 1;
+                            if (aAssigned !== bAssigned) return aAssigned - bAssigned;
+                            return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+                          });
+                          if (!sorted.length) {
+                            return (
+                              <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
+                                {q ? "Nessun risultato." : "Nessun allievo trovato."}
+                              </div>
+                            );
+                          }
+                          return sorted.map((student) => {
+                            const isAssignedHere = clusterStudentIds.includes(student.id);
+                            const assignedToOther =
+                              !isAssignedHere &&
+                              student.assignedInstructorId &&
+                              student.assignedInstructorId !== clusterInstructor?.id;
+                            const otherInstructorName = assignedToOther
+                              ? instructors.find((i) => i.id === student.assignedInstructorId)?.name
+                              : null;
+                            return (
+                              <div
+                                key={student.id}
+                                className={cn(
+                                  "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
+                                  isAssignedHere
+                                    ? "bg-yellow-50/80"
+                                    : "hover:bg-white",
+                                )}
+                                onClick={() => {
+                                  setClusterStudentIds((prev) =>
+                                    prev.includes(student.id)
+                                      ? prev.filter((id) => id !== student.id)
+                                      : [...prev, student.id],
+                                  );
+                                }}
+                              >
+                                <Checkbox checked={isAssignedHere} className="pointer-events-none" />
+                                <span className="text-sm flex-1 truncate">
+                                  {student.firstName} {student.lastName}
+                                </span>
+                                {assignedToOther ? (
+                                  <span className="text-[10px] shrink-0 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
+                                    {otherInstructorName ?? "altro"}
+                                  </span>
+                                ) : null}
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </FieldGroup>
+                  </>
+                ) : null}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+                <Button variant="outline" onClick={() => setClusterInstructor(null)}>
+                  Annulla
+                </Button>
+                <Button onClick={saveClusterSettings} disabled={clusterSaving}>
+                  {clusterSaving ? "Salvataggio..." : "Salva"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
           </>
         ) : configTab === "students" ? (
           <>

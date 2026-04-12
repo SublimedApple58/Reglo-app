@@ -219,14 +219,17 @@ model CompanyMember {
   bookingBlocked             Boolean        @default(false)
   weeklyBookingLimitExempt   Boolean        @default(false)
   examPriorityOverride       Boolean?
+  assignedInstructorId       String?        @db.Uuid
   createdAt                  DateTime       @default(now()) @db.Timestamp(6)
   updatedAt      DateTime       @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedInstructor AutoscuolaInstructor? @relation("InstructorAssignedStudents", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
 
   @@id([companyId, userId])
   @@index([userId])
+  @@index([assignedInstructorId])
 }
 
 model CompanyInvite {
@@ -502,19 +505,22 @@ model AutoscuolaAppointmentRepositionTask {
 }
 
 model AutoscuolaInstructor {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @db.Uuid
-  userId    String?  @db.Uuid
-  name      String
-  phone     String?
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  userId         String?  @db.Uuid
+  name           String
+  phone          String?
+  status         String   @default("active")
+  autonomousMode Boolean  @default(false)
+  settings       Json?    @db.Json
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt
 
-  company      Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user         User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  appointments AutoscuolaAppointment[]
-  blocks       AutoscuolaInstructorBlock[]
+  company          Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user             User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments     AutoscuolaAppointment[]
+  blocks           AutoscuolaInstructorBlock[]
+  assignedStudents CompanyMember[]               @relation("InstructorAssignedStudents")
 
   @@unique([companyId, userId])
   @@index([companyId])

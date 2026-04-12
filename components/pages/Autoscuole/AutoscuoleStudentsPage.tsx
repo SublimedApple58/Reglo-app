@@ -42,6 +42,7 @@ import {
   getAutoscuolaStudentDrivingRegister,
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
+  getAutoscuolaInstructors,
   getCompanyInviteCode,
   getPaymentMode,
   toggleStudentBookingBlock,
@@ -78,6 +79,7 @@ type StudentProfile = {
 
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
+  assignedInstructorId?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -268,6 +270,9 @@ export function AutoscuoleStudentsPage({
     (!paymentMode.auto && !paymentMode.credits) ||
     (paymentMode.credits && !paymentMode.creditsRequired)
   );
+
+  // Instructor clusters
+  const [instructorMap, setInstructorMap] = React.useState<Map<string, string>>(new Map());
 
   // Sub-tabs
   const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
@@ -489,6 +494,11 @@ export function AutoscuoleStudentsPage({
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
       }
     });
+    getAutoscuolaInstructors().then((res) => {
+      if (res.success && res.data) {
+        setInstructorMap(new Map(res.data.map((i: { id: string; name: string }) => [i.id, i.name])));
+      }
+    });
     getPaymentMode().then((res) => {
       if (res.success && res.data) {
         setPaymentMode({
@@ -703,6 +713,11 @@ export function AutoscuoleStudentsPage({
                             {student.bookingBlocked && (
                               <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
                                 Bloccato
+                              </Badge>
+                            )}
+                            {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
+                              <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">
+                                {instructorMap.get(student.assignedInstructorId)}
                               </Badge>
                             )}
                           </TableCell>

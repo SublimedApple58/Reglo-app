@@ -333,6 +333,7 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     voiceAssistantVoice: z.string().min(1).max(50).optional(),
     studentNotesEnabled: z.boolean().optional(),
+    instructorClustersEnabled: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -385,7 +386,8 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceRetentionDays !== undefined ||
       value.voiceInstructions !== undefined ||
       value.voiceAllowedActions !== undefined ||
-      value.studentNotesEnabled !== undefined,
+      value.studentNotesEnabled !== undefined ||
+      value.instructorClustersEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -552,6 +554,7 @@ export type AutoscuolaSettingsData = {
   voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
   voiceAssistantVoice: string;
   studentNotesEnabled: boolean;
+  instructorClustersEnabled: boolean;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -698,6 +701,10 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.studentNotesEnabled === "boolean"
       ? limits.studentNotesEnabled
       : DEFAULT_STUDENT_NOTES_ENABLED;
+  const instructorClustersEnabled =
+    typeof limits.instructorClustersEnabled === "boolean"
+      ? limits.instructorClustersEnabled
+      : false;
   const voiceFeatureEnabled =
     typeof limits.voiceFeatureEnabled === "boolean"
       ? limits.voiceFeatureEnabled
@@ -841,6 +848,7 @@ const resolveAutoscuolaSettingsData = async (
     voiceAllowedActions,
     voiceAssistantVoice,
     studentNotesEnabled,
+    instructorClustersEnabled,
   };
 };
 
@@ -1014,6 +1022,10 @@ export async function updateAutoscuolaSettings(
       typeof limits.studentNotesEnabled === "boolean"
         ? limits.studentNotesEnabled
         : DEFAULT_STUDENT_NOTES_ENABLED;
+    const previousInstructorClustersEnabled =
+      typeof limits.instructorClustersEnabled === "boolean"
+        ? limits.instructorClustersEnabled
+        : false;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -1150,6 +1162,8 @@ export async function updateAutoscuolaSettings(
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextStudentNotesEnabled =
       payload.studentNotesEnabled ?? previousStudentNotesEnabled;
+    const nextInstructorClustersEnabled =
+      payload.instructorClustersEnabled ?? previousInstructorClustersEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1319,6 +1333,7 @@ export async function updateAutoscuolaSettings(
       voiceAllowedActions: nextVoiceAllowedActions,
       voiceAssistantVoice: nextVoiceAssistantVoice,
       studentNotesEnabled: nextStudentNotesEnabled,
+      instructorClustersEnabled: nextInstructorClustersEnabled,
     };
 
     if (service) {
@@ -1386,6 +1401,7 @@ export async function updateAutoscuolaSettings(
         examPriorityLimit: nextLimits.examPriorityLimit,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         studentNotesEnabled: nextLimits.studentNotesEnabled,
+        instructorClustersEnabled: nextLimits.instructorClustersEnabled,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,
         voiceLineRef: nextLimits.voiceLineRef,

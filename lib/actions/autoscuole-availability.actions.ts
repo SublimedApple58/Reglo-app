@@ -2059,10 +2059,19 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
 
     const limits = (service?.limits ?? {}) as Record<string, unknown>;
     const policy = parseLessonPolicyFromLimits(limits);
-    const bookingSlotDurations = normalizeBookingSlotDurations(
+    const companyBookingSlotDurations = normalizeBookingSlotDurations(
       limits.bookingSlotDurations,
     );
+    const companyRoundedHoursOnly = limits.roundedHoursOnly === true;
     const governance = await getBookingGovernanceForCompany(membership.companyId);
+
+    // Resolve cluster-aware settings
+    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const clusterSettings = await resolveEffectiveBookingSettings(
+      membership.companyId,
+      payload.studentId,
+      { bookingSlotDurations: companyBookingSlotDurations, roundedHoursOnly: companyRoundedHoursOnly },
+    );
 
     const lessonTypeSelectionEnabled = policy.lessonPolicyEnabled;
     let availableLessonTypes: string[] = lessonTypeSelectionEnabled
@@ -2146,7 +2155,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     return {
       success: true,
       data: {
-        bookingSlotDurations,
+        bookingSlotDurations: clusterSettings.bookingSlotDurations,
         lessonTypeSelectionEnabled,
         availableLessonTypes,
         studentBookingMode: governance.studentBookingMode,
@@ -2158,6 +2167,10 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
           reached: weeklyLimitReached,
           examPriority: examPriorityInfo,
         } : { enabled: false },
+        assignedInstructorId: clusterSettings.assignedInstructorId,
+        assignedInstructorName: clusterSettings.assignedInstructorName,
+        assignedInstructorPhone: clusterSettings.assignedInstructorPhone,
+        isLockedToInstructor: clusterSettings.isLockedToInstructor,
       },
     };
   } catch (error) {
@@ -2232,7 +2245,24 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       select: { limits: true },
     });
     const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<string, unknown>;
-    const roundedHoursOnly = serviceLimits.roundedHoursOnly === true;
+
+    // Resolve cluster-aware settings for this student
+    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const clusterSettings = await resolveEffectiveBookingSettings(
+      membership.companyId,
+      payload.studentId,
+      {
+        bookingSlotDurations: normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations),
+        roundedHoursOnly: serviceLimits.roundedHoursOnly === true,
+      },
+    );
+    const roundedHoursOnly = clusterSettings.roundedHoursOnly;
+
+    // If student is locked to an instructor, force the instructorId filter
+    const effectiveInstructorId = clusterSettings.isLockedToInstructor && clusterSettings.assignedInstructorId
+      ? clusterSettings.assignedInstructorId
+      : payload.instructorId;
+
     const bookingMinStartDate =
       typeof serviceLimits.bookingMinStartDate === "string"
         ? serviceLimits.bookingMinStartDate.trim()
@@ -2263,7 +2293,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       }
     }
 
-    const allowedDurations = normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations);
+    const allowedDurations = clusterSettings.bookingSlotDurations;
     if (!allowedDurations.some((d) => d === payload.durationMinutes)) {
       return { success: false, message: "Durata non disponibile per questa autoscuola." };
     }
@@ -2288,7 +2318,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         where: {
           companyId: membership.companyId,
           status: { not: "inactive" },
-          ...(payload.instructorId ? { id: payload.instructorId } : {}),
+          ...(effectiveInstructorId ? { id: effectiveInstructorId } : {}),
         },
         select: { id: true },
       }),
