@@ -71,6 +71,7 @@ export async function resolveEffectiveBookingSettings(
           autonomousMode: true,
           settings: true,
           status: true,
+          user: { select: { phone: true } },
         },
       },
     },
@@ -83,7 +84,7 @@ export async function resolveEffectiveBookingSettings(
 
   base.assignedInstructorId = instructor.id;
   base.assignedInstructorName = instructor.name;
-  base.assignedInstructorPhone = instructor.phone ?? null;
+  base.assignedInstructorPhone = instructor.phone ?? instructor.user?.phone ?? null;
   base.isLockedToInstructor = true;
 
   const settings = parseInstructorSettings(instructor.settings);
