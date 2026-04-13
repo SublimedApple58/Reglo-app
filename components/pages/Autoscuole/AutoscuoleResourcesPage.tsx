@@ -339,7 +339,14 @@ export function AutoscuoleResourcesPage({
 
     if (instructorRes.success && instructorRes.data) {
       setInstructors(
-        instructorRes.data.map((item) => ({ id: item.id, name: item.name, status: item.status })),
+        instructorRes.data.map((item) => ({
+          id: item.id,
+          name: item.name,
+          status: item.status,
+          autonomousMode: item.autonomousMode,
+          settings: item.settings,
+          _count: item._count,
+        })),
       );
     }
     if (instrWeeklyRes.success && instrWeeklyRes.data) {
