@@ -80,6 +80,7 @@ type StudentProfile = {
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
   assignedInstructorId?: string | null;
+  manualUnpaid?: number;
   activeCase: {
     id: string;
     status: string;
@@ -678,14 +679,13 @@ export function AutoscuoleStudentsPage({
                             <TableHead>Email</TableHead>
                             <TableHead>Telefono</TableHead>
                             <TableHead>Status</TableHead>
-                            <TableHead>Guide completate</TableHead>
-                            <TableHead>Obbligo</TableHead>
+                            <TableHead>Guide</TableHead>
                             <TableHead className="text-right">Azioni</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           <TableRow>
-                            <TableCell colSpan={7} className="h-48" />
+                            <TableCell colSpan={6} className="h-48" />
                           </TableRow>
                         </TableBody>
                       </Table>
@@ -709,17 +709,33 @@ export function AutoscuoleStudentsPage({
                       students.map((student) => (
                         <TableRow key={student.id}>
                           <TableCell className="font-medium">
-                            <span>{student.firstName} {student.lastName}</span>
-                            {student.bookingBlocked && (
-                              <Badge variant="destructive" className="ml-2 text-[10px] px-1.5 py-0">
-                                Bloccato
-                              </Badge>
-                            )}
-                            {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
-                              <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">
-                                {instructorMap.get(student.assignedInstructorId)}
-                              </Badge>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="size-2.5 shrink-0 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    (student.manualUnpaid ?? 0) >= 5
+                                      ? '#EF4444'   // red — 5+ unpaid
+                                      : (student.manualUnpaid ?? 0) >= 2
+                                        ? '#F59E0B' // amber — 2-4 unpaid
+                                        : (student.manualUnpaid ?? 0) >= 1
+                                          ? '#FACC15' // yellow — 1 unpaid
+                                          : '#22C55E', // green — all paid
+                                }}
+                                title={`${student.manualUnpaid ?? 0} guide da pagare`}
+                              />
+                              <span>{student.firstName} {student.lastName}</span>
+                              {student.bookingBlocked && (
+                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                  Bloccato
+                                </Badge>
+                              )}
+                              {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
+                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                  {instructorMap.get(student.assignedInstructorId)}
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>{student.email || "—"}</TableCell>
                           <TableCell>{student.phone || "—"}</TableCell>
@@ -727,9 +743,6 @@ export function AutoscuoleStudentsPage({
                             <Badge variant="secondary">
                               {student.status ?? "active"}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            {student.summary.completedLessons}
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
@@ -759,7 +772,7 @@ export function AutoscuoleStudentsPage({
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
                           Nessun allievo trovato.
                         </TableCell>
                       </TableRow>

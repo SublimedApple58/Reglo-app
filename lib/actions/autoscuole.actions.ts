@@ -963,6 +963,8 @@ type DrivingRegisterLessonRow = {
   endsAt: Date | null;
   instructor?: { name: string } | null;
   vehicle?: { name: string } | null;
+  manualPaymentStatus?: string | null;
+  lateCancellationAction?: string | null;
 };
 
 const buildDrivingRegisterData = ({
@@ -1100,6 +1102,8 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           status: true,
           startsAt: true,
           endsAt: true,
+          manualPaymentStatus: true,
+          lateCancellationAction: true,
         },
         take: 5000,
       }),
@@ -1124,11 +1128,24 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
         cases: casesByStudent.get(student.id) ?? [],
         lessons: lessonsByStudent.get(student.id) ?? [],
       });
+      const studentLessons = lessonsByStudent.get(student.id) ?? [];
+      const manualUnpaid = studentLessons.filter(
+        (l) => {
+          const s = (l.status ?? "").trim().toLowerCase();
+          return (
+            (s === "completed" && l.manualPaymentStatus === "unpaid") ||
+            (["cancelled", "no_show"].includes(s) &&
+              l.lateCancellationAction === "charged" &&
+              l.manualPaymentStatus !== "paid")
+          );
+        },
+      ).length;
       return {
         ...student,
         bookingBlocked: bookingBlockedMap.get(student.id) ?? false,
         activeCase: register.activeCase,
         summary: register.summary,
+        manualUnpaid,
       };
     });
 
