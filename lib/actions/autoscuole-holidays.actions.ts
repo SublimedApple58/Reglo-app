@@ -139,6 +139,7 @@ export async function createHoliday(
           data: {
             status: "cancelled",
             cancelledAt: new Date(),
+            cancelledByUserId: membership.userId,
             cancellationKind: "permanent_cancel",
             cancellationReason: "holiday",
           },

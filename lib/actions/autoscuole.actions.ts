@@ -2195,6 +2195,7 @@ export async function cancelAutoscuolaAppointment(
       data: {
         status: "cancelled",
         cancelledAt: new Date(),
+        cancelledByUserId: membership.userId,
         cancellationKind: "manual_cancel",
         cancellationReason: "manual_cancel",
       },
@@ -2292,6 +2293,7 @@ export async function permanentlyCancelAutoscuolaAppointment(
       data: {
         status: "cancelled",
         cancelledAt: new Date(),
+        cancelledByUserId: membership.userId,
         cancellationKind: "permanent_cancel",
         cancellationReason: "permanent_cancel",
       },
@@ -4261,7 +4263,7 @@ export async function cancelExamEvent(appointmentIds: string[]) {
 
     await prisma.autoscuolaAppointment.updateMany({
       where: { id: { in: appointmentIds }, companyId: membership.companyId, type: "esame" },
-      data: { status: "cancelled", cancelledAt: new Date() },
+      data: { status: "cancelled", cancelledAt: new Date(), cancelledByUserId: membership.userId },
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);

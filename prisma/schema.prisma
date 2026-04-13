@@ -325,6 +325,7 @@ model AutoscuolaAppointment {
   penaltyCutoffAt         DateTime? @db.Timestamp(6)
   paidAmount              Decimal   @default(0) @db.Decimal(12, 2)
   cancelledAt             DateTime? @db.Timestamp(6)
+  cancelledByUserId       String?   @db.Uuid
   cancellationKind        String?
   cancellationReason      String?
   replacedByAppointmentId String?   @db.Uuid

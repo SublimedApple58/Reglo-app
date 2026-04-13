@@ -743,6 +743,7 @@ export async function queueOperationalRepositionForAppointment({
       data: {
         status: "cancelled",
         cancelledAt: new Date(),
+        cancelledByUserId: actorUserId ?? null,
         cancellationKind: "operational_reposition",
         cancellationReason: reason,
         paymentStatus: appointment.paymentRequired ? "waived" : appointment.paymentStatus,
