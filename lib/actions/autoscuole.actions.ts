@@ -4117,6 +4117,38 @@ export async function toggleStudentBookingBlock(
   }
 }
 
+export async function assignStudentToInstructor(input: {
+  studentId: string;
+  instructorId: string | null;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    ensureAutoscuolaRole(membership, ["OWNER"]);
+
+    if (input.instructorId) {
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: { id: input.instructorId, companyId: membership.companyId, autonomousMode: true },
+      });
+      if (!instructor) {
+        return { success: false, message: "Istruttore non valido o non autonomo." };
+      }
+    }
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: input.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { assignedInstructorId: input.instructorId },
+    });
+
+    return { success: true, data: { assignedInstructorId: input.instructorId } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Exam events
 // ---------------------------------------------------------------------------

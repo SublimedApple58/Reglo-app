@@ -43,6 +43,7 @@ import {
   getAutoscuolaStudentLessonCredits,
   getAutoscuolaStudentsWithProgress,
   getAutoscuolaInstructors,
+  assignStudentToInstructor,
   getCompanyInviteCode,
   getPaymentMode,
   toggleStudentBookingBlock,
@@ -274,6 +275,8 @@ export function AutoscuoleStudentsPage({
 
   // Instructor clusters
   const [instructorMap, setInstructorMap] = React.useState<Map<string, string>>(new Map());
+  const [autonomousInstructors, setAutonomousInstructors] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [assigningSaving, setAssigningSaving] = React.useState(false);
 
   // Sub-tabs
   const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
@@ -498,6 +501,11 @@ export function AutoscuoleStudentsPage({
     getAutoscuolaInstructors().then((res) => {
       if (res.success && res.data) {
         setInstructorMap(new Map(res.data.map((i: { id: string; name: string }) => [i.id, i.name])));
+        setAutonomousInstructors(
+          res.data
+            .filter((i: { autonomousMode?: boolean }) => i.autonomousMode)
+            .map((i: { id: string; name: string }) => ({ id: i.id, name: i.name })),
+        );
       }
     });
     getPaymentMode().then((res) => {
@@ -1008,6 +1016,59 @@ export function AutoscuoleStudentsPage({
                         )}
                       </div>
                     </section>
+
+                    {/* Instructor assignment */}
+                    {autonomousInstructors.length > 0 && (
+                      <section className="rounded-2xl border border-border/50 bg-white p-4">
+                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                          Istruttore assegnato
+                        </p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Select
+                            value={selectedStudent?.assignedInstructorId ?? "__none__"}
+                            onValueChange={async (value) => {
+                              if (!selectedStudentId || assigningSaving) return;
+                              setAssigningSaving(true);
+                              const instrId = value === "__none__" ? null : value;
+                              const res = await assignStudentToInstructor({
+                                studentId: selectedStudentId,
+                                instructorId: instrId,
+                              });
+                              setAssigningSaving(false);
+                              if (!res.success) {
+                                toast.error({ description: res.message ?? "Errore." });
+                                return;
+                              }
+                              // Update local state
+                              setStudents((prev) =>
+                                prev.map((s) =>
+                                  s.id === selectedStudentId
+                                    ? { ...s, assignedInstructorId: instrId }
+                                    : s,
+                                ),
+                              );
+                              toast.success({
+                                description: instrId
+                                  ? `Assegnato a ${instructorMap.get(instrId) ?? "istruttore"}.`
+                                  : "Rimosso dall'istruttore.",
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="w-full" disabled={assigningSaving}>
+                              <SelectValue placeholder="Nessun istruttore" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
+                              {autonomousInstructors.map((instr) => (
+                                <SelectItem key={instr.id} value={instr.id}>
+                                  {instr.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </section>
+                    )}
 
                     {/* Stats — manual mode */}
                     {manualMode && register.extendedSummary && (
