@@ -12,7 +12,12 @@ import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
 export async function GET() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.autoscuolaRole !== "INSTRUCTOR" && membership.role !== "admin") {
+    // Allow INSTRUCTOR and OWNER (owners may also have an instructor profile)
+    if (
+      membership.autoscuolaRole !== "INSTRUCTOR" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      membership.role !== "admin"
+    ) {
       return NextResponse.json(
         { success: false, message: "Operazione non consentita." },
         { status: 403 },
@@ -33,9 +38,15 @@ export async function GET() {
     });
 
     if (!instructor) {
-      return NextResponse.json(
-        { success: false, message: "Profilo istruttore non trovato." },
-        { status: 404 },
+      // Not an instructor — return default non-autonomous response
+      return NextResponse.json({
+        success: true,
+        data: {
+          autonomousMode: false,
+          settings: {},
+          companyDefaults: { bookingSlotDurations: [30, 60], roundedHoursOnly: false },
+        },
+      });
       );
     }
 
@@ -79,7 +90,11 @@ const patchSchema = z.object({
 export async function PATCH(request: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.autoscuolaRole !== "INSTRUCTOR" && membership.role !== "admin") {
+    if (
+      membership.autoscuolaRole !== "INSTRUCTOR" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      membership.role !== "admin"
+    ) {
       return NextResponse.json(
         { success: false, message: "Operazione non consentita." },
         { status: 403 },
