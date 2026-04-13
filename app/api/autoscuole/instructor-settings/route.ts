@@ -47,7 +47,6 @@ export async function GET() {
           companyDefaults: { bookingSlotDurations: [30, 60], roundedHoursOnly: false },
         },
       });
-      );
     }
 
     // Load company defaults

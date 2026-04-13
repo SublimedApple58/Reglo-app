@@ -225,11 +225,23 @@ export async function createSwapOffer(
     // Determine recipients
     const dayBounds = getDayBoundsForDate(appointment.startsAt);
 
+    // If requesting student is assigned to an autonomous instructor,
+    // only notify students in the same cluster.
+    const requestingMember = await prisma.companyMember.findFirst({
+      where: { companyId: membership.companyId, userId: membership.userId, autoscuolaRole: "STUDENT" },
+      select: { assignedInstructorId: true, assignedInstructor: { select: { autonomousMode: true } } },
+    });
+    const clusterInstructorId =
+      requestingMember?.assignedInstructorId && requestingMember.assignedInstructor?.autonomousMode
+        ? requestingMember.assignedInstructorId
+        : null;
+
     const students = await prisma.companyMember.findMany({
       where: {
         companyId: membership.companyId,
         autoscuolaRole: "STUDENT",
         userId: { not: membership.userId },
+        ...(clusterInstructorId ? { assignedInstructorId: clusterInstructorId } : {}),
       },
       include: {
         user: {
@@ -378,12 +390,38 @@ export async function getSwapOffers(
       return { success: false, message: "Allievo non valido." };
     }
 
+    // If student is in a cluster, only see offers from same cluster
+    const viewerMember = await prisma.companyMember.findFirst({
+      where: { companyId: membership.companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
+      select: { assignedInstructorId: true, assignedInstructor: { select: { autonomousMode: true } } },
+    });
+    const viewerClusterInstructorId =
+      viewerMember?.assignedInstructorId && viewerMember.assignedInstructor?.autonomousMode
+        ? viewerMember.assignedInstructorId
+        : null;
+
+    // If locked to a cluster, only show offers from students in the same cluster
+    let clusterStudentIds: string[] | null = null;
+    if (viewerClusterInstructorId) {
+      const clusterMembers = await prisma.companyMember.findMany({
+        where: {
+          companyId: membership.companyId,
+          autoscuolaRole: "STUDENT",
+          assignedInstructorId: viewerClusterInstructorId,
+        },
+        select: { userId: true },
+      });
+      clusterStudentIds = clusterMembers.map((m) => m.userId);
+    }
+
     const offers = await prisma.autoscuolaSwapOffer.findMany({
       where: {
         companyId: membership.companyId,
         status: "broadcasted",
         expiresAt: { gt: now },
-        requestingStudentId: { not: payload.studentId },
+        requestingStudentId: clusterStudentIds
+          ? { not: payload.studentId, in: clusterStudentIds }
+          : { not: payload.studentId },
         appointment: {
           startsAt: { gt: now },
           status: { in: ["scheduled", "confirmed"] },
@@ -492,6 +530,23 @@ export async function respondSwapOffer(
 
     if (!offer) {
       return { success: false, message: "Offerta non trovata o scaduta." };
+    }
+
+    // Cluster validation: if accepting student is in a cluster, the offer must be from the same cluster
+    if (payload.response === "accept") {
+      const acceptingMember = await prisma.companyMember.findFirst({
+        where: { companyId: membership.companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
+        select: { assignedInstructorId: true, assignedInstructor: { select: { autonomousMode: true } } },
+      });
+      if (acceptingMember?.assignedInstructorId && acceptingMember.assignedInstructor?.autonomousMode) {
+        const offerCreatorMember = await prisma.companyMember.findFirst({
+          where: { companyId: membership.companyId, userId: offer.requestingStudentId, autoscuolaRole: "STUDENT" },
+          select: { assignedInstructorId: true },
+        });
+        if (offerCreatorMember?.assignedInstructorId !== acceptingMember.assignedInstructorId) {
+          return { success: false, message: "Non puoi accettare scambi da allievi di un altro gruppo." };
+        }
+      }
     }
 
     if (payload.response === "decline") {
