@@ -699,8 +699,7 @@ export function AutoscuoleStudentsPage({
                       <TableHead>Email</TableHead>
                       <TableHead>Telefono</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Guide completate</TableHead>
-                      <TableHead>Obbligo</TableHead>
+                      <TableHead>Guide</TableHead>
                       <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
