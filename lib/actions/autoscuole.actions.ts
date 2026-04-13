@@ -103,9 +103,19 @@ const repositionAppointmentSchema = z.object({
   reason: z.string().min(1).max(120).optional(),
 });
 
+const ALLOWED_STATUS_TRANSITIONS = [
+  "scheduled",
+  "confirmed",
+  "proposal",
+  "checked_in",
+  "no_show",
+  "completed",
+  "cancelled",
+] as const;
+
 const updateAppointmentStatusSchema = z.object({
   appointmentId: z.string().uuid(),
-  status: z.string().min(1),
+  status: z.enum(ALLOWED_STATUS_TRANSITIONS),
   lessonType: z.string().min(1).optional(),
   lessonTypes: z.array(z.string()).optional(),
 });
@@ -2542,6 +2552,14 @@ export async function updateAutoscuolaAppointmentStatus(
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = updateAppointmentStatusSchema.parse(input);
     const nextStatus = normalizeStatus(payload.status);
+
+    // Cancellations must use dedicated endpoints (/cancel, /permanent-cancel)
+    if (nextStatus === "cancelled") {
+      return {
+        success: false,
+        message: "Usa la funzione di annullamento dedicata per cancellare una guida.",
+      };
+    }
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({
       where: { id: payload.appointmentId, companyId: membership.companyId },

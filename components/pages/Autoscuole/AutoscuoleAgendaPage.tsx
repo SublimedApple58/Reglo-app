@@ -712,7 +712,7 @@ export function AutoscuoleAgendaPage({
     setPendingEventActionId(null);
   };
 
-  const handleStatusUpdate = async (appointmentId: string, status: string) => {
+  const handleStatusUpdate = async (appointmentId: string, status: "scheduled" | "confirmed" | "proposal" | "checked_in" | "no_show" | "completed" | "cancelled") => {
     setPendingEventActionId(appointmentId);
     const res = await updateAutoscuolaAppointmentStatus({ appointmentId, status });
     if (!res.success) {
