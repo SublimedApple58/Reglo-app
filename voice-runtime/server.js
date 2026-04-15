@@ -499,9 +499,13 @@ const setupOpenAiSocket = (state) => {
 
     const initialInstructions = state.transferFailed
       ? `Di' esattamente: "Mi scusi, purtroppo la segreteria non risponde al momento. Se vuole mi lascia il suo numero di cellulare e la faccio richiamare appena possibile." Non aggiungere altro.`
-      : `Saluta brevemente: "${normalizeCompanyName(
-          state.companyName,
-        )}, ${saluto}. Come posso aiutarla?" Non aggiungere altro.`;
+      : state.voiceHandoffDuringCallEnabled
+        ? `Saluta brevemente: "${normalizeCompanyName(
+            state.companyName,
+          )}, ${saluto}. Sono la segretaria virtuale dell'autoscuola. Come posso aiutarla? Se preferisce parlare con la segreteria può dirmelo." Non aggiungere altro.`
+        : `Saluta brevemente: "${normalizeCompanyName(
+            state.companyName,
+          )}, ${saluto}. Come posso aiutarla?" Non aggiungere altro.`;
 
     sendToOpenAi(state, {
       type: "response.create",

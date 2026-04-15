@@ -12,6 +12,7 @@ import {
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
   DEFAULT_STUDENT_BOOKING_MODE,
+  parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 
 export type InstructorSettings = {
@@ -176,7 +177,6 @@ export type CompanyBookingDefaults = {
 };
 
 export function buildCompanyBookingDefaults(limits: Record<string, unknown>): CompanyBookingDefaults {
-  const { parseBookingGovernanceFromLimits } = require("@/lib/autoscuole/booking-governance");
   const governance = parseBookingGovernanceFromLimits(limits);
   return {
     bookingSlotDurations: normalizeBookingSlotDurations(limits.bookingSlotDurations),

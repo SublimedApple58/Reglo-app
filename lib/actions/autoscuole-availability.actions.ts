@@ -2428,6 +2428,21 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       if (appt.vehicleId) addInterval(appt.vehicleId);
     }
 
+    // Load instructor blocks (sick leave, etc.) and add them to intervals
+    const instructorBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId: membership.companyId,
+        instructorId: { in: activeInstructorIds },
+        endsAt: { gt: rangeStart },
+        startsAt: { lt: rangeEnd },
+      },
+    });
+    for (const block of instructorBlocks) {
+      const list = intervals.get(block.instructorId) ?? [];
+      list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+      intervals.set(block.instructorId, list);
+    }
+
     const overlaps = (
       ownerIntervals: Array<{ start: number; end: number }> | undefined,
       start: number,
@@ -2631,6 +2646,11 @@ export async function getDateAvailabilityMap(
     // Also need student availability when restricted time range is active
     const needStudentAvailability = filterByStudentAvailability || clusterSettings.restrictedTimeRangeEnabled;
 
+    // If student is locked to an instructor (cluster), only consider that instructor
+    const effectiveInstructorId = clusterSettings.isLockedToInstructor && clusterSettings.assignedInstructorId
+      ? clusterSettings.assignedInstructorId
+      : null;
+
     // Fetch resources in parallel
     const [activeInstructors, activeVehicles, student, studentAvailabilityRaw] =
       await Promise.all([
@@ -2638,6 +2658,7 @@ export async function getDateAvailabilityMap(
           where: {
             companyId: membership.companyId,
             status: { not: "inactive" },
+            ...(effectiveInstructorId ? { id: effectiveInstructorId } : {}),
           },
           select: { id: true },
         }),
@@ -2770,6 +2791,21 @@ export async function getDateAvailabilityMap(
       addInterval(appt.studentId);
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
+    }
+
+    // Load instructor blocks (sick leave, etc.) and add them to intervals
+    const dateMapInstructorBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId: membership.companyId,
+        instructorId: { in: activeInstructorIds },
+        endsAt: { gt: rangeStart },
+        startsAt: { lt: rangeEnd },
+      },
+    });
+    for (const block of dateMapInstructorBlocks) {
+      const list = intervals.get(block.instructorId) ?? [];
+      list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+      intervals.set(block.instructorId, list);
     }
 
     const overlaps = (

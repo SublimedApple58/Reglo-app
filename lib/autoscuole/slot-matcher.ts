@@ -324,20 +324,30 @@ export async function findBestAutoscuolaSlot(
     toTimeZoneDate(preferredDateParts, 0, 0).getTime() - 60 * 60 * 1000,
   );
   const fullRangeEnd = toTimeZoneDate(addDaysToDateParts(preferredDateParts, maxDays + 1), 0, 0);
-  const allAppointments = await prisma.autoscuolaAppointment.findMany({
-    where: {
-      companyId: input.companyId,
-      status: { notIn: ["cancelled"] },
-      startsAt: { gte: fullRangeStart, lt: fullRangeEnd },
-    },
-    select: {
-      instructorId: true,
-      vehicleId: true,
-      studentId: true,
-      startsAt: true,
-      endsAt: true,
-    },
-  });
+  const [allAppointments, allInstructorBlocks] = await Promise.all([
+    prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: input.companyId,
+        status: { notIn: ["cancelled"] },
+        startsAt: { gte: fullRangeStart, lt: fullRangeEnd },
+      },
+      select: {
+        instructorId: true,
+        vehicleId: true,
+        studentId: true,
+        startsAt: true,
+        endsAt: true,
+      },
+    }),
+    prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId: input.companyId,
+        instructorId: { in: activeInstructorIds },
+        endsAt: { gt: fullRangeStart },
+        startsAt: { lt: fullRangeEnd },
+      },
+    }),
+  ]);
 
   for (let offset = 0; offset <= maxDays; offset += 1) {
     const dayParts = addDaysToDateParts(preferredDateParts, offset);
@@ -351,6 +361,13 @@ export async function findBestAutoscuolaSlot(
       (a) => a.startsAt >= appointmentScanStart && a.startsAt < rangeEnd,
     );
     const appointmentMaps = buildAppointmentMaps(dayAppointments);
+    // Inject instructor blocks (sick leave, etc.) into the intervals map
+    for (const block of allInstructorBlocks) {
+      if (block.endsAt <= rangeStart || block.startsAt >= rangeEnd) continue;
+      const list = appointmentMaps.intervals.get(block.instructorId) ?? [];
+      list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+      appointmentMaps.intervals.set(block.instructorId, list);
+    }
     const studentIntervals = appointmentMaps.intervals.get(input.studentId);
 
     const window = {
