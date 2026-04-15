@@ -8,6 +8,9 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import {
+  queueOperationalRepositionForAppointment,
+} from "@/lib/autoscuole/repositioning";
 
 const sickLeaveSchema = z.object({
   instructorId: z.string().uuid().optional(),
@@ -110,7 +113,7 @@ export async function POST(request: Request) {
       ),
     );
 
-    // Cancel appointments that fall within the sick period
+    // Cancel appointments and queue repositioning
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId: membership.companyId,
@@ -118,30 +121,31 @@ export async function POST(request: Request) {
         status: { in: ["scheduled", "confirmed", "proposal", "checked_in"] },
         startsAt: { gte: sickStart, lte: sickEnd },
       },
-      include: {
-        student: { select: { id: true, name: true, email: true, phone: true } },
-      },
+      select: { id: true, studentId: true },
     });
 
     const cancelledIds: string[] = [];
     for (const appointment of appointments) {
-      await prisma.autoscuolaAppointment.update({
-        where: { id: appointment.id },
-        data: {
-          status: "cancelled",
-          cancellationReason: "instructor_sick",
-        },
+      // Queue repositioning — this cancels the appointment, notifies the student,
+      // and attempts to find a new slot automatically
+      await queueOperationalRepositionForAppointment({
+        companyId: membership.companyId,
+        appointmentId: appointment.id,
+        reason: "instructor_sick",
+        actorUserId: membership.userId,
+        attemptNow: true,
       });
       cancelledIds.push(appointment.id);
 
-      // Notify students
+      // Additional sick-leave-specific push (the repositioning sends a generic one,
+      // this one is more specific with the emoji and reason)
       if (appointment.studentId) {
         try {
           await sendAutoscuolaPushToUsers({
             companyId: membership.companyId,
             userIds: [appointment.studentId],
             title: "🤒 Guida cancellata",
-            body: `La tua guida è stata cancellata perché l'istruttore ${targetInstructor.name} è in malattia.`,
+            body: `La tua guida è stata cancellata perché l'istruttore ${targetInstructor.name} è in malattia. Stiamo cercando un nuovo orario.`,
             data: {
               kind: "sick_leave_cancelled",
               appointmentId: appointment.id,
