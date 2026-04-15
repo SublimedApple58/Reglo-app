@@ -98,7 +98,7 @@ const getWaitlistOffersSchema = z.object({
 
 const SLOT_MINUTES = 30;
 const DEFAULT_MAX_DAYS = 4;
-const DURATION_PRIORITY = [60, 30, 90, 120] as const;
+const DURATION_PRIORITY = [60, 45, 30, 90, 120] as const;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
 const OPERATIONAL_REPOSITIONABLE_STATUSES = [
@@ -2171,6 +2171,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         assignedInstructorName: clusterSettings.assignedInstructorName,
         assignedInstructorPhone: clusterSettings.assignedInstructorPhone,
         isLockedToInstructor: clusterSettings.isLockedToInstructor,
+        weeklyAbsenceEnabled: clusterSettings.weeklyAbsenceEnabled,
       },
     };
   } catch (error) {
@@ -2308,6 +2309,9 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const governance = await getBookingGovernanceForCompany(membership.companyId);
     const filterByStudentAvailability = governance.studentBookingMode === "engine";
 
+    // Also need student availability when restricted time range is active (to check overlap)
+    const needStudentAvailability = filterByStudentAvailability || clusterSettings.restrictedTimeRangeEnabled;
+
     const [
       activeInstructors,
       activeVehicles,
@@ -2327,7 +2331,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         select: { id: true },
       }),
       ensureStudentMembership(membership.companyId, payload.studentId),
-      filterByStudentAvailability
+      needStudentAvailability
         ? prisma.autoscuolaWeeklyAvailability.findFirst({
             where: { companyId: membership.companyId, ownerType: "student", ownerId: payload.studentId },
           })
@@ -2337,6 +2341,24 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const studentAvailability = studentAvailabilityRaw
       ? defaultToAvailabilityRecord(studentAvailabilityRaw)
       : null;
+
+    // Restricted time range: check if student has availability overlapping with the restricted range
+    let restrictToTimeRange = false;
+    let restrictedStartMin = 0;
+    let restrictedEndMin = 0;
+    if (clusterSettings.restrictedTimeRangeEnabled && studentAvailability) {
+      const [rsH, rsM] = clusterSettings.restrictedTimeRangeStart.split(":").map(Number);
+      const [reH, reM] = clusterSettings.restrictedTimeRangeEnd.split(":").map(Number);
+      restrictedStartMin = rsH * 60 + rsM;
+      restrictedEndMin = reH * 60 + reM;
+      // Check if any of the student's declared availability ranges overlap with the restricted range
+      const hasOverlap = studentAvailability.ranges.some(
+        (r) => r.startMinutes < restrictedEndMin && r.endMinutes > restrictedStartMin,
+      );
+      if (hasOverlap) {
+        restrictToTimeRange = true;
+      }
+    }
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
@@ -2470,6 +2492,12 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           if (!isOwnerAvailable(studentAvailability, dayOfWeek, minutes, minutes + payload.durationMinutes)) continue;
         }
 
+        // Restricted time range: if student has availability in the restricted range,
+        // only show slots within that range
+        if (restrictToTimeRange) {
+          if (minutes < restrictedStartMin || minutes + payload.durationMinutes > restrictedEndMin) continue;
+        }
+
         if (
           enforceLessonTypeTimeConstraints &&
           requestedPolicyType &&
@@ -2589,6 +2617,20 @@ export async function getDateAvailabilityMap(
     const filterByStudentAvailability =
       governance.studentBookingMode === "engine";
 
+    // Resolve cluster-aware settings for restricted time range
+    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const clusterSettings = await resolveEffectiveBookingSettings(
+      membership.companyId,
+      payload.studentId,
+      {
+        bookingSlotDurations: normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations),
+        roundedHoursOnly: serviceLimits.roundedHoursOnly === true,
+      },
+    );
+
+    // Also need student availability when restricted time range is active
+    const needStudentAvailability = filterByStudentAvailability || clusterSettings.restrictedTimeRangeEnabled;
+
     // Fetch resources in parallel
     const [activeInstructors, activeVehicles, student, studentAvailabilityRaw] =
       await Promise.all([
@@ -2607,7 +2649,7 @@ export async function getDateAvailabilityMap(
           select: { id: true },
         }),
         ensureStudentMembership(membership.companyId, payload.studentId),
-        filterByStudentAvailability
+        needStudentAvailability
           ? prisma.autoscuolaWeeklyAvailability.findFirst({
               where: {
                 companyId: membership.companyId,
@@ -2621,6 +2663,23 @@ export async function getDateAvailabilityMap(
     const studentAvailability = studentAvailabilityRaw
       ? defaultToAvailabilityRecord(studentAvailabilityRaw)
       : null;
+
+    // Restricted time range: check if student has availability overlapping with the restricted range
+    let restrictToTimeRange = false;
+    let restrictedStartMin = 0;
+    let restrictedEndMin = 0;
+    if (clusterSettings.restrictedTimeRangeEnabled && studentAvailability) {
+      const [rsH, rsM] = clusterSettings.restrictedTimeRangeStart.split(":").map(Number);
+      const [reH, reM] = clusterSettings.restrictedTimeRangeEnd.split(":").map(Number);
+      restrictedStartMin = rsH * 60 + rsM;
+      restrictedEndMin = reH * 60 + reM;
+      const hasOverlap = studentAvailability.ranges.some(
+        (r) => r.startMinutes < restrictedEndMin && r.endMinutes > restrictedStartMin,
+      );
+      if (hasOverlap) {
+        restrictToTimeRange = true;
+      }
+    }
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
@@ -2820,6 +2879,11 @@ export async function getDateAvailabilityMap(
               )
             )
               continue;
+          }
+
+          // Restricted time range filter
+          if (restrictToTimeRange) {
+            if (minutes < restrictedStartMin || minutes + defaultDuration > restrictedEndMin) continue;
           }
 
           const candidateEnd = minutes + defaultDuration;

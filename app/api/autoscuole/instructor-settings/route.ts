@@ -5,14 +5,13 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 import {
   parseInstructorSettings,
+  buildCompanyBookingDefaults,
   type InstructorSettings,
 } from "@/lib/autoscuole/instructor-clusters";
-import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
 
 export async function GET() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    // Allow INSTRUCTOR and OWNER (owners may also have an instructor profile)
     if (
       membership.autoscuolaRole !== "INSTRUCTOR" &&
       membership.autoscuolaRole !== "OWNER" &&
@@ -23,6 +22,14 @@ export async function GET() {
         { status: 403 },
       );
     }
+
+    // Load company defaults
+    const service = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    const companyDefaults = buildCompanyBookingDefaults(limits);
 
     const instructor = await prisma.autoscuolaInstructor.findFirst({
       where: {
@@ -38,27 +45,15 @@ export async function GET() {
     });
 
     if (!instructor) {
-      // Not an instructor — return default non-autonomous response
       return NextResponse.json({
         success: true,
         data: {
           autonomousMode: false,
           settings: {},
-          companyDefaults: { bookingSlotDurations: [30, 60], roundedHoursOnly: false },
+          companyDefaults,
         },
       });
     }
-
-    // Load company defaults
-    const service = await prisma.companyService.findFirst({
-      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-      select: { limits: true },
-    });
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
-    const companyBookingSlotDurations = normalizeBookingSlotDurations(
-      limits.bookingSlotDurations,
-    );
-    const companyRoundedHoursOnly = limits.roundedHoursOnly === true;
 
     const settings = parseInstructorSettings(instructor.settings);
 
@@ -67,10 +62,7 @@ export async function GET() {
       data: {
         autonomousMode: instructor.autonomousMode,
         settings,
-        companyDefaults: {
-          bookingSlotDurations: companyBookingSlotDurations,
-          roundedHoursOnly: companyRoundedHoursOnly,
-        },
+        companyDefaults,
       },
     });
   } catch (error) {
@@ -84,6 +76,22 @@ export async function GET() {
 const patchSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
+  appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
+  instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
+  studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
+  swapEnabled: z.boolean().optional(),
+  swapNotifyMode: z.enum(["all", "available_only"]).optional(),
+  bookingCutoffEnabled: z.boolean().optional(),
+  bookingCutoffTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  weeklyBookingLimitEnabled: z.boolean().optional(),
+  weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+  emptySlotNotificationEnabled: z.boolean().optional(),
+  emptySlotNotificationTarget: z.enum(["all", "availability_matching"]).optional(),
+  emptySlotNotificationTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).optional(),
+  restrictedTimeRangeEnabled: z.boolean().optional(),
+  restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  weeklyAbsenceEnabled: z.boolean().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -131,15 +139,14 @@ export async function PATCH(request: Request) {
     }
 
     const current = parseInstructorSettings(instructor.settings);
-    const next: InstructorSettings = {
-      ...current,
-      ...(payload.bookingSlotDurations !== undefined
-        ? { bookingSlotDurations: payload.bookingSlotDurations }
-        : {}),
-      ...(payload.roundedHoursOnly !== undefined
-        ? { roundedHoursOnly: payload.roundedHoursOnly }
-        : {}),
-    };
+    const next: InstructorSettings = { ...current };
+
+    // Apply all provided fields
+    for (const [key, value] of Object.entries(payload)) {
+      if (value !== undefined) {
+        (next as Record<string, unknown>)[key] = value;
+      }
+    }
 
     await prisma.autoscuolaInstructor.update({
       where: { id: instructor.id },

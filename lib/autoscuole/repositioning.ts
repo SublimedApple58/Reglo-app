@@ -55,6 +55,8 @@ const formatCancellationTitle = (value: string) => {
       return "Guida da riprogrammare";
     case "owner_delete":
       return "Guida spostata dalla segreteria";
+    case "instructor_sick":
+      return "🤒 Guida cancellata — istruttore in malattia";
     default:
       return "Guida da riprogrammare";
   }
@@ -74,6 +76,8 @@ const formatCancellationBody = (value: string, slotLabel: string, instrLabel: st
       return `La guida di ${slotLabel}${instrLabel} è stata spostata dalla segreteria. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
     case "directory_instructor_removed":
       return `La guida di ${slotLabel}${instrLabel} è stata spostata per un cambio istruttore. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+    case "instructor_sick":
+      return `🤒 La guida di ${slotLabel}${instrLabel} è stata cancellata perché l'istruttore è in malattia. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
     default:
       return `La guida di ${slotLabel}${instrLabel} è stata spostata per motivi organizzativi. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
   }

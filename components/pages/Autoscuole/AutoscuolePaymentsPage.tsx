@@ -684,6 +684,23 @@ export function AutoscuolePaymentsPage({
             </div>
           )}
 
+          {lessonCreditFlowEnabled && (
+            <div className="grid gap-3 sm:grid-cols-2 max-w-lg">
+              <FieldGroup label="Cutoff penale">
+                <Select value={penaltyCutoffHoursPreset} onValueChange={setPenaltyCutoffHoursPreset}>
+                  <SelectTrigger><SelectValue placeholder="Ore" /></SelectTrigger>
+                  <SelectContent>{cutoffPresets.map((p) => (<SelectItem key={p} value={String(p)}>{p} ore</SelectItem>))}</SelectContent>
+                </Select>
+              </FieldGroup>
+              <FieldGroup label="Penale">
+                <Select value={penaltyPercentPreset} onValueChange={setPenaltyPercentPreset}>
+                  <SelectTrigger><SelectValue placeholder="%" /></SelectTrigger>
+                  <SelectContent>{penaltyPresets.map((p) => (<SelectItem key={p} value={String(p)}>{p}%</SelectItem>))}</SelectContent>
+                </Select>
+              </FieldGroup>
+            </div>
+          )}
+
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving} size="sm">
               {saving ? "Salvataggio..." : "Salva"}

@@ -33,7 +33,7 @@ export type LessonPolicyConfig = {
   lessonTypeConstraints: LessonTypeConstraintsMap;
 };
 
-export const BOOKING_SLOT_DURATION_OPTIONS = [30, 60, 90, 120] as const;
+export const BOOKING_SLOT_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
 type BookingSlotDuration = (typeof BOOKING_SLOT_DURATION_OPTIONS)[number];
 const BOOKING_SLOT_DURATION_SET = new Set<number>(BOOKING_SLOT_DURATION_OPTIONS);
 

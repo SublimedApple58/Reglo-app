@@ -88,7 +88,7 @@ const formatDateLocal = (date: Date) =>
   `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
-const BOOKING_DURATION_OPTIONS = [30, 60, 90, 120] as const;
+const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
 const APP_BOOKING_ACTOR_OPTIONS = [
   { value: "students", label: "Solo allievi" },
   { value: "instructors", label: "Solo istruttori" },
@@ -215,6 +215,8 @@ export function AutoscuoleResourcesPage({
   const [savingSettings, setSavingSettings] = React.useState(false);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
+  const [studentReminderMorningEnabled, setStudentReminderMorningEnabled] = React.useState(false);
+  const [studentReminderMorningTime, setStudentReminderMorningTime] = React.useState("08:00");
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
     "push",
@@ -245,6 +247,11 @@ export function AutoscuoleResourcesPage({
   const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
   const [examPriorityEnabled, setExamPriorityEnabled] = React.useState(false);
   const [examPriorityLimit, setExamPriorityLimit] = React.useState(5);
+  const [examPriorityDaysBeforeExam, setExamPriorityDaysBeforeExam] = React.useState(14);
+  const [examPriorityBlockNonExam, setExamPriorityBlockNonExam] = React.useState(false);
+  const [restrictedTimeRangeEnabled, setRestrictedTimeRangeEnabled] = React.useState(false);
+  const [restrictedTimeRangeStart, setRestrictedTimeRangeStart] = React.useState("08:00");
+  const [restrictedTimeRangeEnd, setRestrictedTimeRangeEnd] = React.useState("13:00");
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
@@ -261,11 +268,35 @@ export function AutoscuoleResourcesPage({
   const [clusterStudentIds, setClusterStudentIds] = React.useState<string[]>([]);
   const [clusterSaving, setClusterSaving] = React.useState(false);
   const [clusterStudentSearch, setClusterStudentSearch] = React.useState("");
+  // Task 3: new cluster booking settings
+  const [clusterAppBookingActors, setClusterAppBookingActors] = React.useState<"students" | "instructors" | "both" | undefined>(undefined);
+  const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | "guided_proposal" | undefined>(undefined);
+  const [clusterStudentBookingMode, setClusterStudentBookingMode] = React.useState<"engine" | "free_choice" | undefined>(undefined);
+  const [clusterSwapEnabled, setClusterSwapEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterSwapNotifyMode, setClusterSwapNotifyMode] = React.useState<"all" | "available_only" | undefined>(undefined);
+  const [clusterBookingCutoffEnabled, setClusterBookingCutoffEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterBookingCutoffTime, setClusterBookingCutoffTime] = React.useState<string | undefined>(undefined);
+  const [clusterWeeklyLimitEnabled, setClusterWeeklyLimitEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterWeeklyLimit, setClusterWeeklyLimit] = React.useState<number | undefined>(undefined);
+  const [clusterEmptySlotEnabled, setClusterEmptySlotEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterEmptySlotTarget, setClusterEmptySlotTarget] = React.useState<"all" | "availability_matching" | undefined>(undefined);
+  const [clusterEmptySlotTimes, setClusterEmptySlotTimes] = React.useState<string[] | undefined>(undefined);
+  const [clusterRestrictedTimeEnabled, setClusterRestrictedTimeEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterRestrictedTimeStart, setClusterRestrictedTimeStart] = React.useState<string | undefined>(undefined);
+  const [clusterRestrictedTimeEnd, setClusterRestrictedTimeEnd] = React.useState<string | undefined>(undefined);
+  const [clusterWeeklyAbsenceEnabled, setClusterWeeklyAbsenceEnabled] = React.useState<boolean | undefined>(undefined);
   const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [studentBookingMode, setStudentBookingMode] = React.useState<StudentBookingModeValue>("engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
+  // Sick leave state
+  const [sickLeaveInstructor, setSickLeaveInstructor] = React.useState<InstructorDetail | null>(null);
+  const [sickLeaveStartDate, setSickLeaveStartDate] = React.useState("");
+  const [sickLeaveEndDate, setSickLeaveEndDate] = React.useState("");
+  const [sickLeaveHalfDay, setSickLeaveHalfDay] = React.useState(false);
+  const [sickLeaveStartTime, setSickLeaveStartTime] = React.useState("14:00");
+  const [sickLeaveSaving, setSickLeaveSaving] = React.useState(false);
   const [instructorWeeklyAvailability, setInstructorWeeklyAvailability] = React.useState<
     Record<string, VehicleWeeklyAvailability>
   >({});
@@ -418,6 +449,8 @@ export function AutoscuoleResourcesPage({
       setAvailabilityWeeks(String(res.data.availabilityWeeks));
       setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
       setStudentReminderMinutes(String(res.data.studentReminderMinutes));
+      setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
+      setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
       setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
       setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
       setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
@@ -451,6 +484,11 @@ export function AutoscuoleResourcesPage({
       setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
       setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
       setExamPriorityLimit(res.data.examPriorityLimit ?? 5);
+      setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
+      setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
+      setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
+      setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
+      setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
       setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
       setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
       setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
@@ -578,6 +616,8 @@ export function AutoscuoleResourcesPage({
       bookingMinStartDate: bookingMinStartDate || null,
       studentReminderMinutes:
         parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
+      studentReminderMorningEnabled,
+      studentReminderMorningTime,
       instructorReminderMinutes:
         parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
       slotFillChannels,
@@ -597,6 +637,11 @@ export function AutoscuoleResourcesPage({
       weeklyBookingLimit,
       examPriorityEnabled,
       examPriorityLimit,
+      examPriorityDaysBeforeExam,
+      examPriorityBlockNonExam,
+      restrictedTimeRangeEnabled,
+      restrictedTimeRangeStart,
+      restrictedTimeRangeEnd,
       emptySlotNotificationEnabled,
       emptySlotNotificationTarget,
       emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
@@ -617,6 +662,8 @@ export function AutoscuoleResourcesPage({
 
     setAvailabilityWeeks(String(res.data.availabilityWeeks));
     setStudentReminderMinutes(String(res.data.studentReminderMinutes));
+    setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
+    setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
     setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
@@ -819,10 +866,27 @@ export function AutoscuoleResourcesPage({
     const settings = (instructor.settings ?? {}) as Record<string, unknown>;
     setClusterDurations(
       Array.isArray(settings.bookingSlotDurations)
-        ? (settings.bookingSlotDurations as number[]).filter((d) => [30, 60, 90, 120].includes(d))
+        ? (settings.bookingSlotDurations as number[]).filter((d) => [30, 45, 60, 90, 120].includes(d))
         : [30, 60],
     );
     setClusterRoundedHours(settings.roundedHoursOnly === true);
+    // Load new cluster booking settings
+    setClusterAppBookingActors(settings.appBookingActors as "students" | "instructors" | "both" | undefined);
+    setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | "guided_proposal" | undefined);
+    setClusterStudentBookingMode(settings.studentBookingMode as "engine" | "free_choice" | undefined);
+    setClusterSwapEnabled(typeof settings.swapEnabled === "boolean" ? settings.swapEnabled : undefined);
+    setClusterSwapNotifyMode(settings.swapNotifyMode as "all" | "available_only" | undefined);
+    setClusterBookingCutoffEnabled(typeof settings.bookingCutoffEnabled === "boolean" ? settings.bookingCutoffEnabled : undefined);
+    setClusterBookingCutoffTime(settings.bookingCutoffTime as string | undefined);
+    setClusterWeeklyLimitEnabled(typeof settings.weeklyBookingLimitEnabled === "boolean" ? settings.weeklyBookingLimitEnabled : undefined);
+    setClusterWeeklyLimit(typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : undefined);
+    setClusterEmptySlotEnabled(typeof settings.emptySlotNotificationEnabled === "boolean" ? settings.emptySlotNotificationEnabled : undefined);
+    setClusterEmptySlotTarget(settings.emptySlotNotificationTarget as "all" | "availability_matching" | undefined);
+    setClusterEmptySlotTimes(Array.isArray(settings.emptySlotNotificationTimes) ? settings.emptySlotNotificationTimes as string[] : undefined);
+    setClusterRestrictedTimeEnabled(typeof settings.restrictedTimeRangeEnabled === "boolean" ? settings.restrictedTimeRangeEnabled : undefined);
+    setClusterRestrictedTimeStart(settings.restrictedTimeRangeStart as string | undefined);
+    setClusterRestrictedTimeEnd(settings.restrictedTimeRangeEnd as string | undefined);
+    setClusterWeeklyAbsenceEnabled(typeof settings.weeklyAbsenceEnabled === "boolean" ? settings.weeklyAbsenceEnabled : undefined);
     const studRes = await getAutoscuolaStudentsWithProgress();
     if (studRes.success && studRes.data) {
       setAllStudents(studRes.data.map((s) => ({
@@ -845,7 +909,26 @@ export function AutoscuoleResourcesPage({
     const res = await updateAutoscuolaInstructor({
       instructorId: clusterInstructor.id,
       autonomousMode: clusterAutonomous,
-      settings: clusterAutonomous ? { bookingSlotDurations: clusterDurations, roundedHoursOnly: clusterRoundedHours } : undefined,
+      settings: clusterAutonomous ? {
+        bookingSlotDurations: clusterDurations,
+        roundedHoursOnly: clusterRoundedHours,
+        appBookingActors: clusterAppBookingActors,
+        instructorBookingMode: clusterInstructorBookingMode,
+        studentBookingMode: clusterStudentBookingMode,
+        swapEnabled: clusterSwapEnabled,
+        swapNotifyMode: clusterSwapNotifyMode,
+        bookingCutoffEnabled: clusterBookingCutoffEnabled,
+        bookingCutoffTime: clusterBookingCutoffTime,
+        weeklyBookingLimitEnabled: clusterWeeklyLimitEnabled,
+        weeklyBookingLimit: clusterWeeklyLimit,
+        emptySlotNotificationEnabled: clusterEmptySlotEnabled,
+        emptySlotNotificationTarget: clusterEmptySlotTarget,
+        emptySlotNotificationTimes: clusterEmptySlotTimes,
+        restrictedTimeRangeEnabled: clusterRestrictedTimeEnabled,
+        restrictedTimeRangeStart: clusterRestrictedTimeStart,
+        restrictedTimeRangeEnd: clusterRestrictedTimeEnd,
+        weeklyAbsenceEnabled: clusterWeeklyAbsenceEnabled,
+      } : undefined,
       assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
     });
     setClusterSaving(false);
@@ -1457,6 +1540,34 @@ export function AutoscuoleResourcesPage({
                 </FieldGroup>
               </div>
 
+              {/* Morning reminder */}
+              <div className="max-w-2xl space-y-3">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setStudentReminderMorningEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Reminder mattina del giorno</span>
+                    <span className="text-xs text-muted-foreground">
+                      Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti.
+                    </span>
+                  </div>
+                  <InlineToggle checked={studentReminderMorningEnabled} size="sm" />
+                </div>
+                {studentReminderMorningEnabled && (
+                  <FieldGroup label="Orario invio">
+                    <Select value={studentReminderMorningTime} onValueChange={setStudentReminderMorningTime}>
+                      <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
+                      <SelectContent>
+                        {["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"].map((t) => (
+                          <SelectItem key={t} value={t}>{t}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FieldGroup>
+                )}
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-3">
                 <ChannelGroup
                   title="Slot fill"
@@ -1682,6 +1793,20 @@ export function AutoscuoleResourcesPage({
                       >
                         <Clock className="size-3.5" />
                       </ResourceCardAction>
+                      <ResourceCardAction
+                        onClick={() => {
+                          setSickLeaveInstructor(instructor);
+                          const today = new Date();
+                          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+                          setSickLeaveStartDate(todayStr);
+                          setSickLeaveEndDate(todayStr);
+                          setSickLeaveHalfDay(false);
+                          setSickLeaveStartTime("14:00");
+                        }}
+                        title="Segna malattia"
+                      >
+                        🤒
+                      </ResourceCardAction>
                     </>
                   }
                   availabilitySummary={
@@ -1771,6 +1896,219 @@ export function AutoscuoleResourcesPage({
                         </span>
                       </div>
                       <InlineToggle checked={clusterRoundedHours} size="sm" />
+                    </div>
+
+                    {/* ── Governance prenotazione (override cluster) ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Governance prenotazione</span>
+                      <FieldGroup label="Chi prenota">
+                        <Select value={clusterAppBookingActors ?? ""} onValueChange={(v) => setClusterAppBookingActors((v || undefined) as "students" | "instructors" | "both" | undefined)}>
+                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="students">Solo allievi</SelectItem>
+                            <SelectItem value="instructors">Solo istruttori</SelectItem>
+                            <SelectItem value="both">Entrambi</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                      <FieldGroup label="Modalità prenotazione istruttore">
+                        <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | "guided_proposal" | undefined)}>
+                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="manual_full">Manuale totale</SelectItem>
+                            <SelectItem value="manual_engine">Manuale + motore annullamenti</SelectItem>
+                            <SelectItem value="guided_proposal">Guidata con proposta</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                      <FieldGroup label="Modalità prenotazione allievo">
+                        <Select value={clusterStudentBookingMode ?? ""} onValueChange={(v) => setClusterStudentBookingMode((v || undefined) as "engine" | "free_choice" | undefined)}>
+                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="engine">Motore (proposta automatica)</SelectItem>
+                            <SelectItem value="free_choice">Scelta libera</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    </div>
+
+                    {/* ── Scambio guide ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scambio guide</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterSwapEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Scambio guide</span>
+                          <span className="text-xs text-muted-foreground">{clusterSwapEnabled === undefined ? "Default azienda" : clusterSwapEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterSwapEnabled ?? false} size="sm" />
+                      </div>
+                      {clusterSwapEnabled && (
+                        <FieldGroup label="Notifica scambio">
+                          <Select value={clusterSwapNotifyMode ?? ""} onValueChange={(v) => setClusterSwapNotifyMode((v || undefined) as "all" | "available_only" | undefined)}>
+                            <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Tutti gli allievi</SelectItem>
+                              <SelectItem value="available_only">Solo disponibili</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </FieldGroup>
+                      )}
+                    </div>
+
+                    {/* ── Cutoff prenotazione ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cutoff prenotazione</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterBookingCutoffEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Cutoff prenotazione</span>
+                          <span className="text-xs text-muted-foreground">{clusterBookingCutoffEnabled === undefined ? "Default azienda" : clusterBookingCutoffEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterBookingCutoffEnabled ?? false} size="sm" />
+                      </div>
+                      {clusterBookingCutoffEnabled && (
+                        <FieldGroup label="Orario limite">
+                          <Select value={clusterBookingCutoffTime ?? ""} onValueChange={(v) => setClusterBookingCutoffTime(v || undefined)}>
+                            <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                            <SelectContent>
+                              {["12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00"].map((t) => (
+                                <SelectItem key={t} value={t}>{t}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FieldGroup>
+                      )}
+                    </div>
+
+                    {/* ── Limite settimanale ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Limite guide settimanali</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterWeeklyLimitEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Limite settimanale</span>
+                          <span className="text-xs text-muted-foreground">{clusterWeeklyLimitEnabled === undefined ? "Default azienda" : clusterWeeklyLimitEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterWeeklyLimitEnabled ?? false} size="sm" />
+                      </div>
+                      {clusterWeeklyLimitEnabled && (
+                        <FieldGroup label="Max guide a settimana">
+                          <input
+                            type="number"
+                            min={1}
+                            max={50}
+                            className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
+                            value={clusterWeeklyLimit ?? ""}
+                            onChange={(e) => setClusterWeeklyLimit(e.target.value ? Number(e.target.value) : undefined)}
+                          />
+                        </FieldGroup>
+                      )}
+                    </div>
+
+                    {/* ── Notifiche slot vuoti ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notifiche slot vuoti</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterEmptySlotEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Notifiche slot vuoti</span>
+                          <span className="text-xs text-muted-foreground">{clusterEmptySlotEnabled === undefined ? "Default azienda" : clusterEmptySlotEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterEmptySlotEnabled ?? false} size="sm" />
+                      </div>
+                      {clusterEmptySlotEnabled && (
+                        <>
+                          <FieldGroup label="Destinatari">
+                            <Select value={clusterEmptySlotTarget ?? ""} onValueChange={(v) => setClusterEmptySlotTarget((v || undefined) as "all" | "availability_matching" | undefined)}>
+                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">Tutti gli allievi</SelectItem>
+                                <SelectItem value="availability_matching">Solo con disponibilità</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </FieldGroup>
+                          <FieldGroup label="Orari notifica">
+                            <div className="flex flex-wrap gap-1.5">
+                              {["08:00","10:00","12:00","14:00","16:00","18:00","20:00"].map((t) => (
+                                <ToggleChip
+                                  key={t}
+                                  active={(clusterEmptySlotTimes ?? []).includes(t)}
+                                  onClick={() => setClusterEmptySlotTimes((prev) => {
+                                    const current = prev ?? [];
+                                    return current.includes(t) ? current.filter((x) => x !== t) : [...current, t].sort();
+                                  })}
+                                  size="sm"
+                                >
+                                  {t}
+                                </ToggleChip>
+                              ))}
+                            </div>
+                          </FieldGroup>
+                        </>
+                      )}
+                    </div>
+
+                    {/* ── Fascia oraria ristretta ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fascia oraria ristretta</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterRestrictedTimeEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Fascia oraria ristretta</span>
+                          <span className="text-xs text-muted-foreground">{clusterRestrictedTimeEnabled === undefined ? "Default azienda" : clusterRestrictedTimeEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterRestrictedTimeEnabled ?? false} size="sm" />
+                      </div>
+                      {clusterRestrictedTimeEnabled && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <FieldGroup label="Inizio fascia">
+                            <Select value={clusterRestrictedTimeStart ?? ""} onValueChange={(v) => setClusterRestrictedTimeStart(v || undefined)}>
+                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                              <SelectContent>
+                                {["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00"].map((t) => (
+                                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FieldGroup>
+                          <FieldGroup label="Fine fascia">
+                            <Select value={clusterRestrictedTimeEnd ?? ""} onValueChange={(v) => setClusterRestrictedTimeEnd(v || undefined)}>
+                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                              <SelectContent>
+                                {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"].map((t) => (
+                                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FieldGroup>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Assenza settimanale (Task 8) ── */}
+                    <div className="space-y-3 border-t border-border/40 pt-4">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assenza settimanale</span>
+                      <div
+                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                        onClick={() => setClusterWeeklyAbsenceEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                      >
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-sm font-medium">Assenza settimanale allievi</span>
+                          <span className="text-xs text-muted-foreground">{clusterWeeklyAbsenceEnabled === undefined ? "Default azienda" : clusterWeeklyAbsenceEnabled ? "Attivo" : "Disattivo"}</span>
+                        </div>
+                        <InlineToggle checked={clusterWeeklyAbsenceEnabled ?? false} size="sm" />
+                      </div>
                     </div>
 
                     <FieldGroup label={`Allievi assegnati (${clusterStudentIds.length})`}>
@@ -1955,19 +2293,79 @@ export function AutoscuoleResourcesPage({
                     </div>
 
                     {examPriorityEnabled ? (
-                      <FieldGroup label="Guide massime per settimana (priorit&agrave; esame)">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={50}
-                          value={examPriorityLimit}
-                          onChange={(e) => setExamPriorityLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                          className="w-24"
-                        />
-                      </FieldGroup>
+                      <>
+                        <FieldGroup label="Giorni prima dell&apos;esame">
+                          <Input
+                            type="number"
+                            min={1}
+                            max={60}
+                            value={examPriorityDaysBeforeExam}
+                            onChange={(e) => setExamPriorityDaysBeforeExam(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
+                            className="w-24"
+                          />
+                        </FieldGroup>
+                        <div
+                          className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                          onClick={() => setExamPriorityBlockNonExam((prev) => !prev)}
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-sm font-medium">Blocca non-esame durante priorit&agrave;</span>
+                            <span className="text-xs text-muted-foreground">
+                              Quando un allievo ha priorit&agrave; esame, gli altri allievi (non-esame) nello stesso cluster o autoscuola non possono prenotare.
+                            </span>
+                          </div>
+                          <InlineToggle checked={examPriorityBlockNonExam} size="sm" />
+                        </div>
+                      </>
                     ) : null}
                   </>
                 ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={Clock}
+              title="Fascia oraria ristretta"
+              description="Definisci una fascia oraria difficile da riempire. Gli allievi disponibili in quella fascia potranno prenotare solo lì."
+              expanded={expandedSection === "restrictedTimeRange"}
+              onToggle={() => toggleSection("restrictedTimeRange")}
+            >
+              <div className="space-y-5 max-w-2xl">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setRestrictedTimeRangeEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Attiva restrizione fascia oraria</span>
+                    <span className="text-xs text-muted-foreground">
+                      Gli allievi disponibili in questa fascia potranno prenotare SOLO slot in questa fascia.
+                    </span>
+                  </div>
+                  <InlineToggle checked={restrictedTimeRangeEnabled} size="sm" />
+                </div>
+                {restrictedTimeRangeEnabled && (
+                  <div className="grid gap-3 sm:grid-cols-2 max-w-md">
+                    <FieldGroup label="Inizio fascia">
+                      <Select value={restrictedTimeRangeStart} onValueChange={setRestrictedTimeRangeStart}>
+                        <SelectTrigger><SelectValue placeholder="Inizio" /></SelectTrigger>
+                        <SelectContent>
+                          {["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00"].map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                    <FieldGroup label="Fine fascia">
+                      <Select value={restrictedTimeRangeEnd} onValueChange={setRestrictedTimeRangeEnd}>
+                        <SelectTrigger><SelectValue placeholder="Fine" /></SelectTrigger>
+                        <SelectContent>
+                          {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"].map((t) => (
+                            <SelectItem key={t} value={t}>{t}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                  </div>
+                )}
               </div>
             </AccordionSection>
             <AccordionSection
@@ -2579,6 +2977,98 @@ export function AutoscuoleResourcesPage({
                   {savingAvailability ? "Salvataggio..." : "Salva"}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Sick leave dialog ── */}
+        <Dialog open={Boolean(sickLeaveInstructor)} onOpenChange={(open) => !open && setSickLeaveInstructor(null)}>
+          <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
+            <div className="px-6 pt-5 pb-4 border-b border-border">
+              <DialogHeader>
+                <DialogTitle>🤒 Malattia — {sickLeaveInstructor?.name}</DialogTitle>
+              </DialogHeader>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FieldGroup label="Data inizio">
+                  <input
+                    type="date"
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
+                    value={sickLeaveStartDate}
+                    onChange={(e) => setSickLeaveStartDate(e.target.value)}
+                  />
+                </FieldGroup>
+                <FieldGroup label="Data fine">
+                  <input
+                    type="date"
+                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
+                    value={sickLeaveEndDate}
+                    onChange={(e) => setSickLeaveEndDate(e.target.value)}
+                  />
+                </FieldGroup>
+              </div>
+              <div
+                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                onClick={() => setSickLeaveHalfDay((prev) => !prev)}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Mezza giornata</span>
+                  <span className="text-xs text-muted-foreground">
+                    La malattia inizia a un orario specifico del primo giorno.
+                  </span>
+                </div>
+                <InlineToggle checked={sickLeaveHalfDay} size="sm" />
+              </div>
+              {sickLeaveHalfDay && (
+                <FieldGroup label="Orario inizio malattia">
+                  <Select value={sickLeaveStartTime} onValueChange={setSickLeaveStartTime}>
+                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
+                    <SelectContent>
+                      {["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+              )}
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
+              <Button variant="outline" onClick={() => setSickLeaveInstructor(null)}>
+                Annulla
+              </Button>
+              <Button
+                disabled={sickLeaveSaving || !sickLeaveStartDate || !sickLeaveEndDate}
+                onClick={async () => {
+                  if (!sickLeaveInstructor) return;
+                  setSickLeaveSaving(true);
+                  try {
+                    const res = await fetch("/api/autoscuole/instructor-sick-leave", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        instructorId: sickLeaveInstructor.id,
+                        startDate: sickLeaveStartDate,
+                        endDate: sickLeaveEndDate,
+                        startTime: sickLeaveHalfDay ? sickLeaveStartTime : undefined,
+                      }),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast.success({ description: `Malattia registrata. ${data.data.appointmentsCancelled} guide cancellate.` });
+                      setSickLeaveInstructor(null);
+                    } else {
+                      toast.error({ description: data.message ?? "Errore." });
+                    }
+                  } catch {
+                    toast.error({ description: "Errore nel salvataggio." });
+                  } finally {
+                    setSickLeaveSaving(false);
+                  }
+                }}
+              >
+                {sickLeaveSaving ? "Salvataggio..." : "Conferma malattia"}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

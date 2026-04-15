@@ -1,6 +1,6 @@
 import { prisma } from "@/db/prisma";
 
-const EXAM_PRIORITY_WINDOW_DAYS = 14;
+export const DEFAULT_EXAM_PRIORITY_DAYS_BEFORE = 14;
 
 export type ExamPriorityInfo = {
   active: boolean;
@@ -14,17 +14,20 @@ export type ExamPriorityInfo = {
 export async function hasExamPriority(
   companyId: string,
   studentId: string,
+  daysBeforeExam?: number,
 ): Promise<boolean> {
-  const info = await getExamPriorityInfo(companyId, studentId);
+  const info = await getExamPriorityInfo(companyId, studentId, daysBeforeExam);
   return info.active;
 }
 
 /**
  * Returns detailed exam priority info including the exam date and detection source.
+ * @param daysBeforeExam - configurable window (default 14)
  */
 export async function getExamPriorityInfo(
   companyId: string,
   studentId: string,
+  daysBeforeExam: number = DEFAULT_EXAM_PRIORITY_DAYS_BEFORE,
 ): Promise<ExamPriorityInfo> {
   // 1. Check manual override first
   const member = await prisma.companyMember.findFirst({
@@ -33,7 +36,6 @@ export async function getExamPriorityInfo(
   });
 
   if (member?.examPriorityOverride === true) {
-    // Force on — still try to find exam date for display, but active = true regardless
     const examDate = await findClosestExamDate(companyId, studentId);
     return { active: true, examDate, source: "override" };
   }
@@ -44,7 +46,7 @@ export async function getExamPriorityInfo(
   // 2. Auto-detect: check AutoscuolaCase.drivingExamAt within window
   const now = new Date();
   const windowEnd = new Date(now);
-  windowEnd.setDate(windowEnd.getDate() + EXAM_PRIORITY_WINDOW_DAYS);
+  windowEnd.setDate(windowEnd.getDate() + daysBeforeExam);
 
   const caseWithExam = await prisma.autoscuolaCase.findFirst({
     where: {
@@ -124,4 +126,40 @@ async function findClosestExamDate(
   });
 
   return examAppointment?.startsAt.toISOString() ?? null;
+}
+
+/**
+ * Determine if there are students with exam priority in scope.
+ * Scope: if studentInstructorId is given (student is in a cluster), only check that cluster.
+ * Otherwise check the entire company.
+ * Returns the list of student IDs that have exam priority in the given scope.
+ */
+export async function getExamStudentsInScope({
+  companyId,
+  studentInstructorId,
+  daysBeforeExam = DEFAULT_EXAM_PRIORITY_DAYS_BEFORE,
+}: {
+  companyId: string;
+  studentInstructorId: string | null;
+  daysBeforeExam?: number;
+}): Promise<string[]> {
+  // Get all students in scope
+  const members = await prisma.companyMember.findMany({
+    where: {
+      companyId,
+      autoscuolaRole: "STUDENT",
+      ...(studentInstructorId ? { assignedInstructorId: studentInstructorId } : {}),
+    },
+    select: { userId: true },
+  });
+
+  const examStudentIds: string[] = [];
+  for (const member of members) {
+    const hasPriority = await hasExamPriority(companyId, member.userId, daysBeforeExam);
+    if (hasPriority) {
+      examStudentIds.push(member.userId);
+    }
+  }
+
+  return examStudentIds;
 }

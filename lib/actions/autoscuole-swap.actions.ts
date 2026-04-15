@@ -165,7 +165,20 @@ export async function createSwapOffer(
     const payload = createSwapOfferSchema.parse(input);
 
     const settings = await getAutoscuolaSettingsForCompany(membership.companyId);
-    if (!settings.swapEnabled) {
+
+    // Check cluster-level swap override for the requesting student
+    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
+    const companyLimits = await (async () => {
+      const svc = await prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      });
+      return (svc?.limits ?? {}) as Record<string, unknown>;
+    })();
+    const companyDefaults = buildCompanyBookingDefaults(companyLimits);
+    const effectiveSettings = await resolveEffectiveBookingSettings(membership.companyId, membership.userId, companyDefaults);
+
+    if (!effectiveSettings.swapEnabled) {
       return { success: false, message: "Scambi tra allievi non abilitati." };
     }
 
@@ -256,7 +269,7 @@ export async function createSwapOffer(
 
     let eligibleStudents = students;
 
-    if (settings.swapNotifyMode === "available_only") {
+    if (effectiveSettings.swapNotifyMode === "available_only") {
       const studentIds = students.map((s) => s.user.id);
       const [availabilities, appointments_] = await Promise.all([
         prisma.autoscuolaWeeklyAvailability.findMany({

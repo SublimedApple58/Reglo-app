@@ -243,6 +243,8 @@ const autoscuolaSettingsPatchSchema = z
     availabilityWeeks: z.number().int().min(1).max(12).optional(),
     bookingMinStartDate: z.string().nullable().optional(),
     studentReminderMinutes: reminderMinutesSchema.optional(),
+    studentReminderMorningEnabled: z.boolean().optional(),
+    studentReminderMorningTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     slotFillChannels: channelListSchema.optional(),
     studentReminderChannels: channelListSchema.optional(),
@@ -309,6 +311,11 @@ const autoscuolaSettingsPatchSchema = z
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
     examPriorityEnabled: z.boolean().optional(),
     examPriorityLimit: z.number().int().min(1).max(50).optional(),
+    examPriorityDaysBeforeExam: z.number().int().min(1).max(60).optional(),
+    examPriorityBlockNonExam: z.boolean().optional(),
+    restrictedTimeRangeEnabled: z.boolean().optional(),
+    restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
@@ -339,6 +346,8 @@ const autoscuolaSettingsPatchSchema = z
     (value) =>
       value.availabilityWeeks !== undefined ||
       value.studentReminderMinutes !== undefined ||
+      value.studentReminderMorningEnabled !== undefined ||
+      value.studentReminderMorningTime !== undefined ||
       value.instructorReminderMinutes !== undefined ||
       value.slotFillChannels !== undefined ||
       value.studentReminderChannels !== undefined ||
@@ -371,6 +380,11 @@ const autoscuolaSettingsPatchSchema = z
       value.weeklyBookingLimit !== undefined ||
       value.examPriorityEnabled !== undefined ||
       value.examPriorityLimit !== undefined ||
+      value.examPriorityDaysBeforeExam !== undefined ||
+      value.examPriorityBlockNonExam !== undefined ||
+      value.restrictedTimeRangeEnabled !== undefined ||
+      value.restrictedTimeRangeStart !== undefined ||
+      value.restrictedTimeRangeEnd !== undefined ||
       value.instructorPreferenceEnabled !== undefined ||
       value.voiceAssistantEnabled !== undefined ||
       value.voiceBookingEnabled !== undefined ||
@@ -485,6 +499,8 @@ export type AutoscuolaSettingsData = {
   availabilityWeeks: number;
   bookingMinStartDate: string | null;
   studentReminderMinutes: number;
+  studentReminderMorningEnabled: boolean;
+  studentReminderMorningTime: string;
   instructorReminderMinutes: number;
   slotFillChannels: string[];
   studentReminderChannels: string[];
@@ -529,6 +545,11 @@ export type AutoscuolaSettingsData = {
   weeklyBookingLimit: number;
   examPriorityEnabled: boolean;
   examPriorityLimit: number;
+  examPriorityDaysBeforeExam: number;
+  examPriorityBlockNonExam: boolean;
+  restrictedTimeRangeEnabled: boolean;
+  restrictedTimeRangeStart: string;
+  restrictedTimeRangeEnd: string;
   instructorPreferenceEnabled: boolean;
   voiceFeatureEnabled: boolean;
   voiceProvisioningStatus: (typeof VOICE_PROVISIONING_STATUSES)[number];
@@ -572,6 +593,14 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.studentReminderMinutes === "number"
       ? limits.studentReminderMinutes
       : DEFAULT_STUDENT_REMINDER_MINUTES;
+  const studentReminderMorningEnabled =
+    typeof limits.studentReminderMorningEnabled === "boolean"
+      ? limits.studentReminderMorningEnabled
+      : false;
+  const studentReminderMorningTime =
+    typeof limits.studentReminderMorningTime === "string" && /^\d{2}:\d{2}$/.test(limits.studentReminderMorningTime)
+      ? limits.studentReminderMorningTime
+      : "08:00";
   const instructorReminderMinutes =
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
@@ -693,6 +722,14 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
       ? limits.examPriorityLimit
       : DEFAULT_EXAM_PRIORITY_LIMIT;
+  const examPriorityDaysBeforeExam =
+    typeof limits.examPriorityDaysBeforeExam === "number" && limits.examPriorityDaysBeforeExam >= 1
+      ? limits.examPriorityDaysBeforeExam
+      : 14;
+  const examPriorityBlockNonExam =
+    typeof limits.examPriorityBlockNonExam === "boolean"
+      ? limits.examPriorityBlockNonExam
+      : false;
   const instructorPreferenceEnabled =
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
@@ -789,6 +826,8 @@ const resolveAutoscuolaSettingsData = async (
     availabilityWeeks,
     bookingMinStartDate,
     studentReminderMinutes,
+    studentReminderMorningEnabled,
+    studentReminderMorningTime,
     instructorReminderMinutes,
     slotFillChannels,
     studentReminderChannels,
@@ -827,6 +866,11 @@ const resolveAutoscuolaSettingsData = async (
     weeklyBookingLimit,
     examPriorityEnabled,
     examPriorityLimit,
+    examPriorityDaysBeforeExam,
+    examPriorityBlockNonExam,
+    restrictedTimeRangeEnabled: limits.restrictedTimeRangeEnabled === true,
+    restrictedTimeRangeStart: typeof limits.restrictedTimeRangeStart === "string" && /^\d{2}:\d{2}$/.test(limits.restrictedTimeRangeStart) ? limits.restrictedTimeRangeStart : "08:00",
+    restrictedTimeRangeEnd: typeof limits.restrictedTimeRangeEnd === "string" && /^\d{2}:\d{2}$/.test(limits.restrictedTimeRangeEnd) ? limits.restrictedTimeRangeEnd : "13:00",
     instructorPreferenceEnabled,
     voiceFeatureEnabled,
     voiceProvisioningStatus,
@@ -1275,6 +1319,10 @@ export async function updateAutoscuolaSettings(
         : (typeof limits.bookingMinStartDate === "string" ? limits.bookingMinStartDate : null),
       studentReminderMinutes:
         payload.studentReminderMinutes ?? previousStudentReminderMinutes,
+      studentReminderMorningEnabled:
+        payload.studentReminderMorningEnabled ?? (limits.studentReminderMorningEnabled === true),
+      studentReminderMorningTime:
+        payload.studentReminderMorningTime ?? (typeof limits.studentReminderMorningTime === "string" ? limits.studentReminderMorningTime : "08:00"),
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
       slotFillChannels: payload.slotFillChannels ?? previousSlotFillChannels,
@@ -1312,6 +1360,16 @@ export async function updateAutoscuolaSettings(
       weeklyBookingLimit: nextWeeklyBookingLimit,
       examPriorityEnabled: nextExamPriorityEnabled,
       examPriorityLimit: nextExamPriorityLimit,
+      examPriorityDaysBeforeExam:
+        payload.examPriorityDaysBeforeExam ?? (typeof limits.examPriorityDaysBeforeExam === "number" ? limits.examPriorityDaysBeforeExam : 14),
+      examPriorityBlockNonExam:
+        payload.examPriorityBlockNonExam ?? (limits.examPriorityBlockNonExam === true),
+      restrictedTimeRangeEnabled:
+        payload.restrictedTimeRangeEnabled ?? (limits.restrictedTimeRangeEnabled === true),
+      restrictedTimeRangeStart:
+        payload.restrictedTimeRangeStart ?? (typeof limits.restrictedTimeRangeStart === "string" ? limits.restrictedTimeRangeStart : "08:00"),
+      restrictedTimeRangeEnd:
+        payload.restrictedTimeRangeEnd ?? (typeof limits.restrictedTimeRangeEnd === "string" ? limits.restrictedTimeRangeEnd : "13:00"),
       instructorPreferenceEnabled: nextInstructorPreferenceEnabled,
       voiceFeatureEnabled: nextVoiceFeatureEnabled,
       voiceProvisioningStatus: nextVoiceProvisioningStatus,
@@ -1366,6 +1424,8 @@ export async function updateAutoscuolaSettings(
         availabilityWeeks: nextLimits.availabilityWeeks,
         bookingMinStartDate: nextLimits.bookingMinStartDate ?? null,
         studentReminderMinutes: nextLimits.studentReminderMinutes,
+        studentReminderMorningEnabled: nextLimits.studentReminderMorningEnabled,
+        studentReminderMorningTime: nextLimits.studentReminderMorningTime,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         slotFillChannels: nextLimits.slotFillChannels,
         studentReminderChannels: nextLimits.studentReminderChannels,
@@ -1399,6 +1459,11 @@ export async function updateAutoscuolaSettings(
         weeklyBookingLimit: nextLimits.weeklyBookingLimit,
         examPriorityEnabled: nextLimits.examPriorityEnabled,
         examPriorityLimit: nextLimits.examPriorityLimit,
+        examPriorityDaysBeforeExam: nextLimits.examPriorityDaysBeforeExam,
+        examPriorityBlockNonExam: nextLimits.examPriorityBlockNonExam,
+        restrictedTimeRangeEnabled: nextLimits.restrictedTimeRangeEnabled,
+        restrictedTimeRangeStart: nextLimits.restrictedTimeRangeStart,
+        restrictedTimeRangeEnd: nextLimits.restrictedTimeRangeEnd,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         studentNotesEnabled: nextLimits.studentNotesEnabled,
         instructorClustersEnabled: nextLimits.instructorClustersEnabled,

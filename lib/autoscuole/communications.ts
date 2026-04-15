@@ -744,6 +744,124 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
   }
 };
 
+/**
+ * Morning-of-day reminder: at the configured time, send reminders for all
+ * appointments of the CURRENT day (scheduled/confirmed).
+ * Deduplicates via AutoscuolaMessageLog with a date-specific key.
+ */
+export const processAutoscuolaMorningReminders = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => {
+  const services = await prisma.companyService.findMany({
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    select: { companyId: true, limits: true },
+  });
+
+  const tz = "Europe/Rome";
+  const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+  const currentHH = String(nowInTz.getHours()).padStart(2, "0");
+  const currentMM = String(nowInTz.getMinutes()).padStart(2, "0");
+  const currentTime = `${currentHH}:${currentMM}`;
+  const todayStr = `${nowInTz.getFullYear()}-${String(nowInTz.getMonth() + 1).padStart(2, "0")}-${String(nowInTz.getDate()).padStart(2, "0")}`;
+
+  const activeStatuses = ["scheduled", "confirmed"];
+
+  for (const service of services) {
+    const limits = (service.limits ?? {}) as Record<string, unknown>;
+    const enabled = limits.studentReminderMorningEnabled === true;
+    if (!enabled) continue;
+
+    const reminderTime = typeof limits.studentReminderMorningTime === "string"
+      ? limits.studentReminderMorningTime
+      : "08:00";
+
+    // Only fire at the configured time (within a 1-min window)
+    if (currentTime !== reminderTime) continue;
+
+    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
+
+    // Get today's appointments (in Europe/Rome timezone)
+    const dayStart = new Date(`${todayStr}T00:00:00+02:00`);
+    const dayEnd = new Date(`${todayStr}T23:59:59+02:00`);
+
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: service.companyId,
+        status: { in: activeStatuses },
+        startsAt: { gte: dayStart, lt: dayEnd },
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        instructor: { include: { user: { select: { id: true, email: true } } } },
+      },
+    });
+
+    for (const appointment of appointments) {
+      const studentProfile = mapStudentFromUser(appointment.student);
+      const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
+      const durationMinutes = Math.max(
+        30,
+        Math.round(
+          ((appointment.endsAt?.getTime() ??
+            appointment.startsAt.getTime() + 30 * 60 * 1000) -
+            appointment.startsAt.getTime()) /
+            60000,
+        ),
+      );
+      const body = `Buongiorno! Hai una guida oggi alle ${startsAtLabel.split(" alle ")[1] ?? startsAtLabel}. Durata ${durationMinutes} minuti.`;
+
+      if (studentChannels.includes("push") && appointment.studentId) {
+        try {
+          await sendAutoscuolaPushToUsers({
+            companyId: service.companyId,
+            userIds: [appointment.studentId],
+            title: "Guida oggi",
+            body,
+            data: {
+              kind: "morning_reminder_student",
+              appointmentId: appointment.id,
+              startsAt: appointment.startsAt.toISOString(),
+            },
+          });
+        } catch (error) {
+          console.error("Morning reminder push error", error);
+        }
+      }
+
+      if (studentChannels.includes("whatsapp") && studentProfile.phone) {
+        try {
+          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
+        } catch (error) {
+          console.error("Morning reminder WhatsApp error", error);
+        }
+      }
+
+      if (studentChannels.includes("email") && studentProfile.email) {
+        try {
+          await sendDynamicEmail({
+            to: studentProfile.email,
+            subject: "Reglo Autoscuole · Guida oggi",
+            body,
+          });
+        } catch (error) {
+          console.error("Morning reminder email error", error);
+        }
+      }
+    }
+  }
+};
+
 export const processAutoscuolaPenaltyCharges = async ({
   prisma = defaultPrisma,
   now = new Date(),

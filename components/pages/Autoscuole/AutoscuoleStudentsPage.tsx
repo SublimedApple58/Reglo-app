@@ -1328,7 +1328,7 @@ export function AutoscuoleStudentsPage({
                               <p className="mt-1 text-xs text-muted-foreground">
                                 {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string) => formatLessonType(t)).join(", ")} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                               </p>
-                              {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && (
+                              {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && !lesson.creditApplied && (
                                 <div className="mt-2 flex gap-2">
                                   {(lesson.manualPaymentStatus !== "paid") && (
                                     <Button

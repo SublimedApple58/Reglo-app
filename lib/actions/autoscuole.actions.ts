@@ -142,6 +142,22 @@ const createVehicleSchema = z.object({
 const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
+  appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
+  instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
+  studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
+  swapEnabled: z.boolean().optional(),
+  swapNotifyMode: z.enum(["all", "available_only"]).optional(),
+  bookingCutoffEnabled: z.boolean().optional(),
+  bookingCutoffTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  weeklyBookingLimitEnabled: z.boolean().optional(),
+  weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+  emptySlotNotificationEnabled: z.boolean().optional(),
+  emptySlotNotificationTarget: z.enum(["all", "availability_matching"]).optional(),
+  emptySlotNotificationTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/)).optional(),
+  restrictedTimeRangeEnabled: z.boolean().optional(),
+  restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  weeklyAbsenceEnabled: z.boolean().optional(),
 }).optional();
 
 const updateInstructorSchema = z.object({

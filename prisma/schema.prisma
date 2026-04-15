@@ -68,6 +68,7 @@ model User {
   autoscuolaRepositionTasksStudent     AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskStudent")
   autoscuolaRepositionTasksActor       AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskActor")
   autoscuolaMessageLogs                AutoscuolaMessageLog[]
+  autoscuolaWeeklyAbsences             AutoscuolaStudentWeeklyAbsence[]
   autoscuolaVoiceCallsStudent          AutoscuolaVoiceCall[]                  @relation("AutoscuolaVoiceCallStudent")
   autoscuolaVoiceCallbackTasksStudent  AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackStudent")
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
@@ -185,6 +186,7 @@ model Company {
   autoscuolaMessageTemplates     AutoscuolaMessageTemplate[]
   autoscuolaMessageRules         AutoscuolaMessageRule[]
   autoscuolaMessageLogs          AutoscuolaMessageLog[]
+  autoscuolaWeeklyAbsences       AutoscuolaStudentWeeklyAbsence[]
   autoscuolaVoiceLines           AutoscuolaVoiceLine[]
   autoscuolaVoiceCalls           AutoscuolaVoiceCall[]
   autoscuolaVoiceCallbackTasks   AutoscuolaVoiceCallbackTask[]
@@ -522,6 +524,7 @@ model AutoscuolaInstructor {
   appointments     AutoscuolaAppointment[]
   blocks           AutoscuolaInstructorBlock[]
   assignedStudents CompanyMember[]               @relation("InstructorAssignedStudents")
+  weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -936,4 +939,20 @@ model AutoscuolaMessageLog {
   @@index([companyId])
   @@index([ruleId])
   @@index([appointmentId])
+}
+
+model AutoscuolaStudentWeeklyAbsence {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @db.Uuid
+  studentId    String   @db.Uuid
+  instructorId String   @db.Uuid
+  weekStart    DateTime @db.Date
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+
+  company    Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student    User                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  instructor AutoscuolaInstructor   @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, studentId, weekStart])
+  @@index([companyId, instructorId, weekStart])
 }
