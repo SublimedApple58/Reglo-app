@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
@@ -103,6 +104,18 @@ const repositionAppointmentSchema = z.object({
   reason: z.string().min(1).max(120).optional(),
 });
 
+const rescheduleAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+  startsAt: z.string().min(1),
+  endsAt: z.string().optional().nullable(),
+});
+
+const RESCHEDULE_ALLOWED_STATUSES = new Set([
+  "scheduled",
+  "confirmed",
+  "proposal",
+]);
+
 const ALLOWED_STATUS_TRANSITIONS = [
   "scheduled",
   "confirmed",
@@ -143,8 +156,7 @@ const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
   appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
-  instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
-  studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
+  instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   swapEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
   bookingCutoffEnabled: z.boolean().optional(),
@@ -367,22 +379,29 @@ const notifyStudentAppointmentCancelled = async ({
   const slotLabel = `${dateLabel} alle ${timeLabel}`;
   const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
 
+  // Students in manual_full clusters cannot book from the app — omit the CTA.
+  const { isStudentInManualFullCluster } = await import("@/lib/autoscuole/instructor-clusters");
+  const manualFull = await isStudentInManualFullCluster(companyId, appointment.studentId);
+  const cta = manualFull
+    ? "L'istruttore ti contatterà per riprogrammarla."
+    : "Prenota una nuova guida dall'app quando vuoi.";
+
   let title: string;
   let body: string;
 
   if (cancellationKind === "permanent_cancel") {
     title = "Guida annullata definitivamente";
     if (actorRole === "instructor") {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. Prenota una nuova guida dall'app quando vuoi.`;
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
     } else {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. Prenota una nuova guida dall'app quando vuoi.`;
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${cta}`;
     }
   } else {
     title = "Guida annullata";
     if (actorRole === "instructor") {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. Prenota una nuova guida dall'app quando vuoi.`;
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
     } else {
-      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. Prenota una nuova guida dall'app quando vuoi.`;
+      body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${cta}`;
     }
   }
 
@@ -414,6 +433,122 @@ const notifyStudentAppointmentCancelled = async ({
     }
   }
 };
+
+const formatAutoscuolaSlotLabel = (when: Date) => {
+  const dateLabel = when.toLocaleDateString("it-IT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Europe/Rome",
+  });
+  const timeLabel = when.toLocaleTimeString("it-IT", {
+    timeZone: "Europe/Rome",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return `${dateLabel} alle ${timeLabel}`;
+};
+
+const notifyAppointmentRescheduled = async ({
+  companyId,
+  actorUserId,
+  actorRole,
+  appointment,
+  oldStartsAt,
+}: {
+  companyId: string;
+  actorUserId: string;
+  actorRole: "instructor" | "owner" | "admin";
+  appointment: {
+    id: string;
+    studentId: string;
+    startsAt: Date;
+    endsAt: Date | null;
+    instructorId: string | null;
+  };
+  oldStartsAt: Date;
+}) => {
+  const oldLabel = formatAutoscuolaSlotLabel(oldStartsAt);
+  const newLabel = formatAutoscuolaSlotLabel(appointment.startsAt);
+
+  const [studentUser, instructor] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: appointment.studentId },
+      select: { email: true },
+    }),
+    appointment.instructorId
+      ? prisma.autoscuolaInstructor.findFirst({
+          where: { id: appointment.instructorId, companyId },
+          select: { id: true, name: true, userId: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
+  const title = "Guida spostata";
+  const actorSuffix = actorRole === "instructor" ? "dall'istruttore" : "dalla segreteria";
+  const body = `La tua guida del ${oldLabel}${instrLabel} è stata spostata ${actorSuffix} al ${newLabel}.`;
+
+  // Reschedule is informational (not a booking invitation), so we always
+  // notify the student — even in manual_full clusters.
+  const shouldNotifyStudent = actorUserId !== appointment.studentId;
+
+  if (shouldNotifyStudent) {
+    try {
+      await sendAutoscuolaPushToUsers({
+        companyId,
+        userIds: [appointment.studentId],
+        title,
+        body,
+        data: {
+          kind: "appointment_rescheduled",
+          appointmentId: appointment.id,
+          startsAt: appointment.startsAt.toISOString(),
+          oldStartsAt: oldStartsAt.toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Appointment reschedule push error", error);
+    }
+
+    if (studentUser?.email) {
+      try {
+        await sendDynamicEmail({
+          to: studentUser.email,
+          subject: title,
+          body,
+        });
+      } catch (error) {
+        console.error("Appointment reschedule email error", error);
+      }
+    }
+  }
+
+  // Notify the instructor only when the segreteria/owner moved the lesson.
+  if (
+    (actorRole === "owner" || actorRole === "admin") &&
+    instructor?.userId &&
+    instructor.userId !== actorUserId
+  ) {
+    try {
+      await sendAutoscuolaPushToUsers({
+        companyId,
+        userIds: [instructor.userId],
+        title: "Guida spostata dalla segreteria",
+        body: `Una guida è stata spostata dal ${oldLabel} al ${newLabel}.`,
+        data: {
+          kind: "appointment_rescheduled",
+          appointmentId: appointment.id,
+          startsAt: appointment.startsAt.toISOString(),
+          oldStartsAt: oldStartsAt.toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error("Appointment reschedule instructor push error", error);
+    }
+  }
+};
+
 const invalidateAgendaAndPaymentsCache = async (companyId: string) => {
   await invalidateAutoscuoleCache({
     companyId,
@@ -650,16 +785,66 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         ? Math.max(1, Math.min(600, Math.trunc(input.limit)))
         : 500;
 
+    // Extended exam visibility for instructors:
+    // - Non-autonomous instructor: sees ALL company exams
+    // - Autonomous instructor: sees exams where they are the accompanying instructor
+    //   OR where at least one involved student is in their cluster
+    let examVisibilityClause: Prisma.AutoscuolaAppointmentWhereInput | null = null;
+    if (input.instructorId) {
+      const instructorRecord = await prisma.autoscuolaInstructor.findFirst({
+        where: { id: input.instructorId, companyId },
+        select: { id: true, autonomousMode: true },
+      });
+      if (instructorRecord) {
+        if (instructorRecord.autonomousMode) {
+          const clusterMembers = await prisma.companyMember.findMany({
+            where: {
+              companyId,
+              autoscuolaRole: "STUDENT",
+              assignedInstructorId: instructorRecord.id,
+            },
+            select: { userId: true },
+          });
+          const clusterStudentIds = clusterMembers.map((m) => m.userId);
+          examVisibilityClause = {
+            type: "esame",
+            OR: [
+              { instructorId: instructorRecord.id },
+              ...(clusterStudentIds.length
+                ? [{ studentId: { in: clusterStudentIds } }]
+                : []),
+            ],
+          };
+        } else {
+          // Non-autonomous: see all exams
+          examVisibilityClause = { type: "esame" };
+        }
+      }
+    }
+
+    const baseWhere: Prisma.AutoscuolaAppointmentWhereInput = {
+      companyId,
+      startsAt: { gte: from, lt: to },
+      ...(input.vehicleId ? { vehicleId: input.vehicleId } : {}),
+      ...(normalizedStatus ? { status: normalizedStatus } : {}),
+      ...(normalizedType ? { type: normalizedType } : {}),
+    };
+    const appointmentsWhere: Prisma.AutoscuolaAppointmentWhereInput =
+      input.instructorId && examVisibilityClause
+        ? {
+            ...baseWhere,
+            OR: [
+              { instructorId: input.instructorId },
+              examVisibilityClause,
+            ],
+          }
+        : input.instructorId
+          ? { ...baseWhere, instructorId: input.instructorId }
+          : baseWhere;
+
     const [appointments, students, instructors, vehicles, instructorBlocks, holidays] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId,
-          startsAt: { gte: from, lt: to },
-          ...(input.instructorId ? { instructorId: input.instructorId } : {}),
-          ...(input.vehicleId ? { vehicleId: input.vehicleId } : {}),
-          ...(normalizedStatus ? { status: normalizedStatus } : {}),
-          ...(normalizedType ? { type: normalizedType } : {}),
-        },
+        where: appointmentsWhere,
         select: {
           id: true,
           companyId: true,
@@ -1864,11 +2049,11 @@ export async function createAutoscuolaAppointment(
         ? lim.weeklyBookingLimit
         : 3;
       const examPriorityEnabled = lim.examPriorityEnabled === true;
-      const examPriorityLimit =
-        typeof lim.examPriorityLimit === "number" && lim.examPriorityLimit >= 1
-          ? lim.examPriorityLimit
-          : 5;
-      return { enabled, limit, examPriorityEnabled, examPriorityLimit };
+      const examPriorityDaysBeforeExam =
+        typeof lim.examPriorityDaysBeforeExam === "number" && lim.examPriorityDaysBeforeExam >= 1
+          ? lim.examPriorityDaysBeforeExam
+          : 14;
+      return { enabled, limit, examPriorityEnabled, examPriorityDaysBeforeExam };
     })();
 
     if (weeklyLimitSettings.enabled && !payload.skipWeeklyLimitCheck) {
@@ -1880,15 +2065,20 @@ export async function createAutoscuolaAppointment(
       const isExempt = memberRecord?.weeklyBookingLimitExempt === true;
 
       if (!isExempt) {
-        // Determine effective limit (exam priority may raise it)
-        let effectiveLimit = weeklyLimitSettings.limit;
+        // Students with exam priority bypass the weekly limit entirely
+        let bypassLimit = false;
         if (weeklyLimitSettings.examPriorityEnabled) {
           const { hasExamPriority } = await import("@/lib/autoscuole/exam-priority");
-          const hasPriority = await hasExamPriority(companyId, payload.studentId);
-          if (hasPriority) {
-            effectiveLimit = weeklyLimitSettings.examPriorityLimit;
-          }
+          bypassLimit = await hasExamPriority(
+            companyId,
+            payload.studentId,
+            weeklyLimitSettings.examPriorityDaysBeforeExam,
+          );
         }
+        const effectiveLimit = weeklyLimitSettings.limit;
+        if (bypassLimit) {
+          // Skip count check — exam priority students have no weekly limit
+        } else {
 
         // Calculate current ISO week bounds (Monday-Sunday) for the slot being booked
         const slotDate = new Date(payload.startsAt);
@@ -1927,12 +2117,11 @@ export async function createAutoscuolaAppointment(
             };
           }
         }
+        }  // end else (bypassLimit)
       }
     }
 
-    const shouldSendProposal =
-      payload.sendProposal ||
-      (isInstructorActor && governance.instructorBookingMode === "guided_proposal");
+    const shouldSendProposal = payload.sendProposal === true;
     const appointmentStatus = shouldSendProposal
       ? "proposal"
       : payload.status ?? "scheduled";
@@ -2471,6 +2660,495 @@ export async function cancelAndRepositionAutoscuolaAppointment(
         : "Guida cancellata. Ricerca nuovo slot in corso.",
     };
   } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function rescheduleAutoscuolaAppointment(
+  input: z.infer<typeof rescheduleAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = rescheduleAppointmentSchema.parse(input);
+
+    const isInstructorActor =
+      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+    const isStudentActor =
+      membership.autoscuolaRole === "STUDENT" && membership.role !== "admin";
+    const isOwnerOrAdminActor =
+      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+
+    if (isStudentActor) {
+      return {
+        success: false,
+        message: "Gli allievi non possono spostare le guide dalla app.",
+      };
+    }
+    if (!isInstructorActor && !isOwnerOrAdminActor) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: payload.appointmentId, companyId },
+      select: {
+        id: true,
+        companyId: true,
+        studentId: true,
+        instructorId: true,
+        vehicleId: true,
+        startsAt: true,
+        endsAt: true,
+        status: true,
+        type: true,
+        types: true,
+        slotId: true,
+      },
+    });
+    if (!appointment) {
+      return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    const currentStatus = normalizeStatus(appointment.status);
+    if (!RESCHEDULE_ALLOWED_STATUSES.has(currentStatus)) {
+      return {
+        success: false,
+        message:
+          "Questa guida non può essere spostata: lo stato attuale non lo consente.",
+        code: "APPOINTMENT_NOT_RESCHEDULABLE" as const,
+      };
+    }
+
+    // Instructor actors can only move their own appointments.
+    if (isInstructorActor) {
+      const ownInstructor = await getOwnInstructorProfile(
+        companyId,
+        membership.userId,
+      );
+      if (!ownInstructor) {
+        return {
+          success: false,
+          message: "Profilo istruttore non trovato per questo account.",
+        };
+      }
+      if (appointment.instructorId !== ownInstructor.id) {
+        return {
+          success: false,
+          message: "Puoi spostare solo le tue guide.",
+        };
+      }
+    }
+
+    const oldStartsAt = appointment.startsAt;
+    const oldEndsAt =
+      appointment.endsAt ?? new Date(oldStartsAt.getTime() + 30 * 60 * 1000);
+    const oldDurationMs = oldEndsAt.getTime() - oldStartsAt.getTime();
+
+    const newStart = new Date(payload.startsAt);
+    if (Number.isNaN(newStart.getTime())) {
+      return { success: false, message: "Orario di inizio non valido." };
+    }
+    if (newStart.getTime() < Date.now()) {
+      return {
+        success: false,
+        message: "Non puoi spostare una guida nel passato.",
+      };
+    }
+    const newEnd = payload.endsAt
+      ? new Date(payload.endsAt)
+      : new Date(newStart.getTime() + oldDurationMs);
+    if (Number.isNaN(newEnd.getTime()) || newEnd <= newStart) {
+      return { success: false, message: "Orario di fine non valido." };
+    }
+
+    // No-op: same start/end as before.
+    if (
+      newStart.getTime() === oldStartsAt.getTime() &&
+      newEnd.getTime() === oldEndsAt.getTime()
+    ) {
+      return { success: false, message: "La guida è già in questo orario." };
+    }
+
+    // Load service limits once for cutoff / weekly-limit / exam-priority checks.
+    const autoscuolaService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const serviceLimits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
+
+    // Lesson policy window (instructor/student paths only; owner bypass matches create).
+    if (!isOwnerOrAdminActor) {
+      const lessonPolicy = await getLessonPolicyForCompany(companyId);
+      if (lessonPolicy.lessonPolicyEnabled) {
+        const types = (appointment.types?.length
+          ? appointment.types
+          : [appointment.type]).filter(isLessonPolicyType);
+        if (types.length) {
+          const allOk = isLessonTypesAllowedForInterval({
+            policy: lessonPolicy,
+            types,
+            startsAt: newStart,
+            endsAt: newEnd,
+          });
+          if (!allOk) {
+            return {
+              success: false,
+              message:
+                "Il tipo guida selezionato non è consentito nella fascia oraria scelta.",
+              code: "LESSON_POLICY_WINDOW" as const,
+            };
+          }
+        }
+      }
+    }
+
+    // Booking cutoff: applies to instructor actors; owner/admin bypass.
+    if (isInstructorActor) {
+      const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
+      if (cutoffEnabled) {
+        const cutoffTime =
+          typeof serviceLimits.bookingCutoffTime === "string"
+            ? serviceLimits.bookingCutoffTime
+            : "18:00";
+        const [cutoffH = 18, cutoffM = 0] = cutoffTime
+          .split(":")
+          .map((p) => Number(p));
+        // Cutoff = the day before the booked date at cutoffH:cutoffM, Europe/Rome.
+        // We approximate by using the instructor's local timezone (server tz is UTC;
+        // this mirrors what the availability action does in practice).
+        const cutoffDeadline = new Date(newStart);
+        cutoffDeadline.setHours(cutoffH, cutoffM, 0, 0);
+        cutoffDeadline.setDate(cutoffDeadline.getDate() - 1);
+        if (Date.now() >= cutoffDeadline.getTime()) {
+          return {
+            success: false,
+            message: `Le prenotazioni per questa data sono chiuse dalle ${cutoffTime} del giorno prima.`,
+            code: "BOOKING_CUTOFF_PASSED" as const,
+          };
+        }
+      }
+    }
+
+    // Weekly limit: only re-check when the new slot falls into a different ISO week.
+    const getIsoWeekStart = (date: Date) => {
+      const day = date.getUTCDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const ws = new Date(date);
+      ws.setUTCDate(ws.getUTCDate() + mondayOffset);
+      ws.setUTCHours(0, 0, 0, 0);
+      return ws;
+    };
+    const oldWeekStart = getIsoWeekStart(oldStartsAt);
+    const newWeekStart = getIsoWeekStart(newStart);
+    const weekChanged = oldWeekStart.getTime() !== newWeekStart.getTime();
+
+    const weeklyLimitEnabled = serviceLimits.weeklyBookingLimitEnabled === true;
+    const weeklyLimit =
+      typeof serviceLimits.weeklyBookingLimit === "number" &&
+      serviceLimits.weeklyBookingLimit >= 1
+        ? (serviceLimits.weeklyBookingLimit as number)
+        : 3;
+    const examPriorityEnabled = serviceLimits.examPriorityEnabled === true;
+    const examPriorityDaysBeforeExam =
+      typeof serviceLimits.examPriorityDaysBeforeExam === "number" &&
+      serviceLimits.examPriorityDaysBeforeExam >= 1
+        ? (serviceLimits.examPriorityDaysBeforeExam as number)
+        : 14;
+
+    const appointmentIsExam = normalizeLessonType(appointment.type) === "esame";
+
+    if (weeklyLimitEnabled && weekChanged && !appointmentIsExam) {
+      const memberRecord = await prisma.companyMember.findFirst({
+        where: { companyId, userId: appointment.studentId },
+        select: { weeklyBookingLimitExempt: true },
+      });
+      const isExempt = memberRecord?.weeklyBookingLimitExempt === true;
+
+      let bypassLimit = false;
+      if (!isExempt && examPriorityEnabled) {
+        const { hasExamPriority } = await import("@/lib/autoscuole/exam-priority");
+        bypassLimit = await hasExamPriority(
+          companyId,
+          appointment.studentId,
+          examPriorityDaysBeforeExam,
+        );
+      }
+
+      if (!isExempt && !bypassLimit) {
+        const weekEnd = new Date(newWeekStart);
+        weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+        const weekCount = await prisma.autoscuolaAppointment.count({
+          where: {
+            companyId,
+            studentId: appointment.studentId,
+            status: { notIn: ["cancelled"] },
+            startsAt: { gte: newWeekStart, lt: weekEnd },
+            id: { not: appointment.id },
+          },
+        });
+        if (weekCount >= weeklyLimit) {
+          if (isInstructorActor) {
+            return {
+              success: false,
+              message: `L'allievo ha già raggiunto il limite di ${weeklyLimit} guide settimanali.`,
+              code: "WEEKLY_LIMIT_REACHED" as const,
+            };
+          }
+          // OWNER/ADMIN: surface the confirm signal, matching createAutoscuolaAppointment.
+          return {
+            success: false,
+            message: `L'allievo ha già raggiunto il limite di ${weeklyLimit} guide settimanali (${weekCount} prenotate) nella settimana scelta.`,
+            code: "WEEKLY_LIMIT_CONFIRM" as const,
+            weeklyLimitData: { current: weekCount, limit: weeklyLimit },
+          };
+        }
+      }
+    }
+
+    // Exam-priority day block (only when moving across days; non-exam students only).
+    const sameDay =
+      oldStartsAt.toDateString() === newStart.toDateString();
+    if (!sameDay && !appointmentIsExam && examPriorityEnabled) {
+      const examBlockNonExam = serviceLimits.examPriorityBlockNonExam === true;
+      const pausedUntilStr =
+        typeof serviceLimits.examPriorityPausedUntil === "string"
+          ? (serviceLimits.examPriorityPausedUntil as string)
+          : null;
+      const isPaused = Boolean(pausedUntilStr && new Date(pausedUntilStr) > new Date());
+      if (examBlockNonExam && !isPaused) {
+        const { getExamPriorityInfo, isDayBlockedByExamPriority } = await import(
+          "@/lib/autoscuole/exam-priority"
+        );
+        const selfInfo = await getExamPriorityInfo(
+          companyId,
+          appointment.studentId,
+          examPriorityDaysBeforeExam,
+        );
+        if (!selfInfo.active) {
+          const { resolveEffectiveBookingSettings } = await import(
+            "@/lib/autoscuole/instructor-clusters"
+          );
+          const clusterSettings = await resolveEffectiveBookingSettings(
+            companyId,
+            appointment.studentId,
+            { bookingSlotDurations: [], roundedHoursOnly: false },
+          );
+          const studentMember = await prisma.companyMember.findFirst({
+            where: {
+              companyId,
+              userId: appointment.studentId,
+              autoscuolaRole: "STUDENT",
+            },
+            select: { assignedInstructorId: true },
+          });
+          const scope = clusterSettings.isLockedToInstructor
+            ? studentMember?.assignedInstructorId ?? null
+            : null;
+          const dayStart = new Date(newStart);
+          dayStart.setHours(0, 0, 0, 0);
+          const dayEnd = new Date(dayStart);
+          dayEnd.setDate(dayEnd.getDate() + 1);
+          const blocked = await isDayBlockedByExamPriority({
+            companyId,
+            studentInstructorId: scope,
+            dayStart,
+            dayEnd,
+            daysBeforeExam: examPriorityDaysBeforeExam,
+          });
+          if (blocked) {
+            return {
+              success: false,
+              message: scope
+                ? "Questo giorno è riservato agli allievi del tuo gruppo prossimi all'esame."
+                : "Questo giorno è riservato agli allievi prossimi all'esame.",
+              code: "EXAM_PRIORITY_DAY_BLOCKED" as const,
+            };
+          }
+        }
+      }
+    }
+
+    // Overlap check: appointments (other than current) and instructor blocks.
+    const scanStart = new Date(newStart);
+    scanStart.setDate(scanStart.getDate() - 1);
+    const scanEnd = new Date(newEnd);
+    scanEnd.setDate(scanEnd.getDate() + 1);
+
+    const overlapOr: Array<{
+      instructorId?: string;
+      vehicleId?: string;
+    }> = [];
+    if (appointment.instructorId) overlapOr.push({ instructorId: appointment.instructorId });
+    if (appointment.vehicleId) overlapOr.push({ vehicleId: appointment.vehicleId });
+
+    if (overlapOr.length) {
+      const conflicts = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          id: { not: appointment.id },
+          startsAt: { gte: scanStart, lt: scanEnd },
+          status: { notIn: ["cancelled"] },
+          OR: overlapOr,
+        },
+        select: {
+          instructorId: true,
+          vehicleId: true,
+          startsAt: true,
+          endsAt: true,
+        },
+      });
+      const conflict = conflicts.find((item) => {
+        const start = item.startsAt;
+        const end = item.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
+        return start < newEnd && end > newStart;
+      });
+      if (conflict) {
+        const byInstructor =
+          appointment.instructorId &&
+          conflict.instructorId === appointment.instructorId;
+        return {
+          success: false,
+          message: byInstructor
+            ? "L'istruttore ha già una guida in quel momento."
+            : "Il veicolo è prenotato da un'altra guida in quel momento.",
+          code: "OVERLAP_APPOINTMENT" as const,
+        };
+      }
+    }
+
+    if (appointment.instructorId) {
+      const blocks = await prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId,
+          instructorId: appointment.instructorId,
+          startsAt: { lt: newEnd },
+          endsAt: { gt: newStart },
+        },
+        select: { startsAt: true, endsAt: true, reason: true },
+      });
+      if (blocks.length) {
+        return {
+          success: false,
+          message:
+            "L'istruttore non è disponibile in quel giorno/orario.",
+          code: "OVERLAP_INSTRUCTOR_BLOCK" as const,
+        };
+      }
+    }
+
+    // Transactional update + slot reconciliation.
+    const updated = await prisma.$transaction(async (tx) => {
+      // Re-check status to guard against mid-flight cancellation/completion races.
+      const current = await tx.autoscuolaAppointment.findUnique({
+        where: { id: appointment.id },
+        select: { status: true, startsAt: true, endsAt: true },
+      });
+      if (!current || !RESCHEDULE_ALLOWED_STATUSES.has(normalizeStatus(current.status))) {
+        throw new Error("APPOINTMENT_NOT_RESCHEDULABLE");
+      }
+
+      // Try to link to an existing open slot at the new position (best-effort).
+      let newSlotId: string | null = null;
+      if (appointment.instructorId) {
+        const freshSlot = await tx.autoscuolaAvailabilitySlot.findFirst({
+          where: {
+            companyId,
+            ownerType: "instructor",
+            ownerId: appointment.instructorId,
+            startsAt: newStart,
+            status: { in: ["open", "booked"] },
+          },
+          select: { id: true },
+        });
+        if (freshSlot) newSlotId = freshSlot.id;
+      }
+
+      const row = await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: {
+          startsAt: newStart,
+          endsAt: newEnd,
+          slotId: newSlotId,
+          rescheduledAt: new Date(),
+          rescheduledFromStartsAt: oldStartsAt,
+        },
+      });
+
+      // Release the old slot row(s): anything booked in the old range for this
+      // student/instructor/vehicle should become open again.
+      const rangeEnd = appointment.endsAt ?? new Date(oldStartsAt.getTime() + 30 * 60 * 1000);
+      const ownerFilters: Array<{ ownerType: string; ownerId: string }> = [
+        { ownerType: "student", ownerId: appointment.studentId },
+      ];
+      if (appointment.instructorId) {
+        ownerFilters.push({ ownerType: "instructor", ownerId: appointment.instructorId });
+      }
+      if (appointment.vehicleId) {
+        ownerFilters.push({ ownerType: "vehicle", ownerId: appointment.vehicleId });
+      }
+      await tx.autoscuolaAvailabilitySlot.updateMany({
+        where: {
+          companyId,
+          status: "booked",
+          startsAt: { gte: oldStartsAt, lt: rangeEnd },
+          OR: ownerFilters,
+        },
+        data: { status: "open" },
+      });
+
+      // If we linked a new slot, mark it booked.
+      if (newSlotId) {
+        await tx.autoscuolaAvailabilitySlot.update({
+          where: { id: newSlotId },
+          data: { status: "booked" },
+        });
+      }
+
+      return row;
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+
+    // Fire-and-forget notifications (errors logged inside the helper).
+    const actorRole: "instructor" | "owner" | "admin" = isInstructorActor
+      ? "instructor"
+      : membership.role === "admin"
+        ? "admin"
+        : "owner";
+    await notifyAppointmentRescheduled({
+      companyId,
+      actorUserId: membership.userId,
+      actorRole,
+      appointment: {
+        id: updated.id,
+        studentId: updated.studentId,
+        startsAt: updated.startsAt,
+        endsAt: updated.endsAt,
+        instructorId: updated.instructorId,
+      },
+      oldStartsAt,
+    });
+
+    const serializedAppointment = {
+      ...updated,
+      priceAmount: Number(updated.priceAmount),
+      penaltyAmount: Number(updated.penaltyAmount),
+      paidAmount: Number(updated.paidAmount),
+    };
+
+    return {
+      success: true as const,
+      data: serializedAppointment,
+      message: "Guida spostata.",
+    };
+  } catch (error) {
+    if (error instanceof Error && error.message === "APPOINTMENT_NOT_RESCHEDULABLE") {
+      return {
+        success: false,
+        message: "La guida non è più spostabile.",
+        code: "APPOINTMENT_NOT_RESCHEDULABLE" as const,
+      };
+    }
     return { success: false, message: formatError(error) };
   }
 }
@@ -3226,8 +3904,32 @@ export async function updateAutoscuolaInstructor(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    ensureAutoscuolaRole(membership, ["OWNER"]);
     const payload = updateInstructorSchema.parse(input);
+
+    const existing = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: payload.instructorId, companyId: membership.companyId },
+    });
+    if (!existing) {
+      return { success: false, message: "Istruttore non trovato." };
+    }
+
+    // Authorization:
+    // - OWNER can edit any instructor
+    // - INSTRUCTOR can edit ONLY their own cluster (settings + assignStudentIds only — not name/status/userId)
+    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+    const isSelfInstructor =
+      membership.autoscuolaRole === "INSTRUCTOR" && existing.userId === membership.userId;
+    if (!isOwnerOrAdmin && !isSelfInstructor) {
+      return { success: false, message: "Non autorizzato." };
+    }
+    if (isSelfInstructor && !isOwnerOrAdmin) {
+      // Strip fields that only OWNER can change — instructor can only edit settings + assignStudentIds
+      payload.name = undefined;
+      payload.phone = undefined;
+      payload.status = undefined;
+      payload.userId = undefined;
+      payload.autonomousMode = undefined;
+    }
 
     if (payload.userId) {
       const member = await prisma.companyMember.findFirst({
@@ -3243,13 +3945,6 @@ export async function updateAutoscuolaInstructor(
           message: "Utente non valido per ruolo istruttore.",
         };
       }
-    }
-
-    const existing = await prisma.autoscuolaInstructor.findFirst({
-      where: { id: payload.instructorId, companyId: membership.companyId },
-    });
-    if (!existing) {
-      return { success: false, message: "Istruttore non trovato." };
     }
 
     const updated = await prisma.autoscuolaInstructor.update({
@@ -4212,6 +4907,41 @@ export async function createExamEvent(
     const invalidIds = payload.studentIds.filter((id) => !validIds.has(id));
     if (invalidIds.length) {
       return { success: false as const, message: `${invalidIds.length} allievi non trovati.` };
+    }
+
+    // Overlap check: students and instructor must be free
+    const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
+    const studentConflicts = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: { in: payload.studentIds },
+        status: { in: activeStatuses },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+      },
+      select: { studentId: true },
+    });
+    if (studentConflicts.length) {
+      const count = new Set(studentConflicts.map((a) => a.studentId)).size;
+      return {
+        success: false as const,
+        message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
+      };
+    }
+    if (payload.instructorId) {
+      const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+        where: {
+          companyId,
+          instructorId: payload.instructorId,
+          status: { in: activeStatuses },
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+        },
+        select: { id: true },
+      });
+      if (instrConflict) {
+        return { success: false as const, message: "L'istruttore ha già un impegno in quell'orario." };
+      }
     }
 
     // Create one appointment per student

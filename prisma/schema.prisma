@@ -338,6 +338,8 @@ model AutoscuolaAppointment {
   availabilityOverrideApproved Boolean @default(false)
   manualPaymentStatus     String?
   lateCancellationAction  String?
+  rescheduledAt           DateTime? @db.Timestamp(6)
+  rescheduledFromStartsAt DateTime? @db.Timestamp(6)
   createdAt               DateTime  @default(now()) @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt
 

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+
+<html lang="it"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Reglo — Sposta guida (web Dialog preview)</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            pink: {
+              50: '#FDF2F8', 100: '#FCE7F3', 200: '#FBCFE8', 300: '#F9A8D4',
+              400: '#F472B6', 500: '#EC4899', 600: '#DB2777', 700: '#BE185D',
+              800: '#9D174D', 900: '#831843',
+            },
+            slate: {
+              50: '#F8FAFC', 100: '#F1F5F9', 200: '#E2E8F0', 300: '#CBD5E1',
+              400: '#94A3B8', 500: '#64748B', 600: '#475569', 700: '#334155',
+              800: '#1E293B', 900: '#0F172A', 950: '#020617',
+            }
+          },
+          borderRadius: { DEFAULT: '0.25rem', lg: '0.5rem', xl: '0.75rem', full: '9999px' },
+          fontFamily: { body: ['Inter', 'sans-serif'] }
+        },
+      },
+    }
+  </script>
+<style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased overflow-hidden">
+<!-- Backdrop (blurred agenda hint) -->
+<div class="fixed inset-0 z-0 flex flex-col blur-sm opacity-40 pointer-events-none">
+<header class="bg-white border-b border-slate-200 h-16 w-full px-6 flex justify-between items-center shrink-0">
+<div class="flex items-center gap-8">
+<span class="text-lg font-semibold tracking-tight text-slate-900">Reglo</span>
+<nav class="hidden md:flex gap-6">
+<a class="text-slate-600" href="#">Dashboard</a>
+<a class="text-pink-500 border-b-2 border-pink-500 pb-1" href="#">Calendario</a>
+<a class="text-slate-600" href="#">Guide</a>
+<a class="text-slate-600" href="#">Esami</a>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded-full bg-slate-200"></div>
+</div>
+</header>
+<main class="flex-1 p-8 grid grid-cols-7 gap-4">
+<div class="col-span-7 flex justify-between items-end mb-4">
+<h1 class="text-2xl font-bold text-slate-900">Agenda Settimanale</h1>
+<div class="flex gap-2">
+<div class="h-10 w-32 bg-slate-200 rounded-md"></div>
+<div class="h-10 w-40 bg-pink-500 rounded-md"></div>
+</div>
+</div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+<div class="bg-white border border-slate-200 h-96 rounded-lg"></div>
+</main>
+</div>
+
+<!-- Modal overlay -->
+<div class="fixed inset-0 z-50 bg-slate-900/40 flex items-center justify-center p-4">
+<!-- Dialog -->
+<div class="bg-white w-full max-w-[480px] rounded-[12px] border border-slate-200 shadow-xl overflow-hidden flex flex-col">
+<div class="p-6 relative">
+<button class="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors" aria-label="Chiudi">
+<svg fill="none" height="20" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><line x1="18" x2="6" y1="6" y2="18"></line><line x1="6" x2="18" y1="6" y2="18"></line></svg>
+</button>
+<h2 class="text-[18px] leading-[24px] font-semibold text-slate-900 tracking-[-0.01em]">Sposta guida</h2>
+<p class="text-[14px] leading-[20px] font-normal text-slate-600 mt-1">Andrea Bianchi · Luca Moretti</p>
+</div>
+<hr class="border-t border-slate-200"/>
+<div class="p-6 flex flex-col gap-5">
+<!-- Currently -->
+<div class="bg-slate-50 border border-slate-200 rounded-[8px] px-4 py-3 flex items-center gap-3">
+<svg class="text-slate-500" fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><rect height="18" rx="2" ry="2" width="18" x="3" y="4"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>
+<div>
+<p class="text-[11px] font-medium text-slate-500 tracking-[0.08em] leading-none mb-1">ATTUALMENTE</p>
+<p class="text-[14px] font-medium text-slate-900">mar 22 apr · 14:00</p>
+</div>
+</div>
+
+<!-- Pickers -->
+<div class="grid grid-cols-2 gap-3">
+<div class="flex flex-col gap-2">
+<label class="text-[12px] font-medium text-slate-700">Nuova data</label>
+<div class="h-10 rounded-md border border-slate-200 bg-white px-3 flex items-center justify-between text-sm cursor-pointer hover:bg-slate-50 transition-colors">
+<span class="text-slate-900">mer 23 apr</span>
+<svg class="text-slate-400" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg"><rect height="18" rx="2" ry="2" width="18" x="3" y="4"></rect><line x1="16" x2="16" y1="2" y2="6"></line><line x1="8" x2="8" y1="2" y2="6"></line><line x1="3" x2="21" y1="10" y2="10"></line></svg>
+</div>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-[12px] font-medium text-slate-700">Nuovo orario</label>
+<div class="h-10 rounded-md border border-slate-200 bg-white px-3 flex items-center justify-between text-sm cursor-pointer hover:bg-slate-50 transition-colors">
+<span class="text-slate-900">10:30</span>
+<svg class="text-slate-400" fill="none" height="14" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="14" xmlns="http://www.w3.org/2000/svg"><path d="m6 9 6 6 6-6"></path></svg>
+</div>
+</div>
+</div>
+
+<!-- Preview -->
+<div class="bg-[#FDF2F8] border border-pink-200 rounded-[8px] px-4 py-3 flex items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<svg class="text-pink-500" fill="none" height="18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="18" xmlns="http://www.w3.org/2000/svg"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path><path d="M5 3v4"></path><path d="M19 17v4"></path><path d="M3 5h4"></path><path d="M17 19h4"></path></svg>
+<div>
+<p class="text-[11px] font-medium text-pink-700 tracking-[0.08em] leading-none mb-1">NUOVA</p>
+<p class="text-[14px] font-medium text-slate-900">mer 23 apr · 10:30</p>
+</div>
+</div>
+<span class="bg-pink-100 text-pink-600 text-[12px] font-medium px-[10px] py-[2px] rounded-full">+1g +3h 30m</span>
+</div>
+
+<!-- Error -->
+<div class="bg-rose-50 border border-rose-200 rounded-md px-3 py-2.5 flex items-start gap-3" role="alert">
+<svg class="text-rose-500 shrink-0 mt-0.5" fill="none" height="16" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24" width="16" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+<p class="text-[13px] font-medium text-rose-900 leading-tight">L'istruttore ha già una guida in quel momento.</p>
+</div>
+</div>
+<hr class="border-t border-slate-200"/>
+<div class="p-6 flex justify-end gap-2 bg-white">
+<button class="h-10 px-4 rounded-md border border-slate-200 bg-white text-slate-900 text-sm font-medium hover:bg-slate-50 transition-all duration-150 active:scale-[0.98]">Annulla</button>
+<button class="h-10 px-4 rounded-md bg-pink-500 text-white text-sm font-medium hover:bg-pink-600 transition-all duration-150 shadow-sm focus:ring-2 focus:ring-pink-500/30 focus:ring-offset-2 active:scale-[0.98]">Sposta guida</button>
+</div>
+</div>
+</div>
+</body></html>

@@ -96,6 +96,47 @@ Stripe (payments + Connect), Resend (email), Slack, Notion, AWS S3, Cloudflare R
 - Short imperative commit messages, single-change scope
 - Run `pnpm lint` before PRs
 
+## Notifications Architecture
+
+Push notifications must always be recoverable server-side. When adding a new notification type, follow this checklist:
+
+### 1. Backend push (real-time)
+Send via `sendAutoscuolaPushToUsers()` in `lib/autoscuole/push.ts`. The push `data` payload MUST include a `kind` string (e.g., `appointment_rescheduled`) that the mobile app uses to route the notification.
+
+### 2. Server-side recovery endpoint
+Add a query to `app/api/autoscuole/notifications/route.ts` so the mobile app can recover the notification when it comes back online (sync on foreground via `syncServerNotifications()`). The query reads from existing DB state (e.g., `cancelledAt >= since`, `rescheduledAt >= since`, `status = 'proposal'`). If no existing field supports the query, add a nullable timestamp to the model (like `rescheduledAt` on `AutoscuolaAppointment`).
+
+### 3. Mobile push intent handler (inbox persistence)
+In `reglo-mobile/src/components/NotificationOverlay.tsx`, add a handler in the `subscribePushIntent` callback (student block and/or instructor block depending on recipient). The handler must create a `PersistedNotification` and merge it into the local inbox via `mergeFromApi()` + `saveInbox()`. This ensures the notification appears in `NotificationInboxScreen` immediately when the push arrives while the app is in foreground.
+
+### 4. Mobile inbox rendering
+In `reglo-mobile/src/screens/NotificationInboxScreen.tsx`, add the new `kind` to:
+- `ICON_MAP` — icon from Ionicons
+- `getTitle()` — switch case returning Italian title
+- `getSubtitle()` — switch case returning formatted subtitle
+- `ICON_COLOR_MAP` (optional) — custom icon color
+- `isInteractive()` — if the notification is tappable
+
+### 5. Mobile types
+Add the new kind + data type to `reglo-mobile/src/types/notifications.ts` in both the `NotificationItem` discriminated union and as a standalone exported type.
+
+### Current notification kinds
+
+| Kind | Recipients | Server recovery | Inbox persistence |
+|------|-----------|----------------|-------------------|
+| `appointment_proposal` / `proposal` | Student | Appointments with `status='proposal'` | Via live data merge |
+| `appointment_cancelled` | Student | `cancelledAt >= since` (non-sick) | Push handler |
+| `appointment_rescheduled` | Student + Instructor | `rescheduledAt >= since` | Push handler |
+| `swap` / `swap_offer` | Student | Active swap offers `status='broadcasted'` | Via live data merge |
+| `swap_accepted` / `confirmation` | Student | — (client-side only) | Via `setConfirmations` |
+| `slot_fill_offer` / `waitlist` | Student | Active waitlist offers | Via live data merge |
+| `sick_leave_cancelled` | Student + Instructor | `cancellationReason='instructor_sick'` | Push handler |
+| `holiday_declared` | Student | `AutoscuolaHoliday.createdAt >= since` | Push handler |
+| `weekly_absence` | Instructor | `AutoscuolaStudentWeeklyAbsence` | Push handler |
+| `available_slots` | Student | — (transient) | Push handler |
+| `appointment_reminder_*` | Both | — (time-based, no recovery needed) | — |
+| `broadcast` / `test_push` | Various | — (fire-and-forget) | — |
+
 ## Agent Instructions
 
 - Before planning, ask relevant technical questions to remove ambiguity.

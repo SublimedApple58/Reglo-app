@@ -52,6 +52,10 @@ import {
   OutOfAvailabilitySheet,
   type OutOfAvailabilityAppointment,
 } from "@/components/pages/Autoscuole/OutOfAvailabilitySheet";
+import {
+  RescheduleAppointmentDialog,
+  type RescheduleAppointmentDialogAppointment,
+} from "@/components/pages/Autoscuole/RescheduleAppointmentDialog";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
 type ResourceOption = { id: string; name: string };
@@ -278,6 +282,8 @@ export function AutoscuoleAgendaPage({
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
+  const [rescheduleTarget, setRescheduleTarget] =
+    React.useState<RescheduleAppointmentDialogAppointment | null>(null);
   const [form, setForm] = React.useState({
     studentId: "",
     type: "guida",
@@ -725,6 +731,23 @@ export function AutoscuoleAgendaPage({
     await load({ silent: true });
     setPendingEventActionId(null);
   };
+
+  const handleOpenReschedule = (item: AppointmentRow) => {
+    setRescheduleTarget({
+      id: item.id,
+      startsAt: item.startsAt,
+      endsAt: item.endsAt ?? null,
+      status: item.status,
+      student: {
+        firstName: item.student.firstName,
+        lastName: item.student.lastName,
+      },
+      instructor: item.instructor
+        ? { name: item.instructor.name }
+        : null,
+    });
+  };
+
   const applyFilter = React.useCallback((kind: FilterKind, value: string) => {
     if (kind === "instructor") {
       setInstructorFilter(value);
@@ -942,6 +965,17 @@ export function AutoscuoleAgendaPage({
             load({ silent: true });
           }}
         />
+
+        <RescheduleAppointmentDialog
+          open={rescheduleTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) setRescheduleTarget(null);
+          }}
+          appointment={rescheduleTarget}
+          onSuccess={() => {
+            load({ silent: true });
+          }}
+        />
           </>)}
         </div>
 
@@ -1039,6 +1073,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
                               <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div></div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>
+                              {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
                               <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
                               <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                             </DropdownMenuContent>
@@ -1420,7 +1455,8 @@ export function AutoscuoleAgendaPage({
                                   <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
                                   <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                                 </div>
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                                {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
                                 <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1754,7 +1790,8 @@ export function AutoscuoleAgendaPage({
                               <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
                               <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                             </div>
-                            <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                            {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
                             <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -2961,6 +2998,13 @@ function canCompleteStatus(appointment: AppointmentRow) {
   const endTime = getAppointmentEnd(appointment);
   const isPast = endTime.getTime() < Date.now();
   return !isPast && (appointment.status ?? "").toLowerCase() === "checked_in";
+}
+
+function canRescheduleAppointment(appointment: AppointmentRow) {
+  const status = (appointment.status ?? "").toLowerCase();
+  if (!["scheduled", "confirmed", "proposal"].includes(status)) return false;
+  const startTime = new Date(appointment.startsAt).getTime();
+  return startTime > Date.now();
 }
 
 function formatTime(date: Date) {

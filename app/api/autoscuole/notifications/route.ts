@@ -9,9 +9,10 @@ import { formatError } from "@/lib/utils";
  * can recover notifications missed when offline / no push token.
  *
  * Role-based:
- * - STUDENT: swap offers, proposals, sick leave cancellations
- * - INSTRUCTOR: weekly absences from assigned students
- * - OWNER: same as instructor (for all instructors)
+ * - STUDENT: swap offers, proposals, sick leave cancellations, appointment
+ *   cancellations, holiday declarations, waitlist offers, rescheduled appointments
+ * - INSTRUCTOR: weekly absences, sick leave cancellations, rescheduled appointments
+ * - OWNER: same as instructor
  */
 export async function GET(request: Request) {
   try {
@@ -129,6 +130,114 @@ export async function GET(request: Request) {
           createdAt: (appt.cancelledAt ?? appt.updatedAt).toISOString(),
         });
       }
+
+      // 4. Cancelled appointments (non-sick — sick_leave_cancelled handled above)
+      const cancelledAppointments = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: userId,
+          status: "cancelled",
+          cancelledAt: { gte: since },
+          cancellationReason: { not: "instructor_sick" },
+          cancelledByUserId: { not: userId },
+        },
+        include: {
+          instructor: { select: { name: true } },
+        },
+        orderBy: { cancelledAt: "desc" },
+        take: limit,
+      });
+      for (const appt of cancelledAppointments) {
+        notifications.push({
+          id: `cancelled_${appt.id}`,
+          kind: "appointment_cancelled",
+          data: {
+            appointmentId: appt.id,
+            startsAt: appt.startsAt.toISOString(),
+            instructorName: appt.instructor?.name ?? "",
+            cancellationKind: appt.cancellationKind ?? "manual_cancel",
+          },
+          createdAt: (appt.cancelledAt ?? appt.updatedAt).toISOString(),
+        });
+      }
+
+      // 5. Holiday declarations
+      const holidays = await prisma.autoscuolaHoliday.findMany({
+        where: {
+          companyId,
+          createdAt: { gte: since },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      for (const h of holidays) {
+        const dateStr = h.date instanceof Date
+          ? h.date.toISOString().slice(0, 10)
+          : String(h.date);
+        notifications.push({
+          id: `holiday_${h.id}`,
+          kind: "holiday_declared",
+          data: {
+            date: dateStr,
+            label: h.label ?? undefined,
+            appointmentsCancelled: true,
+          },
+          createdAt: h.createdAt.toISOString(),
+        });
+      }
+
+      // 6. Active waitlist offers (slot became available)
+      const waitlistOffers = await prisma.autoscuolaWaitlistOffer.findMany({
+        where: {
+          companyId,
+          status: "broadcasted",
+          expiresAt: { gt: new Date() },
+          createdAt: { gte: since },
+        },
+        include: {
+          slot: { select: { startsAt: true, endsAt: true, ownerId: true, ownerType: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        take: limit,
+      });
+      for (const offer of waitlistOffers) {
+        notifications.push({
+          id: `waitlist_${offer.id}`,
+          kind: "waitlist",
+          data: {
+            id: offer.id,
+            slot: {
+              startsAt: offer.slot.startsAt.toISOString(),
+              endsAt: offer.slot.endsAt.toISOString(),
+            },
+            expiresAt: offer.expiresAt.toISOString(),
+          },
+          createdAt: offer.createdAt.toISOString(),
+        });
+      }
+
+      // 7. Rescheduled appointments (student's lessons that were moved)
+      const rescheduledStudent = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: userId,
+          rescheduledAt: { gte: since },
+        },
+        orderBy: { rescheduledAt: "desc" },
+        take: limit,
+      });
+      for (const appt of rescheduledStudent) {
+        notifications.push({
+          id: `reschedule_${appt.id}`,
+          kind: "appointment_rescheduled",
+          data: {
+            appointmentId: appt.id,
+            startsAt: appt.startsAt.toISOString(),
+            oldStartsAt: appt.rescheduledFromStartsAt?.toISOString() ?? "",
+          },
+          createdAt: appt.rescheduledAt!.toISOString(),
+        });
+      }
     }
 
     if (role === "INSTRUCTOR" || role === "OWNER") {
@@ -139,6 +248,29 @@ export async function GET(request: Request) {
       });
 
       if (instructor) {
+        // Rescheduled appointments (instructor's lessons moved by the owner)
+        const rescheduledInstr = await prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId,
+            instructorId: instructor.id,
+            rescheduledAt: { gte: since },
+          },
+          orderBy: { rescheduledAt: "desc" },
+          take: limit,
+        });
+        for (const appt of rescheduledInstr) {
+          notifications.push({
+            id: `reschedule_${appt.id}`,
+            kind: "appointment_rescheduled",
+            data: {
+              appointmentId: appt.id,
+              startsAt: appt.startsAt.toISOString(),
+              oldStartsAt: appt.rescheduledFromStartsAt?.toISOString() ?? "",
+            },
+            createdAt: appt.rescheduledAt!.toISOString(),
+          });
+        }
+
         // Weekly absences from assigned students
         const absences = await prisma.autoscuolaStudentWeeklyAbsence.findMany({
           where: {
