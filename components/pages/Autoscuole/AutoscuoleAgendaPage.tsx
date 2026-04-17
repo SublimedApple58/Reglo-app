@@ -120,8 +120,8 @@ const LESSON_TYPE_OPTIONS = [
   { value: "altro", label: "Altro" },
   { value: "esame", label: "Esame" },
 ] as const;
-const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 2 }, (_, index) => {
-  const total = DAY_START_HOUR * 60 + index * 30;
+const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 4 }, (_, index) => {
+  const total = DAY_START_HOUR * 60 + index * 15;
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
   return `${pad(hours)}:${pad(minutes)}`;

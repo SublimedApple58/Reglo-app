@@ -42,8 +42,9 @@ const toTimeStr = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const TIME_OPTIONS: string[] = (() => {
   const out: string[] = [];
   for (let h = 8; h <= 21; h++) {
-    out.push(`${pad(h)}:00`);
-    out.push(`${pad(h)}:30`);
+    for (const m of [0, 15, 30, 45]) {
+      out.push(`${pad(h)}:${pad(m)}`);
+    }
   }
   return out;
 })();
