@@ -157,6 +157,7 @@ const instructorSettingsSchema = z.object({
   roundedHoursOnly: z.boolean().optional(),
   appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
   instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
+  studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
   swapEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
   bookingCutoffEnabled: z.boolean().optional(),
