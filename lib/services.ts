@@ -19,11 +19,12 @@ export type ServiceLimits = {
   studentReminderChannels?: ("push" | "whatsapp" | "email")[];
   instructorReminderChannels?: ("push" | "whatsapp" | "email")[];
   appBookingActors?: "students" | "instructors" | "both";
-  instructorBookingMode?: "manual_full" | "manual_engine" | "guided_proposal";
+  instructorBookingMode?: "manual_full" | "manual_engine";
   weeklyBookingLimitEnabled?: boolean;
   weeklyBookingLimit?: number;
   examPriorityEnabled?: boolean;
-  examPriorityLimit?: number;
+  examPriorityDaysBeforeExam?: number;
+  examPriorityBlockNonExam?: boolean;
   voiceFeatureEnabled?: boolean;
   voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
   voiceLineRef?: string | null;

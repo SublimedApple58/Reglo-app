@@ -4,6 +4,7 @@ import {
   processAutoscuolaAutoCompleteCheckedIn,
   processAutoscuolaAutoPendingReview,
   processAutoscuolaConfiguredAppointmentReminders,
+  processAutoscuolaMorningReminders,
   processAutoscuolaAppointmentReminders,
   processAutoscuolaCaseDeadlines,
   processAutoscuolaPenaltyCharges,
@@ -38,6 +39,7 @@ export const autoscuoleReminders = schedules.task({
     await safe("invoiceFinalization", () => processAutoscuolaInvoiceFinalization({ prisma }));
     await safe("pendingRepositions", () => processAutoscuolaPendingRepositions({ prisma, limit: 50 }));
     await safe("configuredReminders", () => processAutoscuolaConfiguredAppointmentReminders({ prisma }));
+    await safe("morningReminders", () => processAutoscuolaMorningReminders({ prisma, now }));
     await safe("appointmentReminders", () => processAutoscuolaAppointmentReminders({ prisma }));
     await safe("caseDeadlines", () => processAutoscuolaCaseDeadlines({ prisma }));
     if (now.getUTCMinutes() === 0) {

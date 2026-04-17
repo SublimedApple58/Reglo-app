@@ -17,6 +17,7 @@ import {
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
+import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -62,24 +63,27 @@ const formatCancellationTitle = (value: string) => {
   }
 };
 
-const formatCancellationBody = (value: string, slotLabel: string, instrLabel: string) => {
+const formatCancellationBody = (value: string, slotLabel: string, instrLabel: string, manualFull = false) => {
+  const tail = manualFull
+    ? "L'istruttore ti contatterà per riprogrammarla."
+    : "Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.";
   switch ((value ?? "").trim()) {
     case "instructor_cancel":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata dall'istruttore. Stiamo già cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata dall'istruttore. ${manualFull ? tail : `Stiamo già cercando un nuovo orario e ti invieremo una proposta a breve.`}`;
     case "vehicle_inactive":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché il veicolo non è più disponibile. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché il veicolo non è più disponibile. ${tail}`;
     case "instructor_inactive":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché l'istruttore non è al momento disponibile. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata perché l'istruttore non è al momento disponibile. ${tail}`;
     case "availability_changed":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata per una variazione di disponibilità. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per una variazione di disponibilità. ${tail}`;
     case "owner_delete":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata dalla segreteria. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata dalla segreteria. ${tail}`;
     case "directory_instructor_removed":
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata per un cambio istruttore. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per un cambio istruttore. ${tail}`;
     case "instructor_sick":
-      return `🤒 La guida di ${slotLabel}${instrLabel} è stata cancellata perché l'istruttore è in malattia. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `🤒 La guida di ${slotLabel}${instrLabel} è stata cancellata perché l'istruttore è in malattia. ${tail}`;
     default:
-      return `La guida di ${slotLabel}${instrLabel} è stata spostata per motivi organizzativi. Stiamo cercando un nuovo orario e ti invieremo una proposta a breve.`;
+      return `La guida di ${slotLabel}${instrLabel} è stata spostata per motivi organizzativi. ${tail}`;
   }
 };
 
@@ -335,12 +339,14 @@ const notifyOperationalCancellationPending = async ({
   startsAt,
   reason,
   instructorId,
+  manualFull = false,
 }: {
   companyId: string;
   studentId: string;
   startsAt: Date;
   reason: string;
   instructorId?: string | null;
+  manualFull?: boolean;
 }) => {
   const [studentUser, instructor] = await Promise.all([
     defaultPrisma.user.findUnique({
@@ -370,7 +376,7 @@ const notifyOperationalCancellationPending = async ({
   const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
 
   const title = formatCancellationTitle(reason);
-  const body = formatCancellationBody(reason, slotLabel, instrLabel);
+  const body = formatCancellationBody(reason, slotLabel, instrLabel, manualFull);
 
   try {
     await sendAutoscuolaPushToUsers({
@@ -741,6 +747,10 @@ export async function queueOperationalRepositionForAppointment({
     select: { id: true },
   });
 
+  // If the student's assigned instructor is in manual_full mode, we cancel but do NOT
+  // queue a reposition task nor send any "we'll find a new slot" messaging.
+  const manualFull = await isStudentInManualFullCluster(companyId, appointment.studentId);
+
   await prisma.$transaction(async (tx) => {
     await tx.autoscuolaAppointment.update({
       where: { id: appointment.id },
@@ -764,24 +774,26 @@ export async function queueOperationalRepositionForAppointment({
       endsAt: appointment.endsAt,
     });
 
-    await tx.autoscuolaAppointmentRepositionTask.upsert({
-      where: { sourceAppointmentId: appointment.id },
-      update: {
-        status: "pending",
-        reason,
-        nextAttemptAt: now,
-      },
-      create: {
-        companyId,
-        sourceAppointmentId: appointment.id,
-        studentId: appointment.studentId,
-        status: "pending",
-        reason,
-        attemptCount: 0,
-        nextAttemptAt: now,
-        createdByUserId: actorUserId ?? null,
-      },
-    });
+    if (!manualFull) {
+      await tx.autoscuolaAppointmentRepositionTask.upsert({
+        where: { sourceAppointmentId: appointment.id },
+        update: {
+          status: "pending",
+          reason,
+          nextAttemptAt: now,
+        },
+        create: {
+          companyId,
+          sourceAppointmentId: appointment.id,
+          studentId: appointment.studentId,
+          status: "pending",
+          reason,
+          attemptCount: 0,
+          nextAttemptAt: now,
+          createdByUserId: actorUserId ?? null,
+        },
+      });
+    }
   });
 
   if (!existingTask) {
@@ -791,6 +803,7 @@ export async function queueOperationalRepositionForAppointment({
       startsAt: appointment.startsAt,
       reason,
       instructorId: appointment.instructorId,
+      manualFull,
     });
   }
 
@@ -798,7 +811,7 @@ export async function queueOperationalRepositionForAppointment({
   let proposalStartsAt: Date | null = null;
   let taskId = existingTask?.id ?? null;
 
-  if (attemptNow) {
+  if (attemptNow && !manualFull) {
     const task = await prisma.autoscuolaAppointmentRepositionTask.findUnique({
       where: { sourceAppointmentId: appointment.id },
       select: { id: true },
@@ -895,6 +908,16 @@ export async function attemptOperationalRepositionTask({
 
   if (task.status !== "pending") {
     return { attempted: false, proposalCreated: false } as const;
+  }
+
+  // Safety net: if the student is in a manual_full cluster, cancel the task — no automatic proposal.
+  const manualFull = await isStudentInManualFullCluster(task.companyId, task.studentId);
+  if (manualFull) {
+    await prisma.autoscuolaAppointmentRepositionTask.update({
+      where: { id: task.id },
+      data: { status: "cancelled", lastAttemptAt: now, nextAttemptAt: null },
+    });
+    return { attempted: true, proposalCreated: false } as const;
   }
 
   const source = task.sourceAppointment;

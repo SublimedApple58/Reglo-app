@@ -18,6 +18,7 @@ import {
   normalizeBookingSlotDurations,
 } from "@/lib/autoscuole/lesson-policy";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
+import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -1299,6 +1300,15 @@ export const processEmptySlotNotifications = async ({
     });
     const usersWithToken = new Set(devicesWithToken.map((d: { userId: string }) => d.userId));
     targetUserIds = targetUserIds.filter((id) => usersWithToken.has(id));
+
+    if (!targetUserIds.length) continue;
+
+    // Exclude students whose assigned instructor cluster is in manual_full mode
+    // (these students should never receive proactive "you can book" messaging).
+    const manualFullFlags = await Promise.all(
+      targetUserIds.map((id) => isStudentInManualFullCluster(companyId, id)),
+    );
+    targetUserIds = targetUserIds.filter((_, i) => !manualFullFlags[i]);
 
     if (!targetUserIds.length) continue;
 

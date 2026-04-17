@@ -163,3 +163,48 @@ export async function getExamStudentsInScope({
 
   return examStudentIds;
 }
+
+/**
+ * Per-day block check: returns true if a non-exam student is blocked from booking
+ * on the given day because NOT ALL exam students in scope have booked a lesson on that day yet.
+ *
+ * Logic:
+ * - If there are no exam students in scope → not blocked
+ * - If every exam student in scope has at least one scheduled/confirmed/proposal/checked_in booking on that day → not blocked
+ * - Otherwise → blocked (at least one exam student still needs to secure their slot)
+ */
+export async function isDayBlockedByExamPriority({
+  companyId,
+  studentInstructorId,
+  dayStart,
+  dayEnd,
+  daysBeforeExam = DEFAULT_EXAM_PRIORITY_DAYS_BEFORE,
+}: {
+  companyId: string;
+  studentInstructorId: string | null;
+  dayStart: Date;
+  dayEnd: Date;
+  daysBeforeExam?: number;
+}): Promise<boolean> {
+  const examStudentIds = await getExamStudentsInScope({
+    companyId,
+    studentInstructorId,
+    daysBeforeExam,
+  });
+  if (examStudentIds.length === 0) return false;
+
+  // Which exam students already have a booking that day?
+  const existing = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId: { in: examStudentIds },
+      status: { in: ["scheduled", "confirmed", "proposal", "checked_in"] },
+      startsAt: { gte: dayStart, lt: dayEnd },
+    },
+    select: { studentId: true },
+  });
+  const bookedStudentIds = new Set(existing.map((a) => a.studentId));
+
+  // Blocked if at least one exam student has not yet booked this day
+  return bookedStudentIds.size < examStudentIds.length;
+}

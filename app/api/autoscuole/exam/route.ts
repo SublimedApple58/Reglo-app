@@ -4,6 +4,10 @@ import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 import { createExamEvent } from "@/lib/actions/autoscuole.actions";
+import {
+  AUTOSCUOLE_CACHE_SEGMENTS,
+  invalidateAutoscuoleCache,
+} from "@/lib/autoscuole/cache";
 
 const createExamSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1),
@@ -32,36 +36,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const payload = createExamSchema.parse(body);
 
-    // For instructors: validate students are in their cluster (if autonomous)
-    if (membership.autoscuolaRole === "INSTRUCTOR") {
-      const instructor = await prisma.autoscuolaInstructor.findFirst({
-        where: {
-          companyId: membership.companyId,
-          userId: membership.userId,
-          status: { not: "inactive" },
-        },
-        select: { id: true, autonomousMode: true },
-      });
-
-      if (instructor?.autonomousMode) {
-        const assignedMembers = await prisma.companyMember.findMany({
-          where: {
-            companyId: membership.companyId,
-            assignedInstructorId: instructor.id,
-            autoscuolaRole: "STUDENT",
-          },
-          select: { userId: true },
-        });
-        const assignedIds = new Set(assignedMembers.map((m) => m.userId));
-        const unauthorized = payload.studentIds.filter((id) => !assignedIds.has(id));
-        if (unauthorized.length) {
-          return NextResponse.json(
-            { success: false, message: `${unauthorized.length} allievi non assegnati al tuo gruppo.` },
-            { status: 403 },
-          );
-        }
-      }
-    }
+    // Instructors (autonomous or not) can create exams for any student in the company.
+    // The exam priority rules will naturally apply based on the students' own scope.
 
     // Use the existing server action (it checks OWNER — we need to call it directly)
     // Since the action requires OWNER, we'll replicate the core logic here for INSTRUCTOR
@@ -77,9 +53,18 @@ export async function POST(request: Request) {
         );
       }
 
-      if (payload.instructorId) {
+      // Auto-assign the creating instructor if not explicitly provided,
+      // so the exam shows up in the creator's agenda.
+      let resolvedInstructorId: string | null = payload.instructorId ?? null;
+      if (!resolvedInstructorId) {
+        const selfInstructor = await prisma.autoscuolaInstructor.findFirst({
+          where: { companyId, userId: membership.userId, status: { not: "inactive" } },
+          select: { id: true },
+        });
+        resolvedInstructorId = selfInstructor?.id ?? null;
+      } else {
         const instr = await prisma.autoscuolaInstructor.findFirst({
-          where: { id: payload.instructorId, companyId, status: { not: "inactive" } },
+          where: { id: resolvedInstructorId, companyId, status: { not: "inactive" } },
           select: { id: true },
         });
         if (!instr) {
@@ -103,6 +88,47 @@ export async function POST(request: Request) {
         );
       }
 
+      // Overlap check: no active appointment on students or the assigned instructor
+      const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
+      const studentConflicts = await prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: { in: payload.studentIds },
+          status: { in: activeStatuses },
+          startsAt: { lt: endsAt },
+          endsAt: { gt: startsAt },
+        },
+        select: { studentId: true },
+      });
+      if (studentConflicts.length) {
+        const count = new Set(studentConflicts.map((a) => a.studentId)).size;
+        return NextResponse.json(
+          {
+            success: false,
+            message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
+          },
+          { status: 400 },
+        );
+      }
+      if (resolvedInstructorId) {
+        const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+          where: {
+            companyId,
+            instructorId: resolvedInstructorId,
+            status: { in: activeStatuses },
+            startsAt: { lt: endsAt },
+            endsAt: { gt: startsAt },
+          },
+          select: { id: true },
+        });
+        if (instrConflict) {
+          return NextResponse.json(
+            { success: false, message: "Hai già un impegno in quell'orario." },
+            { status: 400 },
+          );
+        }
+      }
+
       const appointments = await prisma.$transaction(
         payload.studentIds.map((studentId) =>
           prisma.autoscuolaAppointment.create({
@@ -113,7 +139,7 @@ export async function POST(request: Request) {
               startsAt,
               endsAt,
               status: "scheduled",
-              instructorId: payload.instructorId ?? null,
+              instructorId: resolvedInstructorId,
               vehicleId: null,
               notes: payload.notes ?? null,
               paymentRequired: false,
@@ -121,6 +147,11 @@ export async function POST(request: Request) {
           }),
         ),
       );
+
+      await invalidateAutoscuoleCache({
+        companyId,
+        segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+      });
 
       return NextResponse.json({
         success: true,

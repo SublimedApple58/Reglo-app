@@ -68,34 +68,46 @@ export async function POST(request: Request) {
       );
     }
 
-    const startDate = new Date(payload.startDate);
-    const endDate = new Date(payload.endDate);
+    // Rome-timezone-aware date parsing (business is Italian driving school).
+    // Convert "YYYY-MM-DD HH:mm Rome" → UTC Date.
+    const ROME_OFFSET_HOURS = 2; // CEST (DST); CET is +1. Using +2 to be safe — widens the window slightly.
+    const toUtcFromRome = (dateStr: string, timeStr: string) => {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const [h, min] = timeStr.split(":").map(Number);
+      return new Date(Date.UTC(y, m - 1, d, h - ROME_OFFSET_HOURS, min, 0));
+    };
 
-    if (endDate < startDate) {
+    const sickStart = payload.startTime
+      ? toUtcFromRome(payload.startDate, payload.startTime)
+      : toUtcFromRome(payload.startDate, "00:00");
+    const sickEnd = toUtcFromRome(payload.endDate, "23:59");
+
+    if (sickEnd < sickStart) {
       return NextResponse.json(
         { success: false, message: "Data fine deve essere dopo data inizio." },
         { status: 400 },
       );
     }
 
-    // Determine the sick period bounds
-    const sickStart = payload.startTime
-      ? new Date(`${payload.startDate}T${payload.startTime}:00`)
-      : new Date(`${payload.startDate}T00:00:00`);
-    const sickEnd = new Date(`${payload.endDate}T23:59:59`);
-
-    // Create instructor blocks for each day
+    // Create instructor blocks for each day (using Rome-local day boundaries in UTC)
+    const [sy, sm, sd] = payload.startDate.split("-").map(Number);
+    const [ey, em, ed] = payload.endDate.split("-").map(Number);
     const blocks: { startsAt: Date; endsAt: Date }[] = [];
-    const current = new Date(startDate);
-    while (current <= endDate) {
-      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
-      const isFirstDay = dateStr === payload.startDate && payload.startTime;
-      const blockStart = isFirstDay
-        ? new Date(`${dateStr}T${payload.startTime}:00`)
-        : new Date(`${dateStr}T00:00:00`);
-      const blockEnd = new Date(`${dateStr}T23:59:59`);
+    for (
+      let d = new Date(Date.UTC(sy, sm - 1, sd));
+      d.getTime() <= Date.UTC(ey, em - 1, ed);
+      d.setUTCDate(d.getUTCDate() + 1)
+    ) {
+      const y = d.getUTCFullYear();
+      const m = d.getUTCMonth() + 1;
+      const day = d.getUTCDate();
+      const dateStr = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const isFirstDay = dateStr === payload.startDate && Boolean(payload.startTime);
+      const blockStart = isFirstDay && payload.startTime
+        ? toUtcFromRome(dateStr, payload.startTime)
+        : toUtcFromRome(dateStr, "00:00");
+      const blockEnd = toUtcFromRome(dateStr, "23:59");
       blocks.push({ startsAt: blockStart, endsAt: blockEnd });
-      current.setDate(current.getDate() + 1);
     }
 
     // Create blocks in transaction
@@ -121,13 +133,26 @@ export async function POST(request: Request) {
         status: { in: ["scheduled", "confirmed", "proposal", "checked_in"] },
         startsAt: { gte: sickStart, lte: sickEnd },
       },
-      select: { id: true, studentId: true },
+      select: { id: true, studentId: true, startsAt: true, status: true },
+    });
+
+    console.log("[sick-leave] Query result", {
+      instructorId: targetInstructor.id,
+      sickStartIso: sickStart.toISOString(),
+      sickEndIso: sickEnd.toISOString(),
+      appointmentsFound: appointments.length,
+      appointments: appointments.map((a) => ({
+        id: a.id,
+        startsAt: a.startsAt.toISOString(),
+        status: a.status,
+      })),
     });
 
     const cancelledIds: string[] = [];
     for (const appointment of appointments) {
-      // Queue repositioning — this cancels the appointment, notifies the student,
-      // and attempts to find a new slot automatically
+      // Queue repositioning — cancels the appointment, notifies the student
+      // (with sick-leave-specific wording from formatCancellationBody),
+      // and attempts to find a new slot automatically (unless student is in manual_full cluster).
       await queueOperationalRepositionForAppointment({
         companyId: membership.companyId,
         appointmentId: appointment.id,
@@ -136,26 +161,6 @@ export async function POST(request: Request) {
         attemptNow: true,
       });
       cancelledIds.push(appointment.id);
-
-      // Additional sick-leave-specific push (the repositioning sends a generic one,
-      // this one is more specific with the emoji and reason)
-      if (appointment.studentId) {
-        try {
-          await sendAutoscuolaPushToUsers({
-            companyId: membership.companyId,
-            userIds: [appointment.studentId],
-            title: "🤒 Guida cancellata",
-            body: `La tua guida è stata cancellata perché l'istruttore ${targetInstructor.name} è in malattia. Stiamo cercando un nuovo orario.`,
-            data: {
-              kind: "sick_leave_cancelled",
-              appointmentId: appointment.id,
-              instructorName: targetInstructor.name,
-            },
-          });
-        } catch (error) {
-          console.error("Sick leave push error", error);
-        }
-      }
     }
 
     await invalidateAutoscuoleCache({

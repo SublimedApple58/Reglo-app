@@ -21,11 +21,8 @@ import {
   AppBookingActors,
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
-  DEFAULT_STUDENT_BOOKING_MODE,
   INSTRUCTOR_BOOKING_MODE_OPTIONS,
   InstructorBookingMode,
-  STUDENT_BOOKING_MODE_OPTIONS,
-  StudentBookingMode,
   parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 
@@ -81,7 +78,6 @@ const EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS = [
 const DEFAULT_WEEKLY_BOOKING_LIMIT_ENABLED = false;
 const DEFAULT_WEEKLY_BOOKING_LIMIT = 3;
 const DEFAULT_EXAM_PRIORITY_ENABLED = false;
-const DEFAULT_EXAM_PRIORITY_LIMIT = 5;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_STUDENT_NOTES_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
@@ -221,7 +217,6 @@ const bookingSlotDurationsSchema = z
 
 const appBookingActorsSchema = z.enum(APP_BOOKING_ACTOR_OPTIONS);
 const instructorBookingModeSchema = z.enum(INSTRUCTOR_BOOKING_MODE_OPTIONS);
-const studentBookingModeSchema = z.enum(STUDENT_BOOKING_MODE_OPTIONS);
 const voiceAllowedActionSchema = z.enum(VOICE_ALLOWED_ACTIONS);
 const voiceOfficeHoursSchema = z
   .object({
@@ -310,16 +305,15 @@ const autoscuolaSettingsPatchSchema = z
     weeklyBookingLimitEnabled: z.boolean().optional(),
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
     examPriorityEnabled: z.boolean().optional(),
-    examPriorityLimit: z.number().int().min(1).max(50).optional(),
     examPriorityDaysBeforeExam: z.number().int().min(1).max(60).optional(),
     examPriorityBlockNonExam: z.boolean().optional(),
+    examPriorityPausedUntil: z.string().nullable().optional(),
     restrictedTimeRangeEnabled: z.boolean().optional(),
     restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorPreferenceEnabled: z.boolean().optional(),
     appBookingActors: appBookingActorsSchema.optional(),
     instructorBookingMode: instructorBookingModeSchema.optional(),
-    studentBookingMode: studentBookingModeSchema.optional(),
     voiceAssistantEnabled: z.boolean().optional(),
     voiceBookingEnabled: z.boolean().optional(),
     voiceLanguage: z.literal("it-IT").optional(),
@@ -368,7 +362,6 @@ const autoscuolaSettingsPatchSchema = z
       value.bookingSlotDurations !== undefined ||
       value.appBookingActors !== undefined ||
       value.instructorBookingMode !== undefined ||
-      value.studentBookingMode !== undefined ||
       value.swapEnabled !== undefined ||
       value.swapNotifyMode !== undefined ||
       value.bookingCutoffEnabled !== undefined ||
@@ -379,8 +372,8 @@ const autoscuolaSettingsPatchSchema = z
       value.weeklyBookingLimitEnabled !== undefined ||
       value.weeklyBookingLimit !== undefined ||
       value.examPriorityEnabled !== undefined ||
-      value.examPriorityLimit !== undefined ||
       value.examPriorityDaysBeforeExam !== undefined ||
+      value.examPriorityPausedUntil !== undefined ||
       value.examPriorityBlockNonExam !== undefined ||
       value.restrictedTimeRangeEnabled !== undefined ||
       value.restrictedTimeRangeStart !== undefined ||
@@ -533,7 +526,6 @@ export type AutoscuolaSettingsData = {
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
-  studentBookingMode: StudentBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: (typeof SWAP_NOTIFY_MODES)[number];
   bookingCutoffEnabled: boolean;
@@ -544,9 +536,9 @@ export type AutoscuolaSettingsData = {
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
   examPriorityEnabled: boolean;
-  examPriorityLimit: number;
   examPriorityDaysBeforeExam: number;
   examPriorityBlockNonExam: boolean;
+  examPriorityPausedUntil: string | null;
   restrictedTimeRangeEnabled: boolean;
   restrictedTimeRangeStart: string;
   restrictedTimeRangeEnd: string;
@@ -718,10 +710,6 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.examPriorityEnabled === "boolean"
       ? limits.examPriorityEnabled
       : DEFAULT_EXAM_PRIORITY_ENABLED;
-  const examPriorityLimit =
-    typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
-      ? limits.examPriorityLimit
-      : DEFAULT_EXAM_PRIORITY_LIMIT;
   const examPriorityDaysBeforeExam =
     typeof limits.examPriorityDaysBeforeExam === "number" && limits.examPriorityDaysBeforeExam >= 1
       ? limits.examPriorityDaysBeforeExam
@@ -730,6 +718,10 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.examPriorityBlockNonExam === "boolean"
       ? limits.examPriorityBlockNonExam
       : false;
+  const examPriorityPausedUntil =
+    typeof limits.examPriorityPausedUntil === "string"
+      ? limits.examPriorityPausedUntil
+      : null;
   const instructorPreferenceEnabled =
     typeof limits.instructorPreferenceEnabled === "boolean"
       ? limits.instructorPreferenceEnabled
@@ -854,7 +846,6 @@ const resolveAutoscuolaSettingsData = async (
         : false,
     appBookingActors: bookingGovernance.appBookingActors,
     instructorBookingMode: bookingGovernance.instructorBookingMode,
-    studentBookingMode: bookingGovernance.studentBookingMode,
     swapEnabled,
     swapNotifyMode,
     bookingCutoffEnabled,
@@ -865,9 +856,9 @@ const resolveAutoscuolaSettingsData = async (
     weeklyBookingLimitEnabled,
     weeklyBookingLimit,
     examPriorityEnabled,
-    examPriorityLimit,
     examPriorityDaysBeforeExam,
     examPriorityBlockNonExam,
+    examPriorityPausedUntil,
     restrictedTimeRangeEnabled: limits.restrictedTimeRangeEnabled === true,
     restrictedTimeRangeStart: typeof limits.restrictedTimeRangeStart === "string" && /^\d{2}:\d{2}$/.test(limits.restrictedTimeRangeStart) ? limits.restrictedTimeRangeStart : "08:00",
     restrictedTimeRangeEnd: typeof limits.restrictedTimeRangeEnd === "string" && /^\d{2}:\d{2}$/.test(limits.restrictedTimeRangeEnd) ? limits.restrictedTimeRangeEnd : "13:00",
@@ -1054,10 +1045,6 @@ export async function updateAutoscuolaSettings(
       typeof limits.examPriorityEnabled === "boolean"
         ? limits.examPriorityEnabled
         : DEFAULT_EXAM_PRIORITY_ENABLED;
-    const previousExamPriorityLimit =
-      typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
-        ? limits.examPriorityLimit
-        : DEFAULT_EXAM_PRIORITY_LIMIT;
     const previousInstructorPreferenceEnabled =
       typeof limits.instructorPreferenceEnabled === "boolean"
         ? limits.instructorPreferenceEnabled
@@ -1182,8 +1169,6 @@ export async function updateAutoscuolaSettings(
       (nextAppBookingActors === "instructors" || nextAppBookingActors === "both"
         ? previousBookingGovernance.instructorBookingMode
         : DEFAULT_INSTRUCTOR_BOOKING_MODE);
-    const nextStudentBookingMode =
-      payload.studentBookingMode ?? previousBookingGovernance.studentBookingMode;
     const nextSwapEnabled = payload.swapEnabled ?? previousSwapEnabled;
     const nextSwapNotifyMode = payload.swapNotifyMode ?? previousSwapNotifyMode;
     const nextBookingCutoffEnabled = payload.bookingCutoffEnabled ?? previousBookingCutoffEnabled;
@@ -1200,8 +1185,6 @@ export async function updateAutoscuolaSettings(
       payload.weeklyBookingLimit ?? previousWeeklyBookingLimit;
     const nextExamPriorityEnabled =
       payload.examPriorityEnabled ?? previousExamPriorityEnabled;
-    const nextExamPriorityLimit =
-      payload.examPriorityLimit ?? previousExamPriorityLimit;
     const nextInstructorPreferenceEnabled =
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextStudentNotesEnabled =
@@ -1348,7 +1331,6 @@ export async function updateAutoscuolaSettings(
       roundedHoursOnly: payload.roundedHoursOnly ?? (limits.roundedHoursOnly === true),
       appBookingActors: nextAppBookingActors,
       instructorBookingMode: nextInstructorBookingMode,
-      studentBookingMode: nextStudentBookingMode,
       swapEnabled: nextSwapEnabled,
       swapNotifyMode: nextSwapNotifyMode,
       bookingCutoffEnabled: nextBookingCutoffEnabled,
@@ -1359,11 +1341,16 @@ export async function updateAutoscuolaSettings(
       weeklyBookingLimitEnabled: nextWeeklyBookingLimitEnabled,
       weeklyBookingLimit: nextWeeklyBookingLimit,
       examPriorityEnabled: nextExamPriorityEnabled,
-      examPriorityLimit: nextExamPriorityLimit,
       examPriorityDaysBeforeExam:
         payload.examPriorityDaysBeforeExam ?? (typeof limits.examPriorityDaysBeforeExam === "number" ? limits.examPriorityDaysBeforeExam : 14),
       examPriorityBlockNonExam:
         payload.examPriorityBlockNonExam ?? (limits.examPriorityBlockNonExam === true),
+      examPriorityPausedUntil:
+        payload.examPriorityPausedUntil !== undefined
+          ? payload.examPriorityPausedUntil
+          : typeof limits.examPriorityPausedUntil === "string"
+            ? limits.examPriorityPausedUntil
+            : null,
       restrictedTimeRangeEnabled:
         payload.restrictedTimeRangeEnabled ?? (limits.restrictedTimeRangeEnabled === true),
       restrictedTimeRangeStart:
@@ -1447,7 +1434,6 @@ export async function updateAutoscuolaSettings(
         roundedHoursOnly: nextLimits.roundedHoursOnly,
         appBookingActors: nextLimits.appBookingActors,
         instructorBookingMode: nextLimits.instructorBookingMode,
-        studentBookingMode: nextLimits.studentBookingMode,
         swapEnabled: nextLimits.swapEnabled,
         swapNotifyMode: nextLimits.swapNotifyMode,
         bookingCutoffEnabled: nextLimits.bookingCutoffEnabled,
@@ -1458,9 +1444,9 @@ export async function updateAutoscuolaSettings(
         weeklyBookingLimitEnabled: nextLimits.weeklyBookingLimitEnabled,
         weeklyBookingLimit: nextLimits.weeklyBookingLimit,
         examPriorityEnabled: nextLimits.examPriorityEnabled,
-        examPriorityLimit: nextLimits.examPriorityLimit,
         examPriorityDaysBeforeExam: nextLimits.examPriorityDaysBeforeExam,
         examPriorityBlockNonExam: nextLimits.examPriorityBlockNonExam,
+        examPriorityPausedUntil: nextLimits.examPriorityPausedUntil,
         restrictedTimeRangeEnabled: nextLimits.restrictedTimeRangeEnabled,
         restrictedTimeRangeStart: nextLimits.restrictedTimeRangeStart,
         restrictedTimeRangeEnd: nextLimits.restrictedTimeRangeEnd,

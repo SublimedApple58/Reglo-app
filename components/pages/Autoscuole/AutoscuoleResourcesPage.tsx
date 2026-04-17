@@ -97,11 +97,6 @@ const APP_BOOKING_ACTOR_OPTIONS = [
 const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_full", label: "Manuale totale" },
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
-  { value: "guided_proposal", label: "Guidata con proposta" },
-] as const;
-const STUDENT_BOOKING_MODE_OPTIONS = [
-  { value: "engine", label: "Motore (proposta automatica)" },
-  { value: "free_choice", label: "Scelta libera" },
 ] as const;
 const CHANNEL_OPTIONS = [
   { value: "push", label: "Push" },
@@ -111,8 +106,6 @@ const CHANNEL_OPTIONS = [
 type ChannelValue = (typeof CHANNEL_OPTIONS)[number]["value"];
 type AppBookingActorsValue = (typeof APP_BOOKING_ACTOR_OPTIONS)[number]["value"];
 type InstructorBookingModeValue = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number]["value"];
-type StudentBookingModeValue = (typeof STUDENT_BOOKING_MODE_OPTIONS)[number]["value"];
-
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },
@@ -246,9 +239,9 @@ export function AutoscuoleResourcesPage({
   const [weeklyBookingLimitEnabled, setWeeklyBookingLimitEnabled] = React.useState(false);
   const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
   const [examPriorityEnabled, setExamPriorityEnabled] = React.useState(false);
-  const [examPriorityLimit, setExamPriorityLimit] = React.useState(5);
   const [examPriorityDaysBeforeExam, setExamPriorityDaysBeforeExam] = React.useState(14);
   const [examPriorityBlockNonExam, setExamPriorityBlockNonExam] = React.useState(false);
+  const [examPriorityPausedUntil, setExamPriorityPausedUntil] = React.useState<string | null>(null);
   const [restrictedTimeRangeEnabled, setRestrictedTimeRangeEnabled] = React.useState(false);
   const [restrictedTimeRangeStart, setRestrictedTimeRangeStart] = React.useState("08:00");
   const [restrictedTimeRangeEnd, setRestrictedTimeRangeEnd] = React.useState("13:00");
@@ -270,8 +263,7 @@ export function AutoscuoleResourcesPage({
   const [clusterStudentSearch, setClusterStudentSearch] = React.useState("");
   // Task 3: new cluster booking settings
   const [clusterAppBookingActors, setClusterAppBookingActors] = React.useState<"students" | "instructors" | "both" | undefined>(undefined);
-  const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | "guided_proposal" | undefined>(undefined);
-  const [clusterStudentBookingMode, setClusterStudentBookingMode] = React.useState<"engine" | "free_choice" | undefined>(undefined);
+  const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | undefined>(undefined);
   const [clusterSwapEnabled, setClusterSwapEnabled] = React.useState<boolean | undefined>(undefined);
   const [clusterSwapNotifyMode, setClusterSwapNotifyMode] = React.useState<"all" | "available_only" | undefined>(undefined);
   const [clusterBookingCutoffEnabled, setClusterBookingCutoffEnabled] = React.useState<boolean | undefined>(undefined);
@@ -288,7 +280,6 @@ export function AutoscuoleResourcesPage({
   const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
-  const [studentBookingMode, setStudentBookingMode] = React.useState<StudentBookingModeValue>("engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   // Sick leave state
   const [sickLeaveInstructor, setSickLeaveInstructor] = React.useState<InstructorDetail | null>(null);
@@ -483,9 +474,9 @@ export function AutoscuoleResourcesPage({
       setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
       setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
       setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
-      setExamPriorityLimit(res.data.examPriorityLimit ?? 5);
       setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
       setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
+      setExamPriorityPausedUntil(res.data.examPriorityPausedUntil ?? null);
       setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
       setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
       setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
@@ -506,13 +497,6 @@ export function AutoscuoleResourcesPage({
         )
           ? (res.data.instructorBookingMode as InstructorBookingModeValue)
           : "manual_engine",
-      );
-      setStudentBookingMode(
-        STUDENT_BOOKING_MODE_OPTIONS.some(
-          (option) => option.value === res.data.studentBookingMode,
-        )
-          ? (res.data.studentBookingMode as StudentBookingModeValue)
-          : "engine",
       );
     };
     loadSettings();
@@ -636,8 +620,8 @@ export function AutoscuoleResourcesPage({
       weeklyBookingLimitEnabled,
       weeklyBookingLimit,
       examPriorityEnabled,
-      examPriorityLimit,
       examPriorityDaysBeforeExam,
+      examPriorityPausedUntil,
       examPriorityBlockNonExam,
       restrictedTimeRangeEnabled,
       restrictedTimeRangeStart,
@@ -649,7 +633,6 @@ export function AutoscuoleResourcesPage({
       studentNotesEnabled,
       appBookingActors,
       instructorBookingMode,
-      studentBookingMode,
     });
     setSavingSettings(false);
 
@@ -708,13 +691,6 @@ export function AutoscuoleResourcesPage({
       )
         ? (res.data.instructorBookingMode as InstructorBookingModeValue)
         : "manual_engine",
-    );
-    setStudentBookingMode(
-      STUDENT_BOOKING_MODE_OPTIONS.some(
-        (option) => option.value === res.data.studentBookingMode,
-      )
-        ? (res.data.studentBookingMode as StudentBookingModeValue)
-        : "engine",
     );
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
@@ -872,8 +848,7 @@ export function AutoscuoleResourcesPage({
     setClusterRoundedHours(settings.roundedHoursOnly === true);
     // Load new cluster booking settings
     setClusterAppBookingActors(settings.appBookingActors as "students" | "instructors" | "both" | undefined);
-    setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | "guided_proposal" | undefined);
-    setClusterStudentBookingMode(settings.studentBookingMode as "engine" | "free_choice" | undefined);
+    setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | undefined);
     setClusterSwapEnabled(typeof settings.swapEnabled === "boolean" ? settings.swapEnabled : undefined);
     setClusterSwapNotifyMode(settings.swapNotifyMode as "all" | "available_only" | undefined);
     setClusterBookingCutoffEnabled(typeof settings.bookingCutoffEnabled === "boolean" ? settings.bookingCutoffEnabled : undefined);
@@ -914,7 +889,6 @@ export function AutoscuoleResourcesPage({
         roundedHoursOnly: clusterRoundedHours,
         appBookingActors: clusterAppBookingActors,
         instructorBookingMode: clusterInstructorBookingMode,
-        studentBookingMode: clusterStudentBookingMode,
         swapEnabled: clusterSwapEnabled,
         swapNotifyMode: clusterSwapNotifyMode,
         bookingCutoffEnabled: clusterBookingCutoffEnabled,
@@ -1442,27 +1416,6 @@ export function AutoscuoleResourcesPage({
                   </FieldGroup>
                 ) : null}
 
-                {appBookingActors !== "instructors" ? (
-                  <FieldGroup label="Modalità allievo">
-                    <Select
-                      value={studentBookingMode}
-                      onValueChange={(value) =>
-                        setStudentBookingMode(value as StudentBookingModeValue)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleziona modalità" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STUDENT_BOOKING_MODE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                ) : null}
               </div>
 
               <FieldGroup label="Durata prenotazione allievo">
@@ -1912,21 +1865,11 @@ export function AutoscuoleResourcesPage({
                         </Select>
                       </FieldGroup>
                       <FieldGroup label="Modalità prenotazione istruttore">
-                        <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | "guided_proposal" | undefined)}>
+                        <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | undefined)}>
                           <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="manual_full">Manuale totale</SelectItem>
                             <SelectItem value="manual_engine">Manuale + motore annullamenti</SelectItem>
-                            <SelectItem value="guided_proposal">Guidata con proposta</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      <FieldGroup label="Modalità prenotazione allievo">
-                        <Select value={clusterStudentBookingMode ?? ""} onValueChange={(v) => setClusterStudentBookingMode((v || undefined) as "engine" | "free_choice" | undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="engine">Motore (proposta automatica)</SelectItem>
-                            <SelectItem value="free_choice">Scelta libera</SelectItem>
                           </SelectContent>
                         </Select>
                       </FieldGroup>
@@ -2126,7 +2069,6 @@ export function AutoscuoleResourcesPage({
                                 `${s.firstName} ${s.lastName}`.toLowerCase().includes(q),
                               )
                             : allStudents;
-                          // Sort: assigned first, then alphabetically
                           const sorted = [...filtered].sort((a, b) => {
                             const aAssigned = clusterStudentIds.includes(a.id) ? 0 : 1;
                             const bAssigned = clusterStudentIds.includes(b.id) ? 0 : 1;
@@ -2154,9 +2096,7 @@ export function AutoscuoleResourcesPage({
                                 key={student.id}
                                 className={cn(
                                   "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
-                                  isAssignedHere
-                                    ? "bg-yellow-50/80"
-                                    : "hover:bg-white",
+                                  isAssignedHere ? "bg-yellow-50/80" : "hover:bg-white",
                                 )}
                                 onClick={() => {
                                   setClusterStudentIds((prev) =>
@@ -2311,11 +2251,53 @@ export function AutoscuoleResourcesPage({
                           <div className="flex flex-col gap-0.5">
                             <span className="text-sm font-medium">Blocca non-esame durante priorit&agrave;</span>
                             <span className="text-xs text-muted-foreground">
-                              Quando un allievo ha priorit&agrave; esame, gli altri allievi (non-esame) nello stesso cluster o autoscuola non possono prenotare.
+                              Gli allievi senza esame non possono prenotare in un giorno della finestra di priorit&agrave; finch&eacute; tutti gli allievi con esame non hanno prenotato per quel giorno.
                             </span>
                           </div>
                           <InlineToggle checked={examPriorityBlockNonExam} size="sm" />
                         </div>
+
+                        {/* Manual pause control */}
+                        {examPriorityBlockNonExam ? (
+                          (() => {
+                            const isPaused = Boolean(examPriorityPausedUntil && new Date(examPriorityPausedUntil) > new Date());
+                            return (
+                              <div className="rounded-xl border border-border/60 bg-white/70 px-4 py-3 space-y-2">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-sm font-medium">Pausa blocco priorit&agrave;</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {isPaused
+                                        ? `Blocco in pausa fino al ${new Date(examPriorityPausedUntil!).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                                        : "Disattiva temporaneamente il blocco dei non-esame."}
+                                    </span>
+                                  </div>
+                                  {isPaused ? (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => setExamPriorityPausedUntil(null)}
+                                    >
+                                      Riattiva blocco
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        const until = new Date();
+                                        until.setHours(23, 59, 59, 999);
+                                        setExamPriorityPausedUntil(until.toISOString());
+                                      }}
+                                    >
+                                      Pausa fino a stasera
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()
+                        ) : null}
                       </>
                     ) : null}
                   </>

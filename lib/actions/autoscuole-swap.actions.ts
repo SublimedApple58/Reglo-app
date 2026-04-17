@@ -13,6 +13,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
+import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
 
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
@@ -309,6 +310,16 @@ export async function createSwapOffer(
         return !hasAppointmentConflict(booked, appointment.startsAt, appointment.endsAt);
       });
     }
+
+    if (!eligibleStudents.length) {
+      return { success: true, data: offer };
+    }
+
+    // Exclude students whose assigned instructor cluster is in manual_full mode
+    const manualFullFlags = await Promise.all(
+      eligibleStudents.map((s) => isStudentInManualFullCluster(membership.companyId, s.user.id)),
+    );
+    eligibleStudents = eligibleStudents.filter((_, i) => !manualFullFlags[i]);
 
     if (!eligibleStudents.length) {
       return { success: true, data: offer };

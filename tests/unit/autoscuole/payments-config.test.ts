@@ -80,11 +80,11 @@ describe("autoscuole policy parser helpers", () => {
   it("parses booking governance with fallbacks", () => {
     const parsed = parseBookingGovernanceFromLimits({
       appBookingActors: "both",
-      instructorBookingMode: "guided_proposal",
+      instructorBookingMode: "manual_engine",
     });
     expect(parsed).toEqual({
       appBookingActors: "both",
-      instructorBookingMode: "guided_proposal",
+      instructorBookingMode: "manual_engine",
     });
 
     const fallback = parseBookingGovernanceFromLimits({

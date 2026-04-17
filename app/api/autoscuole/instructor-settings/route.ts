@@ -51,11 +51,51 @@ export async function GET() {
           autonomousMode: false,
           settings: {},
           companyDefaults,
+          students: [],
+          assignedStudentIds: [],
         },
       });
     }
 
     const settings = parseInstructorSettings(instructor.settings);
+
+    // Load all students in the company + which are currently assigned to this instructor
+    const studentMembers = await prisma.companyMember.findMany({
+      where: {
+        companyId: membership.companyId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: {
+        userId: true,
+        assignedInstructorId: true,
+        user: { select: { name: true } },
+      },
+      orderBy: { user: { name: "asc" } },
+    });
+
+    const students = studentMembers.map((m) => {
+      const fullName = (m.user?.name ?? "").trim();
+      const [firstName, ...rest] = fullName.split(" ");
+      return {
+        id: m.userId,
+        firstName: firstName ?? "",
+        lastName: rest.join(" "),
+        assignedInstructorId: m.assignedInstructorId,
+      };
+    });
+    const assignedStudentIds = studentMembers
+      .filter((m) => m.assignedInstructorId === instructor.id)
+      .map((m) => m.userId);
+
+    // Load all autonomous instructors in company (for cluster labels in UI)
+    const autonomousInstructors = await prisma.autoscuolaInstructor.findMany({
+      where: {
+        companyId: membership.companyId,
+        autonomousMode: true,
+        status: { not: "inactive" },
+      },
+      select: { id: true, name: true },
+    });
 
     return NextResponse.json({
       success: true,
@@ -63,6 +103,10 @@ export async function GET() {
         autonomousMode: instructor.autonomousMode,
         settings,
         companyDefaults,
+        students,
+        assignedStudentIds,
+        instructorId: instructor.id,
+        autonomousInstructors,
       },
     });
   } catch (error) {
@@ -77,8 +121,7 @@ const patchSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
   appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
-  instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
-  studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
+  instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
   swapEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
   bookingCutoffEnabled: z.boolean().optional(),
@@ -92,6 +135,7 @@ const patchSchema = z.object({
   restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   weeklyAbsenceEnabled: z.boolean().optional(),
+  assignStudentIds: z.array(z.string().uuid()).optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -141,8 +185,9 @@ export async function PATCH(request: Request) {
     const current = parseInstructorSettings(instructor.settings);
     const next: InstructorSettings = { ...current };
 
-    // Apply all provided fields
-    for (const [key, value] of Object.entries(payload)) {
+    // Apply all provided fields (except assignStudentIds, handled separately)
+    const { assignStudentIds, ...settingsPayload } = payload;
+    for (const [key, value] of Object.entries(settingsPayload)) {
       if (value !== undefined) {
         (next as Record<string, unknown>)[key] = value;
       }
@@ -152,6 +197,33 @@ export async function PATCH(request: Request) {
       where: { id: instructor.id },
       data: { settings: next },
     });
+
+    // Handle student assignment changes
+    if (assignStudentIds !== undefined) {
+      await prisma.$transaction([
+        // Remove current assignments for this instructor
+        prisma.companyMember.updateMany({
+          where: {
+            companyId: membership.companyId,
+            assignedInstructorId: instructor.id,
+          },
+          data: { assignedInstructorId: null },
+        }),
+        // Assign provided students to this instructor
+        ...(assignStudentIds.length > 0
+          ? [
+              prisma.companyMember.updateMany({
+                where: {
+                  companyId: membership.companyId,
+                  userId: { in: assignStudentIds },
+                  autoscuolaRole: "STUDENT",
+                },
+                data: { assignedInstructorId: instructor.id },
+              }),
+            ]
+          : []),
+      ]);
+    }
 
     return NextResponse.json({ success: true, data: next });
   } catch (error) {

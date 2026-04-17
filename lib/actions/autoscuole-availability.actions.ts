@@ -512,8 +512,22 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  const governance = await getBookingGovernanceForCompany(companyId);
-  if (!isStudentAppBookingEnabled(governance)) {
+  // Resolve cluster-aware governance (instructor cluster override → company default)
+  const companyGovernance = await getBookingGovernanceForCompany(companyId);
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const companyDurations = normalizeBookingSlotDurations(
+    (service?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
+  );
+  const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+  const effective = await resolveEffectiveBookingSettings(companyId, studentId, {
+    bookingSlotDurations: companyDurations,
+    roundedHoursOnly: false,
+  });
+  const effectiveActors = effective.appBookingActors ?? companyGovernance.appBookingActors;
+  if (effectiveActors === "instructors") {
     return {
       allowed: false as const,
       message: "La prenotazione da app è abilitata solo per istruttori.",
@@ -1387,12 +1401,33 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     }
 
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
-    const [activeInstructors, activeVehicles, studentAvailabilityRaw, autoscuolaService] = await Promise.all([
+    // Resolve cluster settings FIRST so we can force instructor filter when student is locked to a cluster
+    const autoscuolaServicePre = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const companyDurations = normalizeBookingSlotDurations(
+      (autoscuolaServicePre?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
+    );
+    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const clusterBookingSettings = await resolveEffectiveBookingSettings(
+      membership.companyId,
+      payload.studentId,
+      {
+        bookingSlotDurations: companyDurations,
+        roundedHoursOnly: false,
+      },
+    );
+    // If student is locked to a cluster instructor, ALWAYS use that instructor
+    const effectiveInstructorId = clusterBookingSettings.isLockedToInstructor && clusterBookingSettings.assignedInstructorId
+      ? clusterBookingSettings.assignedInstructorId
+      : payload.instructorId;
+    const [activeInstructors, activeVehicles, studentAvailabilityRaw] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
           companyId: membership.companyId,
           status: { not: "inactive" },
-          ...(payload.instructorId ? { id: payload.instructorId } : {}),
+          ...(effectiveInstructorId ? { id: effectiveInstructorId } : {}),
         },
         select: { id: true },
       }),
@@ -1407,24 +1442,22 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           ownerId: payload.studentId,
         },
       }),
-      prisma.companyService.findFirst({
-        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-        select: { limits: true },
-      }),
     ]);
+    const autoscuolaService = autoscuolaServicePre;
     const studentAvailability = studentAvailabilityRaw ? defaultToAvailabilityRecord(studentAvailabilityRaw) : null;
     const lessonPolicy = parseLessonPolicyFromLimits(
       (autoscuolaService?.limits ?? {}) as Record<string, unknown>,
     );
-    const allowedDurations = normalizeBookingSlotDurations(
-      (autoscuolaService?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
-    );
+    const allowedDurations = clusterBookingSettings.bookingSlotDurations;
     if (!allowedDurations.some((duration) => duration === payload.durationMinutes)) {
       return {
         success: false,
         message: "Durata non disponibile per questa autoscuola.",
       };
     }
+
+    // Exam priority per-day block is checked AFTER candidate resolution,
+    // using the candidate's actual day (see checkExamPriorityDayBlock below).
     const enforceRequiredTypes =
       lessonPolicy.lessonPolicyEnabled &&
       lessonPolicy.lessonRequiredTypesEnabled &&
@@ -1818,6 +1851,52 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return best;
     };
 
+    // Exam priority day-block checker (reusable in both selectedStartsAt and engine paths)
+    const checkExamPriorityDayBlock = async (dayDate: Date): Promise<string | null> => {
+      const companyLimits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
+      const examEnabled = companyLimits.examPriorityEnabled === true;
+      const examBlockNonExam = companyLimits.examPriorityBlockNonExam === true;
+      const pausedUntilStr =
+        typeof companyLimits.examPriorityPausedUntil === "string" ? companyLimits.examPriorityPausedUntil : null;
+      const isPaused = Boolean(pausedUntilStr && new Date(pausedUntilStr) > now);
+      if (!examEnabled || !examBlockNonExam || isPaused) return null;
+
+      const examDaysBefore =
+        typeof companyLimits.examPriorityDaysBeforeExam === "number" && companyLimits.examPriorityDaysBeforeExam >= 1
+          ? companyLimits.examPriorityDaysBeforeExam
+          : 14;
+      const { getExamPriorityInfo, isDayBlockedByExamPriority } = await import("@/lib/autoscuole/exam-priority");
+      const selfInfo = await getExamPriorityInfo(membership.companyId, payload.studentId, examDaysBefore);
+      if (selfInfo.active) return null; // this student IS priority → never blocked
+
+      const studentMember = await prisma.companyMember.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: payload.studentId,
+          autoscuolaRole: "STUDENT",
+        },
+        select: { assignedInstructorId: true },
+      });
+      const scope = clusterBookingSettings.isLockedToInstructor
+        ? studentMember?.assignedInstructorId ?? null
+        : null;
+      const dayStart = new Date(dayDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(dayStart);
+      dayEnd.setDate(dayEnd.getDate() + 1);
+      const blocked = await isDayBlockedByExamPriority({
+        companyId: membership.companyId,
+        studentInstructorId: scope,
+        dayStart,
+        dayEnd,
+        daysBeforeExam: examDaysBefore,
+      });
+      if (!blocked) return null;
+      return scope
+        ? "Questo giorno è riservato agli allievi del tuo gruppo prossimi all'esame. Scegli un altro giorno."
+        : "Questo giorno è riservato agli allievi prossimi all'esame. Scegli un altro giorno.";
+    };
+
     if (payload.selectedStartsAt) {
       const selectedStart = new Date(payload.selectedStartsAt);
       if (Number.isNaN(selectedStart.getTime())) {
@@ -1853,6 +1932,12 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           };
         }
         return { success: false, message: "Slot non disponibile." };
+      }
+
+      // Exam priority per-day block check (selectedStartsAt path)
+      const blockMsg = await checkExamPriorityDayBlock(candidate.start);
+      if (blockMsg) {
+        return { success: false, message: blockMsg };
       }
 
       const appointmentId = randomUUID();
@@ -2036,13 +2121,16 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = bookingOptionsSchema.parse(input);
-    const bookingAccess = await ensureStudentCanBookFromApp({
-      companyId: membership.companyId,
-      membership,
-      studentId: payload.studentId,
-    });
-    if (!bookingAccess.allowed) {
-      return { success: false, message: bookingAccess.message };
+    // Auth guard only — do NOT gate on booking-allowed.
+    // getBookingOptions must always return cluster info (instructor, weekly absence, etc.)
+    // even when the student cannot book, so the UI can render the right state.
+    if (
+      membership.role !== "admin" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      membership.autoscuolaRole !== "INSTRUCTOR" &&
+      (membership.autoscuolaRole !== "STUDENT" || membership.userId !== payload.studentId)
+    ) {
+      return { success: false, message: "Accesso non consentito." };
     }
 
     const [student, service] = await Promise.all([
@@ -2103,33 +2191,62 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     const weeklyBookingLimit = typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
       ? limits.weeklyBookingLimit
       : 3;
+    // Exam priority settings (new model — gated by examPriorityEnabled master toggle)
     const examPriorityEnabled = limits.examPriorityEnabled === true;
-    const examPriorityLimit =
-      typeof limits.examPriorityLimit === "number" && limits.examPriorityLimit >= 1
-        ? limits.examPriorityLimit
-        : 5;
+    const examPriorityDaysBeforeExam =
+      typeof limits.examPriorityDaysBeforeExam === "number" && limits.examPriorityDaysBeforeExam >= 1
+        ? limits.examPriorityDaysBeforeExam
+        : 14;
+    const examPriorityBlockNonExam = limits.examPriorityBlockNonExam === true;
+    const pausedUntilStr =
+      typeof limits.examPriorityPausedUntil === "string" ? limits.examPriorityPausedUntil : null;
+    const examPriorityPaused = Boolean(pausedUntilStr && new Date(pausedUntilStr) > new Date());
+
+    // Compute exam priority info (drives banner + weekly limit bypass + blocking)
+    let examPriorityInfo: { active: boolean; examDate: string | null } = { active: false, examDate: null };
+    let blockedByExamPriority = false;
+    let studentHasExamPriority = false;
+
+    if (examPriorityEnabled) {
+      const { getExamPriorityInfo, getExamStudentsInScope } = await import("@/lib/autoscuole/exam-priority");
+      const studentExamInfo = await getExamPriorityInfo(
+        membership.companyId,
+        payload.studentId,
+        examPriorityDaysBeforeExam,
+      );
+      examPriorityInfo = { active: studentExamInfo.active, examDate: studentExamInfo.examDate };
+      studentHasExamPriority = studentExamInfo.active;
+
+      if (examPriorityBlockNonExam && !studentExamInfo.active && !examPriorityPaused) {
+        const studentMember = await prisma.companyMember.findFirst({
+          where: { companyId: membership.companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
+          select: { assignedInstructorId: true },
+        });
+        const scope = clusterSettings.isLockedToInstructor
+          ? studentMember?.assignedInstructorId ?? null
+          : null;
+        const examStudentsInScope = await getExamStudentsInScope({
+          companyId: membership.companyId,
+          studentInstructorId: scope,
+          daysBeforeExam: examPriorityDaysBeforeExam,
+        });
+        if (examStudentsInScope.length > 0) {
+          blockedByExamPriority = true;
+        }
+      }
+    }
 
     let weeklyLimitReached = false;
     let weeklyBookingCount = 0;
-    let examPriorityInfo: { active: boolean; examDate: string | null } | null = null;
-    let effectiveLimit = weeklyBookingLimit;
+    const effectiveLimit = weeklyBookingLimit;
 
     if (weeklyBookingLimitEnabled) {
       const memberRecord = await prisma.companyMember.findFirst({
         where: { companyId: membership.companyId, userId: payload.studentId },
         select: { weeklyBookingLimitExempt: true },
       });
-      if (!memberRecord?.weeklyBookingLimitExempt) {
-        // Check exam priority
-        if (examPriorityEnabled) {
-          const { getExamPriorityInfo } = await import("@/lib/autoscuole/exam-priority");
-          const info = await getExamPriorityInfo(membership.companyId, payload.studentId);
-          examPriorityInfo = { active: info.active, examDate: info.examDate };
-          if (info.active) {
-            effectiveLimit = examPriorityLimit;
-          }
-        }
-
+      // Bypass weekly limit: exempt members OR students with exam priority
+      if (!memberRecord?.weeklyBookingLimitExempt && !studentHasExamPriority) {
         // Count bookings for current week (Mon-Sun)
         const now = new Date();
         const dayOfWeek = now.getUTCDay();
@@ -2158,7 +2275,6 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         bookingSlotDurations: clusterSettings.bookingSlotDurations,
         lessonTypeSelectionEnabled,
         availableLessonTypes,
-        studentBookingMode: governance.studentBookingMode,
         instructorPreferenceEnabled,
         weeklyBookingLimit: weeklyBookingLimitEnabled ? {
           enabled: true,
@@ -2172,6 +2288,10 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         assignedInstructorPhone: clusterSettings.assignedInstructorPhone,
         isLockedToInstructor: clusterSettings.isLockedToInstructor,
         weeklyAbsenceEnabled: clusterSettings.weeklyAbsenceEnabled,
+        appBookingActors: clusterSettings.appBookingActors,
+        swapEnabled: clusterSettings.swapEnabled,
+        examPriority: examPriorityInfo,
+        blockedByExamPriority,
       },
     };
   } catch (error) {
@@ -2306,11 +2426,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       lessonPolicy.lessonRequiredTypesEnabled &&
       lessonPolicy.lessonRequiredTypes.length > 0;
 
-    const governance = await getBookingGovernanceForCompany(membership.companyId);
-    const filterByStudentAvailability = governance.studentBookingMode === "engine";
-
-    // Also need student availability when restricted time range is active (to check overlap)
-    const needStudentAvailability = filterByStudentAvailability || clusterSettings.restrictedTimeRangeEnabled;
+    // Need student availability when restricted time range is active (to check overlap)
+    const needStudentAvailability = clusterSettings.restrictedTimeRangeEnabled;
 
     const [
       activeInstructors,
@@ -2501,12 +2618,6 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
-        // In engine mode, filter by student's weekly availability
-        if (filterByStudentAvailability) {
-          if (!studentAvailability) continue; // no availability configured → no slots
-          if (!isOwnerAvailable(studentAvailability, dayOfWeek, minutes, minutes + payload.durationMinutes)) continue;
-        }
-
         // Restricted time range: if student has availability in the restricted range,
         // only show slots within that range
         if (restrictToTimeRange) {
@@ -2625,13 +2736,6 @@ export async function getDateAvailabilityMap(
       serviceLimits.bookingSlotDurations,
     )[0];
 
-    // Governance
-    const governance = await getBookingGovernanceForCompany(
-      membership.companyId,
-    );
-    const filterByStudentAvailability =
-      governance.studentBookingMode === "engine";
-
     // Resolve cluster-aware settings for restricted time range
     const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
     const clusterSettings = await resolveEffectiveBookingSettings(
@@ -2643,8 +2747,8 @@ export async function getDateAvailabilityMap(
       },
     );
 
-    // Also need student availability when restricted time range is active
-    const needStudentAvailability = filterByStudentAvailability || clusterSettings.restrictedTimeRangeEnabled;
+    // Need student availability when restricted time range is active
+    const needStudentAvailability = clusterSettings.restrictedTimeRangeEnabled;
 
     // If student is locked to an instructor (cluster), only consider that instructor
     const effectiveInstructorId = clusterSettings.isLockedToInstructor && clusterSettings.assignedInstructorId
@@ -2903,19 +3007,6 @@ export async function getDateAvailabilityMap(
           if (startMs < now.getTime()) continue;
           if (startDate < dateStart || endDate > dateEnd) continue;
           if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
-
-          if (filterByStudentAvailability) {
-            if (!studentAvailability) continue;
-            if (
-              !isOwnerAvail(
-                studentAvailability,
-                dayOfWeek,
-                minutes,
-                minutes + defaultDuration,
-              )
-            )
-              continue;
-          }
 
           // Restricted time range filter
           if (restrictToTimeRange) {
