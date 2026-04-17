@@ -982,6 +982,11 @@ export async function getInstructorAvailabilityForAgenda(input: {
         companyId,
         status: { not: "inactive" },
         userId: { not: null },
+        user: {
+          companyMembers: {
+            some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+          },
+        },
       },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
