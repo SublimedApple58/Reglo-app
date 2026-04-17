@@ -1852,7 +1852,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     };
 
     // Exam priority day-block checker (reusable in both selectedStartsAt and engine paths)
-    const checkExamPriorityDayBlock = async (dayDate: Date): Promise<string | null> => {
+    const checkExamPriorityDayBlock = async (dayDate: Date, slotStartsAt?: Date): Promise<string | null> => {
       const companyLimits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
       const examEnabled = companyLimits.examPriorityEnabled === true;
       const examBlockNonExam = companyLimits.examPriorityBlockNonExam === true;
@@ -1890,6 +1890,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         dayStart,
         dayEnd,
         daysBeforeExam: examDaysBefore,
+        slotStartsAt,
       });
       if (!blocked) return null;
       return scope
@@ -1935,7 +1936,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
 
       // Exam priority per-day block check (selectedStartsAt path)
-      const blockMsg = await checkExamPriorityDayBlock(candidate.start);
+      const blockMsg = await checkExamPriorityDayBlock(candidate.start, candidate.start);
       if (blockMsg) {
         return { success: false, message: blockMsg };
       }

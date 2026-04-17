@@ -2955,6 +2955,7 @@ export async function rescheduleAutoscuolaAppointment(
             dayStart,
             dayEnd,
             daysBeforeExam: examPriorityDaysBeforeExam,
+            slotStartsAt: newStart,
           });
           if (blocked) {
             return {
