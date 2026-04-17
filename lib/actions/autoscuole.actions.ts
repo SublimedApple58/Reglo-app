@@ -156,7 +156,7 @@ const instructorSettingsSchema = z.object({
   bookingSlotDurations: z.array(z.number().int().min(30).max(120)).optional(),
   roundedHoursOnly: z.boolean().optional(),
   appBookingActors: z.enum(["students", "instructors", "both"]).optional(),
-  instructorBookingMode: z.enum(["manual_full", "manual_engine"]).optional(),
+  instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
   studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
   swapEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
