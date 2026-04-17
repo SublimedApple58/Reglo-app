@@ -3,15 +3,12 @@ import { normalizeBookingSlotDurations } from "@/lib/autoscuole/lesson-policy";
 import type {
   AppBookingActors,
   InstructorBookingMode,
-  StudentBookingMode,
 } from "@/lib/autoscuole/booking-governance";
 import {
   APP_BOOKING_ACTOR_OPTIONS,
   INSTRUCTOR_BOOKING_MODE_OPTIONS,
-  STUDENT_BOOKING_MODE_OPTIONS,
   DEFAULT_APP_BOOKING_ACTORS,
   DEFAULT_INSTRUCTOR_BOOKING_MODE,
-  DEFAULT_STUDENT_BOOKING_MODE,
   parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 
@@ -21,7 +18,7 @@ export type InstructorSettings = {
   // Governance prenotazione
   appBookingActors?: AppBookingActors;
   instructorBookingMode?: InstructorBookingMode;
-  studentBookingMode?: StudentBookingMode;
+  studentBookingMode?: "engine" | "free_choice";
   // Scambio guide
   swapEnabled?: boolean;
   swapNotifyMode?: "all" | "available_only";
@@ -53,7 +50,6 @@ export type EffectiveBookingSettings = {
   // Governance prenotazione
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
-  studentBookingMode: StudentBookingMode;
   // Scambio guide
   swapEnabled: boolean;
   swapNotifyMode: "all" | "available_only";
@@ -108,10 +104,9 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   if (typeof obj.instructorBookingMode === "string" && (INSTRUCTOR_BOOKING_MODE_OPTIONS as readonly string[]).includes(obj.instructorBookingMode)) {
     result.instructorBookingMode = obj.instructorBookingMode as InstructorBookingMode;
   }
-  if (typeof obj.studentBookingMode === "string" && (STUDENT_BOOKING_MODE_OPTIONS as readonly string[]).includes(obj.studentBookingMode)) {
-    result.studentBookingMode = obj.studentBookingMode as StudentBookingMode;
+  if (typeof obj.studentBookingMode === "string" && (obj.studentBookingMode === "engine" || obj.studentBookingMode === "free_choice")) {
+    result.studentBookingMode = obj.studentBookingMode;
   }
-
   // Scambio guide
   if (typeof obj.swapEnabled === "boolean") result.swapEnabled = obj.swapEnabled;
   if (typeof obj.swapNotifyMode === "string" && SWAP_NOTIFY_MODES.has(obj.swapNotifyMode)) {
@@ -160,7 +155,6 @@ export type CompanyBookingDefaults = {
   roundedHoursOnly: boolean;
   appBookingActors: AppBookingActors;
   instructorBookingMode: InstructorBookingMode;
-  studentBookingMode: StudentBookingMode;
   swapEnabled: boolean;
   swapNotifyMode: "all" | "available_only";
   bookingCutoffEnabled: boolean;
@@ -183,7 +177,6 @@ export function buildCompanyBookingDefaults(limits: Record<string, unknown>): Co
     roundedHoursOnly: limits.roundedHoursOnly === true,
     appBookingActors: governance.appBookingActors,
     instructorBookingMode: governance.instructorBookingMode,
-    studentBookingMode: governance.studentBookingMode,
     swapEnabled: limits.swapEnabled === true,
     swapNotifyMode: limits.swapNotifyMode === "available_only" ? "available_only" : "all",
     bookingCutoffEnabled: limits.bookingCutoffEnabled === true,
@@ -212,7 +205,6 @@ export async function resolveEffectiveBookingSettings(
         ...companyDefaults,
         appBookingActors: DEFAULT_APP_BOOKING_ACTORS,
         instructorBookingMode: DEFAULT_INSTRUCTOR_BOOKING_MODE,
-        studentBookingMode: DEFAULT_STUDENT_BOOKING_MODE,
         swapEnabled: false,
         swapNotifyMode: "all" as const,
         bookingCutoffEnabled: false,
@@ -237,7 +229,6 @@ export async function resolveEffectiveBookingSettings(
     isLockedToInstructor: false,
     appBookingActors: defaults.appBookingActors,
     instructorBookingMode: defaults.instructorBookingMode,
-    studentBookingMode: defaults.studentBookingMode,
     swapEnabled: defaults.swapEnabled,
     swapNotifyMode: defaults.swapNotifyMode,
     bookingCutoffEnabled: defaults.bookingCutoffEnabled,
@@ -291,7 +282,6 @@ export async function resolveEffectiveBookingSettings(
   if (typeof settings.roundedHoursOnly === "boolean") base.roundedHoursOnly = settings.roundedHoursOnly;
   if (settings.appBookingActors !== undefined) base.appBookingActors = settings.appBookingActors;
   if (settings.instructorBookingMode !== undefined) base.instructorBookingMode = settings.instructorBookingMode;
-  if (settings.studentBookingMode !== undefined) base.studentBookingMode = settings.studentBookingMode;
   if (typeof settings.swapEnabled === "boolean") base.swapEnabled = settings.swapEnabled;
   if (settings.swapNotifyMode !== undefined) base.swapNotifyMode = settings.swapNotifyMode;
   if (typeof settings.bookingCutoffEnabled === "boolean") base.bookingCutoffEnabled = settings.bookingCutoffEnabled;
@@ -329,7 +319,6 @@ export async function resolveEffectiveSettingsForInstructor(
   if (typeof settings.roundedHoursOnly === "boolean") result.roundedHoursOnly = settings.roundedHoursOnly;
   if (settings.appBookingActors !== undefined) result.appBookingActors = settings.appBookingActors;
   if (settings.instructorBookingMode !== undefined) result.instructorBookingMode = settings.instructorBookingMode;
-  if (settings.studentBookingMode !== undefined) result.studentBookingMode = settings.studentBookingMode;
   if (typeof settings.swapEnabled === "boolean") result.swapEnabled = settings.swapEnabled;
   if (settings.swapNotifyMode !== undefined) result.swapNotifyMode = settings.swapNotifyMode;
   if (typeof settings.bookingCutoffEnabled === "boolean") result.bookingCutoffEnabled = settings.bookingCutoffEnabled;
@@ -360,4 +349,32 @@ export async function getAssignedStudentIds(
     select: { userId: true },
   });
   return members.map((m) => m.userId);
+}
+
+/**
+ * Returns true if the student's assigned instructor cluster has booking mode "manual_full".
+ * In this mode, no proactive "book a new lesson" messaging should reach the student
+ * (no reposition proposals, no empty slot notifications, no swap broadcasts, etc.).
+ */
+export async function isStudentInManualFullCluster(
+  companyId: string,
+  studentId: string,
+): Promise<boolean> {
+  const enabled = await isInstructorClustersEnabled(companyId);
+  if (!enabled) return false;
+
+  const member = await prisma.companyMember.findFirst({
+    where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
+    select: {
+      assignedInstructor: {
+        select: { settings: true, autonomousMode: true, status: true },
+      },
+    },
+  });
+  const instructor = member?.assignedInstructor;
+  if (!instructor || instructor.status === "inactive" || !instructor.autonomousMode) {
+    return false;
+  }
+  const settings = parseInstructorSettings(instructor.settings);
+  return settings.instructorBookingMode === "manual_full";
 }
