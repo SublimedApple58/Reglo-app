@@ -2154,12 +2154,14 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     const companyRoundedHoursOnly = limits.roundedHoursOnly === true;
     const governance = await getBookingGovernanceForCompany(membership.companyId);
 
-    // Resolve cluster-aware settings
-    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    // Resolve cluster-aware settings (pass full company defaults so appBookingActors
+    // and all other governance fields are correctly inherited when no cluster override exists)
+    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
+    const companyDefaults = buildCompanyBookingDefaults(limits);
     const clusterSettings = await resolveEffectiveBookingSettings(
       membership.companyId,
       payload.studentId,
-      { bookingSlotDurations: companyBookingSlotDurations, roundedHoursOnly: companyRoundedHoursOnly },
+      companyDefaults,
     );
 
     const lessonTypeSelectionEnabled = policy.lessonPolicyEnabled;
