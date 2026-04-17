@@ -513,20 +513,14 @@ const ensureStudentCanBookFromApp = async ({
   }
 
   // Resolve cluster-aware governance (instructor cluster override → company default)
-  const companyGovernance = await getBookingGovernanceForCompany(companyId);
   const service = await prisma.companyService.findFirst({
     where: { companyId, serviceKey: "AUTOSCUOLE" },
     select: { limits: true },
   });
-  const companyDurations = normalizeBookingSlotDurations(
-    (service?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
-  );
-  const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
-  const effective = await resolveEffectiveBookingSettings(companyId, studentId, {
-    bookingSlotDurations: companyDurations,
-    roundedHoursOnly: false,
-  });
-  const effectiveActors = effective.appBookingActors ?? companyGovernance.appBookingActors;
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
+  const effective = await resolveEffectiveBookingSettings(companyId, studentId, buildCompanyBookingDefaults(limits));
+  const effectiveActors = effective.appBookingActors;
   if (effectiveActors === "instructors") {
     return {
       allowed: false as const,
@@ -1406,17 +1400,12 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
       select: { limits: true },
     });
-    const companyDurations = normalizeBookingSlotDurations(
-      (autoscuolaServicePre?.limits as Record<string, unknown> | null)?.bookingSlotDurations,
-    );
-    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const preServiceLimits = (autoscuolaServicePre?.limits ?? {}) as Record<string, unknown>;
+    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
     const clusterBookingSettings = await resolveEffectiveBookingSettings(
       membership.companyId,
       payload.studentId,
-      {
-        bookingSlotDurations: companyDurations,
-        roundedHoursOnly: false,
-      },
+      buildCompanyBookingDefaults(preServiceLimits),
     );
     // If student is locked to a cluster instructor, ALWAYS use that instructor
     const effectiveInstructorId = clusterBookingSettings.isLockedToInstructor && clusterBookingSettings.assignedInstructorId
@@ -2371,14 +2360,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<string, unknown>;
 
     // Resolve cluster-aware settings for this student
-    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
     const clusterSettings = await resolveEffectiveBookingSettings(
       membership.companyId,
       payload.studentId,
-      {
-        bookingSlotDurations: normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations),
-        roundedHoursOnly: serviceLimits.roundedHoursOnly === true,
-      },
+      buildCompanyBookingDefaults(serviceLimits),
     );
     const roundedHoursOnly = clusterSettings.roundedHoursOnly;
 
@@ -2740,14 +2726,11 @@ export async function getDateAvailabilityMap(
     )[0];
 
     // Resolve cluster-aware settings for restricted time range
-    const { resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
     const clusterSettings = await resolveEffectiveBookingSettings(
       membership.companyId,
       payload.studentId,
-      {
-        bookingSlotDurations: normalizeBookingSlotDurations(serviceLimits.bookingSlotDurations),
-        roundedHoursOnly: serviceLimits.roundedHoursOnly === true,
-      },
+      buildCompanyBookingDefaults(serviceLimits),
     );
 
     // Need student availability when restricted time range is active
