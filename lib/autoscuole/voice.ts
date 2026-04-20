@@ -336,6 +336,34 @@ export function verifyTwilioRequestSignature({
   return false;
 }
 
+export function verifyTelnyxSignature(
+  request: Request,
+  body: string,
+): boolean {
+  if (process.env.TELNYX_DISABLE_SIGNATURE_CHECK === "1") {
+    return true;
+  }
+
+  const publicKey = process.env.TELNYX_PUBLIC_KEY;
+  if (!publicKey) return true;
+
+  const signature = request.headers.get("telnyx-signature-ed25519");
+  const timestamp = request.headers.get("telnyx-timestamp");
+  if (!signature || !timestamp) return false;
+
+  try {
+    const payload = `${timestamp}|${body}`;
+    return crypto.verify(
+      null,
+      Buffer.from(payload),
+      { key: Buffer.from(publicKey, "base64"), format: "der", type: "spki" },
+      Buffer.from(signature, "base64"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 const findCompanyStudentByPhone = async ({
   prisma,
   companyId,

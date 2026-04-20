@@ -626,7 +626,7 @@ wsServer.on("connection", (socket) => {
     if (event.event === "start") {
       state.streamSid = event.streamSid || event.start?.streamSid || null;
       state.twilioCallSid = event.start?.callSid || null;
-      const params = event.start?.customParameters || {};
+      const params = event.start?.customParameters || event.start?.parameters || {};
       state.companyId = typeof params.companyId === "string" ? params.companyId : null;
       state.companyName =
         typeof params.companyName === "string" ? normalizeCompanyName(params.companyName) : null;

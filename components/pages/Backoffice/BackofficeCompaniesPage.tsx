@@ -92,7 +92,7 @@ function AutoscuolaDrawerContent({
 
   // Voice line form (manual fallback)
   const [showManualForm, setShowManualForm] = useState(false);
-  const [assignRoutingMode, setAssignRoutingMode] = useState<"sip" | "twilio">("sip");
+  const [assignRoutingMode, setAssignRoutingMode] = useState<"sip" | "twilio" | "telnyx">("sip");
   const [assignDisplayNumber, setAssignDisplayNumber] = useState("");
   const [assignTwilioNumber, setAssignTwilioNumber] = useState("");
   const [assignTwilioSid, setAssignTwilioSid] = useState("");
@@ -162,7 +162,7 @@ function AutoscuolaDrawerContent({
         companyId,
         displayNumber: assignDisplayNumber.trim(),
         twilioNumber: assignTwilioNumber.trim(),
-        twilioPhoneSid: assignRoutingMode === "twilio" ? assignTwilioSid.trim() : undefined,
+        twilioPhoneSid: (assignRoutingMode === "twilio" || assignRoutingMode === "telnyx") ? assignTwilioSid.trim() : undefined,
         routingMode: assignRoutingMode,
       });
       if (!res.success || !res.data) {
@@ -339,7 +339,7 @@ function AutoscuolaDrawerContent({
                     Assegna linea manualmente
                   </p>
                   <div className="flex rounded-lg border border-border bg-white p-0.5 text-xs">
-                    {(["sip", "twilio"] as const).map((mode) => (
+                    {(["sip", "telnyx", "twilio"] as const).map((mode) => (
                       <button
                         key={mode}
                         type="button"
@@ -351,7 +351,7 @@ function AutoscuolaDrawerContent({
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        {mode === "sip" ? "SIP / Messagenet" : "Twilio diretto"}
+                        {mode === "sip" ? "SIP / Messagenet" : mode === "telnyx" ? "Telnyx" : "Twilio diretto"}
                       </button>
                     ))}
                   </div>
@@ -365,10 +365,10 @@ function AutoscuolaDrawerContent({
                     placeholder="Numero E.164 (es. +390212345678)"
                     onChange={(e) => setAssignTwilioNumber(e.target.value)}
                   />
-                  {assignRoutingMode === "twilio" && (
+                  {(assignRoutingMode === "twilio" || assignRoutingMode === "telnyx") && (
                     <Input
                       value={assignTwilioSid}
-                      placeholder="Twilio Phone SID (PNxxx...)"
+                      placeholder={assignRoutingMode === "telnyx" ? "Telnyx Phone ID" : "Twilio Phone SID (PNxxx...)"}
                       onChange={(e) => setAssignTwilioSid(e.target.value)}
                     />
                   )}
@@ -380,7 +380,7 @@ function AutoscuolaDrawerContent({
                       isAssigning ||
                       !assignDisplayNumber.trim() ||
                       !assignTwilioNumber.trim() ||
-                      (assignRoutingMode === "twilio" && !assignTwilioSid.trim())
+                      ((assignRoutingMode === "twilio" || assignRoutingMode === "telnyx") && !assignTwilioSid.trim())
                     }
                   >
                     {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}

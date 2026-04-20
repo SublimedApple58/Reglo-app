@@ -7,6 +7,7 @@ import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
 import { getTwilioClient, VOICE_WEBHOOK_BASE_URL } from "@/lib/twilio";
+import { telnyxFetch, TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
 import { setBackofficeCookie, clearBackofficeCookie } from "@/lib/backoffice-auth";
 
@@ -36,7 +37,7 @@ const assignAutoscuolaVoiceLineSchema = z.object({
   twilioNumber: z.string().trim().min(5),
   // For SIP mode (e.g. Messagenet) there is no Twilio SID — auto-generated as "sip:{number}"
   twilioPhoneSid: z.string().trim().min(1).optional(),
-  routingMode: z.enum(["twilio", "sip"]).default("twilio"),
+  routingMode: z.enum(["twilio", "sip", "telnyx"]).default("telnyx"),
 });
 
 const unassignAutoscuolaVoiceLineSchema = z.object({
@@ -259,10 +260,7 @@ export async function unassignAutoscuolaVoiceLine(
   }
 }
 
-// ─── Auto-provision: buy Twilio number + configure webhooks + assign ─────────
-
-const TWILIO_IT_TOLL_FREE_BUNDLE_SID = "BU50f69fd58b0c82b194b8536870491f8b";
-const TWILIO_IT_ADDRESS_SID = "ADe3e5816900a9a5e88290019bceccb70c";
+// ─── Auto-provision: buy Telnyx local number + assign ────────────────────────
 
 const provisionAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
@@ -285,36 +283,53 @@ export async function provisionAutoscuolaVoiceLine(
       return { success: false, message: "Questa autoscuola ha già una linea vocale attiva." };
     }
 
-    const client = getTwilioClient();
+    // 1. Search for available Italian local numbers on Telnyx
+    const searchRes = await telnyxFetch(
+      "/available_phone_numbers?filter[country_code]=IT&filter[phone_number_type]=local&filter[limit]=3",
+    );
+    if (!searchRes.ok) {
+      const err = await searchRes.text();
+      return { success: false, message: `Ricerca numeri Telnyx fallita: ${err}` };
+    }
+    const { data: candidates } = await searchRes.json();
 
-    // 1. Search for available Italian toll-free numbers
-    const itNumbers = client.availablePhoneNumbers("IT");
-    const candidates = await itNumbers.tollFree.list({ voiceEnabled: true, limit: 3 });
-
-    if (!candidates.length) {
-      return { success: false, message: "Nessun numero toll-free italiano disponibile su Twilio." };
+    if (!candidates?.length) {
+      return { success: false, message: "Nessun numero locale italiano disponibile su Telnyx." };
     }
 
-    // 3. Buy the first available number with the IT toll-free bundle
-    const voiceUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/incoming`;
-    const statusUrl = `${VOICE_WEBHOOK_BASE_URL}/api/voice/twilio/status`;
+    // 2. Buy the first available number
+    const telnyxAppId = process.env.TELNYX_TEXML_APP_ID;
+    const requirementGroupId = process.env.TELNYX_IT_REQUIREMENT_GROUP_ID;
 
-    let purchased: Awaited<ReturnType<typeof client.incomingPhoneNumbers.create>> | null = null;
+    let purchased: { phone_number: string; id: string } | null = null;
     let lastError = "";
 
     for (const candidate of candidates) {
       try {
-        purchased = await client.incomingPhoneNumbers.create({
-          phoneNumber: candidate.phoneNumber,
-          voiceUrl,
-          voiceMethod: "POST",
-          statusCallback: statusUrl,
-          statusCallbackMethod: "POST",
-          bundleSid: TWILIO_IT_TOLL_FREE_BUNDLE_SID,
-          addressSid: TWILIO_IT_ADDRESS_SID,
-          friendlyName: `Reglo Voice – ${companyId.slice(0, 8)}`,
+        const orderRes = await telnyxFetch("/number_orders", {
+          method: "POST",
+          body: JSON.stringify({
+            phone_numbers: [{ phone_number: candidate.phone_number }],
+            connection_id: telnyxAppId,
+            messaging_profile_id: null,
+            ...(requirementGroupId ? { requirement_group_id: requirementGroupId } : {}),
+          }),
         });
-        break;
+        if (!orderRes.ok) {
+          lastError = await orderRes.text();
+          continue;
+        }
+        const { data: order } = await orderRes.json();
+        // The order response contains the purchased phone numbers
+        const phoneNumbers = order?.phone_numbers ?? [];
+        if (phoneNumbers.length > 0) {
+          purchased = {
+            phone_number: phoneNumbers[0].phone_number,
+            id: phoneNumbers[0].id ?? order.id ?? "",
+          };
+          break;
+        }
+        lastError = "Order returned no phone numbers";
       } catch (e: unknown) {
         lastError = e instanceof Error ? e.message : String(e);
       }
@@ -323,25 +338,25 @@ export async function provisionAutoscuolaVoiceLine(
     if (!purchased) {
       return {
         success: false,
-        message: `Acquisto fallito. Numeri provati: ${candidates.length}. Errore: ${lastError}`,
+        message: `Acquisto Telnyx fallito. Numeri provati: ${candidates.length}. Errore: ${lastError}`,
       };
     }
 
-    // 5. Format display number: +39051234567 → +39 051 234567
-    const raw = purchased.phoneNumber; // E.164 e.g. +39051234567
+    // 3. Format display number: +390212345678 → +39 02 12345678
+    const raw = purchased.phone_number; // E.164 e.g. +390212345678
     const withoutPrefix = raw.replace(/^\+39/, "");
     const displayNumber =
       withoutPrefix.length >= 6
         ? `+39 ${withoutPrefix.slice(0, 3)} ${withoutPrefix.slice(3)}`
         : raw;
 
-    // 6. Assign line using existing logic
+    // 4. Assign line using existing logic
     const result = await assignAutoscuolaVoiceLine({
       companyId,
       displayNumber,
-      twilioNumber: purchased.phoneNumber,
-      twilioPhoneSid: purchased.sid,
-      routingMode: "twilio",
+      twilioNumber: purchased.phone_number,
+      twilioPhoneSid: purchased.id,
+      routingMode: "telnyx",
     });
 
     if (!result.success) {
@@ -352,9 +367,9 @@ export async function provisionAutoscuolaVoiceLine(
       success: true,
       data: {
         lineId: result.data!.lineId,
-        phoneNumber: purchased.phoneNumber,
+        phoneNumber: purchased.phone_number,
         displayNumber,
-        phoneSid: purchased.sid,
+        phoneSid: purchased.id,
       },
     };
   } catch (error) {
