@@ -2388,6 +2388,321 @@ export async function createAutoscuolaAppointment(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Batch appointment creation (multi-booking from instructor app)
+// ---------------------------------------------------------------------------
+
+const createAppointmentBatchSchema = z.object({
+  studentId: z.string().uuid(),
+  instructorId: z.string().uuid(),
+  vehicleId: z.string().uuid(),
+  type: z.string().optional(),
+  types: z.array(z.string()).optional(),
+  skipWeeklyLimitCheck: z.boolean().optional(),
+  entries: z
+    .array(
+      z.object({
+        startsAt: z.string().min(1),
+        endsAt: z.string().min(1),
+      }),
+    )
+    .min(1)
+    .max(20),
+});
+
+export async function createAutoscuolaAppointmentBatch(
+  input: z.infer<typeof createAppointmentBatchSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = createAppointmentBatchSchema.parse(input);
+
+    const isInstructorActor =
+      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+    const isOwnerOrAdminActor =
+      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+
+    // Only instructors and admins/owners can batch-book
+    if (!isInstructorActor && !isOwnerOrAdminActor) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    let resolvedInstructorId = payload.instructorId;
+    if (isInstructorActor) {
+      const governance = await getBookingGovernanceForCompany(companyId);
+      if (!isInstructorAppBookingEnabled(governance)) {
+        return {
+          success: false,
+          message: "La prenotazione da app è abilitata solo per allievi.",
+        };
+      }
+      const ownInstructor = await getOwnInstructorProfile(companyId, membership.userId);
+      if (!ownInstructor) {
+        return { success: false, message: "Profilo istruttore non trovato per questo account." };
+      }
+      resolvedInstructorId = ownInstructor.id;
+    }
+
+    const requestedType = normalizeLessonType(payload.type);
+    const requestedTypes = payload.types?.map(normalizeLessonType).filter(Boolean) ?? [];
+    const resolvedType = requestedType || requestedTypes[0] || "guida";
+    const resolvedTypes = requestedTypes.length ? requestedTypes : [resolvedType];
+
+    // ── Shared validation (1 time) ──
+    const [student, instructor, vehicle, lessonPolicy] = await Promise.all([
+      prisma.companyMember.findFirst({
+        where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
+        include: { user: { select: { id: true, name: true, email: true, phone: true } } },
+      }),
+      prisma.autoscuolaInstructor.findFirst({
+        where: { id: resolvedInstructorId, companyId },
+      }),
+      prisma.autoscuolaVehicle.findFirst({
+        where: { id: payload.vehicleId, companyId },
+      }),
+      getLessonPolicyForCompany(companyId),
+    ]);
+
+    if (!student || !instructor || !vehicle) {
+      return { success: false, message: "Seleziona allievo, istruttore e veicolo validi." };
+    }
+
+    // Booking block enforcement
+    const studentBlocked = await getStudentBookingBlockStatus(companyId, payload.studentId);
+    if (studentBlocked && isInstructorActor) {
+      return {
+        success: false,
+        message: "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+      };
+    }
+
+    // Lesson type validation
+    if (lessonPolicy.lessonPolicyEnabled && !requestedType && !requestedTypes.length) {
+      return { success: false, message: "Con policy attiva devi selezionare il tipo guida." };
+    }
+    if (requestedType && !isLessonAllowedType(requestedType)) {
+      return { success: false, message: "Tipo guida non valido." };
+    }
+    if (requestedTypes.length && !requestedTypes.every(isLessonAllowedType)) {
+      return { success: false, message: "Uno o più tipi guida non validi." };
+    }
+
+    // ── Parse & validate each entry ──
+    const parsedEntries: Array<{ startsAt: Date; endsAt: Date }> = [];
+    for (const entry of payload.entries) {
+      const start = new Date(entry.startsAt);
+      const end = new Date(entry.endsAt);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+        return { success: false, message: "Uno o più intervalli orari non validi." };
+      }
+      if (start.getTime() < Date.now()) {
+        return { success: false, message: "Non puoi prenotare una guida nel passato." };
+      }
+      parsedEntries.push({ startsAt: start, endsAt: end });
+    }
+
+    // ── Weekly limit check (aggregated across all entries) ──
+    if (!payload.skipWeeklyLimitCheck) {
+      const svc = await prisma.companyService.findFirst({
+        where: { companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      });
+      const lim = (svc?.limits ?? {}) as Record<string, unknown>;
+      const limitEnabled = lim.weeklyBookingLimitEnabled === true;
+      const weeklyLimit =
+        typeof lim.weeklyBookingLimit === "number" && lim.weeklyBookingLimit >= 1
+          ? lim.weeklyBookingLimit
+          : 3;
+      const examPriorityEnabled = lim.examPriorityEnabled === true;
+      const examPriorityDaysBeforeExam =
+        typeof lim.examPriorityDaysBeforeExam === "number" && lim.examPriorityDaysBeforeExam >= 1
+          ? lim.examPriorityDaysBeforeExam
+          : 14;
+
+      if (limitEnabled) {
+        const memberRecord = await prisma.companyMember.findFirst({
+          where: { companyId, userId: payload.studentId },
+          select: { weeklyBookingLimitExempt: true },
+        });
+        const isExempt = memberRecord?.weeklyBookingLimitExempt === true;
+
+        if (!isExempt) {
+          let bypassLimit = false;
+          if (examPriorityEnabled) {
+            const { hasExamPriority } = await import("@/lib/autoscuole/exam-priority");
+            bypassLimit = await hasExamPriority(companyId, payload.studentId, examPriorityDaysBeforeExam);
+          }
+
+          if (!bypassLimit) {
+            // Group entries by ISO week and check each
+            const weekBuckets = new Map<string, number>();
+            for (const entry of parsedEntries) {
+              const dayOfWeek = entry.startsAt.getUTCDay();
+              const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+              const weekStart = new Date(entry.startsAt);
+              weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+              weekStart.setUTCHours(0, 0, 0, 0);
+              const key = weekStart.toISOString();
+              weekBuckets.set(key, (weekBuckets.get(key) ?? 0) + 1);
+            }
+
+            for (const [weekStartIso, newCount] of weekBuckets) {
+              const weekStart = new Date(weekStartIso);
+              const weekEnd = new Date(weekStart);
+              weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+              const existingCount = await prisma.autoscuolaAppointment.count({
+                where: {
+                  companyId,
+                  studentId: payload.studentId,
+                  status: { notIn: ["cancelled"] },
+                  startsAt: { gte: weekStart, lt: weekEnd },
+                },
+              });
+
+              if (existingCount + newCount > weeklyLimit) {
+                if (isInstructorActor) {
+                  return {
+                    success: false,
+                    message: `L'allievo ha già ${existingCount} guide nella settimana del ${weekStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}. Con queste ${newCount} nuove si supera il limite di ${weeklyLimit}. Vuoi procedere comunque?`,
+                    code: "WEEKLY_LIMIT_CONFIRM" as const,
+                    weeklyLimitData: { current: existingCount, limit: weeklyLimit },
+                  };
+                }
+                if (isOwnerOrAdminActor) {
+                  return {
+                    success: false,
+                    message: `L'allievo supererebbe il limite di ${weeklyLimit} guide settimanali. Vuoi procedere comunque?`,
+                    code: "WEEKLY_LIMIT_CONFIRM" as const,
+                    weeklyLimitData: { current: existingCount, limit: weeklyLimit },
+                  };
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // ── Conflict detection (single query for all entries) ──
+    const allStarts = parsedEntries.map((e) => e.startsAt.getTime());
+    const allEnds = parsedEntries.map((e) => e.endsAt.getTime());
+    const scanStart = new Date(Math.min(...allStarts));
+    scanStart.setDate(scanStart.getDate() - 1);
+    const scanEnd = new Date(Math.max(...allEnds));
+    scanEnd.setDate(scanEnd.getDate() + 1);
+
+    const existingAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        startsAt: { gte: scanStart, lt: scanEnd },
+        status: { notIn: ["cancelled"] },
+        OR: [
+          { instructorId: resolvedInstructorId },
+          { vehicleId: payload.vehicleId },
+        ],
+      },
+    });
+
+    for (let i = 0; i < parsedEntries.length; i++) {
+      const entry = parsedEntries[i];
+      const hasConflict = existingAppointments.some((appt) => {
+        const start = appt.startsAt;
+        const end = appt.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
+        return start < entry.endsAt && end > entry.startsAt;
+      });
+      if (hasConflict) {
+        const dateStr = entry.startsAt.toLocaleDateString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return {
+          success: false,
+          message: `Conflitto per lo slot del ${dateStr}: istruttore o veicolo non disponibile.`,
+        };
+      }
+
+      // Also check inter-entry conflicts (within the batch itself)
+      for (let j = i + 1; j < parsedEntries.length; j++) {
+        const other = parsedEntries[j];
+        if (entry.startsAt < other.endsAt && entry.endsAt > other.startsAt) {
+          return {
+            success: false,
+            message: "Due o più guide nella prenotazione si sovrappongono.",
+          };
+        }
+      }
+    }
+
+    // ── Atomic creation via transaction ──
+    const entryIds = parsedEntries.map(() => randomUUID());
+
+    const appointments = await prisma.$transaction(async (tx) => {
+      // Prepare payment snapshot once (same student/vehicle/instructor)
+      const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
+        prisma: tx as never,
+        companyId,
+        studentId: payload.studentId,
+        startsAt: parsedEntries[0].startsAt,
+        endsAt: parsedEntries[0].endsAt,
+        appointmentId: entryIds[0],
+        actorUserId: membership.userId,
+      });
+
+      const results = [];
+      for (let i = 0; i < parsedEntries.length; i++) {
+        const entry = parsedEntries[i];
+        const appt = await tx.autoscuolaAppointment.create({
+          data: {
+            id: entryIds[i],
+            companyId,
+            studentId: payload.studentId,
+            type: resolvedTypes[0],
+            types: resolvedTypes,
+            startsAt: entry.startsAt,
+            endsAt: entry.endsAt,
+            status: "scheduled",
+            instructorId: resolvedInstructorId,
+            vehicleId: payload.vehicleId,
+            notes: null,
+            paymentRequired: paymentSnapshot.paymentRequired,
+            paymentStatus: paymentSnapshot.paymentStatus,
+            priceAmount: paymentSnapshot.priceAmount,
+            penaltyAmount: paymentSnapshot.penaltyAmount,
+            penaltyCutoffAt: paymentSnapshot.penaltyCutoffAt,
+            paidAmount: paymentSnapshot.paidAmount,
+            invoiceStatus: paymentSnapshot.invoiceStatus,
+            creditApplied: paymentSnapshot.creditApplied,
+            manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
+          },
+        });
+        results.push(appt);
+      }
+      return results;
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+
+    const serialized = appointments.map((appt) => ({
+      ...appt,
+      priceAmount: Number(appt.priceAmount),
+      penaltyAmount: Number(appt.penaltyAmount),
+      paidAmount: Number(appt.paidAmount),
+    }));
+
+    return {
+      success: true,
+      message: `${appointments.length} guide create.`,
+      data: { created: appointments.length, appointments: serialized },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function cancelAutoscuolaAppointment(
   input: z.infer<typeof cancelAppointmentSchema>,
 ) {
@@ -3547,6 +3862,25 @@ export async function updateAutoscuolaAppointmentStatus(
         cancellationKind: "manual_cancel",
         actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
       });
+    }
+
+    // Reverse credits when reverting auto-checked-in appointment to no_show
+    if (
+      nextStatus === "no_show" &&
+      (currentStatus === "checked_in" || currentStatus === "completed")
+    ) {
+      try {
+        await refundLessonCreditIfEligible({
+          appointmentId: updated.id,
+          cancelledByAutoscuola: true,
+          actorUserId: membership.userId,
+        });
+      } catch (error) {
+        console.error(
+          "Autoscuola credit refund on no_show reversal error",
+          error,
+        );
+      }
     }
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
