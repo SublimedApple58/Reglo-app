@@ -543,6 +543,50 @@ export const processAutoscuolaAutoCompleteCheckedIn = async ({
   return { completedCount: result.count };
 };
 
+export async function processAutoscuolaAutoCheckin({ prisma = defaultPrisma }: { prisma?: PrismaClientLike }) {
+  // Find all companies with autoCheckinEnabled
+  const services = await prisma.companyService.findMany({
+    where: {
+      serviceKey: "AUTOSCUOLE",
+      status: "ACTIVE",
+    },
+    select: { companyId: true, limits: true },
+  });
+
+  const now = new Date();
+  let totalUpdated = 0;
+
+  for (const svc of services) {
+    const limits = (svc.limits ?? {}) as Record<string, unknown>;
+    if (limits.autoCheckinEnabled !== true) continue;
+
+    // Find scheduled/confirmed appointments where startsAt <= now
+    const eligible = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: svc.companyId,
+        status: { in: ["scheduled", "confirmed"] },
+        startsAt: { lte: now },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+
+    if (!eligible.length) continue;
+
+    for (const appt of eligible) {
+      const endTime = appt.endsAt ?? new Date(appt.startsAt.getTime() + 60 * 60 * 1000);
+      const nextStatus = now >= endTime ? "completed" : "checked_in";
+
+      await prisma.autoscuolaAppointment.update({
+        where: { id: appt.id },
+        data: { status: nextStatus },
+      });
+      totalUpdated++;
+    }
+  }
+
+  return { updated: totalUpdated };
+}
+
 export const processAutoscuolaAutoPendingReview = async ({
   prisma = defaultPrisma,
   now = new Date(),

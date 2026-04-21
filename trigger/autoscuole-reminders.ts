@@ -1,6 +1,7 @@
 import { schedules } from "@trigger.dev/sdk/v3";
 import { getPrisma } from "@/trigger/prisma";
 import {
+  processAutoscuolaAutoCheckin,
   processAutoscuolaAutoCompleteCheckedIn,
   processAutoscuolaAutoPendingReview,
   processAutoscuolaConfiguredAppointmentReminders,
@@ -32,6 +33,7 @@ export const autoscuoleReminders = schedules.task({
       }
     };
     await safe("autoComplete", () => processAutoscuolaAutoCompleteCheckedIn({ prisma }));
+    await safe("autoCheckin", () => processAutoscuolaAutoCheckin({ prisma }));
     await safe("autoPendingReview", () => processAutoscuolaAutoPendingReview({ prisma }));
     await safe("penaltyCharges", () => processAutoscuolaPenaltyCharges({ prisma }));
     await safe("lessonSettlement", () => processAutoscuolaLessonSettlement({ prisma }));

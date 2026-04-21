@@ -2,7 +2,7 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, FileText, Loader2, Send, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, FileText, Loader2, Send, Settings2, UserCheck, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
@@ -251,6 +251,7 @@ export function AutoscuoleResourcesPage({
   const [triggeringNotification, setTriggeringNotification] = React.useState(false);
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
+  const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -485,6 +486,7 @@ export function AutoscuoleResourcesPage({
       setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
+      setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
 
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -631,6 +633,7 @@ export function AutoscuoleResourcesPage({
       emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
       instructorPreferenceEnabled,
       studentNotesEnabled,
+      autoCheckinEnabled,
       appBookingActors,
       instructorBookingMode,
     });
@@ -680,6 +683,7 @@ export function AutoscuoleResourcesPage({
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
+    setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -2384,6 +2388,30 @@ export function AutoscuoleResourcesPage({
                     </Select>
                   </FieldGroup>
                 ) : null}
+              </div>
+            </AccordionSection>
+            <AccordionSection
+              icon={UserCheck}
+              title="Presenza automatica"
+              description="Check-in automatico delle guide all'orario di inizio. L'istruttore può segnare solo l'assenza."
+              expanded={expandedSection === "autoCheckin"}
+              onToggle={() => toggleSection("autoCheckin")}
+            >
+              <div className="space-y-3">
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setAutoCheckinEnabled((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">Presenza automatica</span>
+                    <span className="text-xs text-muted-foreground">
+                      {autoCheckinEnabled
+                        ? "Attivo — le guide si segnano come presenti in automatico"
+                        : "Disattivo — l'istruttore deve cliccare \"Presente\""}
+                    </span>
+                  </div>
+                  <InlineToggle checked={autoCheckinEnabled} size="sm" />
+                </div>
               </div>
             </AccordionSection>
             <AccordionSection
