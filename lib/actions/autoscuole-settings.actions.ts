@@ -84,6 +84,7 @@ const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
   "not_started",
   "provisioning",
+  "pending_approval",
   "ready",
   "error",
 ] as const;

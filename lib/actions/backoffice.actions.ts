@@ -260,7 +260,7 @@ export async function unassignAutoscuolaVoiceLine(
   }
 }
 
-// ─── Auto-provision: buy Telnyx local number + assign ────────────────────────
+// ─── Auto-provision: buy Telnyx local number (pending regulatory approval) ───
 
 const provisionAutoscuolaVoiceLineSchema = z.object({
   companyId: z.string().uuid(),
@@ -273,7 +273,7 @@ export async function provisionAutoscuolaVoiceLine(
     await requireGlobalAdmin();
     const { companyId } = provisionAutoscuolaVoiceLineSchema.parse(input);
 
-    // Check the company doesn't already have a ready voice line
+    // Check the company doesn't already have a ready or pending voice line
     const existingService = await prisma.companyService.findFirst({
       where: { companyId, serviceKey: "AUTOSCUOLE" },
       select: { limits: true },
@@ -281,6 +281,9 @@ export async function provisionAutoscuolaVoiceLine(
     const currentLimits = (existingService?.limits ?? {}) as Record<string, unknown>;
     if (currentLimits.voiceProvisioningStatus === "ready") {
       return { success: false, message: "Questa autoscuola ha già una linea vocale attiva." };
+    }
+    if (currentLimits.voiceProvisioningStatus === "pending_approval") {
+      return { success: false, message: "C'è già un numero in attesa di approvazione per questa autoscuola." };
     }
 
     // 1. Search for available Italian local numbers on Telnyx
@@ -301,7 +304,7 @@ export async function provisionAutoscuolaVoiceLine(
     const telnyxAppId = process.env.TELNYX_TEXML_APP_ID;
     const requirementGroupId = process.env.TELNYX_IT_REQUIREMENT_GROUP_ID;
 
-    let purchased: { phone_number: string; id: string } | null = null;
+    let purchased: { phone_number: string; id: string; orderId: string } | null = null;
     let lastError = "";
 
     for (const candidate of candidates) {
@@ -320,12 +323,12 @@ export async function provisionAutoscuolaVoiceLine(
           continue;
         }
         const { data: order } = await orderRes.json();
-        // The order response contains the purchased phone numbers
         const phoneNumbers = order?.phone_numbers ?? [];
         if (phoneNumbers.length > 0) {
           purchased = {
             phone_number: phoneNumbers[0].phone_number,
             id: phoneNumbers[0].id ?? order.id ?? "",
+            orderId: order.id ?? "",
           };
           break;
         }
@@ -343,19 +346,100 @@ export async function provisionAutoscuolaVoiceLine(
     }
 
     // 3. Format display number: +390212345678 → +39 02 12345678
-    const raw = purchased.phone_number; // E.164 e.g. +390212345678
+    const raw = purchased.phone_number;
     const withoutPrefix = raw.replace(/^\+39/, "");
     const displayNumber =
       withoutPrefix.length >= 6
         ? `+39 ${withoutPrefix.slice(0, 3)} ${withoutPrefix.slice(3)}`
         : raw;
 
-    // 4. Assign line using existing logic
+    // 4. Save as pending_approval — Italian numbers require regulatory approval on Telnyx
+    await prisma.companyService.updateMany({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      data: {
+        limits: {
+          ...currentLimits,
+          voiceProvisioningStatus: "pending_approval",
+          voiceDisplayNumber: displayNumber,
+          voicePendingOrderId: purchased.orderId,
+          voicePendingPhoneNumber: purchased.phone_number,
+          voicePendingPhoneSid: purchased.id,
+        } as Prisma.JsonObject,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        phoneNumber: purchased.phone_number,
+        displayNumber,
+        status: "pending_approval" as const,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ─── Check Telnyx number approval status + finalize if ready ─────────────────
+
+const checkVoiceLineStatusSchema = z.object({
+  companyId: z.string().uuid(),
+});
+
+export async function checkVoiceLineStatus(
+  input: z.infer<typeof checkVoiceLineStatusSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const { companyId } = checkVoiceLineStatusSchema.parse(input);
+
+    const existingService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const currentLimits = (existingService?.limits ?? {}) as Record<string, unknown>;
+
+    if (currentLimits.voiceProvisioningStatus !== "pending_approval") {
+      return { success: false, message: "Nessun numero in attesa di approvazione." };
+    }
+
+    const phoneSid = currentLimits.voicePendingPhoneSid as string | undefined;
+    const phoneNumber = currentLimits.voicePendingPhoneNumber as string | undefined;
+
+    if (!phoneSid || !phoneNumber) {
+      return { success: false, message: "Dati del numero pendente mancanti. Usa l'assegnazione manuale." };
+    }
+
+    // Check number status on Telnyx
+    const res = await telnyxFetch(`/phone_numbers/${phoneSid}`);
+    if (!res.ok) {
+      const err = await res.text();
+      return { success: false, message: `Errore Telnyx: ${err}` };
+    }
+    const { data: numberData } = await res.json();
+    const telnyxStatus = numberData?.status as string | undefined;
+
+    // Telnyx number statuses: "active", "pending", "deleted", etc.
+    if (telnyxStatus !== "active") {
+      return {
+        success: true,
+        data: {
+          status: "still_pending" as const,
+          telnyxStatus: telnyxStatus ?? "unknown",
+          phoneNumber,
+          displayNumber: currentLimits.voiceDisplayNumber as string,
+        },
+      };
+    }
+
+    // Number is active — finalize: create voice line + update limits
+    const displayNumber = (currentLimits.voiceDisplayNumber as string) ?? phoneNumber;
     const result = await assignAutoscuolaVoiceLine({
       companyId,
       displayNumber,
-      twilioNumber: purchased.phone_number,
-      twilioPhoneSid: purchased.id,
+      twilioNumber: phoneNumber,
+      twilioPhoneSid: phoneSid,
       routingMode: "telnyx",
     });
 
@@ -363,13 +447,27 @@ export async function provisionAutoscuolaVoiceLine(
       return result;
     }
 
+    // Clean up pending fields
+    const freshService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const freshLimits = (freshService?.limits ?? {}) as Record<string, unknown>;
+    delete freshLimits.voicePendingOrderId;
+    delete freshLimits.voicePendingPhoneNumber;
+    delete freshLimits.voicePendingPhoneSid;
+    await prisma.companyService.updateMany({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      data: { limits: freshLimits as Prisma.JsonObject },
+    });
+
     return {
       success: true,
       data: {
+        status: "activated" as const,
         lineId: result.data!.lineId,
-        phoneNumber: purchased.phone_number,
+        phoneNumber,
         displayNumber,
-        phoneSid: purchased.id,
       },
     };
   } catch (error) {

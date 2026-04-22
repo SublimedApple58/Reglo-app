@@ -26,9 +26,12 @@ export type ServiceLimits = {
   examPriorityDaysBeforeExam?: number;
   examPriorityBlockNonExam?: boolean;
   voiceFeatureEnabled?: boolean;
-  voiceProvisioningStatus?: "not_started" | "provisioning" | "ready" | "error";
+  voiceProvisioningStatus?: "not_started" | "provisioning" | "pending_approval" | "ready" | "error";
   voiceLineRef?: string | null;
   voiceDisplayNumber?: string | null;
+  voicePendingOrderId?: string | null;
+  voicePendingPhoneNumber?: string | null;
+  voicePendingPhoneSid?: string | null;
   voiceAssistantEnabled?: boolean;
   voiceBookingEnabled?: boolean;
   voiceLanguage?: "it-IT";

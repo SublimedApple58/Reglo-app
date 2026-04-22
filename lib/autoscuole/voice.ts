@@ -10,7 +10,7 @@ export type VoiceAllowedAction = (typeof VOICE_ALLOWED_ACTIONS)[number];
 
 export type AutoscuolaVoiceSettings = {
   voiceFeatureEnabled: boolean;
-  voiceProvisioningStatus: "not_started" | "provisioning" | "ready" | "error";
+  voiceProvisioningStatus: "not_started" | "provisioning" | "pending_approval" | "ready" | "error";
   voiceLineRef: string | null;
   voiceAssistantEnabled: boolean;
   voiceBookingEnabled: boolean;

@@ -48,6 +48,7 @@ import {
   getCompanyStudentPlatforms,
   getVoiceLineDisplayNumber,
   provisionAutoscuolaVoiceLine,
+  checkVoiceLineStatus,
   unassignAutoscuolaVoiceLine,
   updateCompanyService,
 } from "@/lib/actions/backoffice.actions";
@@ -88,8 +89,6 @@ function AutoscuolaDrawerContent({
     ...DEFAULT_SERVICE_LIMITS.AUTOSCUOLE,
     ...(service?.limits ?? {}),
   });
-  const [provisionedNumber, setProvisionedNumber] = useState<string | null>(null);
-
   // Voice line form (manual fallback)
   const [showManualForm, setShowManualForm] = useState(false);
   const [assignRoutingMode, setAssignRoutingMode] = useState<"sip" | "twilio" | "telnyx">("sip");
@@ -137,6 +136,8 @@ function AutoscuolaDrawerContent({
     }
   }, [voiceDisplayNumber, voiceLineRef]);
 
+  const [isCheckingStatus, startCheckingStatus] = useTransition();
+
   const handleProvision = () => {
     startProvisioning(async () => {
       const res = await provisionAutoscuolaVoiceLine({ companyId });
@@ -144,15 +145,40 @@ function AutoscuolaDrawerContent({
         toast.error({ description: ("message" in res ? res.message : null) ?? "Provisioning fallito." });
         return;
       }
-      const data = res.data as { lineId: string; phoneNumber: string; displayNumber: string; phoneSid: string };
-      toast.success({ description: `Segretaria attivata! Numero: ${data.displayNumber}` });
-      setProvisionedNumber(data.displayNumber);
+      const data = res.data as { phoneNumber: string; displayNumber: string; status: "pending_approval" };
+      toast.success({ description: `Numero ${data.displayNumber} ordinato — in attesa di approvazione Telnyx.` });
+      setVoiceDisplayNumber(data.displayNumber);
       setLimits((prev) => ({
         ...prev,
-        voiceFeatureEnabled: true,
-        voiceProvisioningStatus: "ready" as ServiceLimits["voiceProvisioningStatus"],
-        voiceLineRef: data.lineId,
+        voiceProvisioningStatus: "pending_approval" as ServiceLimits["voiceProvisioningStatus"],
+        voiceDisplayNumber: data.displayNumber,
       }));
+    });
+  };
+
+  const handleCheckStatus = () => {
+    startCheckingStatus(async () => {
+      const res = await checkVoiceLineStatus({ companyId });
+      if (!res.success) {
+        toast.error({ description: ("message" in res ? res.message : null) ?? "Verifica fallita." });
+        return;
+      }
+      const data = res.data as
+        | { status: "still_pending"; telnyxStatus: string; phoneNumber: string; displayNumber: string }
+        | { status: "activated"; lineId: string; phoneNumber: string; displayNumber: string };
+      if (data.status === "still_pending") {
+        toast.error({ description: `Numero ancora in attesa. Stato Telnyx: ${data.telnyxStatus}` });
+      } else {
+        toast.success({ description: `Numero ${data.displayNumber} attivato!` });
+        setVoiceDisplayNumber(data.displayNumber);
+        setLimits((prev) => ({
+          ...prev,
+          voiceFeatureEnabled: true,
+          voiceProvisioningStatus: "ready" as ServiceLimits["voiceProvisioningStatus"],
+          voiceLineRef: data.lineId,
+          voiceDisplayNumber: data.displayNumber,
+        }));
+      }
     });
   };
 
@@ -296,6 +322,37 @@ function AutoscuolaDrawerContent({
                 {isUnassigning ? "..." : "Scollega"}
               </Button>
             </div>
+          ) : voiceProvisioningStatus === "pending_approval" ? (
+            /* ── Pending regulatory approval ── */
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
+                    <Phone className="h-3.5 w-3.5 text-amber-700" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-700">In attesa di approvazione</p>
+                    {voiceDisplayNumber && (
+                      <p className="font-mono text-xs text-amber-700">{voiceDisplayNumber}</p>
+                    )}
+                    <p className="text-[11px] text-amber-600/80 mt-0.5">Il numero è stato ordinato su Telnyx e richiede approvazione regolatoria.</p>
+                  </div>
+                </div>
+              </div>
+              <Button
+                className="w-full gap-2"
+                variant="outline"
+                onClick={handleCheckStatus}
+                disabled={isCheckingStatus}
+              >
+                {isCheckingStatus ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CircleCheck className="h-4 w-4" />
+                )}
+                {isCheckingStatus ? "Verifica in corso..." : "Verifica stato numero"}
+              </Button>
+            </div>
           ) : (
             /* ── No line: auto-provision + manual fallback ── */
             <div className="space-y-3">
@@ -310,19 +367,12 @@ function AutoscuolaDrawerContent({
                 ) : (
                   <Phone className="h-4 w-4" />
                 )}
-                {isProvisioning ? "Acquisto numero in corso..." : "Attiva segretaria"}
+                {isProvisioning ? "Acquisto numero in corso..." : "Acquista nuovo numero"}
               </Button>
               {isProvisioning && (
                 <p className="text-center text-[11px] text-muted-foreground">
-                  Acquisto numero italiano, configurazione webhook e attivazione...
+                  Acquisto numero italiano su Telnyx...
                 </p>
-              )}
-              {provisionedNumber && (
-                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-center">
-                  <p className="text-xs text-emerald-700">
-                    Numero assegnato: <span className="font-semibold">{provisionedNumber}</span>
-                  </p>
-                </div>
               )}
 
               {/* Manual fallback */}
@@ -331,7 +381,7 @@ function AutoscuolaDrawerContent({
                 onClick={() => setShowManualForm((v) => !v)}
                 className="w-full cursor-pointer text-center text-[11px] text-muted-foreground hover:text-foreground transition-colors"
               >
-                {showManualForm ? "Nascondi form manuale" : "Oppure assegna manualmente..."}
+                {showManualForm ? "Nascondi form manuale" : "Oppure assegna un numero già acquistato..."}
               </button>
               {showManualForm && (
                 <div className="space-y-3 rounded-xl border border-border bg-gray-50/50 p-4">
