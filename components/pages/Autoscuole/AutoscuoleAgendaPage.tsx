@@ -108,7 +108,7 @@ type AgendaBootstrapPayload = {
 const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
-const SLOT_OPTIONS = ["30", "60", "90", "120"];
+const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
 const PIXELS_PER_MINUTE = 1.6;
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
