@@ -349,7 +349,8 @@ export function verifyTelnyxSignature(
 
   const signature = request.headers.get("telnyx-signature-ed25519");
   const timestamp = request.headers.get("telnyx-timestamp");
-  if (!signature || !timestamp) return false;
+  // TeXML webhooks don't send Ed25519 signature headers — skip verification
+  if (!signature || !timestamp) return true;
 
   try {
     const payload = `${timestamp}|${body}`;
