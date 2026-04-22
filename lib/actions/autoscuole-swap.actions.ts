@@ -769,3 +769,142 @@ export async function getMyAcceptedSwaps(
     return { success: false, message: formatError(error) };
   }
 }
+
+// ── instructorSwapAppointments ───────────────────────────────────────────
+
+const instructorSwapSchema = z.object({
+  appointmentIdA: z.string().uuid(),
+  appointmentIdB: z.string().uuid(),
+});
+
+export async function instructorSwapAppointments(
+  input: z.infer<typeof instructorSwapSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const payload = instructorSwapSchema.parse(input);
+
+    const isInstructorActor =
+      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+    const isOwnerOrAdmin =
+      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+
+    if (!isInstructorActor && !isOwnerOrAdmin) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    if (payload.appointmentIdA === payload.appointmentIdB) {
+      return { success: false, message: "Seleziona due guide diverse." };
+    }
+
+    const [apptA, apptB] = await Promise.all([
+      prisma.autoscuolaAppointment.findFirst({
+        where: { id: payload.appointmentIdA, companyId },
+        include: { student: { select: { id: true, name: true } } },
+      }),
+      prisma.autoscuolaAppointment.findFirst({
+        where: { id: payload.appointmentIdB, companyId },
+        include: { student: { select: { id: true, name: true } } },
+      }),
+    ]);
+
+    if (!apptA || !apptB) {
+      return { success: false, message: "Una o entrambe le guide non trovate." };
+    }
+
+    // Both must be scheduled or confirmed
+    const validStatuses = new Set(["scheduled", "confirmed"]);
+    if (!validStatuses.has(apptA.status) || !validStatuses.has(apptB.status)) {
+      return { success: false, message: "Entrambe le guide devono essere in stato prenotato o confermato." };
+    }
+
+    // Both must be in the future
+    const now = new Date();
+    if (apptA.startsAt <= now || apptB.startsAt <= now) {
+      return { success: false, message: "Entrambe le guide devono essere nel futuro." };
+    }
+
+    // Instructor must own both appointments
+    if (isInstructorActor) {
+      const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true, autonomousMode: true },
+      });
+      if (!ownInstructor) {
+        return { success: false, message: "Profilo istruttore non trovato." };
+      }
+      if (apptA.instructorId !== ownInstructor.id || apptB.instructorId !== ownInstructor.id) {
+        return { success: false, message: "Puoi scambiare solo le tue guide." };
+      }
+
+      // Autonomous mode: both students must be assigned to this instructor
+      if (ownInstructor.autonomousMode) {
+        const members = await prisma.companyMember.findMany({
+          where: {
+            companyId,
+            userId: { in: [apptA.studentId, apptB.studentId] },
+            assignedInstructorId: ownInstructor.id,
+          },
+          select: { userId: true },
+        });
+        const assignedSet = new Set(members.map((m) => m.userId));
+        if (!assignedSet.has(apptA.studentId) || !assignedSet.has(apptB.studentId)) {
+          return { success: false, message: "Puoi scambiare solo guide di allievi assegnati a te." };
+        }
+      }
+    }
+
+    // Students must be different
+    if (apptA.studentId === apptB.studentId) {
+      return { success: false, message: "Le due guide devono appartenere ad allievi diversi." };
+    }
+
+    // Swap studentId and caseId
+    await prisma.$transaction([
+      prisma.autoscuolaAppointment.update({
+        where: { id: apptA.id },
+        data: { studentId: apptB.studentId, caseId: apptB.caseId },
+      }),
+      prisma.autoscuolaAppointment.update({
+        where: { id: apptB.id },
+        data: { studentId: apptA.studentId, caseId: apptA.caseId },
+      }),
+    ]);
+
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [
+        AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+        AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+      ],
+    });
+
+    // Notify both students (fire & forget)
+    const formatDate = (d: Date) =>
+      d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+    sendAutoscuolaPushToUsers({
+      companyId,
+      userIds: [apptA.studentId],
+      title: "Reglo Autoscuole · Scambio guida",
+      body: `La tua guida del ${formatDate(apptA.startsAt)} è stata spostata al ${formatDate(apptB.startsAt)}.`,
+      data: { kind: "appointment_rescheduled", appointmentId: apptB.id, startsAt: apptB.startsAt.toISOString() },
+    }).catch(() => {});
+
+    sendAutoscuolaPushToUsers({
+      companyId,
+      userIds: [apptB.studentId],
+      title: "Reglo Autoscuole · Scambio guida",
+      body: `La tua guida del ${formatDate(apptB.startsAt)} è stata spostata al ${formatDate(apptA.startsAt)}.`,
+      data: { kind: "appointment_rescheduled", appointmentId: apptA.id, startsAt: apptA.startsAt.toISOString() },
+    }).catch(() => {});
+
+    return {
+      success: true,
+      message: "Guide scambiate.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
