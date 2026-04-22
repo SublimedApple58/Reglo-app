@@ -93,6 +93,7 @@ type AgendaBootstrapPayload = {
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
+  vehiclesEnabled?: boolean;
   holidays?: Array<{ date: string; label: string | null }>;
   instructorBlocks?: Array<Record<string, unknown>>;
   meta: {
@@ -254,6 +255,7 @@ export function AutoscuoleAgendaPage({
   const [students, setStudents] = React.useState<StudentOption[]>([]);
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
+  const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -431,6 +433,7 @@ export function AutoscuoleAgendaPage({
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
+        setVehiclesEnabled(payload.data.vehiclesEnabled !== false);
         setHolidays(payload.data.holidays ?? []);
         setInstructorBlocks((payload.data.instructorBlocks ?? []).map((b: Record<string, unknown>) => ({
           id: b.id as string,
@@ -589,7 +592,7 @@ export function AutoscuoleAgendaPage({
   }, [appointments, search, rangeStart, rangeEnd]);
 
   const handleCreate = async () => {
-    if (!form.studentId || !form.day || !form.time || !form.instructorId || !form.vehicleId) {
+    if (!form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)) {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
     }
@@ -607,7 +610,7 @@ export function AutoscuoleAgendaPage({
       startsAt: startDate.toISOString(),
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
-      vehicleId: form.vehicleId,
+      vehicleId: vehiclesEnabled ? form.vehicleId : null,
       sendProposal: form.sendProposal,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
@@ -857,9 +860,11 @@ export function AutoscuoleAgendaPage({
             <FilterTag label="Istruttore" value={instructorFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
               displayValue={instructorFilter === "all" ? null : instructors.find((item) => item.id === instructorFilter)?.name ?? "Selezionato"} />
-            <FilterTag label="Veicolo" value={vehicleFilter} allValue="all"
-              onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
-              displayValue={vehicleFilter === "all" ? null : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"} />
+            {vehiclesEnabled && (
+              <FilterTag label="Veicolo" value={vehicleFilter} allValue="all"
+                onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
+                displayValue={vehicleFilter === "all" ? null : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"} />
+            )}
             <FilterTag label="Tipo" value={typeFilter} allValue="all"
               onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
               displayValue={typeFilter === "all" ? null : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ?? typeFilter} />
@@ -1071,7 +1076,7 @@ export function AutoscuoleAgendaPage({
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div></div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}</div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>
                               {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
                               <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
@@ -1441,7 +1446,7 @@ export function AutoscuoleAgendaPage({
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                      <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
+                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
                                       <Badge variant="secondary">{statusMeta.label}</Badge>
@@ -1776,7 +1781,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                  <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>
+                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
                                   <Badge variant="secondary">{statusMeta.label}</Badge>
@@ -2019,19 +2024,21 @@ export function AutoscuoleAgendaPage({
                           </SelectContent>
                         </Select>
                       </FieldGroup>
-                      <FieldGroup label="Veicolo" required>
-                        <Select
-                          value={form.vehicleId}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Veicolo" /></SelectTrigger>
-                          <SelectContent>
-                            {vehicles.map((vehicle) => (
-                              <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
+                      {vehiclesEnabled && (
+                        <FieldGroup label="Veicolo" required>
+                          <Select
+                            value={form.vehicleId}
+                            onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Veicolo" /></SelectTrigger>
+                            <SelectContent>
+                              {vehicles.map((vehicle) => (
+                                <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FieldGroup>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -2060,7 +2067,7 @@ export function AutoscuoleAgendaPage({
                           : "—"
                       } />
                       <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
-                      <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />
+                      {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
                     </div>
                     <div
                       role="button"
@@ -2110,7 +2117,7 @@ export function AutoscuoleAgendaPage({
                   disabled={
                     createStep === 0
                       ? !form.day || !form.time
-                      : !form.studentId || !form.instructorId || !form.vehicleId
+                      : !form.studentId || !form.instructorId || (vehiclesEnabled && !form.vehicleId)
                   }
                   onClick={() => setCreateStep((s) => s + 1)}
                 >
@@ -2127,7 +2134,7 @@ export function AutoscuoleAgendaPage({
                     !form.day ||
                     !form.time ||
                     !form.instructorId ||
-                    !form.vehicleId
+                    (vehiclesEnabled && !form.vehicleId)
                   }
                   onClick={handleCreate}
                 >

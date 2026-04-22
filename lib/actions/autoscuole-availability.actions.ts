@@ -1481,8 +1481,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           .join(", ")}).`,
       };
     }
+    const vehiclesEnabled = preServiceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((item) => item.id);
-    const activeVehicleIds = activeVehicles.map((item) => item.id);
+    const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
 
     const resolverRangeStart = preferredDate;
     const resolverRangeEnd = toTimeZoneDate(
@@ -1642,7 +1643,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       forcedStart?: Date,
     ) => {
       if (!studentAvailability && !forcedStart) return null;
-      if (!activeInstructorIds.length || !activeVehicleIds.length) return null;
+      if (!activeInstructorIds.length) return null;
+      if (vehiclesEnabled && !activeVehicleIds.length) return null;
 
       const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
 
@@ -1708,7 +1710,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         start: Date;
         end: Date;
         instructorId: string;
-        vehicleId: string;
+        vehicleId: string | null;
         score: number;
         compatibleRequiredTypes: string[];
         resolvedLessonType: string;
@@ -1789,23 +1791,25 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           id: string;
           score: number;
         }> = [];
-        for (const ownerId of activeVehicleIds) {
-          const availability = vehicleAvailabilityResolver.resolve(ownerId, startDate);
-          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
-            continue;
+        if (vehiclesEnabled) {
+          for (const ownerId of activeVehicleIds) {
+            const availability = vehicleAvailabilityResolver.resolve(ownerId, startDate);
+            if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
+              continue;
+            }
+            const intervals = appointmentMaps.intervals.get(ownerId);
+            if (overlaps(intervals, startMs, endDate.getTime())) continue;
+            const score =
+              (appointmentMaps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
+              (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
+            availableVehicles.push({
+              id: ownerId,
+              score,
+            });
           }
-          const intervals = appointmentMaps.intervals.get(ownerId);
-          if (overlaps(intervals, startMs, endDate.getTime())) continue;
-          const score =
-            (appointmentMaps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
-            (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
-          availableVehicles.push({
-            id: ownerId,
-            score,
-          });
         }
 
-        if (!availableInstructors.length || !availableVehicles.length) {
+        if (!availableInstructors.length || (vehiclesEnabled && !availableVehicles.length)) {
           continue;
         }
 
@@ -1813,8 +1817,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         availableVehicles.sort((a, b) => b.score - a.score);
 
         const instructorChoice = availableInstructors[0];
-        const vehicleChoice = availableVehicles[0];
-        const score = instructorChoice.score + vehicleChoice.score;
+        const vehicleChoice = vehiclesEnabled ? availableVehicles[0] : null;
+        const score = instructorChoice.score + (vehicleChoice?.score ?? 0);
 
         if (
           !best ||
@@ -1825,7 +1829,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             start: startDate,
             end: endDate,
             instructorId: instructorChoice.id,
-            vehicleId: vehicleChoice.id,
+            vehicleId: vehicleChoice?.id ?? null,
             score,
             compatibleRequiredTypes,
             resolvedLessonType:
@@ -1988,28 +1992,30 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           },
         });
 
-        await tx.autoscuolaAvailabilitySlot.upsert({
-          where: {
-            companyId_ownerType_ownerId_startsAt: {
+        if (candidate.vehicleId) {
+          await tx.autoscuolaAvailabilitySlot.upsert({
+            where: {
+              companyId_ownerType_ownerId_startsAt: {
+                companyId: membership.companyId,
+                ownerType: "vehicle",
+                ownerId: candidate.vehicleId,
+                startsAt: candidate.start,
+              },
+            },
+            update: {
+              endsAt: candidate.end,
+              status: "booked",
+            },
+            create: {
               companyId: membership.companyId,
               ownerType: "vehicle",
               ownerId: candidate.vehicleId,
               startsAt: candidate.start,
+              endsAt: candidate.end,
+              status: "booked",
             },
-          },
-          update: {
-            endsAt: candidate.end,
-            status: "booked",
-          },
-          create: {
-            companyId: membership.companyId,
-            ownerType: "vehicle",
-            ownerId: candidate.vehicleId,
-            startsAt: candidate.start,
-            endsAt: candidate.end,
-            status: "booked",
-          },
-        });
+          });
+        }
 
         const existingOnSlot = await tx.autoscuolaAppointment.findFirst({
           where: {
@@ -2470,9 +2476,13 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: false, message: "Allievo non valido." };
     }
 
+    const vehiclesEnabledForSlots = serviceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((i) => i.id);
-    const activeVehicleIds = activeVehicles.map((v) => v.id);
-    if (!activeInstructorIds.length || !activeVehicleIds.length) {
+    const activeVehicleIds = vehiclesEnabledForSlots ? activeVehicles.map((v) => v.id) : [];
+    if (!activeInstructorIds.length) {
+      return { success: true, data: [] };
+    }
+    if (vehiclesEnabledForSlots && !activeVehicleIds.length) {
       return { success: true, data: [] };
     }
 
@@ -2648,15 +2658,17 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         }
         if (!hasInstructor) continue;
 
-        let hasVehicle = false;
-        for (const ownerId of activeVehicleIds) {
-          const availability = vehicleResolver.resolve(ownerId, startDate);
-          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
-          if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
-          hasVehicle = true;
-          break;
+        if (vehiclesEnabledForSlots) {
+          let hasVehicle = false;
+          for (const ownerId of activeVehicleIds) {
+            const availability = vehicleResolver.resolve(ownerId, startDate);
+            if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
+            if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
+            hasVehicle = true;
+            break;
+          }
+          if (!hasVehicle) continue;
         }
-        if (!hasVehicle) continue;
 
         result.push({
           startsAt: startDate.toISOString(),
@@ -3732,9 +3744,18 @@ export async function getOutOfAvailabilityAppointments(
       return { success: true as const, data: [] };
     }
 
+    // Check if vehicles module is enabled
+    const oobService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const oobVehiclesEnabled = ((oobService?.limits ?? {}) as Record<string, unknown>).vehiclesEnabled !== false;
+
     // Collect unique instructor/vehicle IDs
     const instructorIds = [...new Set(appointments.map((a) => a.instructorId).filter(Boolean))] as string[];
-    const vehicleIds = [...new Set(appointments.map((a) => a.vehicleId).filter(Boolean))] as string[];
+    const vehicleIds = oobVehiclesEnabled
+      ? [...new Set(appointments.map((a) => a.vehicleId).filter(Boolean))] as string[]
+      : [];
     const earliest = appointments[0].startsAt;
     const latest = appointments[appointments.length - 1].startsAt;
 

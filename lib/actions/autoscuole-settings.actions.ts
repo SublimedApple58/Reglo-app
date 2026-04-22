@@ -336,6 +336,7 @@ const autoscuolaSettingsPatchSchema = z
     studentNotesEnabled: z.boolean().optional(),
     instructorClustersEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
+    vehiclesEnabled: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -396,7 +397,8 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceAllowedActions !== undefined ||
       value.studentNotesEnabled !== undefined ||
       value.instructorClustersEnabled !== undefined ||
-      value.autoCheckinEnabled !== undefined,
+      value.autoCheckinEnabled !== undefined ||
+      value.vehiclesEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -571,6 +573,7 @@ export type AutoscuolaSettingsData = {
   studentNotesEnabled: boolean;
   instructorClustersEnabled: boolean;
   autoCheckinEnabled: boolean;
+  vehiclesEnabled: boolean;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -892,6 +895,7 @@ const resolveAutoscuolaSettingsData = async (
     studentNotesEnabled,
     instructorClustersEnabled,
     autoCheckinEnabled,
+    vehiclesEnabled: limits.vehiclesEnabled !== false,
   };
 };
 
@@ -1069,6 +1073,7 @@ export async function updateAutoscuolaSettings(
       typeof limits.autoCheckinEnabled === "boolean"
         ? limits.autoCheckinEnabled
         : false;
+    const previousVehiclesEnabled = limits.vehiclesEnabled !== false;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -1204,6 +1209,7 @@ export async function updateAutoscuolaSettings(
     const nextInstructorClustersEnabled =
       payload.instructorClustersEnabled ?? previousInstructorClustersEnabled;
     const nextAutoCheckinEnabled = payload.autoCheckinEnabled ?? previousAutoCheckinEnabled;
+    const nextVehiclesEnabled = payload.vehiclesEnabled ?? previousVehiclesEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1393,6 +1399,7 @@ export async function updateAutoscuolaSettings(
       studentNotesEnabled: nextStudentNotesEnabled,
       instructorClustersEnabled: nextInstructorClustersEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
+      vehiclesEnabled: nextVehiclesEnabled,
     };
 
     if (service) {
@@ -1487,6 +1494,7 @@ export async function updateAutoscuolaSettings(
         voiceInstructions: nextLimits.voiceInstructions,
         voiceAllowedActions: nextLimits.voiceAllowedActions,
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
+        vehiclesEnabled: nextVehiclesEnabled,
       },
     };
   } catch (error) {

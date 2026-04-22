@@ -216,7 +216,7 @@ export type AutoscuolaSlotMatchResult = {
   start: Date;
   end: Date;
   instructorId: string;
-  vehicleId: string;
+  vehicleId: string | null;
   resolvedLessonType: string;
   compatibleRequiredTypes: string[];
   missingRequiredTypes: string[];
@@ -266,9 +266,10 @@ export async function findBestAutoscuolaSlot(
     ]);
 
   if (!studentAvailability) return null;
-  if (!activeInstructors.length || !activeVehicles.length) return null;
-
   const limits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
+  const smVehiclesEnabled = limits.vehiclesEnabled !== false;
+  if (!activeInstructors.length) return null;
+  if (smVehiclesEnabled && !activeVehicles.length) return null;
   const allowedDurations = normalizeBookingSlotDurations(limits.bookingSlotDurations);
   if (!allowedDurations.some((value) => value === input.durationMinutes)) {
     return null;
@@ -307,7 +308,7 @@ export async function findBestAutoscuolaSlot(
   }
 
   const activeInstructorIds = activeInstructors.map((item) => item.id);
-  const activeVehicleIds = activeVehicles.map((item) => item.id);
+  const activeVehicleIds = smVehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
 
   // Build date-aware availability resolvers that account for per-week overrides
   const searchRangeStart = toTimeZoneDate(preferredDateParts, 0, 0);
@@ -315,7 +316,9 @@ export async function findBestAutoscuolaSlot(
 
   const [instructorResolver, vehicleResolver] = await Promise.all([
     buildAvailabilityResolver(input.companyId, "instructor", activeInstructorIds, searchRangeStart, searchRangeEnd),
-    buildAvailabilityResolver(input.companyId, "vehicle", activeVehicleIds, searchRangeStart, searchRangeEnd),
+    smVehiclesEnabled && activeVehicleIds.length
+      ? buildAvailabilityResolver(input.companyId, "vehicle", activeVehicleIds, searchRangeStart, searchRangeEnd)
+      : { resolve: () => null, defaultMap: new Map() },
   ]);
 
   // Batch-fetch all appointments for the full search range in one query
@@ -445,27 +448,29 @@ export async function findBestAutoscuolaSlot(
       }
 
       const availableVehicles: Array<{ id: string; score: number }> = [];
-      for (const vehicleId of activeVehicleIds) {
-        const availability = vehicleResolver.resolve(vehicleId, startDate);
-        if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
-          continue;
+      if (smVehiclesEnabled) {
+        for (const vehicleId of activeVehicleIds) {
+          const availability = vehicleResolver.resolve(vehicleId, startDate);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
+            continue;
+          }
+          const intervals = appointmentMaps.intervals.get(vehicleId);
+          if (overlaps(intervals, startMs, endMs)) continue;
+          const score =
+            (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
+            (appointmentMaps.starts.get(vehicleId)?.has(endMs) ? 1 : 0);
+          availableVehicles.push({ id: vehicleId, score });
         }
-        const intervals = appointmentMaps.intervals.get(vehicleId);
-        if (overlaps(intervals, startMs, endMs)) continue;
-        const score =
-          (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
-          (appointmentMaps.starts.get(vehicleId)?.has(endMs) ? 1 : 0);
-        availableVehicles.push({ id: vehicleId, score });
       }
 
-      if (!availableInstructors.length || !availableVehicles.length) continue;
+      if (!availableInstructors.length || (smVehiclesEnabled && !availableVehicles.length)) continue;
 
       availableInstructors.sort((a, b) => b.score - a.score);
       availableVehicles.sort((a, b) => b.score - a.score);
 
       const chosenInstructor = availableInstructors[0];
-      const chosenVehicle = availableVehicles[0];
-      const score = chosenInstructor.score + chosenVehicle.score;
+      const chosenVehicle = smVehiclesEnabled ? availableVehicles[0] : null;
+      const score = chosenInstructor.score + (chosenVehicle?.score ?? 0);
 
       if (!bestForDay || score > bestScore) {
         bestScore = score;
@@ -473,7 +478,7 @@ export async function findBestAutoscuolaSlot(
           start: startDate,
           end: endDate,
           instructorId: chosenInstructor.id,
-          vehicleId: chosenVehicle.id,
+          vehicleId: chosenVehicle?.id ?? null,
           compatibleRequiredTypes,
           missingRequiredTypes,
           resolvedLessonType:

@@ -515,7 +515,13 @@ const findOperationalCandidate = async ({
       }),
     ]);
 
-  if (!studentAvailability || !activeInstructors.length || !activeVehicles.length) {
+  const repoLimits = (autoscuolaService?.limits ?? {}) as Record<string, unknown>;
+  const repoVehiclesEnabled = repoLimits.vehiclesEnabled !== false;
+
+  if (!studentAvailability || !activeInstructors.length) {
+    return null;
+  }
+  if (repoVehiclesEnabled && !activeVehicles.length) {
     return null;
   }
 
@@ -527,11 +533,16 @@ const findOperationalCandidate = async ({
   const activeInstructorIds = activeInstructors
     .map((item) => item.id)
     .filter((id) => !excludedInstructorId || id !== excludedInstructorId);
-  const activeVehicleIds = activeVehicles
-    .map((item) => item.id)
-    .filter((id) => !excludedVehicleId || id !== excludedVehicleId);
+  const activeVehicleIds = repoVehiclesEnabled
+    ? activeVehicles
+        .map((item) => item.id)
+        .filter((id) => !excludedVehicleId || id !== excludedVehicleId)
+    : [];
 
-  if (!activeInstructorIds.length || !activeVehicleIds.length) {
+  if (!activeInstructorIds.length) {
+    return null;
+  }
+  if (repoVehiclesEnabled && !activeVehicleIds.length) {
     return null;
   }
 
@@ -548,7 +559,9 @@ const findOperationalCandidate = async ({
   // Build date-aware availability resolvers that account for per-week overrides
   const [instructorResolver, vehicleResolver] = await Promise.all([
     buildAvailabilityResolver(companyId, "instructor", activeInstructorIds, rangeStart, rangeEnd),
-    buildAvailabilityResolver(companyId, "vehicle", activeVehicleIds, rangeStart, rangeEnd),
+    repoVehiclesEnabled && activeVehicleIds.length
+      ? buildAvailabilityResolver(companyId, "vehicle", activeVehicleIds, rangeStart, rangeEnd)
+      : { resolve: () => null, defaultMap: new Map() },
   ]);
 
   const appointments = await prisma.autoscuolaAppointment.findMany({
@@ -576,7 +589,7 @@ const findOperationalCandidate = async ({
     start: Date;
     end: Date;
     instructorId: string;
-    vehicleId: string;
+    vehicleId: string | null;
     score: number;
   } | null = null;
 
@@ -654,34 +667,36 @@ const findOperationalCandidate = async ({
       }
 
       const availableVehicles: Array<{ id: string; score: number }> = [];
-      for (const ownerId of activeVehicleIds) {
-        const availability = vehicleResolver.resolve(ownerId, start);
-        if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
-          continue;
+      if (repoVehiclesEnabled) {
+        for (const ownerId of activeVehicleIds) {
+          const availability = vehicleResolver.resolve(ownerId, start);
+          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
+            continue;
+          }
+          const intervals = maps.intervals.get(ownerId);
+          if (overlaps(intervals, startMs, endMs)) continue;
+          const score =
+            (maps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
+            (maps.starts.get(ownerId)?.has(endMs) ? 1 : 0);
+          availableVehicles.push({ id: ownerId, score });
         }
-        const intervals = maps.intervals.get(ownerId);
-        if (overlaps(intervals, startMs, endMs)) continue;
-        const score =
-          (maps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
-          (maps.starts.get(ownerId)?.has(endMs) ? 1 : 0);
-        availableVehicles.push({ id: ownerId, score });
       }
 
-      if (!availableInstructors.length || !availableVehicles.length) continue;
+      if (!availableInstructors.length || (repoVehiclesEnabled && !availableVehicles.length)) continue;
 
       availableInstructors.sort((a, b) => b.score - a.score);
       availableVehicles.sort((a, b) => b.score - a.score);
 
       const instructorChoice = availableInstructors[0];
-      const vehicleChoice = availableVehicles[0];
-      const score = instructorChoice.score + vehicleChoice.score;
+      const vehicleChoice = repoVehiclesEnabled ? availableVehicles[0] : null;
+      const score = instructorChoice.score + (vehicleChoice?.score ?? 0);
 
       if (!best || score > best.score || (score === best.score && startMs < best.start.getTime())) {
         best = {
           start,
           end,
           instructorId: instructorChoice.id,
-          vehicleId: vehicleChoice.id,
+          vehicleId: vehicleChoice?.id ?? null,
           score,
         };
       }

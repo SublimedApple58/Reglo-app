@@ -252,6 +252,7 @@ export function AutoscuoleResourcesPage({
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
+  const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -487,6 +488,7 @@ export function AutoscuoleResourcesPage({
       setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
       setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
       setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
+      setVehiclesEnabled(res.data.vehiclesEnabled !== false);
 
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -634,6 +636,7 @@ export function AutoscuoleResourcesPage({
       instructorPreferenceEnabled,
       studentNotesEnabled,
       autoCheckinEnabled,
+      vehiclesEnabled,
       appBookingActors,
       instructorBookingMode,
     });
@@ -684,6 +687,7 @@ export function AutoscuoleResourcesPage({
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
     setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
+    setVehiclesEnabled(res.data.vehiclesEnabled !== false);
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -2584,15 +2588,44 @@ export function AutoscuoleResourcesPage({
           </>
         ) : (
           /* ── Veicoli tab ── */
-          <VehiclesTabContent
-            vehicles={vehicles}
-            vehicleWeeklyAvailability={vehicleWeeklyAvailability}
-            vehicleAvailability={vehicleAvailability}
-            loading={loading}
-            openCreateVehicle={openCreateVehicle}
-            openEditVehicle={openEditVehicle}
-            openAvailabilityDialog={openAvailabilityDialog}
-          />
+          <>
+            <div className="rounded-2xl border border-border bg-white shadow-card p-4">
+              <div
+                className="flex items-center justify-between cursor-pointer"
+                onClick={() => setVehiclesEnabled((prev) => !prev)}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold">Modulo veicoli</span>
+                  <span className="text-xs text-muted-foreground">
+                    {vehiclesEnabled
+                      ? "Attivo — i veicoli vengono tracciati e assegnati alle guide"
+                      : "Disattivo — le guide non richiedono un veicolo"}
+                  </span>
+                </div>
+                <InlineToggle checked={vehiclesEnabled} size="sm" />
+              </div>
+            </div>
+            {vehiclesEnabled && (
+              <VehiclesTabContent
+                vehicles={vehicles}
+                vehicleWeeklyAvailability={vehicleWeeklyAvailability}
+                vehicleAvailability={vehicleAvailability}
+                loading={loading}
+                openCreateVehicle={openCreateVehicle}
+                openEditVehicle={openEditVehicle}
+                openAvailabilityDialog={openAvailabilityDialog}
+              />
+            )}
+            <div className="flex justify-end">
+              <Button
+                onClick={handleSaveSettings}
+                disabled={savingSettings}
+                className="bg-pink-500 text-white hover:bg-pink-600 rounded-full px-6 py-2.5 text-sm font-semibold shadow-md"
+              >
+                {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+              </Button>
+            </div>
+          </>
         )}
 
         {/* ── Instructor availability dialog */}

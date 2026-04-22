@@ -79,7 +79,7 @@ const createAppointmentSchema = z.object({
   endsAt: z.string().optional().nullable(),
   status: z.string().optional(),
   instructorId: z.string().uuid(),
-  vehicleId: z.string().uuid(),
+  vehicleId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   sendProposal: z.boolean().optional().default(false),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -843,6 +843,13 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           ? { ...baseWhere, instructorId: input.instructorId }
           : baseWhere;
 
+    const agendaService = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const agendaLimits = (agendaService?.limits ?? {}) as Record<string, unknown>;
+    const agendaVehiclesEnabled = agendaLimits.vehiclesEnabled !== false;
+
     const [appointments, students, instructors, vehicles, instructorBlocks, holidays] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: appointmentsWhere,
@@ -937,6 +944,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         students,
         instructors,
         vehicles,
+        vehiclesEnabled: agendaVehiclesEnabled,
         instructorBlocks,
         holidays: holidays.map((h) => ({
           date: h.date.toISOString(),
@@ -2153,16 +2161,24 @@ export async function createAutoscuolaAppointment(
       prisma.autoscuolaInstructor.findFirst({
         where: { id: resolvedInstructorId, companyId },
       }),
-      prisma.autoscuolaVehicle.findFirst({
-        where: { id: payload.vehicleId, companyId },
-      }),
+      payload.vehicleId
+        ? prisma.autoscuolaVehicle.findFirst({
+            where: { id: payload.vehicleId, companyId },
+          })
+        : Promise.resolve(null),
       getLessonPolicyForCompany(companyId),
     ]);
 
-    if (!student || !instructor || !vehicle) {
+    if (!student || !instructor) {
       return {
         success: false,
-        message: "Seleziona allievo, istruttore e veicolo validi.",
+        message: "Seleziona allievo e istruttore validi.",
+      };
+    }
+    if (payload.vehicleId && !vehicle) {
+      return {
+        success: false,
+        message: "Veicolo non valido.",
       };
     }
 
@@ -2249,15 +2265,18 @@ export async function createAutoscuolaAppointment(
     const scanEnd = new Date(slotEnd);
     scanEnd.setDate(scanEnd.getDate() + 1);
 
+    const conflictOr: Array<Record<string, string>> = [
+      { instructorId: resolvedInstructorId },
+    ];
+    if (payload.vehicleId) {
+      conflictOr.push({ vehicleId: payload.vehicleId });
+    }
     const conflicts = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
         startsAt: { gte: scanStart, lt: scanEnd },
         status: { notIn: ["cancelled"] },
-        OR: [
-          { instructorId: resolvedInstructorId },
-          { vehicleId: payload.vehicleId },
-        ],
+        OR: conflictOr,
       },
     });
     const hasConflict = conflicts.some((item) => {
@@ -2296,7 +2315,7 @@ export async function createAutoscuolaAppointment(
             endsAt: slotEnd,
             status: appointmentStatus,
             instructorId: resolvedInstructorId,
-            vehicleId: payload.vehicleId,
+            vehicleId: payload.vehicleId ?? null,
           notes: payload.notes ?? null,
           paymentRequired: paymentSnapshot.paymentRequired,
           paymentStatus: paymentSnapshot.paymentStatus,
@@ -2395,7 +2414,7 @@ export async function createAutoscuolaAppointment(
 const createAppointmentBatchSchema = z.object({
   studentId: z.string().uuid(),
   instructorId: z.string().uuid(),
-  vehicleId: z.string().uuid(),
+  vehicleId: z.string().uuid().optional().nullable(),
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -2458,14 +2477,19 @@ export async function createAutoscuolaAppointmentBatch(
       prisma.autoscuolaInstructor.findFirst({
         where: { id: resolvedInstructorId, companyId },
       }),
-      prisma.autoscuolaVehicle.findFirst({
-        where: { id: payload.vehicleId, companyId },
-      }),
+      payload.vehicleId
+        ? prisma.autoscuolaVehicle.findFirst({
+            where: { id: payload.vehicleId, companyId },
+          })
+        : Promise.resolve(null),
       getLessonPolicyForCompany(companyId),
     ]);
 
-    if (!student || !instructor || !vehicle) {
-      return { success: false, message: "Seleziona allievo, istruttore e veicolo validi." };
+    if (!student || !instructor) {
+      return { success: false, message: "Seleziona allievo e istruttore validi." };
+    }
+    if (payload.vehicleId && !vehicle) {
+      return { success: false, message: "Veicolo non valido." };
     }
 
     // Booking block enforcement
@@ -2593,15 +2617,18 @@ export async function createAutoscuolaAppointmentBatch(
     const scanEnd = new Date(Math.max(...allEnds));
     scanEnd.setDate(scanEnd.getDate() + 1);
 
+    const batchConflictOr: Array<Record<string, string>> = [
+      { instructorId: resolvedInstructorId },
+    ];
+    if (payload.vehicleId) {
+      batchConflictOr.push({ vehicleId: payload.vehicleId });
+    }
     const existingAppointments = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
         startsAt: { gte: scanStart, lt: scanEnd },
         status: { notIn: ["cancelled"] },
-        OR: [
-          { instructorId: resolvedInstructorId },
-          { vehicleId: payload.vehicleId },
-        ],
+        OR: batchConflictOr,
       },
     });
 
@@ -2666,7 +2693,7 @@ export async function createAutoscuolaAppointmentBatch(
             endsAt: entry.endsAt,
             status: "scheduled",
             instructorId: resolvedInstructorId,
-            vehicleId: payload.vehicleId,
+            vehicleId: payload.vehicleId ?? null,
             notes: null,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
