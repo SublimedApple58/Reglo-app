@@ -1646,19 +1646,19 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
 
       const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
 
-      // When roundedHoursOnly, collect half-hour starts justified by instructor ranges
-      let allowedHalfHourStarts: Set<number> | null = null;
+      // When roundedHoursOnly, collect allowed starts by cascading from each
+      // instructor range start in 60-min steps. Ranges starting at :30 only
+      // produce :30 slots; ranges starting at :00 only produce :00 slots.
+      let allowedRoundedStarts: Set<number> | null = null;
       if (roundedHoursOnly) {
-        allowedHalfHourStarts = new Set<number>();
+        allowedRoundedStarts = new Set<number>();
         const probe = toTimeZoneDate(dayParts, 0, 0);
         for (const instrId of activeInstructorIds) {
           const avail = instructorAvailabilityResolver.resolve(instrId, probe);
           if (!avail || !avail.daysOfWeek.includes(dayOfWeek)) continue;
           for (const r of avail.ranges) {
-            if (r.startMinutes % 60 !== 0) {
-              for (let s = r.startMinutes; s + payload.durationMinutes <= r.endMinutes; s += 60) {
-                allowedHalfHourStarts.add(s);
-              }
+            for (let s = r.startMinutes; s + payload.durationMinutes <= r.endMinutes; s += 60) {
+              allowedRoundedStarts.add(s);
             }
           }
         }
@@ -1722,10 +1722,10 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
-        // When roundedHoursOnly, skip non-round minutes unless justified by instructor range
+        // When roundedHoursOnly, only allow starts that align with instructor range cascades
         if (roundedHoursOnly) {
           const candidateMin = minutesFromDate(startDate);
-          if (candidateMin % 60 !== 0 && !allowedHalfHourStarts!.has(candidateMin)) continue;
+          if (!allowedRoundedStarts!.has(candidateMin)) continue;
         }
 
         if (
@@ -2571,21 +2571,19 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       );
     };
 
-    // When roundedHoursOnly, collect half-hour offsets where at least one
-    // instructor's availability range starts at a non-round minute, so we
-    // still propose those slots (e.g. 8:30→9:30→10:30 for a 8:30–11:30 range).
-    let allowedHalfHourStarts: Set<number> | null = null;
+    // When roundedHoursOnly, collect allowed starts by cascading from each
+    // instructor range start in 60-min steps. Ranges starting at :30 only
+    // produce :30 slots; ranges starting at :00 only produce :00 slots.
+    let allowedRoundedStarts: Set<number> | null = null;
     if (roundedHoursOnly) {
-      allowedHalfHourStarts = new Set<number>();
+      allowedRoundedStarts = new Set<number>();
       const probe = toTimeZoneDate(dateParts, 0, 0);
       for (const instrId of activeInstructorIds) {
         const avail = instructorResolver.resolve(instrId, probe);
         if (!avail || !avail.daysOfWeek.includes(dayOfWeek)) continue;
         for (const r of avail.ranges) {
-          if (r.startMinutes % 60 !== 0) {
-            for (let s = r.startMinutes; s + payload.durationMinutes <= r.endMinutes; s += 60) {
-              allowedHalfHourStarts.add(s);
-            }
+          for (let s = r.startMinutes; s + payload.durationMinutes <= r.endMinutes; s += 60) {
+            allowedRoundedStarts.add(s);
           }
         }
       }
@@ -2598,8 +2596,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const dayLastStart = 1440 - payload.durationMinutes;
     {
       for (let minutes = 0; minutes <= dayLastStart; minutes += SLOT_MINUTES) {
-        // When roundedHoursOnly, skip non-round minutes unless explicitly allowed
-        if (roundedHoursOnly && minutes % 60 !== 0 && !allowedHalfHourStarts!.has(minutes)) continue;
+        // When roundedHoursOnly, only allow starts that align with instructor range cascades
+        if (roundedHoursOnly && !allowedRoundedStarts!.has(minutes)) continue;
         const startDate = toTimeZoneDate(dateParts, Math.floor(minutes / 60), minutes % 60);
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
