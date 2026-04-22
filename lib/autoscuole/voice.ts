@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { getTwilioClient } from "@/lib/twilio";
+import { TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 
 type PrismaClientLike = typeof defaultPrisma;
@@ -1508,4 +1509,338 @@ export async function transferVoiceCall({
   });
 
   return { transferred: true };
+}
+
+// ---------------------------------------------------------------------------
+// Telnyx Voice AI helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Map legacy OpenAI voice names to Telnyx voice identifiers.
+ * These use Telnyx KokoroTTS — adjust after testing Italian quality.
+ */
+export const TELNYX_VOICE_MAP: Record<string, string> = {
+  coral: "Minimax.speech-2.8-turbo.Wandering_Sorcerer",
+  sage: "Minimax.speech-2.8-turbo.Wandering_Sorcerer",
+  shimmer: "Minimax.speech-2.8-turbo.Wandering_Sorcerer",
+  ash: "Minimax.speech-2.8-turbo.Wandering_Sorcerer",
+  alloy: "Minimax.speech-2.8-turbo.Wandering_Sorcerer",
+};
+
+/** Voice options exposed in the settings UI (Telnyx-native). */
+export const TELNYX_VOICE_OPTIONS = [
+  { value: "Minimax.speech-2.8-turbo.Wandering_Sorcerer", label: "Wandering Sorcerer", description: "Femminile, italiana" },
+] as const;
+
+/** Resolve a voice setting (which may be an old OpenAI name) to a Telnyx voice ID. */
+const DEFAULT_TELNYX_VOICE = "Minimax.speech-2.8-turbo.Wandering_Sorcerer";
+
+export const resolveTelnyxVoice = (voice: string | null | undefined): string => {
+  const v = (voice ?? "").trim();
+  if (!v) return DEFAULT_TELNYX_VOICE;
+  // Already a Telnyx voice ID
+  if (v.includes(".")) return v;
+  // Legacy OpenAI name
+  return TELNYX_VOICE_MAP[v] ?? DEFAULT_TELNYX_VOICE;
+};
+
+export function isWithinOfficeHours(
+  officeHours: { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null,
+): boolean {
+  if (!officeHours) return true;
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Rome",
+    weekday: "short",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+  const dayMap: Record<string, number> = {
+    Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6,
+  };
+  const dayOfWeek = dayMap[parts.find((p) => p.type === "weekday")?.value ?? ""] ?? -1;
+  const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+  const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
+  const currentMinutes = hour * 60 + minute;
+  if (!officeHours.daysOfWeek.includes(dayOfWeek)) return false;
+  return currentMinutes >= officeHours.startMinutes && currentMinutes < officeHours.endMinutes;
+}
+
+function getRomeHour(): number {
+  return parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Europe/Rome",
+      hour: "numeric",
+      hour12: false,
+    })
+      .formatToParts(new Date())
+      .find((p) => p.type === "hour")?.value ?? "12",
+    10,
+  );
+}
+
+/**
+ * Build the system prompt for Telnyx Voice AI — equivalent to
+ * `buildSessionInstructions()` in the old voice-runtime/server.js.
+ */
+export function buildTelnyxSessionInstructions(opts: {
+  companyName: string | null;
+  voiceAllowedActions: VoiceAllowedAction[];
+  voiceBookingEnabled: boolean;
+  voiceHandoffDuringCallEnabled: boolean;
+  voiceHandoffDuringCallInstructions: string;
+  voiceInstructions: string;
+}): string {
+  const name = (opts.companyName ?? "").trim() || "Autoscuola";
+  const actions = opts.voiceAllowedActions.length
+    ? opts.voiceAllowedActions.join(", ")
+    : "faq, lesson_info";
+
+  const parts: string[] = [
+    `Sei la segretaria telefonica dell'autoscuola ${name}.`,
+    "REGOLE DI COMUNICAZIONE IMPORTANTISSIME:",
+    "- Rispondi SOLO in italiano.",
+    "- Sii concisa ma cordiale: 2-3 frasi per risposta. Rispondi in modo naturale e gentile, come una vera segretaria.",
+    "- Puoi usare brevi convenevoli naturali ('certo', 'con piacere', 'nessun problema') ma senza esagerare.",
+    "- NON inventare mai informazioni. Se non sai qualcosa, dillo subito.",
+    "- Se hai il tool giusto, USALO subito senza annunciare che lo userai.",
+    "- RUMORI DI FONDO: se senti solo rumori, respiri, o suoni non chiari, NON rispondere. Aspetta che il chiamante parli chiaramente. NON ripetere la stessa domanda piu' di una volta di seguito.",
+    "- COMPORTAMENTO INIZIALE: dopo il saluto, aspetta che il chiamante ti dica cosa vuole. NON proporre nulla, NON chiedere il numero di cellulare, NON iniziare il flusso prenotazione a meno che il chiamante non lo chieda esplicitamente.",
+    `AZIONI CONSENTITE: ${actions}.`,
+    "STRUMENTI:",
+    "- search_knowledge: per info su corsi, prezzi, regolamenti.",
+  ];
+
+  if (opts.voiceBookingEnabled) {
+    parts.push(
+      "PRONUNCIA ORARI: usa sempre il campo 'spoken' restituito da check_availability. Es: 'alle 9', 'alle 10 e mezza'. MAI leggere orari in formato HH:MM.",
+      "FLUSSO PRENOTAZIONE LEZIONE — IMPORTANTE: avvia questo flusso SOLO quando il chiamante chiede ESPLICITAMENTE di prenotare una guida/lezione. MAI avviarlo di tua iniziativa.",
+      "PASSO 1: SOLO dopo che il chiamante ha chiesto di prenotare, di': 'Dimmi il tuo numero di cellulare.' Poi chiama find_student col numero.",
+      "PASSO 2: se find_student non trova nessuno di': 'Non ti trovo in archivio. Vuoi che ti richiamiamo?' e usa create_callback. FINE.",
+      "PASSO 3: se find_student trova lo studente, di' SOLO il nome e cognome trovato e chiedi: 'Sei tu?' Aspetta conferma.",
+      "PASSO 4: se nega o e' incerto, di': 'Non posso procedere. Vuoi che ti richiamiamo?' FINE.",
+      "PASSO 5: se conferma, chiedi: 'Che giorno vuoi prenotare?' (accetta risposte vaghe: 'domani', 'giovedi', 'la settimana prossima').",
+      "PASSO 6: chiama check_availability per il giorno indicato (fromDate=toDate=quel giorno).",
+      "PASSO 7: proponi UN SOLO slot usando il campo spoken. Esempio: 'Ho disponibile giovedi 12 marzo alle 9. Ti va?' NON elencare tutti gli slot.",
+      "PASSO 8: se lo studente dice 'no', 'un altra proposta', 'hai altro': proponi il secondo slot. Se esauriti i slot del giorno, prova il giorno successivo. Ripeti.",
+      "PASSO 9: se lo studente conferma, chiama create_appointment con studentId (dall'esito find_student), date (YYYY-MM-DD), startTime (HH:MM dello slot accettato).",
+      "PASSO 10: dopo create_appointment di': 'Perfetto, lezione prenotata per [giorno] alle [ora]. A presto!' FINE.",
+      "REGOLA CRITICA: non saltare passi, non chiedere la data di nascita, non elencare piu' slot in un colpo solo.",
+    );
+  }
+
+  parts.push(
+    "STRUMENTO create_callback: usalo se non riesci a completare la richiesta. Non condividere dati sensibili non richiesti.",
+  );
+
+  if (opts.voiceHandoffDuringCallEnabled && opts.voiceHandoffDuringCallInstructions.trim()) {
+    parts.push(
+      "TRASFERIMENTO CHIAMATA: se le regole di trasferimento lo indicano, puoi trasferire la chiamata a una persona fisica. Prima di trasferire, avvisa il chiamante con una frase tipo 'Ti passo la segreteria, un momento.'",
+      "REGOLE DI TRASFERIMENTO: " + opts.voiceHandoffDuringCallInstructions.trim(),
+    );
+  }
+
+  if (opts.voiceInstructions.trim()) {
+    parts.push("ISTRUZIONI AGGIUNTIVE: " + opts.voiceInstructions.trim());
+  }
+
+  return parts.join(" ");
+}
+
+/**
+ * Build the greeting message for the AI assistant.
+ */
+export function buildTelnyxGreeting(opts: {
+  companyName: string | null;
+  voiceHandoffDuringCallEnabled: boolean;
+  voiceLegalGreetingEnabled: boolean;
+}): string {
+  const name = (opts.companyName ?? "").trim() || "Autoscuola";
+  const saluto = getRomeHour() < 13 ? "buongiorno" : "buonasera";
+
+  const legalPrefix = opts.voiceLegalGreetingEnabled
+    ? "Questa chiamata potrebbe essere registrata e analizzata da un assistente virtuale Reglo. "
+    : "";
+
+  const greeting = opts.voiceHandoffDuringCallEnabled
+    ? `${name}, ${saluto}. Sono la segretaria virtuale dell'autoscuola. Come posso aiutarla? Se preferisce parlare con la segreteria può dirmelo.`
+    : `${name}, ${saluto}. Come posso aiutarla?`;
+
+  return legalPrefix + greeting;
+}
+
+/**
+ * Build Telnyx webhook tool definitions for `ai_assistant_start`.
+ * Each tool points to /api/voice/telnyx/tools with query params.
+ */
+export function buildTelnyxWebhookTools(opts: {
+  voiceBookingEnabled: boolean;
+  voiceHandoffDuringCallEnabled: boolean;
+  voiceHandoffPhone: string | null;
+}): Array<Record<string, unknown>> {
+  const baseUrl = `${TELNYX_WEBHOOK_BASE_URL}/api/voice/telnyx/tools`;
+  const commonQuery = "companyId={{companyId}}&callId={{callId}}";
+
+  const tools: Array<Record<string, unknown>> = [
+    {
+      type: "webhook",
+      webhook: {
+        url: `${baseUrl}?tool=search_knowledge&${commonQuery}`,
+        name: "search_knowledge",
+        description: "Cerca informazioni affidabili sul regolamento autoscuola e sulle procedure operative.",
+        method: "POST",
+        body_parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "La domanda da cercare." },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "webhook",
+      webhook: {
+        url: `${baseUrl}?tool=create_callback&${commonQuery}`,
+        name: "create_callback",
+        description: "Crea una richiesta di richiamata quando non e' possibile completare la richiesta al telefono.",
+        method: "POST",
+        body_parameters: {
+          type: "object",
+          properties: {
+            phoneNumber: { type: "string", description: "Numero di telefono per la richiamata." },
+            reason: { type: "string", description: "Motivo della richiamata." },
+            studentId: { type: "string", description: "ID studente se identificato." },
+          },
+          required: ["phoneNumber"],
+        },
+      },
+    },
+  ];
+
+  if (opts.voiceBookingEnabled) {
+    tools.push(
+      {
+        type: "webhook",
+        webhook: {
+          url: `${baseUrl}?tool=find_student&${commonQuery}`,
+          name: "find_student",
+          description:
+            "PASSO 1 identificazione: cerca l'allievo per numero di cellulare. Restituisce id, nome, cognome se trovato.",
+          method: "POST",
+          body_parameters: {
+            type: "object",
+            properties: {
+              phoneNumber: { type: "string", description: "Numero di cellulare fornito dallo studente." },
+            },
+            required: ["phoneNumber"],
+          },
+        },
+      },
+      {
+        type: "webhook",
+        webhook: {
+          url: `${baseUrl}?tool=check_availability&${commonQuery}`,
+          name: "check_availability",
+          description:
+            "PASSO 6 disponibilita': restituisce slot liberi per giorno nel periodo richiesto. Proponi poi UN solo slot alla volta.",
+          method: "POST",
+          body_parameters: {
+            type: "object",
+            properties: {
+              fromDate: { type: "string", description: "Data inizio (YYYY-MM-DD)." },
+              toDate: { type: "string", description: "Data fine (YYYY-MM-DD). Di default uguale a fromDate." },
+            },
+          },
+        },
+      },
+      {
+        type: "webhook",
+        webhook: {
+          url: `${baseUrl}?tool=create_appointment&${commonQuery}`,
+          name: "create_appointment",
+          description:
+            "PASSO 9: prenota la lezione dopo che lo studente ha accettato lo slot. Usa studentId da find_student, date e startTime dello slot confermato.",
+          method: "POST",
+          body_parameters: {
+            type: "object",
+            properties: {
+              studentId: { type: "string", description: "ID allievo da find_student." },
+              date: { type: "string", description: "Data della lezione (YYYY-MM-DD)." },
+              startTime: { type: "string", description: "Orario inizio (HH:MM)." },
+            },
+            required: ["studentId", "date", "startTime"],
+          },
+        },
+      },
+    );
+  }
+
+  if (opts.voiceHandoffDuringCallEnabled && opts.voiceHandoffPhone?.trim()) {
+    tools.push({
+      type: "transfer",
+      transfer: {
+        targets: [{ name: "Segreteria", to: opts.voiceHandoffPhone.trim() }],
+      },
+    });
+  }
+
+  return tools;
+}
+
+/**
+ * Build the full request body for `POST /calls/{id}/actions/ai_assistant_start`.
+ */
+export async function buildTelnyxAssistantStartBody(opts: {
+  companyId: string;
+  callId: string;
+  companyName: string | null;
+  fromNumber: string;
+  settings: AutoscuolaVoiceSettings;
+}): Promise<Record<string, unknown>> {
+  const assistantId = process.env.TELNYX_AI_ASSISTANT_ID;
+  if (!assistantId) {
+    throw new Error("TELNYX_AI_ASSISTANT_ID non configurato.");
+  }
+
+  const instructions = buildTelnyxSessionInstructions({
+    companyName: opts.companyName,
+    voiceAllowedActions: opts.settings.voiceAllowedActions,
+    voiceBookingEnabled: opts.settings.voiceBookingEnabled,
+    voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
+    voiceHandoffDuringCallInstructions: opts.settings.voiceHandoffDuringCallInstructions,
+    voiceInstructions: opts.settings.voiceInstructions,
+  });
+
+  const greeting = buildTelnyxGreeting({
+    companyName: opts.companyName,
+    voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
+    voiceLegalGreetingEnabled: opts.settings.voiceLegalGreetingEnabled,
+  });
+
+  const tools = buildTelnyxWebhookTools({
+    voiceBookingEnabled: opts.settings.voiceBookingEnabled,
+    voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
+    voiceHandoffPhone: opts.settings.voiceHandoffPhone,
+  });
+
+  return {
+    assistant: {
+      id: assistantId,
+      instructions,
+      greeting,
+      tools,
+      dynamic_variables: {
+        companyId: opts.companyId,
+        callId: opts.callId,
+        companyName: opts.companyName ?? "Autoscuola",
+        fromNumber: opts.fromNumber,
+      },
+    },
+    voice: resolveTelnyxVoice(opts.settings.voiceAssistantVoice),
+    transcription: {
+      model: "openai/whisper-large-v3-turbo",
+    },
+  };
 }

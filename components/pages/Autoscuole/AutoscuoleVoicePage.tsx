@@ -83,11 +83,7 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
 ];
 
 const VOICE_OPTIONS = [
-  { value: "coral", label: "Coral", description: "Femminile, calda" },
-  { value: "sage", label: "Sage", description: "Femminile, professionale" },
-  { value: "shimmer", label: "Shimmer", description: "Femminile, vivace" },
-  { value: "ash", label: "Ash", description: "Maschile, naturale" },
-  { value: "alloy", label: "Alloy", description: "Neutra, bilanciata" },
+  { value: "Minimax.speech-2.8-turbo.Wandering_Sorcerer", label: "Wandering Sorcerer", description: "Femminile, italiana" },
 ] as const;
 
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
@@ -216,7 +212,7 @@ export function AutoscuoleVoicePage() {
     "lesson_info",
   ]);
   const [voiceInstructions, setVoiceInstructions] = React.useState("");
-  const [voiceAssistantVoice, setVoiceAssistantVoice] = React.useState("coral");
+  const [voiceAssistantVoice, setVoiceAssistantVoice] = React.useState("Minimax.speech-2.8-turbo.Wandering_Sorcerer");
   const [previewPlaying, setPreviewPlaying] = React.useState(false);
   const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
 
@@ -255,7 +251,7 @@ export function AutoscuoleVoicePage() {
       setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
       setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
       setVoiceInstructions(d.voiceInstructions ?? "");
-      setVoiceAssistantVoice(d.voiceAssistantVoice || "coral");
+      setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
       const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
       const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
         VALID_ACTIONS.includes(a as VoiceAllowedAction),
@@ -363,7 +359,7 @@ export function AutoscuoleVoicePage() {
     setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
     setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
     setVoiceInstructions(d.voiceInstructions ?? "");
-    setVoiceAssistantVoice(d.voiceAssistantVoice || "coral");
+    setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
     const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
     const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
       VALID_ACTIONS.includes(a as VoiceAllowedAction),

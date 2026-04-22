@@ -20,7 +20,6 @@
     "trigger:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev",
     "trigger:deploy:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 deploy",
     "trigger:deploy:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 deploy",
-    "voice:runtime": "node voice-runtime/server.js",
     "migrate:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config prisma migrate dev",
     "migrate:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config prisma migrate deploy",
     "studio:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config prisma studio",

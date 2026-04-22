@@ -21,3 +21,20 @@ export async function telnyxFetch(path: string, options?: RequestInit) {
 
 export const TELNYX_WEBHOOK_BASE_URL =
   process.env.TELNYX_WEBHOOK_BASE_URL?.replace(/\/$/, "") || "https://app.reglo.it";
+
+export async function telnyxCallControl(
+  callControlId: string,
+  action: string,
+  body?: Record<string, unknown>,
+) {
+  const res = await telnyxFetch(`/calls/${callControlId}/actions/${action}`, {
+    method: "POST",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error(`[telnyx] ${action} failed (${res.status}):`, text);
+    throw new Error(`Telnyx ${action} failed (${res.status})`);
+  }
+  return res.json();
+}
