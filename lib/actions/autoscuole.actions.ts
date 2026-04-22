@@ -5822,3 +5822,40 @@ export async function resolveLateCancellation(
     return { success: false, message: formatError(error) };
   }
 }
+
+export async function getStudentsCompletedDrivingMinutes() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    // Get all completed (non-cancelled) appointments for this company
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        status: { in: ["completed", "checked_in"] },
+        type: { not: "esame" },
+      },
+      select: {
+        studentId: true,
+        startsAt: true,
+        endsAt: true,
+      },
+    });
+
+    // Aggregate minutes per student
+    const minutesByStudent: Record<string, number> = {};
+    for (const appt of appointments) {
+      const start = appt.startsAt.getTime();
+      const end = appt.endsAt
+        ? appt.endsAt.getTime()
+        : start + 60 * 60 * 1000;
+      const minutes = Math.round((end - start) / 60000);
+      minutesByStudent[appt.studentId] =
+        (minutesByStudent[appt.studentId] ?? 0) + minutes;
+    }
+
+    return { success: true, data: minutesByStudent };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
