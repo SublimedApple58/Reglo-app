@@ -1838,9 +1838,5 @@ export async function buildTelnyxAssistantStartBody(opts: {
         fromNumber: opts.fromNumber,
       },
     },
-    voice: resolveTelnyxVoice(opts.settings.voiceAssistantVoice),
-    transcription: {
-      model: "openai/whisper-large-v3-turbo",
-    },
   };
 }
