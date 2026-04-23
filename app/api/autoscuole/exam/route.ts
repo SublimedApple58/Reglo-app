@@ -127,6 +127,22 @@ export async function POST(request: Request) {
             { status: 400 },
           );
         }
+        // Check overlap with instructor blocks
+        const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+          where: {
+            companyId,
+            instructorId: resolvedInstructorId,
+            startsAt: { lt: endsAt },
+            endsAt: { gt: startsAt },
+          },
+          select: { id: true },
+        });
+        if (blockConflict) {
+          return NextResponse.json(
+            { success: false, message: "L'istruttore ha uno slot bloccato in quell'orario." },
+            { status: 400 },
+          );
+        }
       }
 
       const appointments = await prisma.$transaction(

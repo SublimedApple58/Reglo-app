@@ -2291,6 +2291,25 @@ export async function createAutoscuolaAppointment(
       };
     }
 
+    // Check overlap with instructor blocks (sick leave, unavailability, etc.)
+    if (resolvedInstructorId) {
+      const blockConflicts = await prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId,
+          instructorId: resolvedInstructorId,
+          startsAt: { lt: slotEnd },
+          endsAt: { gt: slotTime },
+        },
+        select: { id: true },
+      });
+      if (blockConflicts.length > 0) {
+        return {
+          success: false,
+          message: "L'istruttore non è disponibile in quell'orario (slot bloccato).",
+        };
+      }
+    }
+
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
       const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
@@ -2632,6 +2651,15 @@ export async function createAutoscuolaAppointmentBatch(
       },
     });
 
+    // Check overlap with instructor blocks
+    const existingBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: resolvedInstructorId,
+        startsAt: { gte: scanStart, lt: scanEnd },
+      },
+    });
+
     for (let i = 0; i < parsedEntries.length; i++) {
       const entry = parsedEntries[i];
       const hasConflict = existingAppointments.some((appt) => {
@@ -2649,6 +2677,23 @@ export async function createAutoscuolaAppointmentBatch(
         return {
           success: false,
           message: `Conflitto per lo slot del ${dateStr}: istruttore o veicolo non disponibile.`,
+        };
+      }
+
+      // Check overlap with instructor blocks
+      const hasBlockConflict = existingBlocks.some(
+        (block) => block.startsAt < entry.endsAt && block.endsAt > entry.startsAt,
+      );
+      if (hasBlockConflict) {
+        const dateStr = entry.startsAt.toLocaleDateString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return {
+          success: false,
+          message: `Conflitto per lo slot del ${dateStr}: l'istruttore ha uno slot bloccato.`,
         };
       }
 
@@ -5070,6 +5115,59 @@ export async function createInstructorBlock(
     const weeks = payload.recurring ? Math.min(52, payload.recurringWeeks ?? 12) : 1;
     const recurrenceGroupId = payload.recurring ? randomUUID() : null;
     const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+    // Check overlap for each week occurrence
+    for (let i = 0; i < weeks; i++) {
+      const blockStart = new Date(startsAt.getTime() + i * WEEK_MS);
+      const blockEnd = new Date(endsAt.getTime() + i * WEEK_MS);
+
+      // Check vs existing appointments
+      const appointmentConflict = await prisma.autoscuolaAppointment.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: targetInstructor.id,
+          status: { notIn: ["cancelled"] },
+          startsAt: { lt: blockEnd },
+          endsAt: { gt: blockStart },
+        },
+        select: { id: true, startsAt: true },
+      });
+      if (appointmentConflict) {
+        const dateStr = blockStart.toLocaleDateString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return {
+          success: false as const,
+          message: `Impossibile bloccare lo slot del ${dateStr}: c'è una guida programmata.`,
+        };
+      }
+
+      // Check vs existing blocks
+      const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: targetInstructor.id,
+          startsAt: { lt: blockEnd },
+          endsAt: { gt: blockStart },
+        },
+        select: { id: true, startsAt: true },
+      });
+      if (blockConflict) {
+        const dateStr = blockStart.toLocaleDateString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return {
+          success: false as const,
+          message: `Impossibile bloccare lo slot del ${dateStr}: c'è già un blocco in quell'orario.`,
+        };
+      }
+    }
 
     const blocks = await prisma.$transaction(
       Array.from({ length: weeks }, (_, i) =>
