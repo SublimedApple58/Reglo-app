@@ -1496,6 +1496,60 @@ export function AutoscuoleAgendaPage({
                               </button>
                             );
                           })}
+                        {/* Instructor blocks for this instructor on this day */}
+                        {instructorBlocks
+                          .filter((b) => b.instructorId === instr.instructorId && (() => {
+                            const bStart = toDate(b.startsAt);
+                            return bStart >= dayStart && bStart < dayEnd;
+                          })())
+                          .map((b) => {
+                            const bStart = toDate(b.startsAt);
+                            const bEnd = toDate(b.endsAt);
+                            const clippedStart = bStart < dayStart ? dayStart : bStart;
+                            const clippedEnd = bEnd > dayEnd ? dayEnd : bEnd;
+                            const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                            const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                            const top = offsetMin * PIXELS_PER_MINUTE;
+                            const height = durMin * PIXELS_PER_MINUTE;
+                            return (
+                              <DropdownMenu key={`block-${b.id}`}>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="absolute left-0.5 right-0.5 z-[8] overflow-hidden rounded-xl border border-slate-300 bg-slate-100 text-[9px] leading-tight text-left hover:bg-slate-200 transition-colors"
+                                    style={{ top, height }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className="p-1">
+                                      <div className="font-semibold truncate text-[10px] text-slate-600">{b.reason || "Blocco"}</div>
+                                      <div className="text-[8px] truncate text-slate-400">{formatTimeRange(bStart, bEnd)}</div>
+                                    </div>
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                                  <div className="space-y-2">
+                                    <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                    <div className="text-xs text-muted-foreground">{instr.instructorName}</div>
+                                    <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                  </div>
+                                  <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
+                                    onClick={async () => {
+                                      if (b.recurrenceGroupId) {
+                                        setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
+                                      } else {
+                                        setBlockDeleting(b.id);
+                                        const res = await deleteInstructorBlock(b.id);
+                                        setBlockDeleting(null);
+                                        if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                                        setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
+                                        toast.success({ description: "Evento eliminato." });
+                                      }
+                                    }}
+                                  >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            );
+                          })}
                       </div>
                     );
                   });
@@ -1802,6 +1856,58 @@ export function AutoscuoleAgendaPage({
                         </DropdownMenu>
                       );
                     })}
+                    {/* Instructor blocks for this instructor on this day */}
+                    {instructorBlocks
+                      .filter((b) => b.instructorId === instr.id && (() => {
+                        const bStart = toDate(b.startsAt);
+                        return bStart >= dayStart && bStart < dayEnd;
+                      })())
+                      .map((b) => {
+                        const bStart = toDate(b.startsAt);
+                        const bEnd = toDate(b.endsAt);
+                        const clippedStart = bStart < dayStart ? dayStart : bStart;
+                        const clippedEnd = bEnd > dayEnd ? dayEnd : bEnd;
+                        const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                        const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                        const top = offsetMin * PIXELS_PER_MINUTE;
+                        const height = durMin * PIXELS_PER_MINUTE;
+                        return (
+                          <DropdownMenu key={`block-${b.id}`}>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="absolute left-1 right-1 z-[8] overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
+                                style={{ top, height }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
+                                <span className="truncate text-[10px] text-slate-500 block">{formatTimeRange(bStart, bEnd)}</span>
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                              <div className="space-y-2">
+                                <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                <div className="text-xs text-muted-foreground">{instr.name}</div>
+                                <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                              </div>
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
+                                onClick={async () => {
+                                  if (b.recurrenceGroupId) {
+                                    setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
+                                  } else {
+                                    setBlockDeleting(b.id);
+                                    const res = await deleteInstructorBlock(b.id);
+                                    setBlockDeleting(null);
+                                    if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                                    setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
+                                    toast.success({ description: "Evento eliminato." });
+                                  }
+                                }}
+                              >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        );
+                      })}
                   </div>
                 );
               });
