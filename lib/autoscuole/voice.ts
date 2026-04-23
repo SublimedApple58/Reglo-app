@@ -1606,7 +1606,7 @@ export function buildTelnyxSessionInstructions(opts: {
     "- NON inventare mai informazioni. Se non sai qualcosa, dillo subito.",
     "- Se hai il tool giusto, USALO subito senza annunciare che lo userai.",
     "- RUMORI DI FONDO: se senti solo rumori, respiri, o suoni non chiari, NON rispondere. Aspetta che il chiamante parli chiaramente. NON ripetere la stessa domanda piu' di una volta di seguito.",
-    "- NON salutare mai di nuovo dopo il saluto iniziale. Il saluto viene gestito automaticamente. Tu rispondi direttamente a quello che dice il chiamante.",
+    "- DIVIETO ASSOLUTO: NON dire MAI 'buongiorno', 'buonasera', 'benvenuto' o qualsiasi saluto. Il saluto e' gia' stato detto automaticamente. Tu rispondi SOLO nel merito di quello che chiede il chiamante.",
     "- NON proporre nulla di tua iniziativa, NON chiedere il numero di cellulare, NON iniziare il flusso prenotazione a meno che il chiamante non lo chieda esplicitamente.",
     `AZIONI CONSENTITE: ${actions}.`,
     "STRUMENTI:",
@@ -1664,9 +1664,7 @@ export function buildTelnyxGreeting(opts: {
     ? "Questa chiamata potrebbe essere registrata e analizzata da un assistente virtuale Reglo. "
     : "";
 
-  const greeting = opts.voiceHandoffDuringCallEnabled
-    ? `${name}, ${saluto}. Sono la segretaria virtuale dell'autoscuola. Come posso aiutarla? Se preferisce parlare con la segreteria può dirmelo.`
-    : `${name}, ${saluto}. Come posso aiutarla?`;
+  const greeting = `${name}, ${saluto}! Come posso aiutarla?`;
 
   return legalPrefix + greeting;
 }
