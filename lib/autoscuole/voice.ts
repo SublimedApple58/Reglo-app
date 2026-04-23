@@ -1683,6 +1683,12 @@ export function buildTelnyxWebhookTools(opts: {
 
   const tools: Array<Record<string, unknown>> = [
     {
+      type: "hangup",
+      hangup: {
+        description: "Chiudi la chiamata quando la conversazione e' terminata e il chiamante ha salutato o non ha altre domande.",
+      },
+    },
+    {
       type: "webhook",
       webhook: {
         url: `${baseUrl}?tool=search_knowledge&${commonQuery}`,
