@@ -16,7 +16,7 @@ import { PAGE_SIZE } from '../constants';
 import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
-import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
+import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from '@/lib/autoscuole/roles';
 import { cancelAndQueueOperationalRepositionByResource } from '@/lib/autoscuole/repositioning';
 
 // Sign in the user with credentials
@@ -174,7 +174,7 @@ type CompanyUserRow = {
   name: string;
   email: string;
   role: 'admin' | 'member';
-  autoscuolaRole?: 'OWNER' | 'INSTRUCTOR' | 'STUDENT' | null;
+  autoscuolaRole?: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT' | null;
   status: 'active' | 'invited';
 };
 
@@ -376,7 +376,7 @@ export async function deleteUser(id: string) {
       }
     });
 
-    if (targetMembership.autoscuolaRole === 'INSTRUCTOR') {
+    if (isInstructor(targetMembership.autoscuolaRole)) {
       const instructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
           companyId: context.companyId,
@@ -453,13 +453,17 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
         },
       },
       data: {
-        role: user.role,
-        ...(user.autoscuolaRole ? { autoscuolaRole: user.autoscuolaRole } : {}),
+        ...(user.autoscuolaRole
+          ? {
+              autoscuolaRole: user.autoscuolaRole,
+              role: deriveCompanyMemberRole(user.autoscuolaRole),
+            }
+          : {}),
       },
     });
 
-    // Auto-sync AutoscuolaInstructor record when role is set to INSTRUCTOR
-    if (user.autoscuolaRole === 'INSTRUCTOR') {
+    // Auto-sync AutoscuolaInstructor record when role includes instructor
+    if (isInstructor(user.autoscuolaRole)) {
       await prisma.autoscuolaInstructor.upsert({
         where: {
           companyId_userId: {
@@ -493,8 +497,7 @@ export async function createCompanyUser(input: {
   name: string;
   email: string;
   password: string;
-  role: 'member' | 'admin';
-  autoscuolaRole: 'OWNER' | 'INSTRUCTOR' | 'STUDENT';
+  autoscuolaRole: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
 }) {
   try {
     const session = await auth();
@@ -530,13 +533,13 @@ export async function createCompanyUser(input: {
         data: {
           companyId: input.companyId,
           userId: user.id,
-          role: input.role,
+          role: deriveCompanyMemberRole(input.autoscuolaRole),
           autoscuolaRole: input.autoscuolaRole,
         },
       });
 
-      // Auto-create AutoscuolaInstructor record when role is INSTRUCTOR
-      if (input.autoscuolaRole === 'INSTRUCTOR') {
+      // Auto-create AutoscuolaInstructor record when role includes instructor
+      if (isInstructor(input.autoscuolaRole)) {
         await tx.autoscuolaInstructor.create({
           data: {
             companyId: input.companyId,

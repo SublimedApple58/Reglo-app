@@ -3,6 +3,7 @@ import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
 import { prisma } from "@/db/prisma";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
+import { isInstructor } from "@/lib/autoscuole/roles";
 
 export async function GET(request: Request) {
   const token = parseBearerToken(request.headers.get("authorization"));
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
   );
 
   let instructorId: string | null = null;
-  if (user.activeCompanyId && activeMembership?.autoscuolaRole === "INSTRUCTOR") {
+  if (user.activeCompanyId && isInstructor(activeMembership?.autoscuolaRole)) {
     const instructor = await getOrCreateInstructorForUser({
       companyId: user.activeCompanyId,
       userId: user.id,

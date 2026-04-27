@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { updateUser } from "@/lib/actions/user.actions";
-import { AUTOSCUOLA_ROLES, COMPANY_MEMBER_ROLES } from "@/lib/constants";
+import { AUTOSCUOLA_ROLES } from "@/lib/constants";
 import { updateUserSchema } from "@/lib/validators";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -161,42 +161,7 @@ const UpdateUserForm = ({
               Control permissions and administrative access.
             </p>
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="role"
-              render={({
-                field,
-              }: {
-                field: ControllerRenderProps<
-                  z.infer<typeof updateUserSchema>,
-                  "role"
-                >;
-              }) => (
-                <FormItem className="w-full">
-                  <FormLabel>Role</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value.toString()}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {COMPANY_MEMBER_ROLES.map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {role === "admin" ? "Admin" : "Member"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+          <div className="grid gap-4">
             <FormField
               control={form.control}
               name="autoscuolaRole"
@@ -224,9 +189,11 @@ const UpdateUserForm = ({
                         <SelectItem key={role} value={role}>
                           {role === "OWNER"
                             ? "Titolare"
-                            : role === "INSTRUCTOR"
-                              ? "Istruttore"
-                              : "Allievo"}
+                            : role === "INSTRUCTOR_OWNER"
+                              ? "Istruttore e Titolare"
+                              : role === "INSTRUCTOR"
+                                ? "Istruttore"
+                                : "Allievo"}
                         </SelectItem>
                       ))}
                     </SelectContent>

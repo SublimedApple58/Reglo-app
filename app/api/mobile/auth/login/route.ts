@@ -5,6 +5,7 @@ import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from "@/lib/constants";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
+import { isInstructor } from "@/lib/autoscuole/roles";
 
 export async function POST(request: Request) {
   const payload = await request.json();
@@ -105,7 +106,7 @@ export async function POST(request: Request) {
   );
 
   let instructorId: string | null = null;
-  if (activeCompanyId && activeMembership?.autoscuolaRole === "INSTRUCTOR") {
+  if (activeCompanyId && isInstructor(activeMembership?.autoscuolaRole)) {
     const instructor = await getOrCreateInstructorForUser({
       companyId: activeCompanyId,
       userId: user.id,

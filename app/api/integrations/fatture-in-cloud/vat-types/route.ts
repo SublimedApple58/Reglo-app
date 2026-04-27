@@ -9,6 +9,7 @@ import {
 import { getFicConnection } from "@/lib/integrations/fatture-in-cloud";
 import { withPerfJson } from "@/lib/perf";
 import { requireServiceAccess } from "@/lib/service-access";
+import { isOwner } from "@/lib/autoscuole/roles";
 import { formatError } from "@/lib/utils";
 
 type FicVatType = {
@@ -30,7 +31,7 @@ export async function GET() {
         requireServiceAccess("AUTOSCUOLE"),
       );
 
-      if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+      if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
         return {
           status: 403,
           companyId: membership.companyId,

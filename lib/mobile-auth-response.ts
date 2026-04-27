@@ -1,6 +1,7 @@
 import { prisma } from "@/db/prisma";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
+import { isInstructor } from "@/lib/autoscuole/roles";
 
 export async function buildMobileAuthPayload({
   userId,
@@ -75,7 +76,7 @@ export async function buildMobileAuthPayload({
   );
 
   let instructorId: string | null = null;
-  if (resolvedCompanyId && activeMembership?.autoscuolaRole === "INSTRUCTOR") {
+  if (resolvedCompanyId && isInstructor(activeMembership?.autoscuolaRole)) {
     const instructor = await getOrCreateInstructorForUser({
       companyId: resolvedCompanyId,
       userId: user.id,

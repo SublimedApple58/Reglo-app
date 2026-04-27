@@ -7,6 +7,7 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import { refundLessonCreditIfEligible } from "@/lib/autoscuole/payments";
+import { isOwner } from "@/lib/autoscuole/roles";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -65,7 +66,7 @@ export async function createHoliday(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+    if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
       return { success: false as const, message: "Solo il titolare può gestire i giorni festivi." };
     }
 
@@ -255,7 +256,7 @@ export async function deleteHoliday(
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    if (membership.role !== "admin" && membership.autoscuolaRole !== "OWNER") {
+    if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
       return { success: false as const, message: "Solo il titolare può gestire i giorni festivi." };
     }
 

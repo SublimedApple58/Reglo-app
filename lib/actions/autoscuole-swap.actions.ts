@@ -14,6 +14,7 @@ import {
 } from "@/lib/autoscuole/cache";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
@@ -786,9 +787,9 @@ export async function instructorSwapAppointments(
     const payload = instructorSwapSchema.parse(input);
 
     const isInstructorActor =
-      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
     const isOwnerOrAdmin =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     if (!isInstructorActor && !isOwnerOrAdmin) {
       return { success: false, message: "Operazione non consentita." };

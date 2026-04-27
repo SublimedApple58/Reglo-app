@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
+import { isOwner } from "@/lib/autoscuole/roles";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -455,7 +456,7 @@ const autoscuolaSettingsPatchSchema = z
   });
 
 const canManageSettings = (role: string, autoscuolaRole: string | null) =>
-  role === "admin" || autoscuolaRole === "OWNER";
+  role === "admin" || isOwner(autoscuolaRole);
 
 const asChannelList = (
   value: unknown,

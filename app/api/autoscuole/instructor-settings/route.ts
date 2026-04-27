@@ -8,13 +8,14 @@ import {
   buildCompanyBookingDefaults,
   type InstructorSettings,
 } from "@/lib/autoscuole/instructor-clusters";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 export async function GET() {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     if (
-      membership.autoscuolaRole !== "INSTRUCTOR" &&
-      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
       membership.role !== "admin"
     ) {
       return NextResponse.json(
@@ -142,8 +143,8 @@ export async function PATCH(request: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     if (
-      membership.autoscuolaRole !== "INSTRUCTOR" &&
-      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
       membership.role !== "admin"
     ) {
       return NextResponse.json(

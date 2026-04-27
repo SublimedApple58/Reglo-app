@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { prisma } from "@/db/prisma";
 import { compare, hash } from "@/lib/encrypt";
-import { getDefaultAutoscuolaRole, type AutoscuolaRole } from "@/lib/autoscuole/roles";
+import { getDefaultAutoscuolaRole, isInstructor, type AutoscuolaRole } from "@/lib/autoscuole/roles";
 import { formatError } from "@/lib/utils";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-response";
@@ -210,7 +210,7 @@ export async function POST(
     const resolvedRole =
       (invite.autoscuolaRole as AutoscuolaRole | null) ??
       getDefaultAutoscuolaRole(invite.role);
-    if (resolvedRole === "INSTRUCTOR") {
+    if (isInstructor(resolvedRole)) {
       const user = await prisma.user.findUnique({
         where: { id: userId },
         select: { name: true, email: true },

@@ -13,6 +13,7 @@ import {
   getBookingGovernanceForCompany,
   isStudentAppBookingEnabled,
 } from "@/lib/autoscuole/booking-governance";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
@@ -486,7 +487,7 @@ const ensureStudentCanBookFromApp = async ({
   membership: { role: string; autoscuolaRole: string | null; userId: string };
   studentId: string;
 }) => {
-  if (membership.role === "admin" || membership.autoscuolaRole === "OWNER") {
+  if (membership.role === "admin" || isOwner(membership.autoscuolaRole)) {
     return { allowed: true as const };
   }
   if (membership.autoscuolaRole !== "STUDENT") {
@@ -2122,8 +2123,8 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
     // even when the student cannot book, so the UI can render the right state.
     if (
       membership.role !== "admin" &&
-      membership.autoscuolaRole !== "OWNER" &&
-      membership.autoscuolaRole !== "INSTRUCTOR" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole) &&
       (membership.autoscuolaRole !== "STUDENT" || membership.userId !== payload.studentId)
     ) {
       return { success: false, message: "Accesso non consentito." };
@@ -3070,7 +3071,7 @@ export async function suggestInstructorBooking(
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = instructorBookingSuggestSchema.parse(input);
 
-    if (membership.role !== "admin" && membership.autoscuolaRole !== "INSTRUCTOR") {
+    if (membership.role !== "admin" && !isInstructor(membership.autoscuolaRole)) {
       return { success: false, message: "Operazione consentita solo agli istruttori." };
     }
 

@@ -5,9 +5,10 @@ import {
   listAutoscuolaVoiceKnowledge,
 } from "@/lib/autoscuole/voice";
 import { requireServiceAccess } from "@/lib/service-access";
+import { isOwner } from "@/lib/autoscuole/roles";
 
 const canManageVoice = (role: string, autoscuolaRole: string | null) =>
-  role === "admin" || autoscuolaRole === "OWNER";
+  role === "admin" || isOwner(autoscuolaRole);
 
 const createChunkSchema = z.object({
   title: z.string().trim().min(3).max(160),

@@ -11,6 +11,7 @@ import {
 import {
   queueOperationalRepositionForAppointment,
 } from "@/lib/autoscuole/repositioning";
+import { isOwner } from "@/lib/autoscuole/roles";
 
 const sickLeaveSchema = z.object({
   instructorId: z.string().uuid().optional(),
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const isOwnerOrAdmin =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     const body = await request.json();
     const payload = sickLeaveSchema.parse(body);

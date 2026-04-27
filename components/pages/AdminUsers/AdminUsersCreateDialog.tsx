@@ -25,7 +25,7 @@ import {
 import { createCompanyUser } from "@/lib/actions/user.actions";
 import { companyAtom } from "@/atoms/company.store";
 
-type AutoscuolaRole = "OWNER" | "INSTRUCTOR" | "STUDENT";
+type AutoscuolaRole = "OWNER" | "INSTRUCTOR_OWNER" | "INSTRUCTOR" | "STUDENT";
 
 type Props = {
   open: boolean;
@@ -36,7 +36,6 @@ const defaultForm = {
   name: "",
   email: "",
   password: "",
-  role: "member" as "member" | "admin",
   autoscuolaRole: "STUDENT" as AutoscuolaRole,
 };
 
@@ -62,7 +61,6 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
         name: form.name,
         email: form.email,
         password: form.password,
-        role: form.role,
         autoscuolaRole: form.autoscuolaRole,
       });
 
@@ -123,27 +121,6 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
               minLength={6}
             />
           </div>
-          <div className="space-y-2">
-            <Label>Ruolo</Label>
-            <Select
-              value={form.role}
-              onValueChange={(v) =>
-                setForm((p) => ({
-                  ...p,
-                  role: v as "member" | "admin",
-                  autoscuolaRole: v === "admin" ? "OWNER" : p.autoscuolaRole,
-                }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="member">Member</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
           {isAutoscuola && (
             <div className="space-y-2">
               <Label>Ruolo autoscuola</Label>
@@ -157,6 +134,7 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
                 <SelectContent>
                   <SelectItem value="STUDENT">Allievo</SelectItem>
                   <SelectItem value="INSTRUCTOR">Istruttore</SelectItem>
+                  <SelectItem value="INSTRUCTOR_OWNER">Istruttore e Titolare</SelectItem>
                   <SelectItem value="OWNER">Titolare</SelectItem>
                 </SelectContent>
               </Select>

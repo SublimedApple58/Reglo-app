@@ -8,6 +8,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 const createExamSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1),
@@ -23,8 +24,8 @@ export async function POST(request: Request) {
 
     // Allow INSTRUCTOR and OWNER (not just OWNER like the server action)
     if (
-      membership.autoscuolaRole !== "INSTRUCTOR" &&
-      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
       membership.role !== "admin"
     ) {
       return NextResponse.json(
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
 
     // Use the existing server action (it checks OWNER — we need to call it directly)
     // Since the action requires OWNER, we'll replicate the core logic here for INSTRUCTOR
-    if (membership.autoscuolaRole === "INSTRUCTOR") {
+    if (isInstructor(membership.autoscuolaRole)) {
       const companyId = membership.companyId;
       const startsAt = new Date(payload.startsAt);
       const endsAt = new Date(payload.endsAt);

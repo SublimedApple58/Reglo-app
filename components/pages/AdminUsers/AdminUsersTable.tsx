@@ -50,8 +50,7 @@ type AdminUserRow = {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "member";
-  autoscuolaRole?: "OWNER" | "INSTRUCTOR" | "STUDENT";
+  autoscuolaRole?: "OWNER" | "INSTRUCTOR_OWNER" | "INSTRUCTOR" | "STUDENT";
   status: "active" | "invited";
 };
 
@@ -133,7 +132,6 @@ export function AdminUsersTable({
               </TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Ruolo</TableHead>
               <TableHead>Ruolo Autoscuola</TableHead>
               <TableHead>Stato</TableHead>
               <TableHead className="text-right">Azioni</TableHead>
@@ -150,7 +148,6 @@ export function AdminUsersTable({
                       .join("")
                       .toUpperCase()
                   : "U";
-                const isAdmin = user.role === "admin";
                 const isInvited = user.status === "invited";
                 return (
                   <TableRow key={user.id}>
@@ -168,14 +165,9 @@ export function AdminUsersTable({
                             {initials}
                           </AvatarFallback>
                         </Avatar>
-                        <div className="flex flex-col">
-                          <span className="font-medium text-foreground">
-                            {user.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {isAdmin ? "Admin" : "Member"}
-                          </span>
-                        </div>
+                        <span className="font-medium text-foreground">
+                          {user.name}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -186,29 +178,22 @@ export function AdminUsersTable({
                         variant="secondary"
                         className={cn(
                           "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
-                          isAdmin ? "text-emerald-700" : "text-slate-600",
-                        )}
-                      >
-                        {isAdmin ? "Admin" : "Member"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className={cn(
-                          "rounded-full border border-white/60 bg-white/70 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-sm",
                           user.autoscuolaRole === "OWNER"
                             ? "text-sky-700"
-                            : user.autoscuolaRole === "INSTRUCTOR"
-                              ? "text-indigo-700"
-                              : "text-emerald-700",
+                            : user.autoscuolaRole === "INSTRUCTOR_OWNER"
+                              ? "text-violet-700 bg-violet-50"
+                              : user.autoscuolaRole === "INSTRUCTOR"
+                                ? "text-indigo-700"
+                                : "text-emerald-700",
                         )}
                       >
                         {user.autoscuolaRole === "OWNER"
                           ? "Titolare"
-                          : user.autoscuolaRole === "INSTRUCTOR"
-                            ? "Istruttore"
-                            : "Allievo"}
+                          : user.autoscuolaRole === "INSTRUCTOR_OWNER"
+                            ? "Istruttore e Titolare"
+                            : user.autoscuolaRole === "INSTRUCTOR"
+                              ? "Istruttore"
+                              : "Allievo"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -270,7 +255,7 @@ export function AdminUsersTable({
             ) : (
               <TableRow>
                 <TableCell
-                  colSpan={7}
+                  colSpan={6}
                   className="py-10 text-center text-sm text-muted-foreground"
                 >
                   Nessun utente disponibile.
@@ -297,7 +282,13 @@ export function AdminUsersTable({
                     {activeUser.email}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Ruolo: {activeUser.role === "admin" ? "Admin" : "Member"}
+                    Ruolo: {activeUser.autoscuolaRole === "OWNER"
+                      ? "Titolare"
+                      : activeUser.autoscuolaRole === "INSTRUCTOR_OWNER"
+                        ? "Istruttore e Titolare"
+                        : activeUser.autoscuolaRole === "INSTRUCTOR"
+                          ? "Istruttore"
+                          : "Allievo"}
                   </p>
                 </div>
                 <Button

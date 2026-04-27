@@ -6,7 +6,7 @@ import { sendCompanyInviteEmail } from '@/email';
 import { routing } from '@/i18n/routing';
 import { SERVER_URL } from '@/lib/constants';
 import { formatError } from '@/lib/utils';
-import { getDefaultAutoscuolaRole, type AutoscuolaRole } from '@/lib/autoscuole/roles';
+import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor, type AutoscuolaRole } from '@/lib/autoscuole/roles';
 import {
   acceptCompanyInviteSchema,
   acceptCompanyInvitePasswordSchema,
@@ -52,6 +52,9 @@ export async function createCompanyInvite(
     }
 
     const email = payload.email.trim().toLowerCase();
+    const derivedRole = payload.autoscuolaRole
+      ? deriveCompanyMemberRole(payload.autoscuolaRole)
+      : 'member';
 
     const existingMember = await prisma.companyMember.findFirst({
       where: {
@@ -81,7 +84,7 @@ export async function createCompanyInvite(
       ? await prisma.companyInvite.update({
           where: { id: existingInvite.id },
           data: {
-            role: payload.role,
+            role: derivedRole,
             autoscuolaRole: payload.autoscuolaRole ?? null,
             expiresAt,
             platform: payload.platform ?? null,
@@ -91,7 +94,7 @@ export async function createCompanyInvite(
           data: {
             companyId: payload.companyId,
             email,
-            role: payload.role,
+            role: derivedRole,
             autoscuolaRole: payload.autoscuolaRole ?? null,
             token: randomUUID(),
             status: 'pending',
@@ -411,7 +414,7 @@ export async function acceptCompanyInvite(
       data: { activeCompanyId: invite.companyId },
     });
 
-    if (resolvedAutoscuolaRole === 'INSTRUCTOR') {
+    if (isInstructor(resolvedAutoscuolaRole)) {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, email: true } });
       await prisma.autoscuolaInstructor.upsert({
         where: { companyId_userId: { companyId: invite.companyId, userId } },
@@ -498,7 +501,7 @@ export async function acceptCompanyInviteWithPassword(
       data: { activeCompanyId: invite.companyId },
     });
 
-    if (resolvedAutoscuolaRole2 === 'INSTRUCTOR') {
+    if (isInstructor(resolvedAutoscuolaRole2)) {
       await prisma.autoscuolaInstructor.upsert({
         where: { companyId_userId: { companyId: invite.companyId, userId: user.id } },
         update: { status: 'active', name: user.name || user.email?.split('@')[0] || 'Istruttore' },
@@ -580,7 +583,7 @@ export async function acceptCompanyInviteAndRegister(
       });
 
       const resolvedRole = (invite.autoscuolaRole as AutoscuolaRole | null) ?? getDefaultAutoscuolaRole(invite.role);
-      if (resolvedRole === 'INSTRUCTOR') {
+      if (isInstructor(resolvedRole)) {
         await tx.autoscuolaInstructor.create({
           data: { companyId: invite.companyId, userId: user.id, name: payload.name || user.email?.split('@')[0] || 'Istruttore' },
         });
@@ -624,7 +627,7 @@ export async function inviteAutoscuolaStudent(input: {
     return createCompanyInvite({
       companyId: membership.companyId,
       email: input.email.trim().toLowerCase(),
-      role: "member",
+      autoscuolaRole: "STUDENT",
       platform: input.platform,
     });
   } catch (error) {

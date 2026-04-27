@@ -26,6 +26,7 @@ enum CompanyServiceStatus {
 
 enum AutoscuolaRole {
   OWNER
+  INSTRUCTOR_OWNER
   INSTRUCTOR
   STUDENT
 }

@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "AutoscuolaRole" ADD VALUE 'INSTRUCTOR_OWNER';

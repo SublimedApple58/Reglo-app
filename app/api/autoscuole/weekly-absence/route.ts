@@ -8,6 +8,7 @@ import {
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
+import { isInstructor } from "@/lib/autoscuole/roles";
 
 const postSchema = z.object({
   weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -123,7 +124,7 @@ export async function GET(request: Request) {
 
     if (membership.autoscuolaRole === "STUDENT") {
       where.studentId = membership.userId;
-    } else if (membership.autoscuolaRole === "INSTRUCTOR") {
+    } else if (isInstructor(membership.autoscuolaRole)) {
       const instructor = await prisma.autoscuolaInstructor.findFirst({
         where: { companyId: membership.companyId, userId: membership.userId },
         select: { id: true },

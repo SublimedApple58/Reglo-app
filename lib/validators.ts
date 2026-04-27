@@ -46,8 +46,7 @@ export const updateProfileSchema = z.object({
 // Schema to update users
 export const updateUserSchema = updateProfileSchema.extend({
   id: z.string().min(1, 'ID is required'),
-  role: z.enum(['member', 'admin']),
-  autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
+  autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR_OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
 });
 
 export const updateCompanyNameSchema = z.object({
@@ -71,8 +70,7 @@ export const finalizeImageUploadSchema = z.object({
 export const createCompanyInviteSchema = z.object({
   companyId: z.string().min(1, 'Company is required'),
   email: z.string().email('Invalid email address'),
-  role: z.enum(['member', 'admin']),
-  autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
+  autoscuolaRole: z.enum(['OWNER', 'INSTRUCTOR_OWNER', 'INSTRUCTOR', 'STUDENT']).optional(),
   platform: z.enum(['ios', 'android']).optional(),
 });
 

@@ -24,6 +24,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import {
   processAutoscuolaAppointmentSettlementNow,
   adjustStudentLessonCredits,
@@ -217,7 +218,11 @@ const ensureAutoscuolaRole = (
   allowed: string[],
 ) => {
   if (membership.role === "admin") return;
-  if (!membership.autoscuolaRole || !allowed.includes(membership.autoscuolaRole)) {
+  const expanded = new Set(allowed);
+  if (expanded.has("INSTRUCTOR") || expanded.has("OWNER")) {
+    expanded.add("INSTRUCTOR_OWNER");
+  }
+  if (!membership.autoscuolaRole || !expanded.has(membership.autoscuolaRole)) {
     throw new Error("Operazione non consentita.");
   }
 };
@@ -227,7 +232,7 @@ const canManageStudentCredits = (membership: {
   autoscuolaRole: string | null;
 }) =>
   membership.role === "admin" ||
-  membership.autoscuolaRole === "OWNER";
+  isOwner(membership.autoscuolaRole);
 
 const getOwnInstructorProfile = async (companyId: string, userId: string) =>
   prisma.autoscuolaInstructor.findFirst({
@@ -668,7 +673,7 @@ const listAutoscuolaInstructorsReadOnly = async (companyId: string) =>
       userId: { not: null },
       user: {
         companyMembers: {
-          some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+          some: { companyId, autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
         },
       },
     },
@@ -740,7 +745,7 @@ export async function getAutoscuolaOverview() {
           userId: { not: null },
           user: {
             companyMembers: {
-              some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+              some: { companyId, autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
             },
           },
         },
@@ -992,7 +997,7 @@ export async function getInstructorAvailabilityForAgenda(input: {
         userId: { not: null },
         user: {
           companyMembers: {
-            some: { companyId, autoscuolaRole: "INSTRUCTOR" },
+            some: { companyId, autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
           },
         },
       },
@@ -1979,11 +1984,11 @@ export async function createAutoscuolaAppointment(
     const governance = await getBookingGovernanceForCompany(companyId);
 
     const isInstructorActor =
-      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
     const isStudentActor =
       membership.autoscuolaRole === "STUDENT" && membership.role !== "admin";
     const isOwnerOrAdminActor =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     let resolvedInstructorId = payload.instructorId;
     if (isStudentActor) {
@@ -2457,9 +2462,9 @@ export async function createAutoscuolaAppointmentBatch(
     const payload = createAppointmentBatchSchema.parse(input);
 
     const isInstructorActor =
-      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
     const isOwnerOrAdminActor =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     // Only instructors and admins/owners can batch-book
     if (!isInstructorActor && !isOwnerOrAdminActor) {
@@ -2789,7 +2794,7 @@ export async function cancelAutoscuolaAppointment(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
-    if (membership.role !== "admin" && membership.autoscuolaRole === "INSTRUCTOR") {
+    if (membership.role !== "admin" && isInstructor(membership.autoscuolaRole)) {
       const ownInstructor = await getOwnInstructorProfile(
         membership.companyId,
         membership.userId,
@@ -2842,7 +2847,7 @@ export async function cancelAutoscuolaAppointment(
         instructorId: appointment.instructorId,
       },
       cancellationKind: "manual_cancel",
-      actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+      actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
 
     if (appointment.slotId) {
@@ -2940,7 +2945,7 @@ export async function permanentlyCancelAutoscuolaAppointment(
         instructorId: appointment.instructorId,
       },
       cancellationKind: "permanent_cancel",
-      actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+      actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -2971,7 +2976,7 @@ export async function cancelAndRepositionAutoscuolaAppointment(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
-    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
       const governance = await getBookingGovernanceForCompany(membership.companyId);
       if (!isInstructorAppBookingEnabled(governance)) {
         return {
@@ -3021,7 +3026,7 @@ export async function cancelAndRepositionAutoscuolaAppointment(
 
     const reason =
       payload.reason?.trim() ||
-      (membership.autoscuolaRole === "INSTRUCTOR"
+      (isInstructor(membership.autoscuolaRole)
         ? "instructor_cancel"
         : "owner_delete");
 
@@ -3066,11 +3071,11 @@ export async function rescheduleAutoscuolaAppointment(
     const payload = rescheduleAppointmentSchema.parse(input);
 
     const isInstructorActor =
-      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
     const isStudentActor =
       membership.autoscuolaRole === "STUDENT" && membership.role !== "admin";
     const isOwnerOrAdminActor =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     if (isStudentActor) {
       return {
@@ -3602,7 +3607,7 @@ export async function deleteAutoscuolaAppointment(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const canDelete =
-      membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
     if (!canDelete) {
       return {
         success: false,
@@ -3700,7 +3705,7 @@ export async function updateAutoscuolaAppointmentStatus(
       };
     }
 
-    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
       const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
           companyId: membership.companyId,
@@ -3758,7 +3763,7 @@ export async function updateAutoscuolaAppointmentStatus(
     let enforceRequiredTypeSelection = false;
     let compatibleMissingTypes: string[] = [];
 
-    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
       const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
       if (
         lessonPolicy.lessonPolicyEnabled &&
@@ -3914,8 +3919,8 @@ export async function updateAutoscuolaAppointmentStatus(
     if (nextStatus === "cancelled" && !wasCancelled) {
       const cancelledByAutoscuola =
         membership.role === "admin" ||
-        membership.autoscuolaRole === "OWNER" ||
-        membership.autoscuolaRole === "INSTRUCTOR";
+        isOwner(membership.autoscuolaRole) ||
+        isInstructor(membership.autoscuolaRole);
       await refundLessonCreditIfEligible({
         appointmentId: updated.id,
         cancelledByAutoscuola,
@@ -3932,7 +3937,7 @@ export async function updateAutoscuolaAppointmentStatus(
           instructorId: updated.instructorId ?? null,
         },
         cancellationKind: "manual_cancel",
-        actorRole: membership.autoscuolaRole === "INSTRUCTOR" ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+        actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
       });
     }
 
@@ -3977,7 +3982,7 @@ export async function updateAutoscuolaAppointmentDetails(
       return { success: false, message: "Appuntamento non trovato." };
     }
 
-    if (membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin") {
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
       const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
           companyId: membership.companyId,
@@ -4026,7 +4031,7 @@ export async function updateAutoscuolaAppointmentDetails(
     let enforceRequiredTypeSelection = false;
     let compatibleMissingTypes: string[] = [];
     const isInstructorRole =
-      membership.autoscuolaRole === "INSTRUCTOR" && membership.role !== "admin";
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
 
     if (isInstructorRole) {
       const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
@@ -4226,7 +4231,7 @@ export async function createAutoscuolaInstructor(
       where: {
         companyId,
         userId: payload.userId,
-        autoscuolaRole: "INSTRUCTOR",
+        autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] },
       },
       include: { user: true },
     });
@@ -4329,9 +4334,9 @@ export async function updateAutoscuolaInstructor(
     // Authorization:
     // - OWNER can edit any instructor
     // - INSTRUCTOR can edit ONLY their own cluster (settings + assignStudentIds only — not name/status/userId)
-    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(membership.autoscuolaRole);
     const isSelfInstructor =
-      membership.autoscuolaRole === "INSTRUCTOR" && existing.userId === membership.userId;
+      isInstructor(membership.autoscuolaRole) && existing.userId === membership.userId;
     if (!isOwnerOrAdmin && !isSelfInstructor) {
       return { success: false, message: "Non autorizzato." };
     }
@@ -4349,7 +4354,7 @@ export async function updateAutoscuolaInstructor(
         where: {
           companyId: membership.companyId,
           userId: payload.userId,
-          autoscuolaRole: "INSTRUCTOR",
+          autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] },
         },
       });
       if (!member) {
@@ -5079,7 +5084,7 @@ export async function createInstructorBlock(
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = createInstructorBlockSchema.parse(input);
-    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     let resolvedInstructorId = payload.instructorId;
 
@@ -5195,7 +5200,7 @@ export async function createInstructorBlock(
 export async function deleteInstructorBlock(blockId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
-    const isOwnerOrAdmin = membership.role === "admin" || membership.autoscuolaRole === "OWNER";
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
     const block = await prisma.autoscuolaInstructorBlock.findFirst({
       where: {

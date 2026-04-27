@@ -25,7 +25,7 @@ import {
 import { createCompanyInvite } from "@/lib/actions/invite.actions";
 import { companyAtom } from "@/atoms/company.store";
 
-type AutoscuolaRole = "OWNER" | "INSTRUCTOR" | "STUDENT";
+type AutoscuolaRole = "OWNER" | "INSTRUCTOR_OWNER" | "INSTRUCTOR" | "STUDENT";
 
 type AdminUsersInviteDialogProps = {
   open: boolean;
@@ -48,7 +48,6 @@ export function AdminUsersInviteDialog({
 
   const [inviteForm, setInviteForm] = React.useState({
     email: "",
-    role: "member",
     autoscuolaRole: (initialAutoscuolaRole ?? "STUDENT") as AutoscuolaRole,
   });
   const [isInviteSending, setIsInviteSending] = React.useState(false);
@@ -87,7 +86,6 @@ export function AdminUsersInviteDialog({
       const res = await createCompanyInvite({
         companyId,
         email,
-        role: inviteForm.role as "member" | "admin",
         ...(isAutoscuola && { autoscuolaRole: inviteForm.autoscuolaRole }),
       });
 
@@ -120,7 +118,7 @@ export function AdminUsersInviteDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {initialAutoscuolaRole === "INSTRUCTOR"
+            {initialAutoscuolaRole === "INSTRUCTOR" || initialAutoscuolaRole === "INSTRUCTOR_OWNER"
               ? "Invita istruttore"
               : "Invita membri"}
           </DialogTitle>
@@ -145,33 +143,6 @@ export function AdminUsersInviteDialog({
             />
           </div>
 
-          {/* System role — hidden when locked to instructor shortcut */}
-          {!initialAutoscuolaRole && (
-            <div className="space-y-2">
-              <Label>Ruolo</Label>
-              <Select
-                value={inviteForm.role}
-                onValueChange={(value) =>
-                  setInviteForm((prev) => ({
-                    ...prev,
-                    role: value,
-                    // Keep autoscuola role in sync with system role default
-                    autoscuolaRole:
-                      value === "admin" ? "OWNER" : prev.autoscuolaRole,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona ruolo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
           {/* Autoscuola role — only for autoscuola companies */}
           {isAutoscuola && (
             <div className="space-y-2">
@@ -181,9 +152,11 @@ export function AdminUsersInviteDialog({
                 <div className="flex h-9 w-full items-center rounded-md border border-input bg-muted px-3 py-1 text-sm text-muted-foreground">
                   {initialAutoscuolaRole === "INSTRUCTOR"
                     ? "Istruttore"
-                    : initialAutoscuolaRole === "OWNER"
-                      ? "Titolare"
-                      : "Allievo"}
+                    : initialAutoscuolaRole === "INSTRUCTOR_OWNER"
+                      ? "Istruttore e Titolare"
+                      : initialAutoscuolaRole === "OWNER"
+                        ? "Titolare"
+                        : "Allievo"}
                 </div>
               ) : (
                 <Select
@@ -201,6 +174,8 @@ export function AdminUsersInviteDialog({
                   <SelectContent>
                     <SelectItem value="STUDENT">Allievo</SelectItem>
                     <SelectItem value="INSTRUCTOR">Istruttore</SelectItem>
+                    <SelectItem value="INSTRUCTOR_OWNER">Istruttore e Titolare</SelectItem>
+                    <SelectItem value="OWNER">Titolare</SelectItem>
                   </SelectContent>
                 </Select>
               )}

@@ -12,7 +12,7 @@ const INVITE_TTL_DAYS = 7;
 
 const createMobileInviteSchema = z.object({
   email: z.string().email("Email non valida"),
-  autoscuolaRole: z.enum(["INSTRUCTOR", "STUDENT"]).default("INSTRUCTOR"),
+  autoscuolaRole: z.enum(["INSTRUCTOR", "INSTRUCTOR_OWNER", "STUDENT"]).default("INSTRUCTOR"),
 });
 
 const buildMobileInviteUrl = (token: string) => {

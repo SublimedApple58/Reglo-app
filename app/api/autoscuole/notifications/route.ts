@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 /**
  * Server-side notification aggregator.
@@ -240,7 +241,7 @@ export async function GET(request: Request) {
       }
     }
 
-    if (role === "INSTRUCTOR" || role === "OWNER") {
+    if (isInstructor(role) || isOwner(role)) {
       // Find instructor profile
       const instructor = await prisma.autoscuolaInstructor.findFirst({
         where: { companyId, userId, status: { not: "inactive" } },

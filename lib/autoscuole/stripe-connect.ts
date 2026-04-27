@@ -3,6 +3,7 @@ import Stripe from "stripe";
 
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { SERVER_URL } from "@/lib/constants";
+import { isOwner } from "./roles";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
 
@@ -352,7 +353,7 @@ const migrateLegacyStripeConnectedAccount = async ({
 export const canManageAutoscuolaStripeConnect = (
   role: string,
   autoscuolaRole: string | null,
-) => role === "admin" || autoscuolaRole === "OWNER";
+) => role === "admin" || isOwner(autoscuolaRole);
 
 export async function getAutoscuolaStripeConnectStatus({
   prisma = defaultPrisma,
