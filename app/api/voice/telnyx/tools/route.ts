@@ -8,6 +8,8 @@ import {
   verifyTelnyxSignature,
   verifyVoiceStudentDob,
 } from "@/lib/autoscuole/voice";
+import { telnyxCallControl } from "@/lib/telnyx";
+
 const json = (data: unknown, status = 200) =>
   NextResponse.json(data, { status });
 
@@ -18,6 +20,7 @@ const SUPPORTED_TOOLS = new Set([
   "create_callback",
   "check_availability",
   "create_appointment",
+  "transfer_call",
 ]);
 
 export async function POST(request: Request) {
@@ -118,6 +121,37 @@ export async function POST(request: Request) {
         }
         const appointment = await createVoiceAppointment({ companyId, studentId, date, startTime });
         return json({ success: true, data: { appointment } });
+      }
+
+      case "transfer_call": {
+        if (!callId) {
+          return json({ success: false, message: "callId mancante." }, 400);
+        }
+        const { prisma } = await import("@/db/prisma");
+        const call = await prisma.autoscuolaVoiceCall.findFirst({
+          where: { id: callId, companyId },
+          select: { twilioCallSid: true },
+        });
+        if (!call?.twilioCallSid) {
+          return json({ success: false, message: "Chiamata non trovata." }, 400);
+        }
+        const service = await prisma.companyService.findFirst({
+          where: { companyId, serviceKey: "AUTOSCUOLE" },
+          select: { limits: true },
+        });
+        const limits = (service?.limits ?? {}) as Record<string, unknown>;
+        const handoffPhone = (typeof limits.voiceHandoffPhone === "string" ? limits.voiceHandoffPhone : "").trim();
+        if (!handoffPhone) {
+          return json({ success: false, message: "Numero di trasferimento non configurato." }, 400);
+        }
+        console.log(`[voice][telnyx][tools] transfer_call: callControlId=${call.twilioCallSid}, to=${handoffPhone}`);
+        try {
+          await telnyxCallControl(call.twilioCallSid, "ai_assistant_stop", {});
+        } catch (err) {
+          console.warn("[voice][telnyx][tools] ai_assistant_stop warning:", err);
+        }
+        await telnyxCallControl(call.twilioCallSid, "transfer", { to: handoffPhone });
+        return json({ success: true, data: { transferred: true, to: handoffPhone } });
       }
 
       default:
