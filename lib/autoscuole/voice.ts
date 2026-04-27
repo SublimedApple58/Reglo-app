@@ -1683,6 +1683,7 @@ export function buildTelnyxWebhookTools(opts: {
   voiceBookingEnabled: boolean;
   voiceHandoffDuringCallEnabled: boolean;
   voiceHandoffPhone: string | null;
+  fromNumber: string;
 }): Array<Record<string, unknown>> {
   const baseUrl = `${TELNYX_WEBHOOK_BASE_URL}/api/voice/telnyx/tools`;
   const commonQuery = "companyId={{companyId}}&callId={{callId}}";
@@ -1793,6 +1794,7 @@ export function buildTelnyxWebhookTools(opts: {
       type: "transfer",
       transfer: {
         targets: [{ name: "Segreteria", to: opts.voiceHandoffPhone.trim() }],
+        from: opts.fromNumber,
       },
     });
   }
@@ -1808,6 +1810,7 @@ export async function buildTelnyxAssistantStartBody(opts: {
   callId: string;
   companyName: string | null;
   fromNumber: string;
+  lineNumber: string;
   settings: AutoscuolaVoiceSettings;
 }): Promise<Record<string, unknown>> {
   const assistantId = process.env.TELNYX_AI_ASSISTANT_ID;
@@ -1835,6 +1838,7 @@ export async function buildTelnyxAssistantStartBody(opts: {
     voiceBookingEnabled: opts.settings.voiceBookingEnabled,
     voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
     voiceHandoffPhone: opts.settings.voiceHandoffPhone,
+    fromNumber: opts.lineNumber,
   });
 
   return {
