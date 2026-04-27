@@ -1790,11 +1790,19 @@ export function buildTelnyxWebhookTools(opts: {
 
   if (opts.voiceHandoffDuringCallEnabled && opts.voiceHandoffPhone?.trim()) {
     tools.push({
-      type: "transfer",
-      transfer: {
-        targets: [
-          { name: "Segreteria", to: opts.voiceHandoffPhone.trim() },
-        ],
+      type: "webhook",
+      webhook: {
+        url: `${baseUrl}?tool=transfer_call&${commonQuery}`,
+        name: "transfer_call",
+        description:
+          "Trasferisci la chiamata alla segreteria umana. Usa SOLO quando le regole di trasferimento lo indicano. Prima di trasferire, avvisa il chiamante.",
+        method: "POST",
+        body_parameters: {
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Motivo del trasferimento." },
+          },
+        },
       },
     });
   }
