@@ -20,7 +20,7 @@ export async function telnyxFetch(path: string, options?: RequestInit) {
 }
 
 export const TELNYX_WEBHOOK_BASE_URL =
-  process.env.TELNYX_WEBHOOK_BASE_URL?.replace(/\/$/, "") || "https://app.reglo.it";
+  process.env.TELNYX_WEBHOOK_BASE_URL?.trim().replace(/\/$/, "") || "https://app.reglo.it";
 
 export async function telnyxCallControl(
   callControlId: string,

@@ -1794,7 +1794,6 @@ export function buildTelnyxWebhookTools(opts: {
       type: "transfer",
       transfer: {
         targets: [{ name: "Segreteria", to: opts.voiceHandoffPhone.trim() }],
-        from: opts.fromNumber,
       },
     });
   }
