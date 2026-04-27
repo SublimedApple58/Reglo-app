@@ -334,6 +334,7 @@ const autoscuolaSettingsPatchSchema = z
       .transform((items) => Array.from(new Set(items)))
       .optional(),
     voiceAssistantVoice: z.string().min(1).max(50).optional(),
+    voiceCustomGreeting: z.string().max(500).nullable().optional(),
     studentNotesEnabled: z.boolean().optional(),
     instructorClustersEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
@@ -396,6 +397,7 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceRetentionDays !== undefined ||
       value.voiceInstructions !== undefined ||
       value.voiceAllowedActions !== undefined ||
+      value.voiceCustomGreeting !== undefined ||
       value.studentNotesEnabled !== undefined ||
       value.instructorClustersEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
@@ -571,6 +573,7 @@ export type AutoscuolaSettingsData = {
   voiceInstructions: string;
   voiceAllowedActions: Array<(typeof VOICE_ALLOWED_ACTIONS)[number]>;
   voiceAssistantVoice: string;
+  voiceCustomGreeting: string | null;
   studentNotesEnabled: boolean;
   instructorClustersEnabled: boolean;
   autoCheckinEnabled: boolean;
@@ -824,6 +827,10 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.voiceAssistantVoice === "string" && limits.voiceAssistantVoice.trim().length
       ? limits.voiceAssistantVoice.trim()
       : "coral";
+  const voiceCustomGreeting =
+    typeof limits.voiceCustomGreeting === "string" && limits.voiceCustomGreeting.trim().length
+      ? limits.voiceCustomGreeting.trim()
+      : null;
 
   return {
     availabilityWeeks,
@@ -893,6 +900,7 @@ const resolveAutoscuolaSettingsData = async (
     voiceInstructions,
     voiceAllowedActions,
     voiceAssistantVoice,
+    voiceCustomGreeting,
     studentNotesEnabled,
     instructorClustersEnabled,
     autoCheckinEnabled,
@@ -1141,6 +1149,10 @@ export async function updateAutoscuolaSettings(
       typeof limits.voiceAssistantVoice === "string" && limits.voiceAssistantVoice.trim().length
         ? limits.voiceAssistantVoice.trim()
         : "coral";
+    const previousVoiceCustomGreeting =
+      typeof limits.voiceCustomGreeting === "string" && limits.voiceCustomGreeting.trim().length
+        ? limits.voiceCustomGreeting.trim()
+        : null;
 
     const nextAutoPaymentsEnabled =
       payload.autoPaymentsEnabled ?? previousAutoPaymentsEnabled;
@@ -1256,6 +1268,9 @@ export async function updateAutoscuolaSettings(
     const nextVoiceAssistantVoice = nextVoiceFeatureEnabled
       ? payload.voiceAssistantVoice ?? previousVoiceAssistantVoice
       : "coral";
+    const nextVoiceCustomGreeting = nextVoiceFeatureEnabled
+      ? (payload.voiceCustomGreeting !== undefined ? payload.voiceCustomGreeting : previousVoiceCustomGreeting)
+      : null;
 
     if (nextAutoPaymentsEnabled) {
       const stripe = await isAutoscuolaStripeConnectReady({
@@ -1293,7 +1308,8 @@ export async function updateAutoscuolaSettings(
       payload.voiceInstructions !== undefined ||
       payload.voiceLegalGreetingEnabled !== undefined ||
       payload.voiceRecordingEnabled !== undefined ||
-      payload.voiceTranscriptionEnabled !== undefined;
+      payload.voiceTranscriptionEnabled !== undefined ||
+      payload.voiceCustomGreeting !== undefined;
     if (isChangingVoiceSettings && nextVoiceFeatureEnabled && nextVoiceAssistantEnabled) {
       if (!nextVoiceLineRef || nextVoiceProvisioningStatus !== "ready") {
         throw new Error(
@@ -1397,6 +1413,7 @@ export async function updateAutoscuolaSettings(
       voiceInstructions: nextVoiceInstructions,
       voiceAllowedActions: nextVoiceAllowedActions,
       voiceAssistantVoice: nextVoiceAssistantVoice,
+      voiceCustomGreeting: nextVoiceCustomGreeting,
       studentNotesEnabled: nextStudentNotesEnabled,
       instructorClustersEnabled: nextInstructorClustersEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
@@ -1495,6 +1512,7 @@ export async function updateAutoscuolaSettings(
         voiceInstructions: nextLimits.voiceInstructions,
         voiceAllowedActions: nextLimits.voiceAllowedActions,
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
+        voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
       },
     };

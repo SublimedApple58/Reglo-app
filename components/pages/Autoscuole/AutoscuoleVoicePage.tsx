@@ -36,8 +36,6 @@ import {
   CheckCircle2,
   Loader2,
   ChevronDown,
-  Play,
-  Square,
   HelpCircle,
 } from "lucide-react";
 import {
@@ -81,10 +79,6 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
   { value: "lesson_info" as const, label: "Info lezioni", description: "Dettagli su corsi e lezioni" },
   { value: "booking" as const, label: "Prenota guida", description: "Prenotazione diretta sull'agenda" },
 ];
-
-const VOICE_OPTIONS = [
-  { value: "Minimax.speech-2.8-turbo.Wandering_Sorcerer", label: "Wandering Sorcerer", description: "Femminile, italiana" },
-] as const;
 
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
 const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 30);
@@ -213,8 +207,8 @@ export function AutoscuoleVoicePage() {
   ]);
   const [voiceInstructions, setVoiceInstructions] = React.useState("");
   const [voiceAssistantVoice, setVoiceAssistantVoice] = React.useState("Minimax.speech-2.8-turbo.Wandering_Sorcerer");
-  const [previewPlaying, setPreviewPlaying] = React.useState(false);
-  const previewAudioRef = React.useRef<HTMLAudioElement | null>(null);
+  const [voiceCustomGreetingEnabled, setVoiceCustomGreetingEnabled] = React.useState(false);
+  const [voiceCustomGreeting, setVoiceCustomGreeting] = React.useState("");
 
   // Callbacks state
   const [callbackTasks, setCallbackTasks] = React.useState<CallbackTask[]>([]);
@@ -252,6 +246,8 @@ export function AutoscuoleVoicePage() {
       setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
       setVoiceInstructions(d.voiceInstructions ?? "");
       setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
+      setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
+      setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
       const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
       const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
         VALID_ACTIONS.includes(a as VoiceAllowedAction),
@@ -340,6 +336,7 @@ export function AutoscuoleVoicePage() {
       voiceInstructions,
       voiceAllowedActions,
       voiceAssistantVoice,
+      voiceCustomGreeting: voiceCustomGreetingEnabled ? voiceCustomGreeting.trim() || null : null,
     });
     setSaving(false);
 
@@ -360,38 +357,14 @@ export function AutoscuoleVoicePage() {
     setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
     setVoiceInstructions(d.voiceInstructions ?? "");
     setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
+    setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
+    setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
     const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
     const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
       VALID_ACTIONS.includes(a as VoiceAllowedAction),
     );
     setVoiceAllowedActions(loaded.length ? loaded : ["faq", "lesson_info"]);
     toast.success({ description: "Impostazioni segretaria salvate." });
-  };
-
-  const handlePreviewVoice = async () => {
-    if (previewPlaying) {
-      previewAudioRef.current?.pause();
-      previewAudioRef.current = null;
-      setPreviewPlaying(false);
-      return;
-    }
-    setPreviewPlaying(true);
-    try {
-      const audio = new Audio(`/api/voice/preview?voice=${voiceAssistantVoice}`);
-      previewAudioRef.current = audio;
-      audio.onended = () => {
-        setPreviewPlaying(false);
-        previewAudioRef.current = null;
-      };
-      audio.onerror = () => {
-        setPreviewPlaying(false);
-        previewAudioRef.current = null;
-        toast.error({ description: "Impossibile riprodurre l'anteprima." });
-      };
-      await audio.play();
-    } catch {
-      setPreviewPlaying(false);
-    }
   };
 
   const isReady = voiceProvisioningStatus === "ready";
@@ -512,7 +485,21 @@ export function AutoscuoleVoicePage() {
               <div className="space-y-2">
                 <ToggleRow label="Prenotazioni voce" description="L'assistente può prenotare guide sull'agenda" checked={voiceBookingEnabled} onCheckedChange={setVoiceBookingEnabled} />
                 <ToggleRow label="Greeting legale" description="Avvisa il chiamante che la chiamata è gestita da un AI" checked={voiceLegalGreetingEnabled} onCheckedChange={setVoiceLegalGreetingEnabled} />
+                <ToggleRow label="Greeting personalizzato" description="Messaggio iniziale personalizzato prima della conversazione" checked={voiceCustomGreetingEnabled} onCheckedChange={(checked) => { setVoiceCustomGreetingEnabled(checked); if (!checked) setVoiceCustomGreeting(""); }} />
               </div>
+              {voiceCustomGreetingEnabled && (
+                <FieldGroup label="Testo del greeting" description="La segretaria leggerà questo messaggio all'inizio di ogni chiamata, dopo il greeting legale (se attivo).">
+                  <textarea
+                    value={voiceCustomGreeting}
+                    onChange={(e) => setVoiceCustomGreeting(e.target.value)}
+                    maxLength={500}
+                    rows={3}
+                    className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none transition focus:border-primary resize-none"
+                    placeholder="Es: Benvenuto all'autoscuola Rossi. Sono la segretaria virtuale, come posso aiutarti?"
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">{voiceCustomGreeting.length}/500 caratteri</p>
+                </FieldGroup>
+              )}
             </div>
           </VoiceAccordion>
 
@@ -592,49 +579,6 @@ export function AutoscuoleVoicePage() {
                 <ToggleRow label="Registra audio" description="Salva una registrazione audio della chiamata" checked={voiceRecordingEnabled} onCheckedChange={setVoiceRecordingEnabled} />
                 <ToggleRow label="Trascrivi chiamate" description="Genera trascrizione testuale della conversazione" checked={voiceTranscriptionEnabled} onCheckedChange={setVoiceTranscriptionEnabled} />
               </div>
-            </div>
-          </VoiceAccordion>
-
-          {/* Voce assistente */}
-          <VoiceAccordion
-            title="Voce assistente"
-            description="Scegli la voce dell'assistente AI"
-            expanded={voiceSection === "voice"}
-            onToggle={() => toggleVoiceSection("voice")}
-          >
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Select value={voiceAssistantVoice} onValueChange={setVoiceAssistantVoice}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue placeholder="Seleziona voce" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VOICE_OPTIONS.map((v) => (
-                      <SelectItem key={v.value} value={v.value}>
-                        <span className="font-medium">{v.label}</span>
-                        <span className="ml-2 text-muted-foreground">{v.description}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 shrink-0"
-                  onClick={handlePreviewVoice}
-                  disabled={false}
-                >
-                  {previewPlaying ? (
-                    <><Square className="size-3.5" /> Stop</>
-                  ) : (
-                    <><Play className="size-3.5" /> Anteprima</>
-                  )}
-                </Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                La voce selezionata sarà utilizzata per tutte le chiamate in entrata.
-              </p>
             </div>
           </VoiceAccordion>
 
