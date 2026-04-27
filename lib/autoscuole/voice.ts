@@ -1683,7 +1683,6 @@ export function buildTelnyxWebhookTools(opts: {
   voiceBookingEnabled: boolean;
   voiceHandoffDuringCallEnabled: boolean;
   voiceHandoffPhone: string | null;
-  fromNumber: string;
 }): Array<Record<string, unknown>> {
   const baseUrl = `${TELNYX_WEBHOOK_BASE_URL}/api/voice/telnyx/tools`;
   const commonQuery = "companyId={{companyId}}&callId={{callId}}";
@@ -1791,9 +1790,18 @@ export function buildTelnyxWebhookTools(opts: {
 
   if (opts.voiceHandoffDuringCallEnabled && opts.voiceHandoffPhone?.trim()) {
     tools.push({
-      type: "transfer",
-      transfer: {
-        targets: [{ name: "Segreteria", to: opts.voiceHandoffPhone.trim() }],
+      type: "webhook",
+      webhook: {
+        url: `${baseUrl}?tool=transfer_call&companyId={{companyId}}&callId={{callId}}`,
+        name: "transfer_call",
+        description: "Trasferisci la chiamata alla segreteria umana. Usa SOLO quando le regole di trasferimento lo indicano. Prima di trasferire, avvisa il chiamante.",
+        method: "POST",
+        body_parameters: {
+          type: "object",
+          properties: {
+            reason: { type: "string", description: "Motivo del trasferimento." },
+          },
+        },
       },
     });
   }
@@ -1809,7 +1817,6 @@ export async function buildTelnyxAssistantStartBody(opts: {
   callId: string;
   companyName: string | null;
   fromNumber: string;
-  lineNumber: string;
   settings: AutoscuolaVoiceSettings;
 }): Promise<Record<string, unknown>> {
   const assistantId = process.env.TELNYX_AI_ASSISTANT_ID;
@@ -1837,7 +1844,6 @@ export async function buildTelnyxAssistantStartBody(opts: {
     voiceBookingEnabled: opts.settings.voiceBookingEnabled,
     voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
     voiceHandoffPhone: opts.settings.voiceHandoffPhone,
-    fromNumber: opts.lineNumber,
   });
 
   const body = {
@@ -1855,7 +1861,7 @@ export async function buildTelnyxAssistantStartBody(opts: {
     },
   };
 
-  console.log("[voice][telnyx] ai_assistant_start body:", JSON.stringify({ tools, lineNumber: opts.lineNumber, handoffPhone: opts.settings.voiceHandoffPhone }));
+  console.log("[voice][telnyx] ai_assistant_start body:", JSON.stringify({ tools, handoffPhone: opts.settings.voiceHandoffPhone }));
 
   return body;
 }

@@ -205,7 +205,6 @@ async function handleCallAnswered(payload: Record<string, unknown>) {
       callId: call.id,
       companyName: lineContext.companyName,
       fromNumber: from ?? "",
-      lineNumber: lineContext.line.twilioNumber || lineContext.line.displayNumber,
       settings: lineContext.settings,
     });
 
