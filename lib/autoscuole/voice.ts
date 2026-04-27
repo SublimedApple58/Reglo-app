@@ -32,6 +32,7 @@ export type AutoscuolaVoiceSettings = {
   voiceInstructions: string;
   voiceAllowedActions: VoiceAllowedAction[];
   voiceAssistantVoice: string;
+  voiceCustomGreeting?: string | null;
 };
 
 type VoiceLineContext = {
@@ -155,6 +156,7 @@ const mapVoiceSettings = async (companyId: string): Promise<AutoscuolaVoiceSetti
         VOICE_ALLOWED_ACTIONS.includes(item as VoiceAllowedAction),
     ) ?? ["faq", "lesson_info"]) as VoiceAllowedAction[],
     voiceAssistantVoice: settings.voiceAssistantVoice || "coral",
+    voiceCustomGreeting: settings.voiceCustomGreeting ?? null,
   };
 };
 
@@ -1656,14 +1658,18 @@ export function buildTelnyxGreeting(opts: {
   companyName: string | null;
   voiceHandoffDuringCallEnabled: boolean;
   voiceLegalGreetingEnabled: boolean;
+  voiceCustomGreeting?: string | null;
 }): string {
-  const name = (opts.companyName ?? "").trim() || "Autoscuola";
-  const saluto = getRomeHour() < 13 ? "buongiorno" : "buonasera";
-
   const legalPrefix = opts.voiceLegalGreetingEnabled
     ? "Questa chiamata potrebbe essere registrata e analizzata da un assistente virtuale Reglo. "
     : "";
 
+  if (opts.voiceCustomGreeting?.trim()) {
+    return legalPrefix + opts.voiceCustomGreeting.trim();
+  }
+
+  const name = (opts.companyName ?? "").trim() || "Autoscuola";
+  const saluto = getRomeHour() < 13 ? "buongiorno" : "buonasera";
   const greeting = `${name}, ${saluto}! Come posso aiutarla?`;
 
   return legalPrefix + greeting;
@@ -1822,6 +1828,7 @@ export async function buildTelnyxAssistantStartBody(opts: {
     companyName: opts.companyName,
     voiceHandoffDuringCallEnabled: opts.settings.voiceHandoffDuringCallEnabled,
     voiceLegalGreetingEnabled: opts.settings.voiceLegalGreetingEnabled,
+    voiceCustomGreeting: opts.settings.voiceCustomGreeting,
   });
 
   const tools = buildTelnyxWebhookTools({
