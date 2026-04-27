@@ -1841,7 +1841,7 @@ export async function buildTelnyxAssistantStartBody(opts: {
     fromNumber: opts.lineNumber,
   });
 
-  return {
+  const body = {
     assistant: {
       id: assistantId,
       instructions,
@@ -1855,4 +1855,8 @@ export async function buildTelnyxAssistantStartBody(opts: {
       },
     },
   };
+
+  console.log("[voice][telnyx] ai_assistant_start body:", JSON.stringify({ tools, lineNumber: opts.lineNumber, handoffPhone: opts.settings.voiceHandoffPhone }));
+
+  return body;
 }
