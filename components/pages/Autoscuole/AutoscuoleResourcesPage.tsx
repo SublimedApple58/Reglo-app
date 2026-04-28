@@ -43,6 +43,7 @@ import {
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
+import { InstructorHoursDashboard } from "@/components/pages/Autoscuole/InstructorHoursDashboard";
 
 /** Compute Monday (ISO week start) for a date */
 const getWeekStart = (date: Date): Date => {
@@ -201,7 +202,7 @@ export function AutoscuoleResourcesPage({
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
-  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles" | "students">("settings");
+  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles" | "students" | "hours">("settings");
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
@@ -279,6 +280,8 @@ export function AutoscuoleResourcesPage({
   const [clusterRestrictedTimeStart, setClusterRestrictedTimeStart] = React.useState<string | undefined>(undefined);
   const [clusterRestrictedTimeEnd, setClusterRestrictedTimeEnd] = React.useState<string | undefined>(undefined);
   const [clusterWeeklyAbsenceEnabled, setClusterWeeklyAbsenceEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterWorkingHoursStart, setClusterWorkingHoursStart] = React.useState<string | undefined>(undefined);
+  const [clusterWorkingHoursEnd, setClusterWorkingHoursEnd] = React.useState<string | undefined>(undefined);
   const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -870,6 +873,8 @@ export function AutoscuoleResourcesPage({
     setClusterRestrictedTimeStart(settings.restrictedTimeRangeStart as string | undefined);
     setClusterRestrictedTimeEnd(settings.restrictedTimeRangeEnd as string | undefined);
     setClusterWeeklyAbsenceEnabled(typeof settings.weeklyAbsenceEnabled === "boolean" ? settings.weeklyAbsenceEnabled : undefined);
+    setClusterWorkingHoursStart(typeof settings.workingHoursStart === "string" ? settings.workingHoursStart : undefined);
+    setClusterWorkingHoursEnd(typeof settings.workingHoursEnd === "string" ? settings.workingHoursEnd : undefined);
     const studRes = await getAutoscuolaStudentsWithProgress();
     if (studRes.success && studRes.data) {
       setAllStudents(studRes.data.map((s) => ({
@@ -892,25 +897,29 @@ export function AutoscuoleResourcesPage({
     const res = await updateAutoscuolaInstructor({
       instructorId: clusterInstructor.id,
       autonomousMode: clusterAutonomous,
-      settings: clusterAutonomous ? {
-        bookingSlotDurations: clusterDurations,
-        roundedHoursOnly: clusterRoundedHours,
-        appBookingActors: clusterAppBookingActors,
-        instructorBookingMode: clusterInstructorBookingMode,
-        swapEnabled: clusterSwapEnabled,
-        swapNotifyMode: clusterSwapNotifyMode,
-        bookingCutoffEnabled: clusterBookingCutoffEnabled,
-        bookingCutoffTime: clusterBookingCutoffTime,
-        weeklyBookingLimitEnabled: clusterWeeklyLimitEnabled,
-        weeklyBookingLimit: clusterWeeklyLimit,
-        emptySlotNotificationEnabled: clusterEmptySlotEnabled,
-        emptySlotNotificationTarget: clusterEmptySlotTarget,
-        emptySlotNotificationTimes: clusterEmptySlotTimes,
-        restrictedTimeRangeEnabled: clusterRestrictedTimeEnabled,
-        restrictedTimeRangeStart: clusterRestrictedTimeStart,
-        restrictedTimeRangeEnd: clusterRestrictedTimeEnd,
-        weeklyAbsenceEnabled: clusterWeeklyAbsenceEnabled,
-      } : undefined,
+      settings: {
+        ...(clusterAutonomous ? {
+          bookingSlotDurations: clusterDurations,
+          roundedHoursOnly: clusterRoundedHours,
+          appBookingActors: clusterAppBookingActors,
+          instructorBookingMode: clusterInstructorBookingMode,
+          swapEnabled: clusterSwapEnabled,
+          swapNotifyMode: clusterSwapNotifyMode,
+          bookingCutoffEnabled: clusterBookingCutoffEnabled,
+          bookingCutoffTime: clusterBookingCutoffTime,
+          weeklyBookingLimitEnabled: clusterWeeklyLimitEnabled,
+          weeklyBookingLimit: clusterWeeklyLimit,
+          emptySlotNotificationEnabled: clusterEmptySlotEnabled,
+          emptySlotNotificationTarget: clusterEmptySlotTarget,
+          emptySlotNotificationTimes: clusterEmptySlotTimes,
+          restrictedTimeRangeEnabled: clusterRestrictedTimeEnabled,
+          restrictedTimeRangeStart: clusterRestrictedTimeStart,
+          restrictedTimeRangeEnd: clusterRestrictedTimeEnd,
+          weeklyAbsenceEnabled: clusterWeeklyAbsenceEnabled,
+        } : {}),
+        workingHoursStart: clusterWorkingHoursStart,
+        workingHoursEnd: clusterWorkingHoursEnd,
+      },
       assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
     });
     setClusterSaving(false);
@@ -1310,6 +1319,7 @@ export function AutoscuoleResourcesPage({
             { key: "instructors" as const, label: "Istruttori", icon: Users },
             { key: "vehicles" as const, label: "Veicoli", icon: Truck },
             { key: "students" as const, label: "Gestione allievi", icon: UserRoundCog },
+            { key: "hours" as const, label: "Ore guida", icon: Clock },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -1735,11 +1745,15 @@ export function AutoscuoleResourcesPage({
                   key={instructor.id}
                   name={instructor.name}
                   inactive={instructor.status === "inactive"}
-                  subtitle={
-                    instructor.autonomousMode
-                      ? `Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`
-                      : undefined
-                  }
+                  subtitle={(() => {
+                    const parts: string[] = [];
+                    if (instructor.autonomousMode) parts.push(`Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`);
+                    const s = (instructor.settings ?? {}) as Record<string, unknown>;
+                    if (typeof s.workingHoursStart === "string" && typeof s.workingHoursEnd === "string") {
+                      parts.push(`Orario lavoro: ${s.workingHoursStart}–${s.workingHoursEnd}`);
+                    }
+                    return parts.length ? parts.join(" · ") : undefined;
+                  })()}
                   actions={
                     <>
                       <ResourceCardAction
@@ -1812,6 +1826,40 @@ export function AutoscuoleResourcesPage({
                 </DialogHeader>
               </div>
               <div className="px-6 py-5 space-y-5">
+                {/* ── Orario di lavoro ── */}
+                <div className="space-y-3">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Orario di lavoro</span>
+                  <p className="text-xs text-muted-foreground -mt-1">Definisci la fascia lavorativa per identificare ore extra.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FieldGroup label="Inizio">
+                      <Select value={clusterWorkingHoursStart ?? ""} onValueChange={(v) => setClusterWorkingHoursStart(v || undefined)}>
+                        <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 35 }, (_, i) => {
+                            const h = Math.floor(i / 2) + 6;
+                            const m = (i % 2) * 30;
+                            const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+                            return <SelectItem key={val} value={val}>{val}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                    <FieldGroup label="Fine">
+                      <Select value={clusterWorkingHoursEnd ?? ""} onValueChange={(v) => setClusterWorkingHoursEnd(v || undefined)}>
+                        <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
+                        <SelectContent>
+                          {Array.from({ length: 35 }, (_, i) => {
+                            const h = Math.floor(i / 2) + 6;
+                            const m = (i % 2) * 30;
+                            const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+                            return <SelectItem key={val} value={val}>{val}</SelectItem>;
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                  </div>
+                </div>
+
                 <div
                   className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
                   onClick={() => setClusterAutonomous((prev) => !prev)}
@@ -2586,6 +2634,8 @@ export function AutoscuoleResourcesPage({
             </Button>
           </div>
           </>
+        ) : configTab === "hours" ? (
+          <InstructorHoursDashboard />
         ) : (
           /* ── Veicoli tab ── */
           <>

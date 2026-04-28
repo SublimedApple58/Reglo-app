@@ -25,6 +25,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import {
   processAutoscuolaAppointmentSettlementNow,
   adjustStudentLessonCredits,
@@ -172,6 +173,8 @@ const instructorSettingsSchema = z.object({
   restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   weeklyAbsenceEnabled: z.boolean().optional(),
+  workingHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
 }).optional();
 
 const updateInstructorSchema = z.object({
@@ -5985,6 +5988,258 @@ export async function getStudentsCompletedDrivingMinutes() {
     }
 
     return { success: true, data: minutesByStudent };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ── Instructor driving hours ──────────────────────────────────────────────────
+
+type InstructorHoursDayBreakdown = {
+  date: string;
+  dayLabel: string;
+  totalMinutes: number;
+  outsideWorkingHoursMinutes: number;
+  appointmentCount: number;
+};
+
+export type InstructorHoursEntry = {
+  instructorId: string;
+  instructorName: string;
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+  weekly: {
+    totalMinutes: number;
+    outsideWorkingHoursMinutes: number;
+    byDay: InstructorHoursDayBreakdown[];
+  };
+  monthly: {
+    monthLabel: string;
+    totalMinutes: number;
+    outsideWorkingHoursMinutes: number;
+  };
+};
+
+const ITALY_DAY_LABELS = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+const ITALY_MONTH_LABELS = [
+  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
+
+function toItalyDate(date: Date): { year: number; month: number; day: number; dayOfWeek: number; minuteOfDay: number } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Rome",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    weekday: "short",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  const dayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return {
+    year: parseInt(get("year")),
+    month: parseInt(get("month")),
+    day: parseInt(get("day")),
+    dayOfWeek: dayMap[get("weekday")] ?? 0,
+    minuteOfDay: parseInt(get("hour")) * 60 + parseInt(get("minute")),
+  };
+}
+
+function hhmmToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+
+function computeOutsideMinutes(
+  startDate: Date,
+  endDate: Date,
+  whStart: string | undefined,
+  whEnd: string | undefined,
+): number {
+  if (!whStart || !whEnd) return 0;
+  const whStartMin = hhmmToMinutes(whStart);
+  const whEndMin = hhmmToMinutes(whEnd);
+  if (whStartMin >= whEndMin) return 0;
+
+  const s = toItalyDate(startDate);
+  const e = toItalyDate(endDate);
+  const apptStartMin = s.minuteOfDay;
+  const apptEndMin = e.minuteOfDay;
+
+  // Clamp the working-hours window against the appointment
+  const overlapStart = Math.max(apptStartMin, whStartMin);
+  const overlapEnd = Math.min(apptEndMin, whEndMin);
+  const insideMinutes = Math.max(0, overlapEnd - overlapStart);
+  const totalMinutes = Math.max(0, apptEndMin - apptStartMin);
+  return Math.max(0, totalMinutes - insideMinutes);
+}
+
+export async function getInstructorDrivingHours(input: {
+  instructorId?: string;
+  weekStart: string;
+  monthStart?: string;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const role = membership.autoscuolaRole;
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(role);
+    const isSelfInstructor = isInstructor(role);
+
+    // Resolve target instructors
+    let targetInstructors: { id: string; name: string; settings: unknown }[];
+    if (input.instructorId) {
+      // Specific instructor requested
+      if (!isOwnerOrAdmin) {
+        // Instructor can only see own hours
+        const own = await prisma.autoscuolaInstructor.findFirst({
+          where: { companyId, userId: membership.userId, status: "active" },
+          select: { id: true, name: true, settings: true },
+        });
+        if (!own || own.id !== input.instructorId) {
+          return { success: false, message: "Non autorizzato." };
+        }
+        targetInstructors = [own];
+      } else {
+        const instr = await prisma.autoscuolaInstructor.findFirst({
+          where: { companyId, id: input.instructorId },
+          select: { id: true, name: true, settings: true },
+        });
+        if (!instr) return { success: false, message: "Istruttore non trovato." };
+        targetInstructors = [instr];
+      }
+    } else if (isOwnerOrAdmin) {
+      targetInstructors = await prisma.autoscuolaInstructor.findMany({
+        where: { companyId, status: "active" },
+        select: { id: true, name: true, settings: true },
+        orderBy: { name: "asc" },
+      });
+    } else if (isSelfInstructor) {
+      const own = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: "active" },
+        select: { id: true, name: true, settings: true },
+      });
+      if (!own) return { success: false, message: "Istruttore non trovato." };
+      targetInstructors = [own];
+    } else {
+      return { success: false, message: "Non autorizzato." };
+    }
+
+    if (!targetInstructors.length) {
+      return { success: true, data: [] as InstructorHoursEntry[] };
+    }
+
+    // Parse date ranges
+    const weekStartDate = new Date(input.weekStart + "T00:00:00Z");
+    const weekEndDate = new Date(weekStartDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const monthStartStr = input.monthStart ?? input.weekStart.slice(0, 7) + "-01";
+    const monthStartDate = new Date(monthStartStr + "T00:00:00Z");
+    const monthEndDate = new Date(monthStartDate);
+    monthEndDate.setUTCMonth(monthEndDate.getUTCMonth() + 1);
+
+    // Combined range (min/max of week and month)
+    const rangeStart = new Date(Math.min(weekStartDate.getTime(), monthStartDate.getTime()));
+    const rangeEnd = new Date(Math.max(weekEndDate.getTime(), monthEndDate.getTime()));
+
+    const instructorIds = targetInstructors.map((i) => i.id);
+
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        status: { in: ["completed", "checked_in"] },
+        type: { not: "esame" },
+        startsAt: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: {
+        instructorId: true,
+        startsAt: true,
+        endsAt: true,
+      },
+    });
+
+    // Build settings map
+    const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
+    for (const instr of targetInstructors) {
+      settingsMap.set(instr.id, parseInstructorSettings(instr.settings));
+    }
+
+    // Build result per instructor
+    const results: InstructorHoursEntry[] = targetInstructors.map((instr) => {
+      const settings = settingsMap.get(instr.id)!;
+      const instrAppts = appointments.filter((a) => a.instructorId === instr.id);
+
+      // Weekly breakdown by day
+      const weekDays: InstructorHoursDayBreakdown[] = [];
+      for (let d = 0; d < 7; d++) {
+        const dayDate = new Date(weekStartDate.getTime() + d * 24 * 60 * 60 * 1000);
+        const dateStr = dayDate.toISOString().slice(0, 10);
+        const nextDay = new Date(dayDate.getTime() + 24 * 60 * 60 * 1000);
+        const dayAppts = instrAppts.filter((a) => a.startsAt >= dayDate && a.startsAt < nextDay);
+        let dayTotalMin = 0;
+        let dayOutsideMin = 0;
+        for (const appt of dayAppts) {
+          const start = appt.startsAt.getTime();
+          const end = appt.endsAt ? appt.endsAt.getTime() : start + 60 * 60 * 1000;
+          const mins = Math.round((end - start) / 60000);
+          dayTotalMin += mins;
+          dayOutsideMin += computeOutsideMinutes(
+            appt.startsAt,
+            appt.endsAt ?? new Date(start + 60 * 60 * 1000),
+            settings.workingHoursStart,
+            settings.workingHoursEnd,
+          );
+        }
+        const dow = (dayDate.getUTCDay());
+        weekDays.push({
+          date: dateStr,
+          dayLabel: ITALY_DAY_LABELS[dow],
+          totalMinutes: dayTotalMin,
+          outsideWorkingHoursMinutes: Math.round(dayOutsideMin),
+          appointmentCount: dayAppts.length,
+        });
+      }
+
+      const weeklyTotal = weekDays.reduce((s, d) => s + d.totalMinutes, 0);
+      const weeklyOutside = weekDays.reduce((s, d) => s + d.outsideWorkingHoursMinutes, 0);
+
+      // Monthly totals
+      const monthAppts = instrAppts.filter((a) => a.startsAt >= monthStartDate && a.startsAt < monthEndDate);
+      let monthTotal = 0;
+      let monthOutside = 0;
+      for (const appt of monthAppts) {
+        const start = appt.startsAt.getTime();
+        const end = appt.endsAt ? appt.endsAt.getTime() : start + 60 * 60 * 1000;
+        monthTotal += Math.round((end - start) / 60000);
+        monthOutside += computeOutsideMinutes(
+          appt.startsAt,
+          appt.endsAt ?? new Date(start + 60 * 60 * 1000),
+          settings.workingHoursStart,
+          settings.workingHoursEnd,
+        );
+      }
+
+      const monthLabel = `${ITALY_MONTH_LABELS[monthStartDate.getUTCMonth()]} ${monthStartDate.getUTCFullYear()}`;
+
+      return {
+        instructorId: instr.id,
+        instructorName: instr.name,
+        workingHoursStart: settings.workingHoursStart ?? null,
+        workingHoursEnd: settings.workingHoursEnd ?? null,
+        weekly: {
+          totalMinutes: weeklyTotal,
+          outsideWorkingHoursMinutes: weeklyOutside,
+          byDay: weekDays,
+        },
+        monthly: {
+          monthLabel,
+          totalMinutes: monthTotal,
+          outsideWorkingHoursMinutes: Math.round(monthOutside),
+        },
+      };
+    });
+
+    return { success: true, data: results };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

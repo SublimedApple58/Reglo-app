@@ -38,6 +38,9 @@ export type InstructorSettings = {
   restrictedTimeRangeEnd?: string;
   // Assenza settimanale (Task 8)
   weeklyAbsenceEnabled?: boolean;
+  // Orario di lavoro
+  workingHoursStart?: string;
+  workingHoursEnd?: string;
 };
 
 export type EffectiveBookingSettings = {
@@ -146,6 +149,14 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
 
   // Assenza settimanale
   if (typeof obj.weeklyAbsenceEnabled === "boolean") result.weeklyAbsenceEnabled = obj.weeklyAbsenceEnabled;
+
+  // Orario di lavoro
+  if (typeof obj.workingHoursStart === "string" && HH_MM_RE.test(obj.workingHoursStart)) {
+    result.workingHoursStart = obj.workingHoursStart;
+  }
+  if (typeof obj.workingHoursEnd === "string" && HH_MM_RE.test(obj.workingHoursEnd)) {
+    result.workingHoursEnd = obj.workingHoursEnd;
+  }
 
   return result;
 }
