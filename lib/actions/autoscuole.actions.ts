@@ -6109,7 +6109,16 @@ export async function getInstructorDrivingHours(input: {
       }
     } else if (isOwnerOrAdmin) {
       targetInstructors = await prisma.autoscuolaInstructor.findMany({
-        where: { companyId, status: "active" },
+        where: {
+          companyId,
+          status: "active",
+          userId: { not: null },
+          user: {
+            companyMembers: {
+              some: { companyId, autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
+            },
+          },
+        },
         select: { id: true, name: true, settings: true },
         orderBy: { name: "asc" },
       });

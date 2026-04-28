@@ -138,43 +138,35 @@ function InstructorHoursCard({ entry }: { entry: InstructorHoursEntry }) {
         )}
       </div>
 
-      {/* Weekly progress bar */}
-      <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-pink-400 transition-all duration-500"
-          style={{ width: `${Math.min(100, (entry.weekly.totalMinutes / (40 * 60)) * 100)}%` }}
-        />
-      </div>
-
-      {/* Daily breakdown */}
-      <div className="space-y-1.5">
-        {entry.weekly.byDay.map((day) => (
-          <div key={day.date} className="flex items-center gap-2 text-xs">
-            <span className="w-14 text-muted-foreground font-medium">
-              {day.dayLabel} {day.date.slice(8, 10)}/{day.date.slice(5, 7)}
-            </span>
-            <div className="flex-1 h-3 rounded-full bg-gray-50 overflow-hidden">
+      {/* Column chart */}
+      <div className="flex items-end justify-between gap-1.5 h-28 pt-2">
+        {entry.weekly.byDay.map((day) => {
+          const heightPct = maxDayMinutes > 0 ? (day.totalMinutes / maxDayMinutes) * 100 : 0;
+          const hasOutside = day.outsideWorkingHoursMinutes > 0;
+          return (
+            <div key={day.date} className="flex flex-col items-center flex-1 gap-1 h-full justify-end">
               {day.totalMinutes > 0 && (
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-500",
-                    day.outsideWorkingHoursMinutes > 0 ? "bg-amber-400" : "bg-pink-400",
-                  )}
-                  style={{ width: `${(day.totalMinutes / maxDayMinutes) * 100}%` }}
-                />
+                <span className="text-[10px] font-semibold text-muted-foreground tabular-nums">
+                  {formatMinutesAsHours(day.totalMinutes)}
+                </span>
               )}
+              <div
+                className={cn(
+                  "w-full rounded-t-md transition-all duration-500 min-h-[4px]",
+                  day.totalMinutes === 0
+                    ? "bg-gray-100"
+                    : hasOutside
+                      ? "bg-amber-400"
+                      : "bg-pink-400",
+                )}
+                style={{ height: day.totalMinutes > 0 ? `${Math.max(heightPct, 8)}%` : "4px" }}
+              />
+              <span className="text-[10px] font-medium text-muted-foreground mt-0.5">
+                {day.dayLabel}
+              </span>
             </div>
-            <span className={cn(
-              "w-12 text-right tabular-nums",
-              day.totalMinutes > 0 ? "text-foreground font-medium" : "text-muted-foreground",
-            )}>
-              {day.totalMinutes > 0 ? formatMinutesAsHours(day.totalMinutes) : "—"}
-            </span>
-            {day.outsideWorkingHoursMinutes > 0 && (
-              <span className="size-2 rounded-full bg-amber-400 shrink-0" />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Monthly */}
