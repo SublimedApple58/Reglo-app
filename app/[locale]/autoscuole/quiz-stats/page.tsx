@@ -11,7 +11,7 @@ export default async function QuizStatsPage() {
 
   return (
     <QuizStudentStatsPage
-      students={res.success && res.data ? (res.data as any[]) : []}
+      students={res.success && res.data ? (res.data as React.ComponentProps<typeof QuizStudentStatsPage>["students"]) : []}
       error={!res.success ? res.message : undefined}
     />
   );
