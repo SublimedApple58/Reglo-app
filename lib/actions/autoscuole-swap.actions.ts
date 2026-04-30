@@ -339,7 +339,7 @@ export async function createSwapOffer(
     const requesterName = appointment.student?.name ?? "Un allievo";
     const formattedDate = formatItalianDate(appointment.startsAt);
     const formattedTime = formatItalianTime(appointment.startsAt);
-    const title = "Reglo Autoscuole · Richiesta sostituzione";
+    const title = "🔁 Richiesta sostituzione";
     const message = `${requesterName} sta cercando un sostituto per la guida di ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare.`;
 
     if (channels.includes("push")) {
@@ -669,7 +669,7 @@ export async function respondSwapOffer(
       await sendAutoscuolaPushToUsers({
         companyId: membership.companyId,
         userIds: [offer.requestingStudentId],
-        title: "Affare fatto!",
+        title: "🤝 Affare fatto!",
         body: `${newStudentName} ti sostituirà per la guida di ${formattedDate} alle ${formattedTime}.`,
         data: {
           kind: "swap_accepted",
@@ -694,7 +694,7 @@ export async function respondSwapOffer(
         await sendAutoscuolaPushToUsers({
           companyId: membership.companyId,
           userIds: [offer.appointment.instructor.userId],
-          title: "Sostituzione allievo",
+          title: "🔁 Sostituzione allievo",
           body: `${newStudentName} ha sostituito ${oldStudentName} per la guida di ${formattedDate} alle ${formattedTime}.`,
           data: { kind: "swap_instructor_notify" },
         });
@@ -888,7 +888,7 @@ export async function instructorSwapAppointments(
     sendAutoscuolaPushToUsers({
       companyId,
       userIds: [apptA.studentId],
-      title: "Reglo Autoscuole · Scambio guida",
+      title: "🔄 Scambio guida",
       body: `La tua guida del ${formatDate(apptA.startsAt)} è stata spostata al ${formatDate(apptB.startsAt)}.`,
       data: { kind: "appointment_rescheduled", appointmentId: apptB.id, startsAt: apptB.startsAt.toISOString() },
     }).catch(() => {});
@@ -896,7 +896,7 @@ export async function instructorSwapAppointments(
     sendAutoscuolaPushToUsers({
       companyId,
       userIds: [apptB.studentId],
-      title: "Reglo Autoscuole · Scambio guida",
+      title: "🔄 Scambio guida",
       body: `La tua guida del ${formatDate(apptB.startsAt)} è stata spostata al ${formatDate(apptA.startsAt)}.`,
       data: { kind: "appointment_rescheduled", appointmentId: apptA.id, startsAt: apptA.startsAt.toISOString() },
     }).catch(() => {});

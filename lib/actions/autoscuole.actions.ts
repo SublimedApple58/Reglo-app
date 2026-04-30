@@ -400,14 +400,14 @@ const notifyStudentAppointmentCancelled = async ({
   let body: string;
 
   if (cancellationKind === "permanent_cancel") {
-    title = "Guida annullata definitivamente";
+    title = "❌ Guida annullata definitivamente";
     if (actorRole === "instructor") {
       body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
     } else {
       body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dalla segreteria. ${cta}`;
     }
   } else {
-    title = "Guida annullata";
+    title = "❌ Guida annullata";
     if (actorRole === "instructor") {
       body = `La tua guida di ${slotLabel}${instrLabel} è stata annullata dall'istruttore. ${cta}`;
     } else {
@@ -495,7 +495,7 @@ const notifyAppointmentRescheduled = async ({
   ]);
 
   const instrLabel = instructor?.name ? ` con ${instructor.name}` : "";
-  const title = "Guida spostata";
+  const title = "🔄 Guida spostata";
   const actorSuffix = actorRole === "instructor" ? "dall'istruttore" : "dalla segreteria";
   const body = `La tua guida del ${oldLabel}${instrLabel} è stata spostata ${actorSuffix} al ${newLabel}.`;
 
@@ -544,7 +544,7 @@ const notifyAppointmentRescheduled = async ({
       await sendAutoscuolaPushToUsers({
         companyId,
         userIds: [instructor.userId],
-        title: "Guida spostata dalla segreteria",
+        title: "🔄 Guida spostata",
         body: `Una guida è stata spostata dal ${oldLabel} al ${newLabel}.`,
         data: {
           kind: "appointment_rescheduled",
@@ -1437,7 +1437,7 @@ export async function sendTestPushToStudent(studentId: string) {
     const result = await sendAutoscuolaPushToUsers({
       companyId: membership.companyId,
       userIds: [studentId],
-      title: "Test notifica Reglo",
+      title: "🔔 Test notifica Reglo",
       body: "Se vedi questo messaggio, le notifiche push funzionano correttamente!",
       data: { kind: "test_push" },
     });
@@ -2400,7 +2400,7 @@ export async function createAutoscuolaAppointment(
         const pushResult = await sendAutoscuolaPushToUsers({
           companyId,
           userIds,
-          title: "Reglo Autoscuole · Nuova proposta guida",
+          title: "🚗 Nuova proposta guida",
           body: `Hai ricevuto una proposta per il ${when}. Apri Reglo per i dettagli.`,
           data: {
             kind: "appointment_proposal",

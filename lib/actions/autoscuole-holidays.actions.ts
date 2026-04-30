@@ -164,7 +164,7 @@ export async function createHoliday(
       // Send notifications
       for (const [studentId, appts] of byStudent) {
         const count = appts.length;
-        const title = "Giorno festivo";
+        const title = "🏖️ Giorno festivo";
         const body =
           count === 1
             ? `L'autoscuola sarà chiusa il ${dateLabel}. La tua guida è stata cancellata.`
@@ -222,7 +222,7 @@ export async function createHoliday(
       const uniqueStudentIds = [...new Set(appointments.map((a) => a.studentId))];
 
       if (uniqueStudentIds.length > 0) {
-        const title = "Giorno festivo";
+        const title = "🏖️ Giorno festivo";
         const body = `L'autoscuola sarà chiusa il ${dateLabel}.`;
 
         try {

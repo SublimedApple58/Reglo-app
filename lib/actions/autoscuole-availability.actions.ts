@@ -3667,7 +3667,7 @@ export async function broadcastWaitlistOffer({
     minute: "2-digit",
   });
   const message = `Si e liberato uno slot guida il ${formattedDate} alle ${formattedTime}. Apri Reglo per accettare o rifiutare la proposta.`;
-  const title = "Reglo Autoscuole · Slot guida disponibile";
+  const title = "⏰ Slot guida disponibile";
 
   if (channels.includes("push")) {
     const studentUserIds = Array.from(
@@ -4026,8 +4026,8 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
       await sendAutoscuolaPushToUsers({
         companyId,
         userIds: studentUserIds,
-        title: "Disponibilità pubblicate",
-        body: `${instructor.name} ha pubblicato la disponibilità per la settimana del ${weekLabel}.`,
+        title: "📅 Nuove disponibilità",
+        body: `Il tuo istruttore ha pubblicato la disponibilità per la settimana del ${weekLabel}. Prenota la tua guida!`,
         data: {
           kind: "availability_published",
           instructorId,
