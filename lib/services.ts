@@ -53,6 +53,7 @@ export type ServiceLimits = {
   voiceAssistantVoice?: string;
   voiceCustomGreeting?: string | null;
   studentNotesEnabled?: boolean;
+  quizEnabled?: boolean;
 };
 
 export type CompanyServiceInfo = {

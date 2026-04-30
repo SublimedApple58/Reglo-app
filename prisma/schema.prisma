@@ -31,6 +31,12 @@ enum AutoscuolaRole {
   STUDENT
 }
 
+enum QuizSessionMode {
+  EXAM
+  CHAPTER
+  REVIEW
+}
+
 model User {
   id                                   String                                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name                                 String                                 @default("NO_NAME")
@@ -73,6 +79,7 @@ model User {
   autoscuolaVoiceCallsStudent          AutoscuolaVoiceCall[]                  @relation("AutoscuolaVoiceCallStudent")
   autoscuolaVoiceCallbackTasksStudent  AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackStudent")
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
+  quizSessions                         QuizSession[]
 
   @@index([phone])
 }
@@ -197,6 +204,7 @@ model Company {
   pushDevices                    MobilePushDevice[]
   autoscuolaHolidays             AutoscuolaHoliday[]
   autoscuolaInstructorPublishedWeeks AutoscuolaInstructorPublishedWeek[]
+  quizSessions                       QuizSession[]
 }
 
 model CompanyService {
@@ -976,4 +984,103 @@ model AutoscuolaStudentWeeklyAbsence {
 
   @@unique([companyId, studentId, weekStart])
   @@index([companyId, instructorId, weekStart])
+}
+
+model QuizChapter {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chapterNumber Int      @unique
+  description   String
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+
+  questions QuizQuestion[]
+  sessions  QuizSession[]
+}
+
+model QuizHint {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalId      Int      @unique
+  title           String
+  descriptionHtml String   @db.Text
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+
+  questions QuizQuestion[]
+}
+
+model QuizQuestion {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  externalId    Int      @unique
+  argumentId    String
+  chapterId     String   @db.Uuid
+  hintId        String?  @db.Uuid
+  imageKey      String?
+  questionText  String
+  correctAnswer Boolean
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+
+  chapter QuizChapter @relation(fields: [chapterId], references: [id])
+  hint    QuizHint?   @relation(fields: [hintId], references: [id])
+  answers QuizAnswer[]
+  stats   QuizStudentQuestionStat[]
+
+  @@index([chapterId])
+  @@index([hintId])
+  @@index([argumentId])
+}
+
+model QuizSession {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String          @db.Uuid
+  studentId      String          @db.Uuid
+  mode           QuizSessionMode
+  chapterId      String?         @db.Uuid
+  questionIds    String[]        @db.Uuid
+  status         String          @default("in_progress")
+  totalQuestions Int
+  correctCount   Int             @default(0)
+  wrongCount     Int             @default(0)
+  passed         Boolean?
+  startedAt      DateTime        @default(now()) @db.Timestamp(6)
+  completedAt    DateTime?       @db.Timestamp(6)
+  timeLimitSec   Int?
+  createdAt      DateTime        @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime        @updatedAt
+
+  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student  User         @relation(fields: [studentId], references: [id])
+  chapter  QuizChapter? @relation(fields: [chapterId], references: [id])
+  answers  QuizAnswer[]
+
+  @@index([companyId, studentId])
+  @@index([companyId, studentId, mode])
+  @@index([studentId, status])
+}
+
+model QuizAnswer {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sessionId     String   @db.Uuid
+  questionId    String   @db.Uuid
+  studentAnswer Boolean
+  isCorrect     Boolean
+  answeredAt    DateTime @default(now()) @db.Timestamp(6)
+
+  session  QuizSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  question QuizQuestion @relation(fields: [questionId], references: [id])
+
+  @@index([sessionId])
+  @@index([questionId])
+}
+
+model QuizStudentQuestionStat {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  studentId      String   @db.Uuid
+  questionId     String   @db.Uuid
+  timesAnswered  Int      @default(0)
+  timesCorrect   Int      @default(0)
+  lastAnsweredAt DateTime @db.Timestamp(6)
+
+  question QuizQuestion @relation(fields: [questionId], references: [id])
+
+  @@unique([companyId, studentId, questionId])
+  @@index([companyId, studentId])
 }

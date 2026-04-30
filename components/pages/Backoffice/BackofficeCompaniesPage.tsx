@@ -534,6 +534,27 @@ function AutoscuolaDrawerContent({
         )}
       </section>
 
+      {/* ── Quiz Patente ── */}
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
+              <GraduationCap className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Quiz Patente</p>
+              <p className="text-xs text-muted-foreground">Quiz teoria ministeriali per gli studenti</p>
+            </div>
+          </div>
+          <Checkbox
+            checked={Boolean(limits.quizEnabled)}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, quizEnabled: Boolean(checked) }))
+            }
+          />
+        </div>
+      </section>
+
       {/* ── Save ── */}
       <Button onClick={handleSave} disabled={isPending} className="w-full">
         {isPending ? "Salvataggio..." : "Salva modifiche"}

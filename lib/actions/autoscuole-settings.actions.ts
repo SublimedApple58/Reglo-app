@@ -81,6 +81,7 @@ const DEFAULT_WEEKLY_BOOKING_LIMIT = 3;
 const DEFAULT_EXAM_PRIORITY_ENABLED = false;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_STUDENT_NOTES_ENABLED = false;
+const DEFAULT_QUIZ_ENABLED = false;
 const DEFAULT_BOOKING_SLOT_DURATIONS = [30, 60] as const;
 const VOICE_PROVISIONING_STATUSES = [
   "not_started",
@@ -340,6 +341,7 @@ const autoscuolaSettingsPatchSchema = z
     instructorClustersEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
+    quizEnabled: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -402,7 +404,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentNotesEnabled !== undefined ||
       value.instructorClustersEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
-      value.vehiclesEnabled !== undefined,
+      value.vehiclesEnabled !== undefined ||
+      value.quizEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -579,6 +582,7 @@ export type AutoscuolaSettingsData = {
   instructorClustersEnabled: boolean;
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
+  quizEnabled: boolean;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -906,6 +910,10 @@ const resolveAutoscuolaSettingsData = async (
     instructorClustersEnabled,
     autoCheckinEnabled,
     vehiclesEnabled: limits.vehiclesEnabled !== false,
+    quizEnabled:
+      typeof limits.quizEnabled === "boolean"
+        ? limits.quizEnabled
+        : DEFAULT_QUIZ_ENABLED,
   };
 };
 
@@ -1084,6 +1092,10 @@ export async function updateAutoscuolaSettings(
         ? limits.autoCheckinEnabled
         : false;
     const previousVehiclesEnabled = limits.vehiclesEnabled !== false;
+    const previousQuizEnabled =
+      typeof limits.quizEnabled === "boolean"
+        ? limits.quizEnabled
+        : DEFAULT_QUIZ_ENABLED;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -1224,6 +1236,7 @@ export async function updateAutoscuolaSettings(
       payload.instructorClustersEnabled ?? previousInstructorClustersEnabled;
     const nextAutoCheckinEnabled = payload.autoCheckinEnabled ?? previousAutoCheckinEnabled;
     const nextVehiclesEnabled = payload.vehiclesEnabled ?? previousVehiclesEnabled;
+    const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1419,6 +1432,7 @@ export async function updateAutoscuolaSettings(
       instructorClustersEnabled: nextInstructorClustersEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
+      quizEnabled: nextQuizEnabled,
     };
 
     if (service) {
@@ -1515,6 +1529,7 @@ export async function updateAutoscuolaSettings(
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
         voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
+        quizEnabled: nextQuizEnabled,
       },
     };
   } catch (error) {

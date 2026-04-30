@@ -96,6 +96,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Notifications**: callback tasks, missed call handling
 - → Mostly self-contained (Twilio/Telnyx webhooks, knowledge base, call records)
 
+### Quiz Teoria
+- → **Settings**: `quizEnabled` feature flag in CompanyService.limits
+- → **Cache**: QUIZ segment, invalidated on answer/complete
+- → **Backoffice**: toggle in company drawer (BackofficeCompaniesPage)
+- → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens)
+- → Self-contained: global question pool, student-scoped sessions/answers/stats
+
 ## Critical Call Chains
 
 ### Appointment Cancel

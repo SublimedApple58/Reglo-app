@@ -17,6 +17,7 @@
 | Repositioning | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |
 | Voice AI | [voice-ai.md](features/voice-ai.md) | `voice.ts`, `voice-webhook.ts` |
+| Quiz Teoria | [quiz-theory.md](features/quiz-theory.md) | `autoscuole-quiz.actions.ts`, `quiz-engine.ts` |
 
 ## Design System
 
