@@ -6157,7 +6157,7 @@ export async function getInstructorDrivingHours(input: {
       where: {
         companyId,
         instructorId: { in: instructorIds },
-        status: { in: ["completed", "checked_in"] },
+        status: { in: ["completed", "checked_in", "no_show"] },
         type: { not: "esame" },
         startsAt: { gte: rangeStart, lt: rangeEnd },
       },
