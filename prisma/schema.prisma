@@ -196,6 +196,7 @@ model Company {
   mobileTokens                   MobileAccessToken[]
   pushDevices                    MobilePushDevice[]
   autoscuolaHolidays             AutoscuolaHoliday[]
+  autoscuolaInstructorPublishedWeeks AutoscuolaInstructorPublishedWeek[]
 }
 
 model CompanyService {
@@ -528,6 +529,7 @@ model AutoscuolaInstructor {
   blocks           AutoscuolaInstructorBlock[]
   assignedStudents CompanyMember[]               @relation("InstructorAssignedStudents")
   weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
+  publishedWeeks   AutoscuolaInstructorPublishedWeek[]
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -618,6 +620,22 @@ model AutoscuolaHoliday {
 
   @@unique([companyId, date])
   @@index([companyId, date])
+}
+
+model AutoscuolaInstructorPublishedWeek {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @db.Uuid
+  instructorId String   @db.Uuid
+  weekStart    DateTime @db.Date
+  publishedAt  DateTime @default(now()) @db.Timestamp(6)
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt
+
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, instructorId, weekStart])
+  @@index([companyId, instructorId])
 }
 
 model AutoscuolaAvailabilitySlot {

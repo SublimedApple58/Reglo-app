@@ -175,6 +175,7 @@ const instructorSettingsSchema = z.object({
   weeklyAbsenceEnabled: z.boolean().optional(),
   workingHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  availabilityMode: z.enum(["default", "publication"]).optional(),
 }).optional();
 
 const updateInstructorSchema = z.object({

@@ -1492,6 +1492,14 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       0,
       0,
     );
+
+    // Publication mode gating
+    const pubFilter = await getPublicationModeFilter(
+      membership.companyId,
+      activeInstructorIds,
+      resolverRangeStart,
+      resolverRangeEnd,
+    );
     const [instructorAvailabilityResolver, vehicleAvailabilityResolver] = await Promise.all([
       activeInstructorIds.length
         ? buildAvailabilityResolver(
@@ -1773,6 +1781,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           score: number;
         }> = [];
         for (const ownerId of activeInstructorIds) {
+          // Publication mode: skip instructors without published week
+          if (!pubFilter(ownerId, startDate)) continue;
           const availability = instructorAvailabilityResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
             continue;
@@ -2478,7 +2488,17 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     }
 
     const vehiclesEnabledForSlots = serviceLimits.vehiclesEnabled !== false;
-    const activeInstructorIds = activeInstructors.map((i) => i.id);
+    const allInstructorIds = activeInstructors.map((i) => i.id);
+
+    // Publication mode gating: filter out instructors with unpublished weeks
+    const pubFilter = await getPublicationModeFilter(
+      membership.companyId,
+      allInstructorIds,
+      dateStart,
+      toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0),
+    );
+    const activeInstructorIds = allInstructorIds.filter((id) => pubFilter(id, dateStart));
+
     const activeVehicleIds = vehiclesEnabledForSlots ? activeVehicles.map((v) => v.id) : [];
     if (!activeInstructorIds.length) {
       return { success: true, data: [] };
@@ -3854,4 +3874,339 @@ export async function getStudentBookingBlockStatus(
     select: { bookingBlocked: true },
   });
   return member?.bookingBlocked ?? false;
+}
+
+// ── Publication Mode ──────────────────────────────────────────────────────────
+
+const publishWeekSchema = z.object({
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  instructorId: z.string().uuid().optional(),
+});
+
+export async function publishInstructorWeek(input: z.infer<typeof publishWeekSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = publishWeekSchema.parse(input);
+    const companyId = membership.companyId;
+
+    // Resolve instructor: owner can pass instructorId, instructor publishes own
+    let instructorId: string;
+    if (payload.instructorId && (isOwner(membership.autoscuolaRole) || membership.role === "admin")) {
+      instructorId = payload.instructorId;
+    } else {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Profilo istruttore non trovato." };
+      instructorId = instr.id;
+    }
+
+    // Validate weekStart is a Monday
+    const weekStart = new Date(payload.weekStart + "T00:00:00Z");
+    if (Number.isNaN(weekStart.getTime()) || weekStart.getUTCDay() !== 1) {
+      return { success: false as const, message: "La data deve essere un lunedì." };
+    }
+
+    // For each day of the week: if no override exists, copy from the last published week's overrides.
+    // If no previous published week, copy from the default weekly availability.
+    const lastPublished = await prisma.autoscuolaInstructorPublishedWeek.findFirst({
+      where: { companyId, instructorId, weekStart: { lt: weekStart } },
+      orderBy: { weekStart: "desc" },
+      select: { weekStart: true },
+    });
+
+    const existingOverrides = await prisma.autoscuolaDailyAvailabilityOverride.findMany({
+      where: {
+        companyId,
+        ownerType: "instructor",
+        ownerId: instructorId,
+        date: { gte: weekStart, lt: new Date(weekStart.getTime() + 7 * 86400000) },
+      },
+    });
+    const existingDates = new Set(
+      existingOverrides.map((o) => {
+        const d = new Date(o.date);
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+      }),
+    );
+
+    // Load source for missing days
+    let sourceOverrides: Array<{ date: Date; ranges: unknown }> = [];
+    let defaultAvail: { daysOfWeek: number[]; ranges: TimeRange[] } | null = null;
+
+    if (lastPublished) {
+      const lpStart = new Date(lastPublished.weekStart);
+      sourceOverrides = await prisma.autoscuolaDailyAvailabilityOverride.findMany({
+        where: {
+          companyId,
+          ownerType: "instructor",
+          ownerId: instructorId,
+          date: { gte: lpStart, lt: new Date(lpStart.getTime() + 7 * 86400000) },
+        },
+        select: { date: true, ranges: true },
+      });
+    }
+    if (!sourceOverrides.length) {
+      const weeklyAvail = await prisma.autoscuolaWeeklyAvailability.findFirst({
+        where: { companyId, ownerType: "instructor", ownerId: instructorId },
+      });
+      if (weeklyAvail) {
+        defaultAvail = defaultToAvailabilityRecord(weeklyAvail);
+      }
+    }
+
+    // Create missing overrides
+    for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+      const entryDate = new Date(weekStart.getTime() + dayOffset * 86400000);
+      const dateStr = `${entryDate.getUTCFullYear()}-${String(entryDate.getUTCMonth() + 1).padStart(2, "0")}-${String(entryDate.getUTCDate()).padStart(2, "0")}`;
+      if (existingDates.has(dateStr)) continue;
+
+      let ranges: TimeRange[] = [];
+      if (sourceOverrides.length) {
+        // Find matching day of week from source
+        const sourceDayOffset = dayOffset;
+        const sourceEntry = sourceOverrides.find((o) => {
+          const d = new Date(o.date);
+          const lpDow = (d.getUTCDay() + 6) % 7; // Mon=0
+          return lpDow === sourceDayOffset;
+        });
+        if (sourceEntry) {
+          ranges = parseRanges(sourceEntry.ranges);
+        }
+      } else if (defaultAvail) {
+        const dayOfWeek = dayOffset === 6 ? 0 : dayOffset + 1; // Convert Mon=0..Sun=6 to Sun=0..Sat=6
+        if (defaultAvail.daysOfWeek.includes(dayOfWeek)) {
+          ranges = defaultAvail.ranges;
+        }
+      }
+      // Ranges empty = day off
+
+      await prisma.autoscuolaDailyAvailabilityOverride.upsert({
+        where: {
+          companyId_ownerType_ownerId_date: {
+            companyId,
+            ownerType: "instructor",
+            ownerId: instructorId,
+            date: entryDate,
+          },
+        },
+        update: { ranges },
+        create: {
+          companyId,
+          ownerType: "instructor",
+          ownerId: instructorId,
+          date: entryDate,
+          ranges,
+        },
+      });
+    }
+
+    // Upsert published week
+    const published = await prisma.autoscuolaInstructorPublishedWeek.upsert({
+      where: {
+        companyId_instructorId_weekStart: { companyId, instructorId, weekStart },
+      },
+      update: { publishedAt: new Date() },
+      create: { companyId, instructorId, weekStart },
+    });
+
+    // Notify assigned students if instructor has autonomousMode
+    const instructor = await prisma.autoscuolaInstructor.findUnique({
+      where: { id: instructorId },
+      select: { autonomousMode: true, name: true, assignedStudents: { select: { userId: true } } },
+    });
+    if (instructor?.autonomousMode && instructor.assignedStudents.length > 0) {
+      const studentUserIds = instructor.assignedStudents.map((s) => s.userId);
+      const weekLabel = weekStart.toLocaleDateString("it-IT", {
+        day: "numeric",
+        month: "long",
+        timeZone: "UTC",
+      });
+      await sendAutoscuolaPushToUsers({
+        companyId,
+        userIds: studentUserIds,
+        title: "Disponibilità pubblicate",
+        body: `${instructor.name} ha pubblicato la disponibilità per la settimana del ${weekLabel}.`,
+        data: {
+          kind: "availability_published",
+          instructorId,
+          instructorName: instructor.name,
+          weekStart: payload.weekStart,
+        },
+      });
+    }
+
+    await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
+
+    return { success: true as const, data: published };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const unpublishWeekSchema = z.object({
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  instructorId: z.string().uuid().optional(),
+});
+
+export async function unpublishInstructorWeek(input: z.infer<typeof unpublishWeekSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = unpublishWeekSchema.parse(input);
+    const companyId = membership.companyId;
+
+    let instructorId: string;
+    if (payload.instructorId && (isOwner(membership.autoscuolaRole) || membership.role === "admin")) {
+      instructorId = payload.instructorId;
+    } else {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Profilo istruttore non trovato." };
+      instructorId = instr.id;
+    }
+
+    const weekStart = new Date(payload.weekStart + "T00:00:00Z");
+    if (Number.isNaN(weekStart.getTime()) || weekStart.getUTCDay() !== 1) {
+      return { success: false as const, message: "La data deve essere un lunedì." };
+    }
+
+    // Delete published week record (NOT the overrides)
+    await prisma.autoscuolaInstructorPublishedWeek.deleteMany({
+      where: { companyId, instructorId, weekStart },
+    });
+
+    // Reset availabilityOverrideApproved for appointments in this week
+    const weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+    await prisma.autoscuolaAppointment.updateMany({
+      where: {
+        companyId,
+        instructorId,
+        startsAt: { gte: weekStart, lt: weekEnd },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
+      },
+      data: { availabilityOverrideApproved: false },
+    });
+
+    await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
+
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const getPublishedWeeksSchema = z.object({
+  instructorId: z.string().uuid().optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+export async function getInstructorPublishedWeeks(input: z.infer<typeof getPublishedWeeksSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getPublishedWeeksSchema.parse(input);
+    const companyId = membership.companyId;
+
+    let instructorId = payload.instructorId;
+    if (!instructorId) {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Profilo istruttore non trovato." };
+      instructorId = instr.id;
+    }
+
+    const weekStartFilter: { gte?: Date; lte?: Date } = {};
+    if (payload.from) weekStartFilter.gte = new Date(payload.from + "T00:00:00Z");
+    if (payload.to) weekStartFilter.lte = new Date(payload.to + "T00:00:00Z");
+
+    const weeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
+      where: {
+        companyId,
+        instructorId,
+        ...(Object.keys(weekStartFilter).length ? { weekStart: weekStartFilter } : {}),
+      },
+      orderBy: { weekStart: "asc" },
+    });
+
+    return {
+      success: true as const,
+      data: weeks.map((w) => ({
+        id: w.id,
+        weekStart: w.weekStart instanceof Date
+          ? `${w.weekStart.getUTCFullYear()}-${String(w.weekStart.getUTCMonth() + 1).padStart(2, "0")}-${String(w.weekStart.getUTCDate()).padStart(2, "0")}`
+          : String(w.weekStart),
+        publishedAt: w.publishedAt.toISOString(),
+      })),
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ── Publication Mode Gating ───────────────────────────────────────────────────
+
+export async function getPublicationModeFilter(
+  companyId: string,
+  instructorIds: string[],
+  rangeStart: Date,
+  rangeEnd: Date,
+): Promise<(instructorId: string, date: Date) => boolean> {
+  if (!instructorIds.length) return () => true;
+
+  // Load all instructors with their settings
+  const instructors = await prisma.autoscuolaInstructor.findMany({
+    where: { companyId, id: { in: instructorIds }, status: { not: "inactive" } },
+    select: { id: true, settings: true },
+  });
+
+  const { parseInstructorSettings } = await import("@/lib/autoscuole/instructor-clusters");
+  const publicationModeIds = new Set<string>();
+  for (const instr of instructors) {
+    const settings = parseInstructorSettings(instr.settings);
+    if (settings.availabilityMode === "publication") {
+      publicationModeIds.add(instr.id);
+    }
+  }
+
+  if (!publicationModeIds.size) return () => true;
+
+  // Expand rangeStart backwards to the Monday of its week so we catch
+  // published weeks whose weekStart < rangeStart but still cover it.
+  // e.g. searching for May 4 (Sun) → weekStart is April 28 (Mon).
+  const adjustedStart = new Date(rangeStart);
+  const dow = adjustedStart.getUTCDay();
+  adjustedStart.setUTCDate(adjustedStart.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+
+  // Load published weeks for publication-mode instructors in range
+  const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
+    where: {
+      companyId,
+      instructorId: { in: Array.from(publicationModeIds) },
+      weekStart: { gte: adjustedStart, lte: rangeEnd },
+    },
+  });
+
+  // Build a set of `instructorId:weekStart` for quick lookup
+  const publishedSet = new Set<string>();
+  for (const pw of publishedWeeks) {
+    const d = new Date(pw.weekStart);
+    const ws = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    publishedSet.add(`${pw.instructorId}:${ws}`);
+  }
+
+  return (instructorId: string, date: Date) => {
+    if (!publicationModeIds.has(instructorId)) return true;
+    // Compute week start (Monday) for this date
+    const d = new Date(date);
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+    const ws = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    return publishedSet.has(`${instructorId}:${ws}`);
+  };
 }

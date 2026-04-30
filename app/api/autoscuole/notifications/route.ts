@@ -239,6 +239,41 @@ export async function GET(request: Request) {
           createdAt: appt.rescheduledAt!.toISOString(),
         });
       }
+
+      // 8. Published availability weeks from assigned instructor
+      const studentMember = await prisma.companyMember.findFirst({
+        where: { companyId, userId, autoscuolaRole: "STUDENT" },
+        select: { assignedInstructorId: true },
+      });
+      if (studentMember?.assignedInstructorId) {
+        const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
+          where: {
+            companyId,
+            instructorId: studentMember.assignedInstructorId,
+            publishedAt: { gte: since },
+          },
+          include: {
+            instructor: { select: { name: true } },
+          },
+          orderBy: { publishedAt: "desc" },
+          take: limit,
+        });
+        for (const pw of publishedWeeks) {
+          const weekStartStr = pw.weekStart instanceof Date
+            ? `${pw.weekStart.getUTCFullYear()}-${String(pw.weekStart.getUTCMonth() + 1).padStart(2, "0")}-${String(pw.weekStart.getUTCDate()).padStart(2, "0")}`
+            : String(pw.weekStart);
+          notifications.push({
+            id: `availability_published_${pw.id}`,
+            kind: "availability_published",
+            data: {
+              instructorId: studentMember.assignedInstructorId,
+              instructorName: pw.instructor?.name ?? "Istruttore",
+              weekStart: weekStartStr,
+            },
+            createdAt: pw.publishedAt.toISOString(),
+          });
+        }
+      }
     }
 
     if (isInstructor(role) || isOwner(role)) {

@@ -8,7 +8,7 @@ import {
   normalizeLessonType,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
-import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
+import { buildAvailabilityResolver, getPublicationModeFilter } from "@/lib/actions/autoscuole-availability.actions";
 
 const SLOT_MINUTES = 30;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -314,6 +314,14 @@ export async function findBestAutoscuolaSlot(
   const searchRangeStart = toTimeZoneDate(preferredDateParts, 0, 0);
   const searchRangeEnd = toTimeZoneDate(addDaysToDateParts(preferredDateParts, maxDays + 1), 0, 0);
 
+  // Publication mode gating
+  const pubFilter = await getPublicationModeFilter(
+    input.companyId,
+    activeInstructorIds,
+    searchRangeStart,
+    searchRangeEnd,
+  );
+
   const [instructorResolver, vehicleResolver] = await Promise.all([
     buildAvailabilityResolver(input.companyId, "instructor", activeInstructorIds, searchRangeStart, searchRangeEnd),
     smVehiclesEnabled && activeVehicleIds.length
@@ -435,6 +443,7 @@ export async function findBestAutoscuolaSlot(
 
       const availableInstructors: Array<{ id: string; score: number }> = [];
       for (const instructorId of activeInstructorIds) {
+        if (!pubFilter(instructorId, startDate)) continue;
         const availability = instructorResolver.resolve(instructorId, startDate);
         if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
           continue;

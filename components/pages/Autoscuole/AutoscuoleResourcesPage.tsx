@@ -282,6 +282,7 @@ export function AutoscuoleResourcesPage({
   const [clusterWeeklyAbsenceEnabled, setClusterWeeklyAbsenceEnabled] = React.useState<boolean | undefined>(undefined);
   const [clusterWorkingHoursStart, setClusterWorkingHoursStart] = React.useState<string | undefined>(undefined);
   const [clusterWorkingHoursEnd, setClusterWorkingHoursEnd] = React.useState<string | undefined>(undefined);
+  const [clusterAvailabilityMode, setClusterAvailabilityMode] = React.useState<"default" | "publication">("default");
   const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
@@ -875,6 +876,7 @@ export function AutoscuoleResourcesPage({
     setClusterWeeklyAbsenceEnabled(typeof settings.weeklyAbsenceEnabled === "boolean" ? settings.weeklyAbsenceEnabled : undefined);
     setClusterWorkingHoursStart(typeof settings.workingHoursStart === "string" ? settings.workingHoursStart : undefined);
     setClusterWorkingHoursEnd(typeof settings.workingHoursEnd === "string" ? settings.workingHoursEnd : undefined);
+    setClusterAvailabilityMode(settings.availabilityMode === "publication" ? "publication" : "default");
     const studRes = await getAutoscuolaStudentsWithProgress();
     if (studRes.success && studRes.data) {
       setAllStudents(studRes.data.map((s) => ({
@@ -919,6 +921,7 @@ export function AutoscuoleResourcesPage({
         } : {}),
         workingHoursStart: clusterWorkingHoursStart,
         workingHoursEnd: clusterWorkingHoursEnd,
+        availabilityMode: clusterAvailabilityMode,
       },
       assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
     });
@@ -1859,6 +1862,19 @@ export function AutoscuoleResourcesPage({
                     </FieldGroup>
                   </div>
                 </div>
+
+                <FieldGroup label="Modalità disponibilità">
+                  <Select value={clusterAvailabilityMode} onValueChange={(v) => setClusterAvailabilityMode(v as "default" | "publication")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Predefinita</SelectItem>
+                      <SelectItem value="publication">A pubblicazione</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span className="text-xs text-muted-foreground">
+                    In modalità pubblicazione, l&apos;istruttore imposta la disponibilità settimana per settimana.
+                  </span>
+                </FieldGroup>
 
                 <div
                   className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"

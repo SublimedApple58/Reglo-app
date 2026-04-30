@@ -60,6 +60,23 @@ export async function GET() {
 
     const settings = parseInstructorSettings(instructor.settings);
 
+    // Load published weeks from current Monday onwards
+    const now = new Date();
+    const currentMonday = new Date(now);
+    const dow = currentMonday.getUTCDay();
+    currentMonday.setUTCDate(currentMonday.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+    currentMonday.setUTCHours(0, 0, 0, 0);
+
+    const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
+      where: {
+        companyId: membership.companyId,
+        instructorId: instructor.id,
+        weekStart: { gte: currentMonday },
+      },
+      select: { id: true, weekStart: true, publishedAt: true },
+      orderBy: { weekStart: "asc" },
+    });
+
     // Load all students in the company + which are currently assigned to this instructor
     const studentMembers = await prisma.companyMember.findMany({
       where: {
@@ -108,6 +125,13 @@ export async function GET() {
         assignedStudentIds,
         instructorId: instructor.id,
         autonomousInstructors,
+        publishedWeeks: publishedWeeks.map((pw) => ({
+          id: pw.id,
+          weekStart: pw.weekStart instanceof Date
+            ? `${pw.weekStart.getFullYear()}-${String(pw.weekStart.getMonth() + 1).padStart(2, "0")}-${String(pw.weekStart.getDate()).padStart(2, "0")}`
+            : String(pw.weekStart),
+          publishedAt: pw.publishedAt.toISOString(),
+        })),
       },
     });
   } catch (error) {
@@ -136,6 +160,7 @@ const patchSchema = z.object({
   restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   weeklyAbsenceEnabled: z.boolean().optional(),
+  availabilityMode: z.enum(["default", "publication"]).optional(),
   assignStudentIds: z.array(z.string().uuid()).optional(),
 });
 
@@ -176,19 +201,25 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (!instructor.autonomousMode) {
+    const current = parseInstructorSettings(instructor.settings);
+    const next: InstructorSettings = { ...current };
+
+    // availabilityMode can be saved regardless of autonomousMode
+    const { assignStudentIds, availabilityMode, ...autonomousPayload } = payload;
+    if (availabilityMode !== undefined) {
+      next.availabilityMode = availabilityMode;
+    }
+
+    // All other settings require autonomousMode
+    const hasAutonomousFields = Object.values(autonomousPayload).some((v) => v !== undefined);
+    if ((hasAutonomousFields || assignStudentIds !== undefined) && !instructor.autonomousMode) {
       return NextResponse.json(
         { success: false, message: "La modalità autonoma non è attiva per il tuo profilo." },
         { status: 403 },
       );
     }
 
-    const current = parseInstructorSettings(instructor.settings);
-    const next: InstructorSettings = { ...current };
-
-    // Apply all provided fields (except assignStudentIds, handled separately)
-    const { assignStudentIds, ...settingsPayload } = payload;
-    for (const [key, value] of Object.entries(settingsPayload)) {
+    for (const [key, value] of Object.entries(autonomousPayload)) {
       if (value !== undefined) {
         (next as Record<string, unknown>)[key] = value;
       }

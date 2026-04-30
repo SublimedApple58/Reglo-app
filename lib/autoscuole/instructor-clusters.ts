@@ -41,6 +41,8 @@ export type InstructorSettings = {
   // Orario di lavoro
   workingHoursStart?: string;
   workingHoursEnd?: string;
+  // Modalità disponibilità
+  availabilityMode?: "default" | "publication";
 };
 
 export type EffectiveBookingSettings = {
@@ -156,6 +158,11 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   }
   if (typeof obj.workingHoursEnd === "string" && HH_MM_RE.test(obj.workingHoursEnd)) {
     result.workingHoursEnd = obj.workingHoursEnd;
+  }
+
+  // Modalità disponibilità
+  if (typeof obj.availabilityMode === "string" && (obj.availabilityMode === "default" || obj.availabilityMode === "publication")) {
+    result.availabilityMode = obj.availabilityMode;
   }
 
   return result;
