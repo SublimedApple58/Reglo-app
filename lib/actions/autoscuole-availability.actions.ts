@@ -1320,8 +1320,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       return { success: false, message: bookingAccess.message };
     }
     const now = new Date();
-    const durationSlots = payload.durationMinutes / SLOT_MINUTES;
-    if (!Number.isInteger(durationSlots) || durationSlots < 1 || durationSlots > 4) {
+    if (payload.durationMinutes < 30 || payload.durationMinutes > 120 || payload.durationMinutes % 15 !== 0) {
       return { success: false, message: "Durata non valida." };
     }
     const requestedLessonType = normalizeLessonType(payload.lessonType);
@@ -2330,8 +2329,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     }
 
     const now = new Date();
-    const durationSlots = payload.durationMinutes / SLOT_MINUTES;
-    if (!Number.isInteger(durationSlots) || durationSlots < 1 || durationSlots > 4) {
+    if (payload.durationMinutes < 30 || payload.durationMinutes > 120 || payload.durationMinutes % 15 !== 0) {
       return { success: false, message: "Durata non valida." };
     }
 
