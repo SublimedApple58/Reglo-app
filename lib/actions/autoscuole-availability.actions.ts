@@ -2868,8 +2868,8 @@ export async function getDateAvailabilityMap(
       }),
     );
 
-    // Build resolvers for the entire range (4 queries total)
-    const [instructorResolver, vehicleResolver] = await Promise.all([
+    // Build resolvers for the entire range (4 queries total) + publication mode filter
+    const [instructorResolver, vehicleResolver, pubFilter] = await Promise.all([
       buildAvailabilityResolver(
         membership.companyId,
         "instructor",
@@ -2881,6 +2881,12 @@ export async function getDateAvailabilityMap(
         membership.companyId,
         "vehicle",
         activeVehicleIds,
+        rangeStart,
+        rangeEnd,
+      ),
+      getPublicationModeFilter(
+        membership.companyId,
+        activeInstructorIds,
         rangeStart,
         rangeEnd,
       ),
@@ -3035,6 +3041,7 @@ export async function getDateAvailabilityMap(
           // Collect ALL available instructors for this slot
           const slotInstructors: string[] = [];
           for (const ownerId of activeInstructorIds) {
+            if (!pubFilter(ownerId, startDate)) continue;
             const avail = instructorResolver.resolve(ownerId, startDate);
             if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
               continue;
