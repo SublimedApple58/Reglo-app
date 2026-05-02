@@ -1456,6 +1456,7 @@ export async function updateAutoscuolaSettings(
       segments: [
         AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
         AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS,
+        AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS,
       ],
     });
 

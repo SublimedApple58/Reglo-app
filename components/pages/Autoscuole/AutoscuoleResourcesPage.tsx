@@ -1,14 +1,13 @@
 "use client";
 
 import React from "react";
+import dynamic from "next/dynamic";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarCheck, CalendarDays, ClipboardList, Check, Plus, Pencil, Clock, Car, ChevronDown, ChevronLeft, ChevronRight, FileText, Loader2, Send, Settings2, UserCheck, Users, Truck, UserRoundCog } from "lucide-react";
+import { Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
-import { DatePicker, DatePickerInput } from "@/components/ui/date-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Select,
   SelectContent,
@@ -16,11 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SectionCard } from "@/components/ui/section-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { FieldGroup } from "@/components/ui/field-group";
 import { InlineToggle } from "@/components/ui/inline-toggle";
-import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
+
+const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
+const InstructorsTab = dynamic(() => import("./tabs/InstructorsTab"));
+const StudentsTab = dynamic(() => import("./tabs/StudentsTab"));
+const VehiclesTab = dynamic(() => import("./tabs/VehiclesTab"));
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -1344,1354 +1346,178 @@ export function AutoscuoleResourcesPage({
         {loading ? (
           <SettingsSkeleton />
         ) : configTab === "settings" ? (
-          <>
-        {/* Accordion settings card */}
-        <div className="rounded-2xl border border-border bg-white shadow-card">
-          {/* ── Prenotazioni ── */}
-          <AccordionSection
-            icon={CalendarDays}
-            title="Prenotazioni"
-            description="Durate, attori e settimane di disponibilità visibili in app."
-            expanded={expandedSection === "bookings"}
-            onToggle={() => toggleSection("bookings")}
-            isFirst
-          >
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-                <FieldGroup label="Settimane di disponibilità">
-                  <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Settimane" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
-                        <SelectItem key={weeks} value={String(weeks)}>
-                          {weeks} settimane
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-
-                <FieldGroup
-                  label="Prenotazioni aperte dal"
-                  description="Lascia vuoto per nessun limite."
-                >
-                  <div className="flex items-center gap-2">
-                    <DatePickerInput
-                      value={bookingMinStartDate}
-                      onChange={setBookingMinStartDate}
-                      placeholder="Nessun limite"
-                    />
-                    {bookingMinStartDate ? (
-                      <button
-                        type="button"
-                        onClick={() => setBookingMinStartDate("")}
-                        className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition"
-                      >
-                        Rimuovi
-                      </button>
-                    ) : null}
-                  </div>
-                </FieldGroup>
-
-                <FieldGroup label="Chi può prenotare">
-                  <Select
-                    value={appBookingActors}
-                    onValueChange={(value) =>
-                      setAppBookingActors(value as AppBookingActorsValue)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona policy" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-
-                {appBookingActors === "instructors" || appBookingActors === "both" ? (
-                  <FieldGroup label="Modalità istruttore">
-                    <Select
-                      value={instructorBookingMode}
-                      onValueChange={(value) =>
-                        setInstructorBookingMode(value as InstructorBookingModeValue)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleziona modalità" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                ) : null}
-
-              </div>
-
-              <FieldGroup label="Durata prenotazione allievo">
-                <div className="flex flex-wrap gap-2">
-                  {BOOKING_DURATION_OPTIONS.map((duration) => (
-                    <ToggleChip
-                      key={duration}
-                      active={bookingSlotDurations.includes(duration)}
-                      onClick={() => toggleBookingDuration(duration)}
-                    >
-                      {duration} min
-                    </ToggleChip>
-                  ))}
-                </div>
-              </FieldGroup>
-
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setRoundedHoursOnly((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Solo orari tondi</span>
-                  <span className="text-xs text-muted-foreground">
-                    Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)
-                  </span>
-                </div>
-                <InlineToggle checked={roundedHoursOnly} size="sm" />
-              </div>
-            </div>
-          </AccordionSection>
-
-          {/* ── Reminder e notifiche ── */}
-          <AccordionSection
-            icon={Bell}
-            title="Reminder e notifiche"
-            description="Quando e su quali canali inviare promemoria a allievi e istruttori."
-            expanded={expandedSection === "reminders"}
-            onToggle={() => toggleSection("reminders")}
-          >
-            <div className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-                <FieldGroup label="Reminder allievo">
-                  <Select
-                    value={studentReminderMinutes}
-                    onValueChange={setStudentReminderMinutes}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Minuti" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REMINDER_OPTIONS.map((minutes) => (
-                        <SelectItem key={minutes} value={String(minutes)}>
-                          {minutes} minuti prima
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-                <FieldGroup label="Reminder istruttore">
-                  <Select
-                    value={instructorReminderMinutes}
-                    onValueChange={setInstructorReminderMinutes}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Minuti" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {REMINDER_OPTIONS.map((minutes) => (
-                        <SelectItem key={minutes} value={String(minutes)}>
-                          {minutes} minuti prima
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              </div>
-
-              {/* Morning reminder */}
-              <div className="max-w-2xl space-y-3">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setStudentReminderMorningEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Reminder mattina del giorno</span>
-                    <span className="text-xs text-muted-foreground">
-                      Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti.
-                    </span>
-                  </div>
-                  <InlineToggle checked={studentReminderMorningEnabled} size="sm" />
-                </div>
-                {studentReminderMorningEnabled && (
-                  <FieldGroup label="Orario invio">
-                    <Select value={studentReminderMorningTime} onValueChange={setStudentReminderMorningTime}>
-                      <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                      <SelectContent>
-                        {["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"].map((t) => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                )}
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-3">
-                <ChannelGroup
-                  title="Slot fill"
-                  value={slotFillChannels}
-                  onToggle={(channel) =>
-                    toggleChannel(channel, setSlotFillChannels)
-                  }
-                />
-                <ChannelGroup
-                  title="Reminder allievo"
-                  value={studentReminderChannels}
-                  onToggle={(channel) =>
-                    toggleChannel(channel, setStudentReminderChannels)
-                  }
-                />
-                <ChannelGroup
-                  title="Reminder istruttore"
-                  value={instructorReminderChannels}
-                  onToggle={(channel) =>
-                    toggleChannel(channel, setInstructorReminderChannels)
-                  }
-                />
-              </div>
-            </div>
-          </AccordionSection>
-
-          {/* ── Policy tipi guida ── */}
-          <AccordionSection
-            icon={ClipboardList}
-            title="Policy tipi guida"
-            description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
-            expanded={expandedSection === "policy"}
-            onToggle={() => toggleSection("policy")}
-            isLast
-          >
-          <div className="space-y-5">
-            {/* Global toggles */}
-            <div className="space-y-2">
-              <PolicySwitch
-                checked={lessonPolicyEnabled}
-                onChange={() => setLessonPolicyEnabled((v) => !v)}
-                label="Abilita policy tipi guida"
-                description="Attiva le regole di copertura e orario per i tipi di guida"
-              />
-              <PolicySwitch
-                checked={lessonRequiredTypesEnabled}
-                onChange={() => setLessonRequiredTypesEnabled((v) => !v)}
-                label="Richiedi almeno 1 guida per tipo"
-                description="Ogni allievo deve completare almeno una guida per ogni tipo selezionato"
-              />
-            </div>
-
-            {/* Per-type cards — unified required + limit in one card */}
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
-                Configura per tipo di guida
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {LESSON_TYPE_OPTIONS.map((option) => {
-                  const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
-                  const isRequired = lessonRequiredTypes.includes(option.value);
-                  const hasLimit = constraint.enabled;
-                  return (
-                    <div
-                      key={option.value}
-                      className={cn(
-                        "rounded-xl border bg-white p-3 transition-all duration-200",
-                        hasLimit ? "border-yellow-200" : "border-border",
-                      )}
-                    >
-                      {/* Header: name + pill actions */}
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="flex-1 text-sm font-semibold text-foreground">
-                          {option.label}
-                        </span>
-                        <ToggleChip
-                          active={isRequired}
-                          onClick={() => toggleRequiredType(option.value)}
-                          size="sm"
-                          aria-label={`Segna ${option.label} come obbligatorio`}
-                        >
-                          {isRequired && <Check className="inline size-2.5 mr-0.5" />}
-                          Obbl.
-                        </ToggleChip>
-                      </div>
-
-                      {/* Limite orario toggle row */}
-                      <div
-                        role="switch"
-                        tabIndex={0}
-                        aria-checked={hasLimit}
-                        aria-label={`Limite orario per ${option.label}`}
-                        onClick={() => toggleConstraintEnabled(option.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleConstraintEnabled(option.value); } }}
-                        className={cn(
-                          "flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-all duration-150",
-                          hasLimit
-                            ? "bg-yellow-50 text-foreground"
-                            : "bg-gray-50 text-muted-foreground hover:bg-gray-100",
-                        )}
-                      >
-                        <span className="font-medium">Limite orario</span>
-                        <InlineToggle checked={hasLimit} size="sm" />
-                      </div>
-
-                      {/* Expanded: days + time window */}
-                      {hasLimit && (
-                        <div className="mt-3 space-y-2.5 border-t border-border pt-2.5">
-                          <div className="flex flex-wrap gap-1">
-                            {WEEKDAY_OPTIONS.map((day) => (
-                              <ToggleChip
-                                key={`${option.value}-${day.value}`}
-                                active={constraint.daysOfWeek.includes(day.value)}
-                                onClick={() => toggleConstraintDay(option.value, day.value)}
-                                size="sm"
-                              >
-                                {day.label}
-                              </ToggleChip>
-                            ))}
-                          </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <Select
-                              value={String(constraint.startMinutes)}
-                              onValueChange={(value) =>
-                                updateConstraintWindow(option.value, "startMinutes", value)
-                              }
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue placeholder="Inizio" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {START_TIME_OPTIONS.map((minutes) => (
-                                  <SelectItem
-                                    key={`${option.value}-start-${minutes}`}
-                                    value={String(minutes)}
-                                  >
-                                    {formatMinutes(minutes)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={String(constraint.endMinutes)}
-                              onValueChange={(value) =>
-                                updateConstraintWindow(option.value, "endMinutes", value)
-                              }
-                            >
-                              <SelectTrigger className="h-7 text-xs">
-                                <SelectValue placeholder="Fine" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {END_TIME_OPTIONS.map((minutes) => (
-                                  <SelectItem
-                                    key={`${option.value}-end-${minutes}`}
-                                    value={String(minutes)}
-                                  >
-                                    {formatMinutes(minutes)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          </AccordionSection>
-        </div>
-
-        {/* Save button */}
-        <div className="flex justify-end">
-          <Button
-            onClick={handleSaveSettings}
-            disabled={savingSettings}
-            className="min-w-[180px]"
-          >
-            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-          </Button>
-        </div>
-          </>
+          <SettingsTab
+            expandedSection={expandedSection}
+            toggleSection={toggleSection}
+            availabilityWeeks={availabilityWeeks}
+            setAvailabilityWeeks={setAvailabilityWeeks}
+            bookingMinStartDate={bookingMinStartDate}
+            setBookingMinStartDate={setBookingMinStartDate}
+            appBookingActors={appBookingActors}
+            setAppBookingActors={(v) => setAppBookingActors(v as AppBookingActorsValue)}
+            instructorBookingMode={instructorBookingMode}
+            setInstructorBookingMode={(v) => setInstructorBookingMode(v as InstructorBookingModeValue)}
+            bookingSlotDurations={bookingSlotDurations}
+            toggleBookingDuration={toggleBookingDuration}
+            roundedHoursOnly={roundedHoursOnly}
+            setRoundedHoursOnly={setRoundedHoursOnly}
+            studentReminderMinutes={studentReminderMinutes}
+            setStudentReminderMinutes={setStudentReminderMinutes}
+            studentReminderMorningEnabled={studentReminderMorningEnabled}
+            setStudentReminderMorningEnabled={setStudentReminderMorningEnabled}
+            studentReminderMorningTime={studentReminderMorningTime}
+            setStudentReminderMorningTime={setStudentReminderMorningTime}
+            instructorReminderMinutes={instructorReminderMinutes}
+            setInstructorReminderMinutes={setInstructorReminderMinutes}
+            slotFillChannels={slotFillChannels}
+            studentReminderChannels={studentReminderChannels}
+            instructorReminderChannels={instructorReminderChannels}
+            toggleChannel={toggleChannel}
+            setSlotFillChannels={setSlotFillChannels}
+            setStudentReminderChannels={setStudentReminderChannels}
+            setInstructorReminderChannels={setInstructorReminderChannels}
+            lessonPolicyEnabled={lessonPolicyEnabled}
+            setLessonPolicyEnabled={setLessonPolicyEnabled}
+            lessonRequiredTypesEnabled={lessonRequiredTypesEnabled}
+            setLessonRequiredTypesEnabled={setLessonRequiredTypesEnabled}
+            lessonRequiredTypes={lessonRequiredTypes}
+            toggleRequiredType={toggleRequiredType}
+            lessonConstraints={lessonConstraints}
+            toggleConstraintEnabled={toggleConstraintEnabled}
+            toggleConstraintDay={toggleConstraintDay}
+            updateConstraintWindow={updateConstraintWindow}
+            handleSaveSettings={handleSaveSettings}
+            savingSettings={savingSettings}
+          />
         ) : configTab === "instructors" ? (
-          <>
-        <div className="flex items-center justify-between">
-          <div />
-          <Button
-            size="sm"
-            onClick={() => setInviteInstructorOpen(true)}
-          >
-            <Plus className="size-3.5 mr-1.5" />
-            Invita istruttore
-          </Button>
-        </div>
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-            {instructors.map((instructor) => {
-              const wa = instructorWeeklyAvailability[instructor.id] ?? null;
-              const ranges = instructorAvailability[instructor.id] ?? [];
-              const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
-              return (
-                <ResourceCard
-                  key={instructor.id}
-                  name={instructor.name}
-                  inactive={instructor.status === "inactive"}
-                  subtitle={(() => {
-                    const parts: string[] = [];
-                    if (instructor.autonomousMode) parts.push(`Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`);
-                    const s = (instructor.settings ?? {}) as Record<string, unknown>;
-                    if (typeof s.workingHoursStart === "string" && typeof s.workingHoursEnd === "string") {
-                      parts.push(`Orario lavoro: ${s.workingHoursStart}–${s.workingHoursEnd}`);
-                    }
-                    return parts.length ? parts.join(" · ") : undefined;
-                  })()}
-                  actions={
-                    <>
-                      <ResourceCardAction
-                        onClick={() => openClusterPanel(instructor)}
-                        title="Gestione autonoma"
-                      >
-                        <Settings2 className="size-3.5" />
-                      </ResourceCardAction>
-                      <ResourceCardAction
-                        onClick={() => openInstructorAvailabilityDialog(instructor)}
-                        title="Modifica disponibilità"
-                      >
-                        <Clock className="size-3.5" />
-                      </ResourceCardAction>
-                      <ResourceCardAction
-                        onClick={() => {
-                          setSickLeaveInstructor(instructor);
-                          const today = new Date();
-                          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-                          setSickLeaveStartDate(todayStr);
-                          setSickLeaveEndDate(todayStr);
-                          setSickLeaveHalfDay(false);
-                          setSickLeaveStartTime("14:00");
-                        }}
-                        title="Segna malattia"
-                      >
-                        🤒
-                      </ResourceCardAction>
-                    </>
-                  }
-                  availabilitySummary={
-                    wa ? (
-                      <span>
-                        {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
-                        {wa.daysOfWeek
-                          .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-                          .filter(Boolean)
-                          .join(", ")}
-                      </span>
-                    ) : (
-                      <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
-                    )
-                  }
-                  slots={
-                    ranges.length > 0
-                      ? ranges.map((range) => (
-                          <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
-                            {formatTime(range.start)}–{formatTime(range.end)}
-                          </SlotPill>
-                        ))
-                      : undefined
-                  }
-                  totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
-                />
-              );
-            })}
-            {!instructors.length ? (
-              <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
-                Nessun istruttore disponibile.
-              </div>
-            ) : null}
-          </div>
-
-          {/* ── Cluster panel dialog ── */}
-          <Dialog open={Boolean(clusterInstructor)} onOpenChange={(open) => !open && setClusterInstructor(null)}>
-            <DialogContent className="sm:max-w-[520px] gap-0 p-0 overflow-hidden max-h-[80vh] overflow-y-auto">
-              <div className="px-6 pt-5 pb-4 border-b border-border">
-                <DialogHeader>
-                  <DialogTitle>Gestione autonoma — {clusterInstructor?.name}</DialogTitle>
-                </DialogHeader>
-              </div>
-              <div className="px-6 py-5 space-y-5">
-                {/* ── Orario di lavoro ── */}
-                <div className="space-y-3">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Orario di lavoro</span>
-                  <p className="text-xs text-muted-foreground -mt-1">Definisci la fascia lavorativa per identificare ore extra.</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldGroup label="Inizio">
-                      <Select value={clusterWorkingHoursStart ?? ""} onValueChange={(v) => setClusterWorkingHoursStart(v || undefined)}>
-                        <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 35 }, (_, i) => {
-                            const h = Math.floor(i / 2) + 6;
-                            const m = (i % 2) * 30;
-                            const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-                            return <SelectItem key={val} value={val}>{val}</SelectItem>;
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                    <FieldGroup label="Fine">
-                      <Select value={clusterWorkingHoursEnd ?? ""} onValueChange={(v) => setClusterWorkingHoursEnd(v || undefined)}>
-                        <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 35 }, (_, i) => {
-                            const h = Math.floor(i / 2) + 6;
-                            const m = (i % 2) * 30;
-                            const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-                            return <SelectItem key={val} value={val}>{val}</SelectItem>;
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                  </div>
-                </div>
-
-                <FieldGroup label="Modalità disponibilità">
-                  <Select value={clusterAvailabilityMode} onValueChange={(v) => setClusterAvailabilityMode(v as "default" | "publication")}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">Predefinita</SelectItem>
-                      <SelectItem value="publication">A pubblicazione</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <span className="text-xs text-muted-foreground">
-                    In modalità pubblicazione, l&apos;istruttore imposta la disponibilità settimana per settimana.
-                  </span>
-                </FieldGroup>
-
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setClusterAutonomous((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Modalità autonoma</span>
-                    <span className="text-xs text-muted-foreground">
-                      L&apos;istruttore gestisce i propri allievi e impostazioni.
-                    </span>
-                  </div>
-                  <InlineToggle checked={clusterAutonomous} size="sm" />
-                </div>
-
-                {clusterAutonomous ? (
-                  <>
-                    <FieldGroup label="Durata guide">
-                      <div className="flex flex-wrap gap-1.5">
-                        {BOOKING_DURATION_OPTIONS.map((dur) => (
-                          <ToggleChip
-                            key={dur}
-                            active={clusterDurations.includes(dur)}
-                            onClick={() =>
-                              setClusterDurations((prev) =>
-                                prev.includes(dur) ? prev.filter((d) => d !== dur) : [...prev, dur].sort((a, b) => a - b),
-                              )
-                            }
-                            size="sm"
-                          >
-                            {dur} min
-                          </ToggleChip>
-                        ))}
-                      </div>
-                    </FieldGroup>
-
-                    <div
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                      onClick={() => setClusterRoundedHours((prev) => !prev)}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Solo orari tondi</span>
-                        <span className="text-xs text-muted-foreground">
-                          Proponi solo slot che iniziano a ore piene.
-                        </span>
-                      </div>
-                      <InlineToggle checked={clusterRoundedHours} size="sm" />
-                    </div>
-
-                    {/* ── Governance prenotazione (override cluster) ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Governance prenotazione</span>
-                      <FieldGroup label="Chi prenota">
-                        <Select value={clusterAppBookingActors ?? ""} onValueChange={(v) => setClusterAppBookingActors((v || undefined) as "students" | "instructors" | "both" | undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="students">Solo allievi</SelectItem>
-                            <SelectItem value="instructors">Solo istruttori</SelectItem>
-                            <SelectItem value="both">Entrambi</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      <FieldGroup label="Modalità prenotazione istruttore">
-                        <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="manual_full">Manuale totale</SelectItem>
-                            <SelectItem value="manual_engine">Manuale + motore annullamenti</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                    </div>
-
-                    {/* ── Scambio guide ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scambio guide</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterSwapEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Scambio guide</span>
-                          <span className="text-xs text-muted-foreground">{clusterSwapEnabled === undefined ? "Default azienda" : clusterSwapEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterSwapEnabled ?? false} size="sm" />
-                      </div>
-                      {clusterSwapEnabled && (
-                        <FieldGroup label="Notifica scambio">
-                          <Select value={clusterSwapNotifyMode ?? ""} onValueChange={(v) => setClusterSwapNotifyMode((v || undefined) as "all" | "available_only" | undefined)}>
-                            <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">Tutti gli allievi</SelectItem>
-                              <SelectItem value="available_only">Solo disponibili</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </FieldGroup>
-                      )}
-                    </div>
-
-                    {/* ── Cutoff prenotazione ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cutoff prenotazione</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterBookingCutoffEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Cutoff prenotazione</span>
-                          <span className="text-xs text-muted-foreground">{clusterBookingCutoffEnabled === undefined ? "Default azienda" : clusterBookingCutoffEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterBookingCutoffEnabled ?? false} size="sm" />
-                      </div>
-                      {clusterBookingCutoffEnabled && (
-                        <FieldGroup label="Orario limite">
-                          <Select value={clusterBookingCutoffTime ?? ""} onValueChange={(v) => setClusterBookingCutoffTime(v || undefined)}>
-                            <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                            <SelectContent>
-                              {["12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00"].map((t) => (
-                                <SelectItem key={t} value={t}>{t}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </FieldGroup>
-                      )}
-                    </div>
-
-                    {/* ── Limite settimanale ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Limite guide settimanali</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterWeeklyLimitEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Limite settimanale</span>
-                          <span className="text-xs text-muted-foreground">{clusterWeeklyLimitEnabled === undefined ? "Default azienda" : clusterWeeklyLimitEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterWeeklyLimitEnabled ?? false} size="sm" />
-                      </div>
-                      {clusterWeeklyLimitEnabled && (
-                        <FieldGroup label="Max guide a settimana">
-                          <input
-                            type="number"
-                            min={1}
-                            max={50}
-                            className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
-                            value={clusterWeeklyLimit ?? ""}
-                            onChange={(e) => setClusterWeeklyLimit(e.target.value ? Number(e.target.value) : undefined)}
-                          />
-                        </FieldGroup>
-                      )}
-                    </div>
-
-                    {/* ── Notifiche slot vuoti ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notifiche slot vuoti</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterEmptySlotEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Notifiche slot vuoti</span>
-                          <span className="text-xs text-muted-foreground">{clusterEmptySlotEnabled === undefined ? "Default azienda" : clusterEmptySlotEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterEmptySlotEnabled ?? false} size="sm" />
-                      </div>
-                      {clusterEmptySlotEnabled && (
-                        <>
-                          <FieldGroup label="Destinatari">
-                            <Select value={clusterEmptySlotTarget ?? ""} onValueChange={(v) => setClusterEmptySlotTarget((v || undefined) as "all" | "availability_matching" | undefined)}>
-                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="all">Tutti gli allievi</SelectItem>
-                                <SelectItem value="availability_matching">Solo con disponibilità</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FieldGroup>
-                          <FieldGroup label="Orari notifica">
-                            <div className="flex flex-wrap gap-1.5">
-                              {["08:00","10:00","12:00","14:00","16:00","18:00","20:00"].map((t) => (
-                                <ToggleChip
-                                  key={t}
-                                  active={(clusterEmptySlotTimes ?? []).includes(t)}
-                                  onClick={() => setClusterEmptySlotTimes((prev) => {
-                                    const current = prev ?? [];
-                                    return current.includes(t) ? current.filter((x) => x !== t) : [...current, t].sort();
-                                  })}
-                                  size="sm"
-                                >
-                                  {t}
-                                </ToggleChip>
-                              ))}
-                            </div>
-                          </FieldGroup>
-                        </>
-                      )}
-                    </div>
-
-                    {/* ── Fascia oraria ristretta ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fascia oraria ristretta</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterRestrictedTimeEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Fascia oraria ristretta</span>
-                          <span className="text-xs text-muted-foreground">{clusterRestrictedTimeEnabled === undefined ? "Default azienda" : clusterRestrictedTimeEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterRestrictedTimeEnabled ?? false} size="sm" />
-                      </div>
-                      {clusterRestrictedTimeEnabled && (
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <FieldGroup label="Inizio fascia">
-                            <Select value={clusterRestrictedTimeStart ?? ""} onValueChange={(v) => setClusterRestrictedTimeStart(v || undefined)}>
-                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                              <SelectContent>
-                                {["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00"].map((t) => (
-                                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FieldGroup>
-                          <FieldGroup label="Fine fascia">
-                            <Select value={clusterRestrictedTimeEnd ?? ""} onValueChange={(v) => setClusterRestrictedTimeEnd(v || undefined)}>
-                              <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                              <SelectContent>
-                                {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"].map((t) => (
-                                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FieldGroup>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* ── Assenza settimanale (Task 8) ── */}
-                    <div className="space-y-3 border-t border-border/40 pt-4">
-                      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assenza settimanale</span>
-                      <div
-                        className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                        onClick={() => setClusterWeeklyAbsenceEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                      >
-                        <div className="flex flex-col gap-0.5">
-                          <span className="text-sm font-medium">Assenza settimanale allievi</span>
-                          <span className="text-xs text-muted-foreground">{clusterWeeklyAbsenceEnabled === undefined ? "Default azienda" : clusterWeeklyAbsenceEnabled ? "Attivo" : "Disattivo"}</span>
-                        </div>
-                        <InlineToggle checked={clusterWeeklyAbsenceEnabled ?? false} size="sm" />
-                      </div>
-                    </div>
-
-                    <FieldGroup label={`Allievi assegnati (${clusterStudentIds.length})`}>
-                      <Input
-                        placeholder="Cerca allievo..."
-                        value={clusterStudentSearch}
-                        onChange={(e) => setClusterStudentSearch(e.target.value)}
-                        className="mb-2"
-                      />
-                      <div className="space-y-0.5 max-h-[280px] overflow-y-auto rounded-xl border border-border/60 bg-gray-50/30">
-                        {(() => {
-                          const q = clusterStudentSearch.toLowerCase().trim();
-                          const filtered = q
-                            ? allStudents.filter((s) =>
-                                `${s.firstName} ${s.lastName}`.toLowerCase().includes(q),
-                              )
-                            : allStudents;
-                          const sorted = [...filtered].sort((a, b) => {
-                            const aAssigned = clusterStudentIds.includes(a.id) ? 0 : 1;
-                            const bAssigned = clusterStudentIds.includes(b.id) ? 0 : 1;
-                            if (aAssigned !== bAssigned) return aAssigned - bAssigned;
-                            return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
-                          });
-                          if (!sorted.length) {
-                            return (
-                              <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
-                                {q ? "Nessun risultato." : "Nessun allievo trovato."}
-                              </div>
-                            );
-                          }
-                          return sorted.map((student) => {
-                            const isAssignedHere = clusterStudentIds.includes(student.id);
-                            const assignedToOther =
-                              !isAssignedHere &&
-                              student.assignedInstructorId &&
-                              student.assignedInstructorId !== clusterInstructor?.id;
-                            const otherInstructorName = assignedToOther
-                              ? instructors.find((i) => i.id === student.assignedInstructorId)?.name
-                              : null;
-                            return (
-                              <div
-                                key={student.id}
-                                className={cn(
-                                  "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
-                                  isAssignedHere ? "bg-yellow-50/80" : "hover:bg-white",
-                                )}
-                                onClick={() => {
-                                  setClusterStudentIds((prev) =>
-                                    prev.includes(student.id)
-                                      ? prev.filter((id) => id !== student.id)
-                                      : [...prev, student.id],
-                                  );
-                                }}
-                              >
-                                <Checkbox checked={isAssignedHere} className="pointer-events-none" />
-                                <span className="text-sm flex-1 truncate">
-                                  {student.firstName} {student.lastName}
-                                </span>
-                                {assignedToOther ? (
-                                  <span className="text-[10px] shrink-0 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                                    {otherInstructorName ?? "altro"}
-                                  </span>
-                                ) : null}
-                              </div>
-                            );
-                          });
-                        })()}
-                      </div>
-                    </FieldGroup>
-                  </>
-                ) : null}
-              </div>
-
-              <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-                <Button variant="outline" onClick={() => setClusterInstructor(null)}>
-                  Annulla
-                </Button>
-                <Button onClick={saveClusterSettings} disabled={clusterSaving}>
-                  {clusterSaving ? "Salvataggio..." : "Salva"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-          </>
+          <InstructorsTab
+            instructors={instructors}
+            instructorWeeklyAvailability={instructorWeeklyAvailability}
+            instructorAvailability={instructorAvailability}
+            openClusterPanel={openClusterPanel}
+            openInstructorAvailabilityDialog={openInstructorAvailabilityDialog}
+            setSickLeaveInstructor={setSickLeaveInstructor}
+            setSickLeaveStartDate={setSickLeaveStartDate}
+            setSickLeaveEndDate={setSickLeaveEndDate}
+            setSickLeaveHalfDay={setSickLeaveHalfDay}
+            setSickLeaveStartTime={setSickLeaveStartTime}
+            setInviteInstructorOpen={setInviteInstructorOpen}
+            clusterInstructor={clusterInstructor}
+            setClusterInstructor={setClusterInstructor}
+            clusterAutonomous={clusterAutonomous}
+            setClusterAutonomous={setClusterAutonomous}
+            clusterDurations={clusterDurations}
+            setClusterDurations={setClusterDurations}
+            clusterRoundedHours={clusterRoundedHours}
+            setClusterRoundedHours={setClusterRoundedHours}
+            clusterAppBookingActors={clusterAppBookingActors}
+            setClusterAppBookingActors={setClusterAppBookingActors}
+            clusterInstructorBookingMode={clusterInstructorBookingMode}
+            setClusterInstructorBookingMode={setClusterInstructorBookingMode}
+            clusterSwapEnabled={clusterSwapEnabled}
+            setClusterSwapEnabled={setClusterSwapEnabled}
+            clusterSwapNotifyMode={clusterSwapNotifyMode}
+            setClusterSwapNotifyMode={setClusterSwapNotifyMode}
+            clusterBookingCutoffEnabled={clusterBookingCutoffEnabled}
+            setClusterBookingCutoffEnabled={setClusterBookingCutoffEnabled}
+            clusterBookingCutoffTime={clusterBookingCutoffTime}
+            setClusterBookingCutoffTime={setClusterBookingCutoffTime}
+            clusterWeeklyLimitEnabled={clusterWeeklyLimitEnabled}
+            setClusterWeeklyLimitEnabled={setClusterWeeklyLimitEnabled}
+            clusterWeeklyLimit={clusterWeeklyLimit}
+            setClusterWeeklyLimit={setClusterWeeklyLimit}
+            clusterEmptySlotEnabled={clusterEmptySlotEnabled}
+            setClusterEmptySlotEnabled={setClusterEmptySlotEnabled}
+            clusterEmptySlotTarget={clusterEmptySlotTarget}
+            setClusterEmptySlotTarget={setClusterEmptySlotTarget}
+            clusterEmptySlotTimes={clusterEmptySlotTimes}
+            setClusterEmptySlotTimes={setClusterEmptySlotTimes}
+            clusterRestrictedTimeEnabled={clusterRestrictedTimeEnabled}
+            setClusterRestrictedTimeEnabled={setClusterRestrictedTimeEnabled}
+            clusterRestrictedTimeStart={clusterRestrictedTimeStart}
+            setClusterRestrictedTimeStart={setClusterRestrictedTimeStart}
+            clusterRestrictedTimeEnd={clusterRestrictedTimeEnd}
+            setClusterRestrictedTimeEnd={setClusterRestrictedTimeEnd}
+            clusterWeeklyAbsenceEnabled={clusterWeeklyAbsenceEnabled}
+            setClusterWeeklyAbsenceEnabled={setClusterWeeklyAbsenceEnabled}
+            clusterWorkingHoursStart={clusterWorkingHoursStart}
+            setClusterWorkingHoursStart={setClusterWorkingHoursStart}
+            clusterWorkingHoursEnd={clusterWorkingHoursEnd}
+            setClusterWorkingHoursEnd={setClusterWorkingHoursEnd}
+            clusterAvailabilityMode={clusterAvailabilityMode}
+            setClusterAvailabilityMode={setClusterAvailabilityMode}
+            allStudents={allStudents}
+            clusterStudentIds={clusterStudentIds}
+            setClusterStudentIds={setClusterStudentIds}
+            clusterStudentSearch={clusterStudentSearch}
+            setClusterStudentSearch={setClusterStudentSearch}
+            saveClusterSettings={saveClusterSettings}
+            clusterSaving={clusterSaving}
+          />
         ) : configTab === "students" ? (
-          <>
-          {/* ── Gestione allievi tab ── */}
-          <div className="rounded-2xl border border-border bg-white shadow-card">
-            <AccordionSection
-              icon={Clock}
-              title="Limite prenotazione"
-              description="Imposta un orario limite il giorno prima entro cui gli allievi possono prenotare."
-              expanded={expandedSection === "bookingCutoff"}
-              onToggle={() => toggleSection("bookingCutoff")}
-              isFirst
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setBookingCutoffEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Attiva limite prenotazione giorno prima</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi non potranno prenotare guide dopo l&apos;orario limite del giorno precedente. Le prenotazioni per il giorno stesso saranno bloccate.
-                    </span>
-                  </div>
-                  <InlineToggle checked={bookingCutoffEnabled} size="sm" />
-                </div>
-
-                {bookingCutoffEnabled ? (
-                  <FieldGroup label="Orario limite">
-                    <Select value={bookingCutoffTime} onValueChange={setBookingCutoffTime}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Orario" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[
-                          "12:00", "12:30", "13:00", "13:30",
-                          "14:00", "14:30", "15:00", "15:30",
-                          "16:00", "16:30", "17:00", "17:30",
-                          "18:00", "18:30", "19:00", "19:30",
-                          "20:00", "20:30", "21:00", "21:30",
-                          "22:00",
-                        ].map((t) => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                ) : null}
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={CalendarCheck}
-              title="Limite guide settimanali"
-              description="Limita il numero massimo di guide prenotabili da un allievo per settimana."
-              expanded={expandedSection === "weeklyLimit"}
-              onToggle={() => toggleSection("weeklyLimit")}
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setWeeklyBookingLimitEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Attiva limite settimanale</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi non potranno prenotare pi&ugrave; di un certo numero di guide a settimana (lun-dom). Titolare e istruttori possono scavalcare il limite con conferma.
-                    </span>
-                  </div>
-                  <InlineToggle checked={weeklyBookingLimitEnabled} size="sm" />
-                </div>
-
-                {weeklyBookingLimitEnabled ? (
-                  <>
-                    <FieldGroup label="Guide massime per settimana">
-                      <Input
-                        type="number"
-                        min={1}
-                        max={50}
-                        value={weeklyBookingLimit}
-                        onChange={(e) => setWeeklyBookingLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                        className="w-24"
-                      />
-                    </FieldGroup>
-
-                    <div
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                      onClick={() => setExamPriorityEnabled((prev) => !prev)}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Priorit&agrave; esame</span>
-                        <span className="text-xs text-muted-foreground">
-                          Gli allievi con un esame di guida entro 2 settimane possono prenotare pi&ugrave; guide.
-                        </span>
-                      </div>
-                      <InlineToggle checked={examPriorityEnabled} size="sm" />
-                    </div>
-
-                    {examPriorityEnabled ? (
-                      <>
-                        <FieldGroup label="Giorni prima dell&apos;esame">
-                          <Input
-                            type="number"
-                            min={1}
-                            max={60}
-                            value={examPriorityDaysBeforeExam}
-                            onChange={(e) => setExamPriorityDaysBeforeExam(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
-                            className="w-24"
-                          />
-                        </FieldGroup>
-                        <div
-                          className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                          onClick={() => setExamPriorityBlockNonExam((prev) => !prev)}
-                        >
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-sm font-medium">Blocca non-esame durante priorit&agrave;</span>
-                            <span className="text-xs text-muted-foreground">
-                              Gli allievi senza esame non possono prenotare in un giorno della finestra di priorit&agrave; finch&eacute; tutti gli allievi con esame non hanno prenotato per quel giorno.
-                            </span>
-                          </div>
-                          <InlineToggle checked={examPriorityBlockNonExam} size="sm" />
-                        </div>
-
-                        {/* Manual pause control */}
-                        {examPriorityBlockNonExam ? (
-                          (() => {
-                            const isPaused = Boolean(examPriorityPausedUntil && new Date(examPriorityPausedUntil) > new Date());
-                            return (
-                              <div className="rounded-xl border border-border/60 bg-white/70 px-4 py-3 space-y-2">
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-sm font-medium">Pausa blocco priorit&agrave;</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {isPaused
-                                        ? `Blocco in pausa fino al ${new Date(examPriorityPausedUntil!).toLocaleString("it-IT", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
-                                        : "Disattiva temporaneamente il blocco dei non-esame."}
-                                    </span>
-                                  </div>
-                                  {isPaused ? (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setExamPriorityPausedUntil(null)}
-                                    >
-                                      Riattiva blocco
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => {
-                                        const until = new Date();
-                                        until.setHours(23, 59, 59, 999);
-                                        setExamPriorityPausedUntil(until.toISOString());
-                                      }}
-                                    >
-                                      Pausa fino a stasera
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })()
-                        ) : null}
-                      </>
-                    ) : null}
-                  </>
-                ) : null}
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={Clock}
-              title="Fascia oraria ristretta"
-              description="Definisci una fascia oraria difficile da riempire. Gli allievi disponibili in quella fascia potranno prenotare solo lì."
-              expanded={expandedSection === "restrictedTimeRange"}
-              onToggle={() => toggleSection("restrictedTimeRange")}
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setRestrictedTimeRangeEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Attiva restrizione fascia oraria</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi disponibili in questa fascia potranno prenotare SOLO slot in questa fascia.
-                    </span>
-                  </div>
-                  <InlineToggle checked={restrictedTimeRangeEnabled} size="sm" />
-                </div>
-                {restrictedTimeRangeEnabled && (
-                  <div className="grid gap-3 sm:grid-cols-2 max-w-md">
-                    <FieldGroup label="Inizio fascia">
-                      <Select value={restrictedTimeRangeStart} onValueChange={setRestrictedTimeRangeStart}>
-                        <SelectTrigger><SelectValue placeholder="Inizio" /></SelectTrigger>
-                        <SelectContent>
-                          {["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00"].map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                    <FieldGroup label="Fine fascia">
-                      <Select value={restrictedTimeRangeEnd} onValueChange={setRestrictedTimeRangeEnd}>
-                        <SelectTrigger><SelectValue placeholder="Fine" /></SelectTrigger>
-                        <SelectContent>
-                          {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"].map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                  </div>
-                )}
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={UserRoundCog}
-              title="Sostituiscimi"
-              description="Consenti agli allievi di proporre scambi guide tra loro."
-              expanded={expandedSection === "swap"}
-              onToggle={() => toggleSection("swap")}
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setSwapEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Consenti scambi tra allievi</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi potranno proporre ad altri di prendere il loro posto in una guida futura.
-                    </span>
-                  </div>
-                  <InlineToggle checked={swapEnabled} size="sm" />
-                </div>
-
-                {swapEnabled ? (
-                  <FieldGroup label="Modalità notifica">
-                    <Select value={swapNotifyMode} onValueChange={(value) => setSwapNotifyMode(value as "all" | "available_only")}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Modalità" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="available_only">Solo allievi disponibili nello slot</SelectItem>
-                        <SelectItem value="all">Tutti gli allievi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                ) : null}
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={UserCheck}
-              title="Presenza automatica"
-              description="Check-in automatico delle guide all'orario di inizio. L'istruttore può segnare solo l'assenza."
-              expanded={expandedSection === "autoCheckin"}
-              onToggle={() => toggleSection("autoCheckin")}
-            >
-              <div className="space-y-3">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setAutoCheckinEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Presenza automatica</span>
-                    <span className="text-xs text-muted-foreground">
-                      {autoCheckinEnabled
-                        ? "Attivo — le guide si segnano come presenti in automatico"
-                        : "Disattivo — l'istruttore deve cliccare \"Presente\""}
-                    </span>
-                  </div>
-                  <InlineToggle checked={autoCheckinEnabled} size="sm" />
-                </div>
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={FileText}
-              title="Note allievi"
-              description="Consenti agli allievi di vedere le note delle guide dall'app."
-              expanded={expandedSection === "studentNotes"}
-              onToggle={() => toggleSection("studentNotes")}
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setStudentNotesEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Mostra note nell&apos;app allievi</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi potranno consultare le note rilasciate dagli istruttori dopo ogni guida, direttamente dalla loro app.
-                    </span>
-                  </div>
-                  <InlineToggle checked={studentNotesEnabled} size="sm" />
-                </div>
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={Bell}
-              title="Notifica slot vuoti"
-              description="Notifica automaticamente gli allievi quando ci sono guide disponibili per il giorno dopo."
-              expanded={expandedSection === "emptySlotNotification"}
-              onToggle={() => toggleSection("emptySlotNotification")}
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setEmptySlotNotificationEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Notifica slot disponibili domani</span>
-                    <span className="text-xs text-muted-foreground">
-                      Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere per il giorno dopo.
-                    </span>
-                  </div>
-                  <InlineToggle checked={emptySlotNotificationEnabled} size="sm" />
-                </div>
-
-                {emptySlotNotificationEnabled ? (
-                  <>
-                    <FieldGroup label="Destinatari">
-                      <Select value={emptySlotNotificationTarget} onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Destinatari" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="availability_matching">Solo allievi con disponibilità corrispondente</SelectItem>
-                          <SelectItem value="all">Tutti gli allievi</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-
-                    <FieldGroup label="Orari di invio">
-                      <div className="flex flex-wrap gap-1.5">
-                        {([
-                          "08:00", "08:30", "09:00", "09:30",
-                          "10:00", "10:30", "11:00", "11:30",
-                          "12:00", "12:30", "13:00", "13:30",
-                          "14:00", "14:30", "15:00", "15:30",
-                          "16:00", "16:30", "17:00", "17:30",
-                          "18:00", "18:30", "19:00", "19:30",
-                          "20:00", "20:30", "21:00", "21:30",
-                          "22:00",
-                        ] as const).map((time) => (
-                          <ToggleChip
-                            key={time}
-                            active={emptySlotNotificationTimes.includes(time)}
-                            onClick={() => {
-                              setEmptySlotNotificationTimes((prev) => {
-                                if (prev.includes(time)) {
-                                  if (prev.length <= 1) return prev;
-                                  return prev.filter((t) => t !== time);
-                                }
-                                return [...prev, time].sort();
-                              });
-                            }}
-                          >
-                            {time}
-                          </ToggleChip>
-                        ))}
-                      </div>
-                    </FieldGroup>
-
-                    <div className="rounded-xl border border-border/60 bg-white/70 px-4 py-3">
-                      <div className="flex flex-col gap-1.5">
-                        <span className="text-sm font-medium">Invia ora per domani</span>
-                        <span className="text-xs text-muted-foreground">
-                          Invia subito la notifica di guide disponibili per domani a tutti gli allievi idonei.
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-1 w-fit"
-                          disabled={triggeringNotification}
-                          onClick={async () => {
-                            setTriggeringNotification(true);
-                            try {
-                              const res = await triggerEmptySlotNotification();
-                              if (res.success && res.data) {
-                                toast.success({
-                                  description: `Notifica inviata a ${res.data.notified} alliev${res.data.notified === 1 ? "o" : "i"}.`,
-                                });
-                              } else {
-                                toast.error({
-                                  description: res.message ?? "Impossibile inviare la notifica.",
-                                });
-                              }
-                            } catch {
-                              toast.error({ description: "Impossibile inviare la notifica." });
-                            } finally {
-                              setTriggeringNotification(false);
-                            }
-                          }}
-                        >
-                          {triggeringNotification ? (
-                            <Loader2 className="size-4 animate-spin mr-1.5" />
-                          ) : (
-                            <Send className="size-4 mr-1.5" />
-                          )}
-                          {triggeringNotification ? "Invio in corso…" : "Invia notifica"}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                ) : null}
-              </div>
-            </AccordionSection>
-            <AccordionSection
-              icon={Users}
-              title="Preferenza istruttore"
-              description="Consenti agli allievi di scegliere l'istruttore quando prenotano una guida."
-              expanded={expandedSection === "instructorPreference"}
-              onToggle={() => toggleSection("instructorPreference")}
-              isLast
-            >
-              <div className="space-y-5 max-w-2xl">
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setInstructorPreferenceEnabled((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Consenti scelta istruttore</span>
-                    <span className="text-xs text-muted-foreground">
-                      Gli allievi potranno selezionare un istruttore specifico durante la prenotazione. Se non ne selezionano uno, vedranno le proposte di tutti gli istruttori.
-                    </span>
-                  </div>
-                  <InlineToggle checked={instructorPreferenceEnabled} size="sm" />
-                </div>
-              </div>
-            </AccordionSection>
-          </div>
-
-          {/* Save button */}
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSaveSettings}
-              disabled={savingSettings}
-              className="min-w-[180px]"
-            >
-              {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-            </Button>
-          </div>
-          </>
+          <StudentsTab
+            expandedSection={expandedSection}
+            toggleSection={toggleSection}
+            bookingCutoffEnabled={bookingCutoffEnabled}
+            setBookingCutoffEnabled={setBookingCutoffEnabled}
+            bookingCutoffTime={bookingCutoffTime}
+            setBookingCutoffTime={setBookingCutoffTime}
+            weeklyBookingLimitEnabled={weeklyBookingLimitEnabled}
+            setWeeklyBookingLimitEnabled={setWeeklyBookingLimitEnabled}
+            weeklyBookingLimit={weeklyBookingLimit}
+            setWeeklyBookingLimit={setWeeklyBookingLimit}
+            examPriorityEnabled={examPriorityEnabled}
+            setExamPriorityEnabled={setExamPriorityEnabled}
+            examPriorityDaysBeforeExam={examPriorityDaysBeforeExam}
+            setExamPriorityDaysBeforeExam={setExamPriorityDaysBeforeExam}
+            examPriorityBlockNonExam={examPriorityBlockNonExam}
+            setExamPriorityBlockNonExam={setExamPriorityBlockNonExam}
+            examPriorityPausedUntil={examPriorityPausedUntil}
+            setExamPriorityPausedUntil={setExamPriorityPausedUntil}
+            restrictedTimeRangeEnabled={restrictedTimeRangeEnabled}
+            setRestrictedTimeRangeEnabled={setRestrictedTimeRangeEnabled}
+            restrictedTimeRangeStart={restrictedTimeRangeStart}
+            setRestrictedTimeRangeStart={setRestrictedTimeRangeStart}
+            restrictedTimeRangeEnd={restrictedTimeRangeEnd}
+            setRestrictedTimeRangeEnd={setRestrictedTimeRangeEnd}
+            swapEnabled={swapEnabled}
+            setSwapEnabled={setSwapEnabled}
+            swapNotifyMode={swapNotifyMode}
+            setSwapNotifyMode={(v) => setSwapNotifyMode(v as "all" | "available_only")}
+            autoCheckinEnabled={autoCheckinEnabled}
+            setAutoCheckinEnabled={setAutoCheckinEnabled}
+            studentNotesEnabled={studentNotesEnabled}
+            setStudentNotesEnabled={setStudentNotesEnabled}
+            emptySlotNotificationEnabled={emptySlotNotificationEnabled}
+            setEmptySlotNotificationEnabled={setEmptySlotNotificationEnabled}
+            emptySlotNotificationTarget={emptySlotNotificationTarget}
+            setEmptySlotNotificationTarget={(v) => setEmptySlotNotificationTarget(v as "all" | "availability_matching")}
+            emptySlotNotificationTimes={emptySlotNotificationTimes}
+            setEmptySlotNotificationTimes={setEmptySlotNotificationTimes}
+            triggeringNotification={triggeringNotification}
+            setTriggeringNotification={setTriggeringNotification}
+            instructorPreferenceEnabled={instructorPreferenceEnabled}
+            setInstructorPreferenceEnabled={setInstructorPreferenceEnabled}
+            handleSaveSettings={handleSaveSettings}
+            savingSettings={savingSettings}
+            toast={toast}
+          />
         ) : configTab === "hours" ? (
           <InstructorHoursDashboard />
         ) : (
-          /* ── Veicoli tab ── */
-          <>
-            <div className="rounded-2xl border border-border bg-white shadow-card p-4">
-              <div
-                className="flex items-center justify-between cursor-pointer"
-                onClick={() => setVehiclesEnabled((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-semibold">Modulo veicoli</span>
-                  <span className="text-xs text-muted-foreground">
-                    {vehiclesEnabled
-                      ? "Attivo — i veicoli vengono tracciati e assegnati alle guide"
-                      : "Disattivo — le guide non richiedono un veicolo"}
-                  </span>
-                </div>
-                <InlineToggle checked={vehiclesEnabled} size="sm" />
-              </div>
-            </div>
-            {vehiclesEnabled && (
-              <VehiclesTabContent
-                vehicles={vehicles}
-                vehicleWeeklyAvailability={vehicleWeeklyAvailability}
-                vehicleAvailability={vehicleAvailability}
-                loading={loading}
-                openCreateVehicle={openCreateVehicle}
-                openEditVehicle={openEditVehicle}
-                openAvailabilityDialog={openAvailabilityDialog}
-              />
-            )}
-            <div className="flex justify-end">
-              <Button
-                onClick={handleSaveSettings}
-                disabled={savingSettings}
-                className="bg-pink-500 text-white hover:bg-pink-600 rounded-full px-6 py-2.5 text-sm font-semibold shadow-md"
-              >
-                {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-              </Button>
-            </div>
-          </>
+          <VehiclesTab
+            vehicles={vehicles}
+            vehicleWeeklyAvailability={vehicleWeeklyAvailability}
+            vehicleAvailability={vehicleAvailability}
+            loading={loading}
+            vehiclesEnabled={vehiclesEnabled}
+            setVehiclesEnabled={setVehiclesEnabled}
+            openCreateVehicle={openCreateVehicle}
+            openEditVehicle={openEditVehicle}
+            openAvailabilityDialog={openAvailabilityDialog}
+            handleSaveSettings={handleSaveSettings}
+            savingSettings={savingSettings}
+          />
         )}
 
         {/* ── Instructor availability dialog */}
@@ -3186,205 +2012,6 @@ export function AutoscuoleResourcesPage({
   );
 }
 
-function AccordionSection({
-  icon: Icon,
-  title,
-  description,
-  expanded,
-  onToggle,
-  isFirst,
-  isLast,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
-  expanded: boolean;
-  onToggle: () => void;
-  isFirst?: boolean;
-  isLast?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn(!isFirst && "border-t border-border")}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className={cn(
-          "flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-gray-50/50",
-          isFirst && "rounded-t-2xl",
-          isLast && !expanded && "rounded-b-2xl",
-        )}
-      >
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-yellow-50">
-            <Icon className="h-4 w-4 text-yellow-600" />
-          </span>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-            <p className="text-xs text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-            expanded && "rotate-180",
-          )}
-        />
-      </div>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-            animate={{ height: "auto", opacity: 1, overflow: "visible", transitionEnd: { overflow: "visible" } }}
-            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            <div className={cn("px-5 pb-5", isLast && "rounded-b-2xl")}>
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function VehiclesTabContent({
-  vehicles,
-  vehicleWeeklyAvailability,
-  vehicleAvailability,
-  loading,
-  openCreateVehicle,
-  openEditVehicle,
-  openAvailabilityDialog,
-}: {
-  vehicles: VehicleDetail[];
-  vehicleWeeklyAvailability: Record<string, VehicleWeeklyAvailability>;
-  vehicleAvailability: Record<string, AvailabilityRange[]>;
-  loading: boolean;
-  openCreateVehicle: () => void;
-  openEditVehicle: (vehicle: VehicleDetail) => void;
-  openAvailabilityDialog: (vehicle: VehicleDetail) => void;
-}) {
-  return (
-    <>
-      <div className="flex items-center justify-between">
-        <div />
-        <Button size="sm" onClick={openCreateVehicle}>
-          <Plus className="size-3.5 mr-1.5" />
-          Nuovo veicolo
-        </Button>
-      </div>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
-        {vehicles.map((vehicle) => {
-          const wa = vehicleWeeklyAvailability[vehicle.id] ?? null;
-          const ranges = vehicleAvailability[vehicle.id] ?? [];
-          const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
-          return (
-            <ResourceCard
-              key={vehicle.id}
-              name={vehicle.name}
-              subtitle={vehicle.plate ? (
-                <span className="flex items-center gap-1">
-                  <Car className="size-3" />
-                  {vehicle.plate}
-                </span>
-              ) : undefined}
-              inactive={vehicle.status === "inactive"}
-              actions={
-                <>
-                  <ResourceCardAction
-                    onClick={() => openAvailabilityDialog(vehicle)}
-                    title="Modifica disponibilità"
-                  >
-                    <Clock className="size-3.5" />
-                  </ResourceCardAction>
-                  <ResourceCardAction
-                    onClick={() => openEditVehicle(vehicle)}
-                    title="Modifica veicolo"
-                  >
-                    <Pencil className="size-3.5" />
-                  </ResourceCardAction>
-                </>
-              }
-              availabilitySummary={
-                wa ? (
-                  <span>
-                    {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
-                    {wa.daysOfWeek
-                      .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                ) : (
-                  <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
-                )
-              }
-              slots={
-                ranges.length > 0
-                  ? ranges.map((range) => (
-                      <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
-                        {formatTime(range.start)}–{formatTime(range.end)}
-                      </SlotPill>
-                    ))
-                  : undefined
-              }
-              totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
-            />
-          );
-        })}
-        {!vehicles.length ? (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
-            Nessun veicolo disponibile.
-          </div>
-        ) : null}
-      </div>
-    </>
-  );
-}
-
-/* ConfigSection removed — now uses AccordionSection */
-
-function PolicySwitch({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean;
-  onChange: () => void;
-  label: string;
-  description?: string;
-}) {
-  return (
-    <div
-      role="switch"
-      tabIndex={0}
-      aria-checked={checked}
-      onClick={onChange}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(); } }}
-      className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-all duration-150",
-        checked
-          ? "border-yellow-200 bg-yellow-50 hover:bg-yellow-100/50"
-          : "border-border bg-white hover:bg-gray-50",
-      )}
-    >
-      <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
-        {description && (
-          <div className="text-xs text-muted-foreground">{description}</div>
-        )}
-      </div>
-      <InlineToggle checked={checked} />
-    </div>
-  );
-}
-
 /* InstructorCard, VehicleCard, AvailabilityCard, EmptyCard removed — now uses ResourceCard from @/components/ui/resource-card */
 
 function buildAvailabilityMap(slots: AvailabilitySlot[]) {
@@ -3430,36 +2057,6 @@ function formatMinutes(totalMinutes: number) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${pad(hours)}:${pad(minutes)}`;
-}
-
-function ChannelGroup({
-  title,
-  value,
-  onToggle,
-}: {
-  title: string;
-  value: ChannelValue[];
-  onToggle: (channel: ChannelValue) => void;
-}) {
-  return (
-    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
-      <div className="text-xs font-medium text-foreground">{title}</div>
-      <div className="space-y-2">
-        {CHANNEL_OPTIONS.map((channel) => (
-          <label
-            key={channel.value}
-            className="flex cursor-pointer items-center justify-between gap-2 text-xs text-foreground"
-          >
-            <span>{channel.label}</span>
-            <Checkbox
-              checked={value.includes(channel.value)}
-              onCheckedChange={() => onToggle(channel.value)}
-            />
-          </label>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // ── Mini Calendar for availability overrides ──────────────────────────────────

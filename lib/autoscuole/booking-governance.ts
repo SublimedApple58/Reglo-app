@@ -1,4 +1,4 @@
-import { prisma } from "@/db/prisma";
+import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 
 export const APP_BOOKING_ACTOR_OPTIONS = [
   "students",
@@ -64,10 +64,6 @@ export const isInstructorAppBookingEnabled = (
 export const getBookingGovernanceForCompany = async (
   companyId: string,
 ): Promise<BookingGovernanceSettings> => {
-  const service = await prisma.companyService.findFirst({
-    where: { companyId, serviceKey: "AUTOSCUOLE" },
-    select: { limits: true },
-  });
-  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  const limits = await getCachedCompanyServiceLimits(companyId);
   return parseBookingGovernanceFromLimits(limits);
 };

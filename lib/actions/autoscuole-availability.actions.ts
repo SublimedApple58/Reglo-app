@@ -12,13 +12,22 @@ import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
 import {
   getBookingGovernanceForCompany,
   isStudentAppBookingEnabled,
+  parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
+  buildAutoscuoleCacheKey,
+  hashCacheInput,
   invalidateAutoscuoleCache,
+  readAutoscuoleCache,
+  writeAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
+import {
+  getCachedCompanyServiceLimits,
+  getCachedHolidays,
+} from "@/lib/autoscuole/cached-service";
 import {
   LESSON_POLICY_TYPES,
   isLessonPolicyType,
@@ -2139,54 +2148,55 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       return { success: false, message: "Accesso non consentito." };
     }
 
-    const [student, service] = await Promise.all([
+    const [student, limits] = await Promise.all([
       ensureStudentMembership(membership.companyId, payload.studentId),
-      prisma.companyService.findFirst({
-        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-        select: { limits: true },
-      }),
+      getCachedCompanyServiceLimits(membership.companyId),
     ]);
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
     }
-
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
     const policy = parseLessonPolicyFromLimits(limits);
     const companyBookingSlotDurations = normalizeBookingSlotDurations(
       limits.bookingSlotDurations,
     );
     const companyRoundedHoursOnly = limits.roundedHoursOnly === true;
-    const governance = await getBookingGovernanceForCompany(membership.companyId);
+    // Use limits already fetched — no need to re-query companyService
+    const governance = parseBookingGovernanceFromLimits(limits);
 
     // Resolve cluster-aware settings (pass full company defaults so appBookingActors
     // and all other governance fields are correctly inherited when no cluster override exists)
     const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
     const companyDefaults = buildCompanyBookingDefaults(limits);
-    const clusterSettings = await resolveEffectiveBookingSettings(
-      membership.companyId,
-      payload.studentId,
-      companyDefaults,
-    );
+
+    // Resolve cluster settings and lesson coverage in parallel (independent queries)
+    const needsCoverage =
+      policy.lessonPolicyEnabled &&
+      policy.lessonRequiredTypesEnabled &&
+      policy.lessonRequiredTypes.length > 0;
+
+    const [clusterSettings, coverageResult] = await Promise.all([
+      resolveEffectiveBookingSettings(
+        membership.companyId,
+        payload.studentId,
+        companyDefaults,
+      ),
+      needsCoverage
+        ? getStudentLessonPolicyCoverage({
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            policy,
+          })
+        : null,
+    ]);
 
     const lessonTypeSelectionEnabled = policy.lessonPolicyEnabled;
     let availableLessonTypes: string[] = lessonTypeSelectionEnabled
       ? [...LESSON_POLICY_TYPES]
       : [];
 
-    if (
-      lessonTypeSelectionEnabled &&
-      policy.lessonRequiredTypesEnabled &&
-      policy.lessonRequiredTypes.length
-    ) {
-      const coverage = await getStudentLessonPolicyCoverage({
-        companyId: membership.companyId,
-        studentId: payload.studentId,
-        policy,
-      });
-      if (coverage.missingRequiredTypes.length) {
-        availableLessonTypes = coverage.missingRequiredTypes;
-      }
+    if (coverageResult && coverageResult.missingRequiredTypes.length) {
+      availableLessonTypes = coverageResult.missingRequiredTypes;
     }
 
     const instructorPreferenceEnabled =
@@ -2328,6 +2338,24 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: false, message: bookingAccess.message };
     }
 
+    // Redis cache check — after auth, before heavy computation
+    const slotsCacheKey = await buildAutoscuoleCacheKey({
+      companyId: membership.companyId,
+      segment: AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+      scope: hashCacheInput({
+        action: "available-slots",
+        studentId: payload.studentId,
+        date: payload.date,
+        durationMinutes: payload.durationMinutes,
+        instructorId: payload.instructorId,
+        lessonType: payload.lessonType,
+      }),
+    });
+    const cachedSlots = await readAutoscuoleCache<unknown>(slotsCacheKey);
+    if (cachedSlots) {
+      return { success: true, data: cachedSlots };
+    }
+
     const now = new Date();
     if (payload.durationMinutes < 30 || payload.durationMinutes > 120 || payload.durationMinutes % 15 !== 0) {
       return { success: false, message: "Durata non valida." };
@@ -2368,11 +2396,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: true, data: [] };
     }
 
-    const serviceForLimits = await prisma.companyService.findFirst({
-      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-      select: { limits: true },
-    });
-    const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<string, unknown>;
+    const serviceLimits = await getCachedCompanyServiceLimits(membership.companyId);
 
     // Resolve cluster-aware settings for this student
     const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
@@ -2696,6 +2720,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       }
     }
 
+    await writeAutoscuoleCache(slotsCacheKey, result, 30); // 30s TTL
     return { success: true, data: result };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -2723,6 +2748,22 @@ export async function getDateAvailabilityMap(
       return { success: false, message: bookingAccess.message };
     }
 
+    // Redis cache check — after auth, before heavy computation
+    const dateMapCacheKey = await buildAutoscuoleCacheKey({
+      companyId: membership.companyId,
+      segment: AUTOSCUOLE_CACHE_SEGMENTS.AGENDA,
+      scope: hashCacheInput({
+        action: "date-availability-map",
+        studentId: payload.studentId,
+        from: payload.from,
+        to: payload.to,
+      }),
+    });
+    const cachedDateMap = await readAutoscuoleCache<unknown>(dateMapCacheKey);
+    if (cachedDateMap) {
+      return { success: true, data: cachedDateMap };
+    }
+
     const now = new Date();
 
     const fromParts = parseDateOnly(payload.from);
@@ -2731,15 +2772,8 @@ export async function getDateAvailabilityMap(
       return { success: false, message: "Date non valide." };
     }
 
-    // Service limits
-    const serviceForLimits = await prisma.companyService.findFirst({
-      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-      select: { limits: true },
-    });
-    const serviceLimits = (serviceForLimits?.limits ?? {}) as Record<
-      string,
-      unknown
-    >;
+    // Service limits (cached)
+    const serviceLimits = await getCachedCompanyServiceLimits(membership.companyId);
     const bookingMinStartDate =
       typeof serviceLimits.bookingMinStartDate === "string"
         ? serviceLimits.bookingMinStartDate.trim()
@@ -2890,17 +2924,27 @@ export async function getDateAvailabilityMap(
       ),
     ]);
 
-    // Fetch appointments for the entire range (1 query)
+    // Fetch appointments + instructor blocks in parallel (independent queries)
     const appointmentScanStart = new Date(
       rangeStart.getTime() - 60 * 60 * 1000,
     );
-    const appointments = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId: membership.companyId,
-        status: { notIn: ["cancelled"] },
-        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-      },
-    });
+    const [appointments, dateMapInstructorBlocks] = await Promise.all([
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+        },
+      }),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId: membership.companyId,
+          instructorId: { in: activeInstructorIds },
+          endsAt: { gt: rangeStart },
+          startsAt: { lt: rangeEnd },
+        },
+      }),
+    ]);
 
     // Build intervals map
     const intervals = new Map<string, Array<{ start: number; end: number }>>();
@@ -2917,16 +2961,6 @@ export async function getDateAvailabilityMap(
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
     }
-
-    // Load instructor blocks (sick leave, etc.) and add them to intervals
-    const dateMapInstructorBlocks = await prisma.autoscuolaInstructorBlock.findMany({
-      where: {
-        companyId: membership.companyId,
-        instructorId: { in: activeInstructorIds },
-        endsAt: { gt: rangeStart },
-        startsAt: { lt: rangeEnd },
-      },
-    });
     for (const block of dateMapInstructorBlocks) {
       const list = intervals.get(block.instructorId) ?? [];
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
@@ -3080,9 +3114,11 @@ export async function getDateAvailabilityMap(
       dateParts = addDaysToDateParts(dateParts, 1);
     }
 
+    const dateMapResult = { dates: result, instructorsByDate, holidays: Array.from(holidaySet) };
+    await writeAutoscuoleCache(dateMapCacheKey, dateMapResult, 60); // 60s TTL
     return {
       success: true,
-      data: { dates: result, instructorsByDate, holidays: Array.from(holidaySet) },
+      data: dateMapResult,
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -3126,18 +3162,14 @@ export async function suggestInstructorBooking(
       };
     }
 
-    const [student, service] = await Promise.all([
+    const [student, limits] = await Promise.all([
       ensureStudentMembership(membership.companyId, payload.studentId),
-      prisma.companyService.findFirst({
-        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-        select: { limits: true },
-      }),
+      getCachedCompanyServiceLimits(membership.companyId),
     ]);
     if (!student) {
       return { success: false, message: "Allievo non valido." };
     }
 
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
     const bookingSlotDurations = normalizeBookingSlotDurations(
       limits.bookingSlotDurations,
     );

@@ -24,26 +24,27 @@ export async function GET() {
       );
     }
 
-    // Load company defaults
-    const service = await prisma.companyService.findFirst({
-      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
-      select: { limits: true },
-    });
+    // Load company defaults + instructor in parallel (independent queries)
+    const [service, instructor] = await Promise.all([
+      prisma.companyService.findFirst({
+        where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
+      prisma.autoscuolaInstructor.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: membership.userId,
+          status: { not: "inactive" },
+        },
+        select: {
+          id: true,
+          autonomousMode: true,
+          settings: true,
+        },
+      }),
+    ]);
     const limits = (service?.limits ?? {}) as Record<string, unknown>;
     const companyDefaults = buildCompanyBookingDefaults(limits);
-
-    const instructor = await prisma.autoscuolaInstructor.findFirst({
-      where: {
-        companyId: membership.companyId,
-        userId: membership.userId,
-        status: { not: "inactive" },
-      },
-      select: {
-        id: true,
-        autonomousMode: true,
-        settings: true,
-      },
-    });
 
     if (!instructor) {
       return NextResponse.json({
@@ -67,29 +68,38 @@ export async function GET() {
     currentMonday.setUTCDate(currentMonday.getUTCDate() - (dow === 0 ? 6 : dow - 1));
     currentMonday.setUTCHours(0, 0, 0, 0);
 
-    const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
-      where: {
-        companyId: membership.companyId,
-        instructorId: instructor.id,
-        weekStart: { gte: currentMonday },
-      },
-      select: { id: true, weekStart: true, publishedAt: true },
-      orderBy: { weekStart: "asc" },
-    });
-
-    // Load all students in the company + which are currently assigned to this instructor
-    const studentMembers = await prisma.companyMember.findMany({
-      where: {
-        companyId: membership.companyId,
-        autoscuolaRole: "STUDENT",
-      },
-      select: {
-        userId: true,
-        assignedInstructorId: true,
-        user: { select: { name: true } },
-      },
-      orderBy: { user: { name: "asc" } },
-    });
+    // Fetch published weeks, students, and autonomous instructors in parallel
+    const [publishedWeeks, studentMembers, autonomousInstructors] = await Promise.all([
+      prisma.autoscuolaInstructorPublishedWeek.findMany({
+        where: {
+          companyId: membership.companyId,
+          instructorId: instructor.id,
+          weekStart: { gte: currentMonday },
+        },
+        select: { id: true, weekStart: true, publishedAt: true },
+        orderBy: { weekStart: "asc" },
+      }),
+      prisma.companyMember.findMany({
+        where: {
+          companyId: membership.companyId,
+          autoscuolaRole: "STUDENT",
+        },
+        select: {
+          userId: true,
+          assignedInstructorId: true,
+          user: { select: { name: true } },
+        },
+        orderBy: { user: { name: "asc" } },
+      }),
+      prisma.autoscuolaInstructor.findMany({
+        where: {
+          companyId: membership.companyId,
+          autonomousMode: true,
+          status: { not: "inactive" },
+        },
+        select: { id: true, name: true },
+      }),
+    ]);
 
     const students = studentMembers.map((m) => {
       const fullName = (m.user?.name ?? "").trim();
@@ -104,16 +114,6 @@ export async function GET() {
     const assignedStudentIds = studentMembers
       .filter((m) => m.assignedInstructorId === instructor.id)
       .map((m) => m.userId);
-
-    // Load all autonomous instructors in company (for cluster labels in UI)
-    const autonomousInstructors = await prisma.autoscuolaInstructor.findMany({
-      where: {
-        companyId: membership.companyId,
-        autonomousMode: true,
-        status: { not: "inactive" },
-      },
-      select: { id: true, name: true },
-    });
 
     return NextResponse.json({
       success: true,

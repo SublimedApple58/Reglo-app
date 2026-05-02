@@ -155,7 +155,9 @@ export async function startQuizSession(
         id: true,
         questionText: true,
         imageKey: true,
+        correctAnswer: true,
         chapter: { select: { chapterNumber: true } },
+        hint: { select: { title: true, descriptionHtml: true } },
       },
     });
 
@@ -169,6 +171,10 @@ export async function startQuizSession(
           questionText: q.questionText,
           imageUrl: await resolveImageUrl(q.imageKey),
           chapterNumber: q.chapter.chapterNumber,
+          correctAnswer: q.correctAnswer,
+          hint: q.hint
+            ? { title: q.hint.title, descriptionHtml: q.hint.descriptionHtml }
+            : null,
         };
       }),
     );

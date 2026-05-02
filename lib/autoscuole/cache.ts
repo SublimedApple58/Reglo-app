@@ -8,12 +8,15 @@ const FIC_SEGMENT = "fic";
 const QUIZ_SEGMENT = "quiz";
 const CACHE_NAMESPACE = "autoscuole:v1";
 
+const SETTINGS_SEGMENT = "settings";
+
 export const AUTOSCUOLE_CACHE_SEGMENTS = {
   AGENDA: AGENDA_SEGMENT,
   PAYMENTS: PAYMENTS_SEGMENT,
   STRIPE: STRIPE_SEGMENT,
   FIC: FIC_SEGMENT,
   QUIZ: QUIZ_SEGMENT,
+  SETTINGS: SETTINGS_SEGMENT,
 } as const;
 
 export type AutoscuoleCacheSegment =
