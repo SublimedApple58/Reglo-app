@@ -248,7 +248,7 @@ const getOwnInstructorProfile = async (companyId: string, userId: string) =>
     select: { id: true },
   });
 
-const REQUIRED_LESSONS_COUNT = 10;
+const REQUIRED_LESSONS_COUNT = 6;
 const LESSON_TYPE_OPTIONS = LESSON_ALL_ALLOWED_TYPES;
 const LESSON_TYPE_SET = new Set<string>(LESSON_TYPE_OPTIONS);
 const INSTRUCTOR_ALLOWED_STATUSES = new Set(["checked_in", "no_show"]);
