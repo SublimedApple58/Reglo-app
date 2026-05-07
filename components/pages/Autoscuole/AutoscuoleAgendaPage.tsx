@@ -2356,7 +2356,7 @@ export function AutoscuoleAgendaPage({
           </div>
           <div className="px-6 py-5 space-y-5">
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata (guide programmate)</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata</p>
               <div className="space-y-1.5">
                 {[
                   { label: "30 minuti", className: "border-teal-200 bg-teal-50" },
@@ -2373,29 +2373,19 @@ export function AutoscuoleAgendaPage({
               </div>
             </div>
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per stato</p>
-              <div className="space-y-1.5">
-                {[
-                  { label: "In corso (check-in effettuato)", className: "border-emerald-200 bg-emerald-100" },
-                  { label: "Completata", className: "border-indigo-200 bg-indigo-100" },
-                  { label: "Assente", className: "border-rose-200 bg-rose-100" },
-                  { label: "Proposta", className: "border-amber-200 bg-amber-100" },
-                  { label: "Da confermare", className: "border-orange-200 bg-orange-100" },
-                  { label: "Annullata", className: "border-gray-200 bg-gray-100 opacity-60" },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
-                    <span className="text-xs text-foreground">{item.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-3">
                   <div className="h-5 w-8 rounded border-2 border-violet-300 bg-violet-100" />
                   <span className="text-xs text-foreground">Esame</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-5 w-8 rounded border-2 border-rose-200 bg-rose-100" />
+                  <span className="text-xs text-foreground">Assente</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-5 w-8 rounded border-2 border-gray-200 bg-gray-100 opacity-60" />
+                  <span className="text-xs text-foreground">Annullata</span>
                 </div>
               </div>
             </div>
@@ -3336,80 +3326,40 @@ function getStatusMeta(
   now: Date = new Date(),
 ) {
   const normalized = status.toLowerCase();
+  const durationClass = appointment ? getScheduledDurationClass(appointment) : "border-yellow-200/70 bg-yellow-50/80";
+
   if (normalized === "checked_in") {
     if (appointment) {
       const start = toDate(appointment.startsAt);
       const end = getAppointmentEnd(appointment);
       if (now >= start && now < end) {
-        return {
-          label: "In corso",
-          shortLabel: "In corso",
-          className: "border-emerald-300/80 bg-emerald-200/85",
-        };
+        return { label: "In corso", shortLabel: "In corso", className: durationClass };
       }
       if (now < start) {
-        return {
-          label: "Confermata",
-          shortLabel: "Confermata",
-          className: "border-emerald-200/80 bg-emerald-100/85",
-        };
+        return { label: "Confermata", shortLabel: "Confermata", className: durationClass };
       }
     }
-    return {
-      label: "Presente",
-      shortLabel: "Presente",
-      className: "border-emerald-200/70 bg-emerald-100/70",
-    };
+    return { label: "Presente", shortLabel: "Presente", className: durationClass };
   }
   if (normalized === "confirmed" || normalized === "scheduled") {
-    const durationClass = appointment ? getScheduledDurationClass(appointment) : "border-yellow-200/70 bg-yellow-50/80";
-    return {
-      label: "Programmata",
-      shortLabel: "Programmata",
-      className: durationClass,
-    };
+    return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
   }
   if (normalized === "completed") {
-    return {
-      label: "Completa",
-      shortLabel: "Completata",
-      className: "border-indigo-200/70 bg-indigo-100/70",
-    };
+    return { label: "Completa", shortLabel: "Completata", className: durationClass };
   }
   if (normalized === "no_show") {
-    return {
-      label: "Assente",
-      shortLabel: "Assente",
-      className: "border-rose-200/70 bg-rose-100/70",
-    };
+    return { label: "Assente", shortLabel: "Assente", className: "border-rose-200/70 bg-rose-100/70" };
   }
   if (normalized.includes("proposal")) {
-    return {
-      label: "Proposta",
-      shortLabel: "Proposta",
-      className: "border-amber-200/70 bg-amber-100/80",
-    };
+    return { label: "Proposta", shortLabel: "Proposta", className: durationClass };
   }
   if (normalized === "pending_review") {
-    return {
-      label: "Da confermare",
-      shortLabel: "Da confermare",
-      className: "border-orange-200/70 bg-orange-100/80",
-    };
+    return { label: "Da confermare", shortLabel: "Da confermare", className: durationClass };
   }
   if (normalized === "cancelled") {
-    return {
-      label: "Annullata",
-      shortLabel: "Annullata",
-      className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through",
-    };
+    return { label: "Annullata", shortLabel: "Annullata", className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through" };
   }
-  const fallbackClass = appointment ? getScheduledDurationClass(appointment) : "border-yellow-200/70 bg-yellow-50/80";
-  return {
-    label: "Programmata",
-    shortLabel: "Programmata",
-    className: fallbackClass,
-  };
+  return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
 }
 
 function getFilterTitle(kind: FilterKind) {
