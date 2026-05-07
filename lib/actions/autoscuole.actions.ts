@@ -2861,6 +2861,8 @@ export async function cancelAutoscuolaAppointment(
       },
     });
 
+    // Skip refund and notification for exams
+    if (appointment.type !== "esame") {
     await refundLessonCreditIfEligible({
       appointmentId: appointment.id,
       cancelledByAutoscuola: false,
@@ -2879,6 +2881,7 @@ export async function cancelAutoscuolaAppointment(
       cancellationKind: "manual_cancel",
       actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
+    }
 
     if (appointment.slotId) {
       const now = new Date();
