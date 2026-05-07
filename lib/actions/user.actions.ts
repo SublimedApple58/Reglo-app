@@ -462,22 +462,30 @@ export async function updateUser(user: z.infer<typeof updateUserSchema>) {
       },
     });
 
-    // Auto-sync AutoscuolaInstructor record when role includes instructor
-    if (isInstructor(user.autoscuolaRole)) {
-      await prisma.autoscuolaInstructor.upsert({
-        where: {
-          companyId_userId: {
+    // Auto-sync AutoscuolaInstructor record when role changes
+    if (user.autoscuolaRole) {
+      if (isInstructor(user.autoscuolaRole)) {
+        await prisma.autoscuolaInstructor.upsert({
+          where: {
+            companyId_userId: {
+              companyId: context.companyId,
+              userId: user.id,
+            },
+          },
+          update: { status: 'active', name: user.name || undefined },
+          create: {
             companyId: context.companyId,
             userId: user.id,
+            name: user.name || user.id,
           },
-        },
-        update: { status: 'active', name: user.name || undefined },
-        create: {
-          companyId: context.companyId,
-          userId: user.id,
-          name: user.name || user.id,
-        },
-      });
+        });
+      } else {
+        // Role changed away from instructor — deactivate instructor record
+        await prisma.autoscuolaInstructor.updateMany({
+          where: { companyId: context.companyId, userId: user.id },
+          data: { status: 'inactive' },
+        });
+      }
     }
 
     revalidatePath('/admin/users');
