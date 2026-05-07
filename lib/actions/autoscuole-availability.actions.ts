@@ -3778,6 +3778,7 @@ export async function getOutOfAvailabilityAppointments(
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
+        type: { not: "esame" },
         startsAt: { gt: new Date() },
         status: { in: ["scheduled", "confirmed", "checked_in"] },
         availabilityOverrideApproved: false,
