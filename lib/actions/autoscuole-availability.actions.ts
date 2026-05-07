@@ -2308,6 +2308,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         weeklyAbsenceEnabled: clusterSettings.weeklyAbsenceEnabled,
         appBookingActors: clusterSettings.appBookingActors,
         swapEnabled: clusterSettings.swapEnabled,
+        studentCancellationEnabled: clusterSettings.studentCancellationEnabled,
         examPriority: examPriorityInfo,
         blockedByExamPriority,
       },

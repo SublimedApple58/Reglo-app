@@ -3,6 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  Ban,
   Bell,
   CalendarCheck,
   ChevronDown,
@@ -58,6 +59,8 @@ export type StudentsTabProps = {
   setSwapEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   swapNotifyMode: "all" | "available_only";
   setSwapNotifyMode: (v: "all" | "available_only") => void;
+  studentCancellationEnabled: boolean;
+  setStudentCancellationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   autoCheckinEnabled: boolean;
   setAutoCheckinEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentNotesEnabled: boolean;
@@ -173,6 +176,8 @@ export default function StudentsTab({
   setSwapEnabled,
   swapNotifyMode,
   setSwapNotifyMode,
+  studentCancellationEnabled,
+  setStudentCancellationEnabled,
   autoCheckinEnabled,
   setAutoCheckinEnabled,
   studentNotesEnabled,
@@ -439,6 +444,30 @@ export default function StudentsTab({
                 </Select>
               </FieldGroup>
             ) : null}
+          </div>
+        </AccordionSection>
+        <AccordionSection
+          icon={Ban}
+          title="Annullamento guide"
+          description="Consenti o blocca l'annullamento delle guide da parte degli allievi."
+          expanded={expandedSection === "studentCancellation"}
+          onToggle={() => toggleSection("studentCancellation")}
+        >
+          <div className="space-y-3 max-w-2xl">
+            <div
+              className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+              onClick={() => setStudentCancellationEnabled((prev) => !prev)}
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">Consenti annullamento guide da app</span>
+                <span className="text-xs text-muted-foreground">
+                  {studentCancellationEnabled
+                    ? "Gli allievi possono annullare le proprie guide dall'app."
+                    : "Gli allievi non possono annullare le guide. Devono contattare l'autoscuola."}
+                </span>
+              </div>
+              <InlineToggle checked={studentCancellationEnabled} size="sm" />
+            </div>
           </div>
         </AccordionSection>
         <AccordionSection

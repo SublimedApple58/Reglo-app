@@ -129,6 +129,9 @@ interface InstructorsTabProps {
   clusterSwapEnabled: boolean | undefined;
   setClusterSwapEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
 
+  clusterStudentCancellationEnabled: boolean | undefined;
+  setClusterStudentCancellationEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
+
   clusterSwapNotifyMode: "all" | "available_only" | undefined;
   setClusterSwapNotifyMode: React.Dispatch<React.SetStateAction<"all" | "available_only" | undefined>>;
 
@@ -212,6 +215,8 @@ export default function InstructorsTab({
   setClusterInstructorBookingMode,
   clusterSwapEnabled,
   setClusterSwapEnabled,
+  clusterStudentCancellationEnabled,
+  setClusterStudentCancellationEnabled,
   clusterSwapNotifyMode,
   setClusterSwapNotifyMode,
   clusterBookingCutoffEnabled,
@@ -495,6 +500,21 @@ export default function InstructorsTab({
                       </Select>
                     </FieldGroup>
                   )}
+                </div>
+
+                {/* ── Annullamento guide ── */}
+                <div className="space-y-3 border-t border-border/40 pt-4">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Annullamento guide</span>
+                  <div
+                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    onClick={() => setClusterStudentCancellationEnabled((prev) => prev === undefined ? false : prev ? undefined : true)}
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium">Annullamento guide allievi</span>
+                      <span className="text-xs text-muted-foreground">{clusterStudentCancellationEnabled === undefined ? "Default azienda" : clusterStudentCancellationEnabled ? "Attivo" : "Disattivo"}</span>
+                    </div>
+                    <InlineToggle checked={clusterStudentCancellationEnabled ?? true} size="sm" />
+                  </div>
                 </div>
 
                 {/* ── Cutoff prenotazione ── */}

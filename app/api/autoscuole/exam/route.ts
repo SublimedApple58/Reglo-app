@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import { createExamEvent } from "@/lib/actions/autoscuole.actions";
+import { createExamEvent, updateExamTime } from "@/lib/actions/autoscuole.actions";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -13,7 +13,7 @@ import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 const createExamSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1),
   startsAt: z.string(),
-  endsAt: z.string(),
+  endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
 });
@@ -45,9 +45,16 @@ export async function POST(request: Request) {
     if (isInstructor(membership.autoscuolaRole)) {
       const companyId = membership.companyId;
       const startsAt = new Date(payload.startsAt);
-      const endsAt = new Date(payload.endsAt);
+      const hasTime = Boolean(payload.endsAt);
+      const endsAt = hasTime ? new Date(payload.endsAt!) : null;
 
-      if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      if (Number.isNaN(startsAt.getTime())) {
+        return NextResponse.json(
+          { success: false, message: "Data non valida." },
+          { status: 400 },
+        );
+      }
+      if (hasTime && (Number.isNaN(endsAt!.getTime()) || endsAt! <= startsAt)) {
         return NextResponse.json(
           { success: false, message: "Orario non valido." },
           { status: 400 },
@@ -89,60 +96,62 @@ export async function POST(request: Request) {
         );
       }
 
-      // Overlap check: no active appointment on students or the assigned instructor
-      const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
-      const studentConflicts = await prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId,
-          studentId: { in: payload.studentIds },
-          status: { in: activeStatuses },
-          startsAt: { lt: endsAt },
-          endsAt: { gt: startsAt },
-        },
-        select: { studentId: true },
-      });
-      if (studentConflicts.length) {
-        const count = new Set(studentConflicts.map((a) => a.studentId)).size;
-        return NextResponse.json(
-          {
-            success: false,
-            message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
-          },
-          { status: 400 },
-        );
-      }
-      if (resolvedInstructorId) {
-        const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+      // Overlap check only when time is specified
+      if (hasTime && endsAt) {
+        const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
+        const studentConflicts = await prisma.autoscuolaAppointment.findMany({
           where: {
             companyId,
-            instructorId: resolvedInstructorId,
+            studentId: { in: payload.studentIds },
             status: { in: activeStatuses },
             startsAt: { lt: endsAt },
             endsAt: { gt: startsAt },
           },
-          select: { id: true },
+          select: { studentId: true },
         });
-        if (instrConflict) {
+        if (studentConflicts.length) {
+          const count = new Set(studentConflicts.map((a) => a.studentId)).size;
           return NextResponse.json(
-            { success: false, message: "Hai già un impegno in quell'orario." },
+            {
+              success: false,
+              message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
+            },
             { status: 400 },
           );
         }
-        // Check overlap with instructor blocks
-        const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
-          where: {
-            companyId,
-            instructorId: resolvedInstructorId,
-            startsAt: { lt: endsAt },
-            endsAt: { gt: startsAt },
-          },
-          select: { id: true },
-        });
-        if (blockConflict) {
-          return NextResponse.json(
-            { success: false, message: "L'istruttore ha uno slot bloccato in quell'orario." },
-            { status: 400 },
-          );
+        if (resolvedInstructorId) {
+          const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+            where: {
+              companyId,
+              instructorId: resolvedInstructorId,
+              status: { in: activeStatuses },
+              startsAt: { lt: endsAt },
+              endsAt: { gt: startsAt },
+            },
+            select: { id: true },
+          });
+          if (instrConflict) {
+            return NextResponse.json(
+              { success: false, message: "Hai già un impegno in quell'orario." },
+              { status: 400 },
+            );
+          }
+          // Check overlap with instructor blocks
+          const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+            where: {
+              companyId,
+              instructorId: resolvedInstructorId,
+              startsAt: { lt: endsAt },
+              endsAt: { gt: startsAt },
+            },
+            select: { id: true },
+          });
+          if (blockConflict) {
+            return NextResponse.json(
+              { success: false, message: "L'istruttore ha uno slot bloccato in quell'orario." },
+              { status: 400 },
+            );
+          }
         }
       }
 
@@ -154,7 +163,7 @@ export async function POST(request: Request) {
               studentId,
               type: "esame",
               startsAt,
-              endsAt,
+              endsAt: endsAt ?? undefined,
               status: "scheduled",
               instructorId: resolvedInstructorId,
               vehicleId: null,
@@ -178,6 +187,38 @@ export async function POST(request: Request) {
 
     // OWNER/admin: use the existing action
     const result = await createExamEvent(payload);
+    return NextResponse.json(result, { status: result.success ? 200 : 400 });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, message: formatError(error) },
+      { status: 400 },
+    );
+  }
+}
+
+const updateExamTimeSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  startsAt: z.string(),
+  endsAt: z.string().optional().nullable(),
+});
+
+export async function PATCH(request: Request) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
+      membership.role !== "admin"
+    ) {
+      return NextResponse.json(
+        { success: false, message: "Operazione non consentita." },
+        { status: 403 },
+      );
+    }
+
+    const body = await request.json();
+    const payload = updateExamTimeSchema.parse(body);
+    const result = await updateExamTime(payload);
     return NextResponse.json(result, { status: result.success ? 200 : 400 });
   } catch (error) {
     return NextResponse.json(

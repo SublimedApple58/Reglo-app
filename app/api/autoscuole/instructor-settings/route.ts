@@ -160,6 +160,7 @@ const patchSchema = z.object({
   restrictedTimeRangeStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   restrictedTimeRangeEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
   weeklyAbsenceEnabled: z.boolean().optional(),
+  studentCancellationEnabled: z.boolean().optional(),
   availabilityMode: z.enum(["default", "publication"]).optional(),
   assignStudentIds: z.array(z.string().uuid()).optional(),
 });

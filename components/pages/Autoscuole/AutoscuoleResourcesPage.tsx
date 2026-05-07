@@ -237,6 +237,7 @@ export function AutoscuoleResourcesPage({
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
+  const [studentCancellationEnabled, setStudentCancellationEnabled] = React.useState(true);
   const [bookingCutoffEnabled, setBookingCutoffEnabled] = React.useState(false);
   const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
   const [weeklyBookingLimitEnabled, setWeeklyBookingLimitEnabled] = React.useState(false);
@@ -270,6 +271,7 @@ export function AutoscuoleResourcesPage({
   const [clusterAppBookingActors, setClusterAppBookingActors] = React.useState<"students" | "instructors" | "both" | undefined>(undefined);
   const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | undefined>(undefined);
   const [clusterSwapEnabled, setClusterSwapEnabled] = React.useState<boolean | undefined>(undefined);
+  const [clusterStudentCancellationEnabled, setClusterStudentCancellationEnabled] = React.useState<boolean | undefined>(undefined);
   const [clusterSwapNotifyMode, setClusterSwapNotifyMode] = React.useState<"all" | "available_only" | undefined>(undefined);
   const [clusterBookingCutoffEnabled, setClusterBookingCutoffEnabled] = React.useState<boolean | undefined>(undefined);
   const [clusterBookingCutoffTime, setClusterBookingCutoffTime] = React.useState<string | undefined>(undefined);
@@ -477,6 +479,7 @@ export function AutoscuoleResourcesPage({
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
       setSwapEnabled(res.data.swapEnabled ?? false);
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+      setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
       setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
       setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
       setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
@@ -625,6 +628,7 @@ export function AutoscuoleResourcesPage({
       roundedHoursOnly,
       swapEnabled,
       swapNotifyMode,
+      studentCancellationEnabled,
       bookingCutoffEnabled,
       bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
       weeklyBookingLimitEnabled,
@@ -686,6 +690,7 @@ export function AutoscuoleResourcesPage({
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
     setSwapEnabled(res.data.swapEnabled ?? false);
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+    setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
     setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
     setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
@@ -864,6 +869,7 @@ export function AutoscuoleResourcesPage({
     setClusterAppBookingActors(settings.appBookingActors as "students" | "instructors" | "both" | undefined);
     setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | undefined);
     setClusterSwapEnabled(typeof settings.swapEnabled === "boolean" ? settings.swapEnabled : undefined);
+    setClusterStudentCancellationEnabled(typeof settings.studentCancellationEnabled === "boolean" ? settings.studentCancellationEnabled : undefined);
     setClusterSwapNotifyMode(settings.swapNotifyMode as "all" | "available_only" | undefined);
     setClusterBookingCutoffEnabled(typeof settings.bookingCutoffEnabled === "boolean" ? settings.bookingCutoffEnabled : undefined);
     setClusterBookingCutoffTime(settings.bookingCutoffTime as string | undefined);
@@ -908,6 +914,7 @@ export function AutoscuoleResourcesPage({
           appBookingActors: clusterAppBookingActors,
           instructorBookingMode: clusterInstructorBookingMode,
           swapEnabled: clusterSwapEnabled,
+          studentCancellationEnabled: clusterStudentCancellationEnabled,
           swapNotifyMode: clusterSwapNotifyMode,
           bookingCutoffEnabled: clusterBookingCutoffEnabled,
           bookingCutoffTime: clusterBookingCutoffTime,
@@ -1416,6 +1423,8 @@ export function AutoscuoleResourcesPage({
             setClusterInstructorBookingMode={setClusterInstructorBookingMode}
             clusterSwapEnabled={clusterSwapEnabled}
             setClusterSwapEnabled={setClusterSwapEnabled}
+            clusterStudentCancellationEnabled={clusterStudentCancellationEnabled}
+            setClusterStudentCancellationEnabled={setClusterStudentCancellationEnabled}
             clusterSwapNotifyMode={clusterSwapNotifyMode}
             setClusterSwapNotifyMode={setClusterSwapNotifyMode}
             clusterBookingCutoffEnabled={clusterBookingCutoffEnabled}
@@ -1484,6 +1493,8 @@ export function AutoscuoleResourcesPage({
             setSwapEnabled={setSwapEnabled}
             swapNotifyMode={swapNotifyMode}
             setSwapNotifyMode={(v) => setSwapNotifyMode(v as "all" | "available_only")}
+            studentCancellationEnabled={studentCancellationEnabled}
+            setStudentCancellationEnabled={setStudentCancellationEnabled}
             autoCheckinEnabled={autoCheckinEnabled}
             setAutoCheckinEnabled={setAutoCheckinEnabled}
             studentNotesEnabled={studentNotesEnabled}

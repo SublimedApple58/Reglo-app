@@ -342,6 +342,7 @@ const autoscuolaSettingsPatchSchema = z
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
+    studentCancellationEnabled: z.boolean().optional(),
   })
   .refine(
     (value) =>
@@ -405,7 +406,8 @@ const autoscuolaSettingsPatchSchema = z
       value.instructorClustersEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
       value.vehiclesEnabled !== undefined ||
-      value.quizEnabled !== undefined,
+      value.quizEnabled !== undefined ||
+      value.studentCancellationEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -583,6 +585,7 @@ export type AutoscuolaSettingsData = {
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
   quizEnabled: boolean;
+  studentCancellationEnabled: boolean;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -914,6 +917,7 @@ const resolveAutoscuolaSettingsData = async (
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
         : DEFAULT_QUIZ_ENABLED,
+    studentCancellationEnabled: limits.studentCancellationEnabled !== false,
   };
 };
 
@@ -1096,6 +1100,7 @@ export async function updateAutoscuolaSettings(
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
         : DEFAULT_QUIZ_ENABLED;
+    const previousStudentCancellationEnabled = limits.studentCancellationEnabled !== false;
     const previousVoiceFeatureEnabled =
       typeof limits.voiceFeatureEnabled === "boolean"
         ? limits.voiceFeatureEnabled
@@ -1237,6 +1242,7 @@ export async function updateAutoscuolaSettings(
     const nextAutoCheckinEnabled = payload.autoCheckinEnabled ?? previousAutoCheckinEnabled;
     const nextVehiclesEnabled = payload.vehiclesEnabled ?? previousVehiclesEnabled;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
+    const nextStudentCancellationEnabled = payload.studentCancellationEnabled ?? previousStudentCancellationEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
     const nextVoiceProvisioningStatus = previousVoiceProvisioningStatus;
     const nextVoiceLineRef = previousVoiceLineRef;
@@ -1433,6 +1439,7 @@ export async function updateAutoscuolaSettings(
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
       quizEnabled: nextQuizEnabled,
+      studentCancellationEnabled: nextStudentCancellationEnabled,
     };
 
     if (service) {
@@ -1531,6 +1538,7 @@ export async function updateAutoscuolaSettings(
         voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
         quizEnabled: nextQuizEnabled,
+        studentCancellationEnabled: nextStudentCancellationEnabled,
       },
     };
   } catch (error) {

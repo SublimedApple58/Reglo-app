@@ -41,6 +41,8 @@ export type InstructorSettings = {
   // Orario di lavoro
   workingHoursStart?: string;
   workingHoursEnd?: string;
+  // Annullamento guide allievi
+  studentCancellationEnabled?: boolean;
   // Modalità disponibilità
   availabilityMode?: "default" | "publication";
 };
@@ -74,6 +76,8 @@ export type EffectiveBookingSettings = {
   restrictedTimeRangeEnd: string;
   // Assenza settimanale (Task 8)
   weeklyAbsenceEnabled: boolean;
+  // Annullamento guide allievi
+  studentCancellationEnabled: boolean;
 };
 
 export async function isInstructorClustersEnabled(
@@ -152,6 +156,9 @@ export function parseInstructorSettings(raw: unknown): InstructorSettings {
   // Assenza settimanale
   if (typeof obj.weeklyAbsenceEnabled === "boolean") result.weeklyAbsenceEnabled = obj.weeklyAbsenceEnabled;
 
+  // Annullamento guide allievi
+  if (typeof obj.studentCancellationEnabled === "boolean") result.studentCancellationEnabled = obj.studentCancellationEnabled;
+
   // Orario di lavoro
   if (typeof obj.workingHoursStart === "string" && HH_MM_RE.test(obj.workingHoursStart)) {
     result.workingHoursStart = obj.workingHoursStart;
@@ -186,6 +193,7 @@ export type CompanyBookingDefaults = {
   restrictedTimeRangeStart: string;
   restrictedTimeRangeEnd: string;
   weeklyAbsenceEnabled: boolean;
+  studentCancellationEnabled: boolean;
 };
 
 export function buildCompanyBookingDefaults(limits: Record<string, unknown>): CompanyBookingDefaults {
@@ -208,6 +216,7 @@ export function buildCompanyBookingDefaults(limits: Record<string, unknown>): Co
     restrictedTimeRangeStart: typeof limits.restrictedTimeRangeStart === "string" && HH_MM_RE.test(limits.restrictedTimeRangeStart) ? limits.restrictedTimeRangeStart : "08:00",
     restrictedTimeRangeEnd: typeof limits.restrictedTimeRangeEnd === "string" && HH_MM_RE.test(limits.restrictedTimeRangeEnd) ? limits.restrictedTimeRangeEnd : "13:00",
     weeklyAbsenceEnabled: limits.weeklyAbsenceEnabled === true,
+    studentCancellationEnabled: limits.studentCancellationEnabled !== false,
   };
 }
 
@@ -236,6 +245,7 @@ export async function resolveEffectiveBookingSettings(
         restrictedTimeRangeStart: "08:00",
         restrictedTimeRangeEnd: "13:00",
         weeklyAbsenceEnabled: false,
+        studentCancellationEnabled: true,
       };
 
   const base: EffectiveBookingSettings = {
@@ -260,6 +270,7 @@ export async function resolveEffectiveBookingSettings(
     restrictedTimeRangeStart: defaults.restrictedTimeRangeStart,
     restrictedTimeRangeEnd: defaults.restrictedTimeRangeEnd,
     weeklyAbsenceEnabled: defaults.weeklyAbsenceEnabled,
+    studentCancellationEnabled: defaults.studentCancellationEnabled,
   };
 
   const enabled = await isInstructorClustersEnabled(companyId);
@@ -313,6 +324,7 @@ export async function resolveEffectiveBookingSettings(
   if (settings.restrictedTimeRangeStart !== undefined) base.restrictedTimeRangeStart = settings.restrictedTimeRangeStart;
   if (settings.restrictedTimeRangeEnd !== undefined) base.restrictedTimeRangeEnd = settings.restrictedTimeRangeEnd;
   if (typeof settings.weeklyAbsenceEnabled === "boolean") base.weeklyAbsenceEnabled = settings.weeklyAbsenceEnabled;
+  if (typeof settings.studentCancellationEnabled === "boolean") base.studentCancellationEnabled = settings.studentCancellationEnabled;
 
   return base;
 }
@@ -350,6 +362,7 @@ export async function resolveEffectiveSettingsForInstructor(
   if (settings.restrictedTimeRangeStart !== undefined) result.restrictedTimeRangeStart = settings.restrictedTimeRangeStart;
   if (settings.restrictedTimeRangeEnd !== undefined) result.restrictedTimeRangeEnd = settings.restrictedTimeRangeEnd;
   if (typeof settings.weeklyAbsenceEnabled === "boolean") result.weeklyAbsenceEnabled = settings.weeklyAbsenceEnabled;
+  if (typeof settings.studentCancellationEnabled === "boolean") result.studentCancellationEnabled = settings.studentCancellationEnabled;
 
   return result;
 }

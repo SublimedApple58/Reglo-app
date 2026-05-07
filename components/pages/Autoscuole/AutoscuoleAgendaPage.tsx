@@ -3,7 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2 } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -33,6 +33,7 @@ import {
   addExamStudent,
   removeExamStudent,
   updateExamInstructor,
+  updateExamTime,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
@@ -77,7 +78,7 @@ type AppointmentRow = {
 type ExamGroup = {
   key: string;
   startsAt: string;
-  endsAt: string;
+  endsAt: string | null;
   instructorId: string | null;
   instructor: ResourceOption | null;
   appointments: AppointmentRow[];
@@ -305,15 +306,16 @@ export function AutoscuoleAgendaPage({
     id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; recurrenceGroupId: string | null;
   }>>([]);
   const [blockDialogOpen, setBlockDialogOpen] = React.useState(false);
-  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", endTime: "10:00", reason: "", recurring: false, recurringWeeks: 12 });
+  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
   const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
   const [examDialogOpen, setExamDialogOpen] = React.useState(false);
-  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", instructorId: "", studentIds: [] as string[], note: "" });
+  const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
   const [examCreating, setExamCreating] = React.useState(false);
   const [examStudentSearch, setExamStudentSearch] = React.useState("");
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
+  const [legendOpen, setLegendOpen] = React.useState(false);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
@@ -345,7 +347,7 @@ export function AutoscuoleAgendaPage({
       groups.push({
         key,
         startsAt: typeof first.startsAt === "string" ? first.startsAt : (first.startsAt as Date).toISOString(),
-        endsAt: first.endsAt ? (typeof first.endsAt === "string" ? first.endsAt : (first.endsAt as Date).toISOString()) : "",
+        endsAt: first.endsAt ? (typeof first.endsAt === "string" ? first.endsAt : (first.endsAt as Date).toISOString()) : null,
         instructorId: first.instructor?.id ?? null,
         instructor: first.instructor ?? null,
         appointments: appts,
@@ -853,6 +855,10 @@ export function AutoscuoleAgendaPage({
             </Button>
           </div>
 
+          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => setLegendOpen(true)}>
+            <HelpCircle className="size-3" />Legenda
+          </Button>
+
           <div className="h-5 w-px bg-border" />
 
           {/* Filters */}
@@ -926,7 +932,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-3.5 text-violet-500" />
                   Esame
@@ -934,7 +940,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", endTime: "10:00", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-3.5 text-slate-500" />
                   Evento bloccante
@@ -1175,7 +1181,24 @@ export function AutoscuoleAgendaPage({
                         })
                         .map((eg) => {
                           const egStart = toDate(eg.startsAt);
+                          const examHasTime = Boolean(eg.endsAt);
                           const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
+                          if (!examHasTime) {
+                            // Timeless exam — fixed banner at top
+                            return (
+                              <button
+                                key={`exam-${eg.key}`}
+                                type="button"
+                                className="absolute left-1 right-1 z-20 box-border flex items-center gap-1.5 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50 px-2 py-1.5 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
+                                style={{ top: 0 }}
+                                onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
+                              >
+                                <GraduationCap className="size-3 text-violet-600 shrink-0" />
+                                <span className="text-[10px] font-bold text-violet-700">Esame</span>
+                                <span className="text-[9px] text-violet-500 ml-auto">{eg.appointments.length} all.</span>
+                              </button>
+                            );
+                          }
                           const offsetMin = Math.max(0, diffMinutes(egStart < dayStart ? dayStart : egStart, dayStart));
                           const durMin = Math.max(30, diffMinutes(egEnd > dayEnd ? dayEnd : egEnd, egStart < dayStart ? dayStart : egStart));
                           const top = offsetMin * PIXELS_PER_MINUTE;
@@ -1306,6 +1329,7 @@ export function AutoscuoleAgendaPage({
                             <div className="flex flex-wrap gap-0.5 px-1 py-0.5">
                               {dayExams.map((eg) => {
                                 const egStart = toDate(eg.startsAt);
+                                const examHasTime = Boolean(eg.endsAt);
                                 const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 3600000);
                                 return (
                                   <button
@@ -1315,7 +1339,7 @@ export function AutoscuoleAgendaPage({
                                     className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 text-[9px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer"
                                   >
                                     <GraduationCap className="size-3 shrink-0" />
-                                    <span>Esame {formatTimeRange(egStart, egEnd)}</span>
+                                    <span>Esame {examHasTime ? formatTimeRange(egStart, egEnd) : "· orario da definire"}</span>
                                     <span className="text-violet-500">· {eg.appointments.length} all.</span>
                                   </button>
                                 );
@@ -1472,7 +1496,24 @@ export function AutoscuoleAgendaPage({
                           .filter((eg) => eg.instructorId === instr.instructorId && formatYmd(toDate(eg.startsAt)) === dateKey)
                           .map((eg) => {
                             const egStart = toDate(eg.startsAt);
-                            const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 3600000);
+                            const examHasTime = Boolean(eg.endsAt);
+                            if (!examHasTime) {
+                              return (
+                                <button
+                                  key={`exam-instr-${eg.key}`}
+                                  type="button"
+                                  className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                  style={{ top: 0 }}
+                                  onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
+                                >
+                                  <div className="px-1 py-0.5 flex items-center gap-0.5">
+                                    <GraduationCap className="size-2.5 shrink-0 text-violet-600" />
+                                    <span className="font-bold text-[9px] text-violet-700">Esame</span>
+                                  </div>
+                                </button>
+                              );
+                            }
+                            const egEnd = toDate(eg.endsAt!);
                             const clippedStart = egStart < dayStart ? dayStart : egStart;
                             const clippedEnd = egEnd > dayEnd ? dayEnd : egEnd;
                             const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
@@ -2304,12 +2345,71 @@ export function AutoscuoleAgendaPage({
         </DialogContent>
       </Dialog>
 
+      {/* ── Legend Dialog ── */}
+      <Dialog open={legendOpen} onOpenChange={setLegendOpen}>
+        <DialogContent className="sm:max-w-[420px] p-0">
+          <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100">
+              <HelpCircle className="h-4 w-4 text-gray-600" />
+            </div>
+            <DialogTitle className="text-sm font-semibold">Legenda colori agenda</DialogTitle>
+          </div>
+          <div className="px-6 py-5 space-y-5">
+            <div>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata (guide programmate)</p>
+              <div className="space-y-1.5">
+                {[
+                  { label: "30 minuti", className: "border-teal-200 bg-teal-50" },
+                  { label: "45 minuti", className: "border-lime-200 bg-lime-50" },
+                  { label: "60 minuti", className: "border-yellow-200 bg-yellow-50" },
+                  { label: "90 minuti", className: "border-fuchsia-200 bg-fuchsia-50" },
+                  { label: "120 minuti", className: "border-rose-200 bg-rose-50" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
+                    <span className="text-xs text-foreground">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per stato</p>
+              <div className="space-y-1.5">
+                {[
+                  { label: "In corso (check-in effettuato)", className: "border-emerald-200 bg-emerald-100" },
+                  { label: "Completata", className: "border-indigo-200 bg-indigo-100" },
+                  { label: "Assente", className: "border-rose-200 bg-rose-100" },
+                  { label: "Proposta", className: "border-amber-200 bg-amber-100" },
+                  { label: "Da confermare", className: "border-orange-200 bg-orange-100" },
+                  { label: "Annullata", className: "border-gray-200 bg-gray-100 opacity-60" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
+                    <span className="text-xs text-foreground">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <div className="h-5 w-8 rounded border-2 border-violet-300 bg-violet-100" />
+                  <span className="text-xs text-foreground">Esame</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Exam Detail Panel ── */}
       <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }}>
         <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
           {examPanelGroup && (() => {
             const eg = examPanelGroup;
             const egStart = toDate(eg.startsAt);
+            const examHasTime = Boolean(eg.endsAt);
             const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
             return (
               <>
@@ -2321,7 +2421,8 @@ export function AutoscuoleAgendaPage({
                   <div className="flex-1">
                     <DialogTitle className="text-sm font-semibold">Esame</DialogTitle>
                     <p className="text-xs text-muted-foreground">
-                      {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })} · {formatTimeRange(egStart, egEnd)}
+                      {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
+                      {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
                     </p>
                   </div>
                   <Badge variant="secondary" className="border-violet-200 bg-violet-100 text-violet-700 text-xs font-bold">
@@ -2330,6 +2431,57 @@ export function AutoscuoleAgendaPage({
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                  {/* Orario */}
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Orario</p>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : "__none__"}
+                        onValueChange={async (v) => {
+                          if (v === "__none__") {
+                            // Remove time
+                            setExamPanelPending(true);
+                            const dateOnly = new Date(egStart);
+                            dateOnly.setHours(0, 0, 0, 0);
+                            const res = await updateExamTime({
+                              appointmentIds: eg.appointments.map((a) => a.id),
+                              startsAt: dateOnly.toISOString(),
+                              endsAt: undefined,
+                            });
+                            setExamPanelPending(false);
+                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                            setExamPanelGroup({ ...eg, startsAt: dateOnly.toISOString(), endsAt: null });
+                            load({ silent: true });
+                          } else {
+                            // Set time (default 1h duration)
+                            setExamPanelPending(true);
+                            const [h, m] = v.split(":").map(Number);
+                            const newStart = new Date(egStart);
+                            newStart.setHours(h, m, 0, 0);
+                            const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
+                            const res = await updateExamTime({
+                              appointmentIds: eg.appointments.map((a) => a.id),
+                              startsAt: newStart.toISOString(),
+                              endsAt: newEnd.toISOString(),
+                            });
+                            setExamPanelPending(false);
+                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                            setExamPanelGroup({ ...eg, startsAt: newStart.toISOString(), endsAt: newEnd.toISOString() });
+                            load({ silent: true });
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
+                          <SelectValue placeholder="Da definire" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Da definire</SelectItem>
+                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
                   {/* Istruttore */}
                   <div>
                     <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
@@ -2420,7 +2572,7 @@ export function AutoscuoleAgendaPage({
                                   const res = await addExamStudent({
                                     studentId: s.id,
                                     startsAt: eg.startsAt,
-                                    endsAt: eg.endsAt,
+                                    endsAt: eg.endsAt ?? undefined,
                                     instructorId: eg.instructorId,
                                     notes: eg.notes ?? undefined,
                                   });
@@ -2510,24 +2662,33 @@ export function AutoscuoleAgendaPage({
                 <FieldGroup label="Giorno" required>
                   <DatePicker value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
                 </FieldGroup>
-                <div className="grid grid-cols-2 gap-3">
-                  <FieldGroup label="Orario" required>
-                    <Select value={examForm.time} onValueChange={(v) => setExamForm((f) => ({ ...f, time: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                  <FieldGroup label="Durata">
-                    <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
+                <div
+                  className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2 cursor-pointer"
+                  onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
+                >
+                  <span className="text-xs text-muted-foreground">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
+                  <InlineToggle checked={examForm.timeSet} size="sm" />
                 </div>
+                {examForm.timeSet && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <FieldGroup label="Orario">
+                      <Select value={examForm.time} onValueChange={(v) => setExamForm((f) => ({ ...f, time: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                    <FieldGroup label="Durata">
+                      <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FieldGroup>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2643,15 +2804,24 @@ export function AutoscuoleAgendaPage({
                 disabled={examCreating || !examForm.date || !examForm.studentIds.length}
                 onClick={async () => {
                   setExamCreating(true);
-                  const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
-                  const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
-                  const endsAt = new Date(startsAt.getTime() + durationMs);
                   const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
+                  let startsAtIso: string;
+                  let endsAtIso: string | undefined;
+                  if (examForm.timeSet) {
+                    const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
+                    const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
+                    const endsAt = new Date(startsAt.getTime() + durationMs);
+                    startsAtIso = startsAt.toISOString();
+                    endsAtIso = endsAt.toISOString();
+                  } else {
+                    startsAtIso = new Date(`${examForm.date}T00:00:00`).toISOString();
+                    endsAtIso = undefined;
+                  }
 
                   const res = await createExamEvent({
                     studentIds: examForm.studentIds,
-                    startsAt: startsAt.toISOString(),
-                    endsAt: endsAt.toISOString(),
+                    startsAt: startsAtIso,
+                    endsAt: endsAtIso,
                     instructorId: instrId,
                     notes: examForm.note.trim() || undefined,
                   });
@@ -2713,11 +2883,18 @@ export function AutoscuoleAgendaPage({
                 </Select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Ora fine</label>
-                <Select value={blockForm.endTime} onValueChange={(v) => setBlockForm((f) => ({ ...f, endTime: v }))}>
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Durata</label>
+                <Select value={blockForm.duration} onValueChange={(v) => setBlockForm((f) => ({ ...f, duration: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: 48 }, (_, i) => { const h = Math.floor((i + 1) * 30 / 60); const m = ((i + 1) * 30) % 60; const v = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; return <SelectItem key={v} value={v}>{v}</SelectItem>; })}
+                    {[
+                      { value: "15", label: "15 min" },
+                      { value: "30", label: "30 min" },
+                      { value: "45", label: "45 min" },
+                      { value: "60", label: "1 ora" },
+                      { value: "90", label: "1h 30m" },
+                      { value: "120", label: "2 ore" },
+                    ].map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -2759,8 +2936,9 @@ export function AutoscuoleAgendaPage({
               disabled={blockCreating || !blockForm.instructorId || !blockForm.date}
               onClick={async () => {
                 setBlockCreating(true);
-                const startsAt = new Date(`${blockForm.date}T${blockForm.startTime}:00`).toISOString();
-                const endsAt = new Date(`${blockForm.date}T${blockForm.endTime}:00`).toISOString();
+                const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
+                const startsAt = blockStart.toISOString();
+                const endsAt = new Date(blockStart.getTime() + parseInt(blockForm.duration, 10) * 60 * 1000).toISOString();
                 const res = await createInstructorBlock({
                   instructorId: blockForm.instructorId,
                   startsAt,
@@ -3141,6 +3319,17 @@ function buildLocalDateTime(day: string, time: string) {
   return date;
 }
 
+function getScheduledDurationClass(appointment: AppointmentRow): string {
+  const start = toDate(appointment.startsAt);
+  const end = getAppointmentEnd(appointment);
+  const dur = Math.round(diffMinutes(end, start));
+  if (dur <= 30) return "border-teal-200/70 bg-teal-50/80";
+  if (dur <= 45) return "border-lime-200/70 bg-lime-50/80";
+  if (dur <= 60) return "border-yellow-200/70 bg-yellow-50/80";
+  if (dur <= 90) return "border-fuchsia-200/70 bg-fuchsia-50/80";
+  return "border-rose-200/70 bg-rose-50/80";
+}
+
 function getStatusMeta(
   status: string,
   appointment?: AppointmentRow,
@@ -3173,10 +3362,11 @@ function getStatusMeta(
     };
   }
   if (normalized === "confirmed" || normalized === "scheduled") {
+    const durationClass = appointment ? getScheduledDurationClass(appointment) : "border-yellow-200/70 bg-yellow-50/80";
     return {
       label: "Programmata",
       shortLabel: "Programmata",
-      className: "border-sky-200/70 bg-sky-100/75",
+      className: durationClass,
     };
   }
   if (normalized === "completed") {
@@ -3214,10 +3404,11 @@ function getStatusMeta(
       className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through",
     };
   }
+  const fallbackClass = appointment ? getScheduledDurationClass(appointment) : "border-yellow-200/70 bg-yellow-50/80";
   return {
     label: "Programmata",
     shortLabel: "Programmata",
-    className: "border-sky-200/70 bg-sky-100/70",
+    className: fallbackClass,
   };
 }
 

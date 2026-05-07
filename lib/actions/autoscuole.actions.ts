@@ -2824,6 +2824,29 @@ export async function cancelAutoscuolaAppointment(
       }
     }
 
+    // Block student cancellation if setting is disabled
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      const { getCachedCompanyServiceLimits } = await import("@/lib/autoscuole/cached-service");
+      const { buildCompanyBookingDefaults, resolveEffectiveBookingSettings } = await import("@/lib/autoscuole/instructor-clusters");
+      const limits = await getCachedCompanyServiceLimits(membership.companyId);
+      const companyDefaults = buildCompanyBookingDefaults(limits);
+      const effectiveSettings = await resolveEffectiveBookingSettings(
+        membership.companyId,
+        membership.userId,
+        companyDefaults,
+      );
+      if (!effectiveSettings.studentCancellationEnabled) {
+        return {
+          success: false,
+          message: "L'annullamento delle guide non è consentito. Contatta la tua autoscuola.",
+        };
+      }
+    }
+
     await prisma.autoscuolaAppointment.update({
       where: { id: appointment.id },
       data: {
@@ -5342,7 +5365,7 @@ export async function assignStudentToInstructor(input: {
 const createExamEventSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1),
   startsAt: z.string(),
-  endsAt: z.string(),
+  endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
 });
@@ -5358,9 +5381,13 @@ export async function createExamEvent(
     const payload = createExamEventSchema.parse(input);
     const companyId = membership.companyId;
     const startsAt = new Date(payload.startsAt);
-    const endsAt = new Date(payload.endsAt);
+    const hasTime = Boolean(payload.endsAt);
+    const endsAt = hasTime ? new Date(payload.endsAt!) : null;
 
-    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+    if (Number.isNaN(startsAt.getTime())) {
+      return { success: false as const, message: "Data non valida." };
+    }
+    if (hasTime && (Number.isNaN(endsAt!.getTime()) || endsAt! <= startsAt)) {
       return { success: false as const, message: "Orario non valido." };
     }
 
@@ -5384,38 +5411,40 @@ export async function createExamEvent(
       return { success: false as const, message: `${invalidIds.length} allievi non trovati.` };
     }
 
-    // Overlap check: students and instructor must be free
-    const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
-    const studentConflicts = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId,
-        studentId: { in: payload.studentIds },
-        status: { in: activeStatuses },
-        startsAt: { lt: endsAt },
-        endsAt: { gt: startsAt },
-      },
-      select: { studentId: true },
-    });
-    if (studentConflicts.length) {
-      const count = new Set(studentConflicts.map((a) => a.studentId)).size;
-      return {
-        success: false as const,
-        message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
-      };
-    }
-    if (payload.instructorId) {
-      const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+    // Overlap check only when time is specified
+    if (hasTime && endsAt) {
+      const activeStatuses = ["scheduled", "confirmed", "proposal", "checked_in"];
+      const studentConflicts = await prisma.autoscuolaAppointment.findMany({
         where: {
           companyId,
-          instructorId: payload.instructorId,
+          studentId: { in: payload.studentIds },
           status: { in: activeStatuses },
           startsAt: { lt: endsAt },
           endsAt: { gt: startsAt },
         },
-        select: { id: true },
+        select: { studentId: true },
       });
-      if (instrConflict) {
-        return { success: false as const, message: "L'istruttore ha già un impegno in quell'orario." };
+      if (studentConflicts.length) {
+        const count = new Set(studentConflicts.map((a) => a.studentId)).size;
+        return {
+          success: false as const,
+          message: `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`,
+        };
+      }
+      if (payload.instructorId) {
+        const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+          where: {
+            companyId,
+            instructorId: payload.instructorId,
+            status: { in: activeStatuses },
+            startsAt: { lt: endsAt },
+            endsAt: { gt: startsAt },
+          },
+          select: { id: true },
+        });
+        if (instrConflict) {
+          return { success: false as const, message: "L'istruttore ha già un impegno in quell'orario." };
+        }
       }
     }
 
@@ -5450,7 +5479,7 @@ export async function createExamEvent(
 const addExamStudentSchema = z.object({
   studentId: z.string().uuid(),
   startsAt: z.string(),
-  endsAt: z.string(),
+  endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
 });
@@ -5478,7 +5507,7 @@ export async function addExamStudent(
         studentId: payload.studentId,
         type: "esame",
         startsAt: new Date(payload.startsAt),
-        endsAt: new Date(payload.endsAt),
+        endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
         status: "scheduled",
         instructorId: payload.instructorId ?? null,
         vehicleId: null,
@@ -5533,6 +5562,48 @@ export async function updateExamInstructor(
     await prisma.autoscuolaAppointment.updateMany({
       where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
       data: { instructorId: payload.instructorId ?? null },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const updateExamTimeSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  startsAt: z.string(),
+  endsAt: z.string().optional().nullable(),
+});
+
+export async function updateExamTime(
+  input: z.infer<typeof updateExamTimeSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = updateExamTimeSchema.parse(input);
+    const startsAt = new Date(payload.startsAt);
+    const hasTime = Boolean(payload.endsAt);
+    const endsAt = hasTime ? new Date(payload.endsAt!) : null;
+
+    if (Number.isNaN(startsAt.getTime())) {
+      return { success: false as const, message: "Data non valida." };
+    }
+    if (hasTime && (Number.isNaN(endsAt!.getTime()) || endsAt! <= startsAt)) {
+      return { success: false as const, message: "Orario non valido." };
+    }
+
+    await prisma.autoscuolaAppointment.updateMany({
+      where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
+      data: { startsAt, endsAt },
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
