@@ -161,6 +161,7 @@ const instructorSettingsSchema = z.object({
   instructorBookingMode: z.enum(["manual_full", "manual_engine", "guided_proposal"]).optional(),
   studentBookingMode: z.enum(["engine", "free_choice"]).optional(),
   swapEnabled: z.boolean().optional(),
+  studentCancellationEnabled: z.boolean().optional(),
   swapNotifyMode: z.enum(["all", "available_only"]).optional(),
   bookingCutoffEnabled: z.boolean().optional(),
   bookingCutoffTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
