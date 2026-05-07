@@ -2809,18 +2809,21 @@ export async function cancelAutoscuolaAppointment(
           message: "Puoi annullare solo le tue guide.",
         };
       }
-      const governance = await getBookingGovernanceForCompany(membership.companyId);
-      if (!isInstructorAppBookingEnabled(governance)) {
-        return {
-          success: false,
-          message: "La prenotazione da app è abilitata solo per allievi.",
-        };
-      }
-      if (governance.instructorBookingMode !== "manual_full") {
-        return {
-          success: false,
-          message: "In questa modalità usa 'Cancella e riposiziona'.",
-        };
+      // Skip governance checks for exams — booking mode rules don't apply
+      if (appointment.type !== "esame") {
+        const governance = await getBookingGovernanceForCompany(membership.companyId);
+        if (!isInstructorAppBookingEnabled(governance)) {
+          return {
+            success: false,
+            message: "La prenotazione da app è abilitata solo per allievi.",
+          };
+        }
+        if (governance.instructorBookingMode !== "manual_full") {
+          return {
+            success: false,
+            message: "In questa modalità usa 'Cancella e riposiziona'.",
+          };
+        }
       }
     }
 
