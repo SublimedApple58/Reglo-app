@@ -315,6 +315,7 @@ const getInstructorWindowOpenTimeLabel = (startsAt: Date) =>
   new Date(startsAt.getTime() - 10 * 60 * 1000).toLocaleTimeString("it-IT", {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Europe/Rome",
   });
 
 const isWithinInstructorDetailsWindow = (
@@ -2396,6 +2397,7 @@ export async function createAutoscuolaAppointment(
         month: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
+        timeZone: "Europe/Rome",
       });
       try {
         const pushResult = await sendAutoscuolaPushToUsers({
@@ -2618,7 +2620,7 @@ export async function createAutoscuolaAppointmentBatch(
                 if (isInstructorActor) {
                   return {
                     success: false,
-                    message: `L'allievo ha già ${existingCount} guide nella settimana del ${weekStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })}. Con queste ${newCount} nuove si supera il limite di ${weeklyLimit}. Vuoi procedere comunque?`,
+                    message: `L'allievo ha già ${existingCount} guide nella settimana del ${weekStart.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" })}. Con queste ${newCount} nuove si supera il limite di ${weeklyLimit}. Vuoi procedere comunque?`,
                     code: "WEEKLY_LIMIT_CONFIRM" as const,
                     weeklyLimitData: { current: existingCount, limit: weeklyLimit },
                   };
@@ -2678,11 +2680,12 @@ export async function createAutoscuolaAppointmentBatch(
         return start < entry.endsAt && end > entry.startsAt;
       });
       if (hasConflict) {
-        const dateStr = entry.startsAt.toLocaleDateString("it-IT", {
+        const dateStr = entry.startsAt.toLocaleString("it-IT", {
           day: "2-digit",
           month: "2-digit",
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "Europe/Rome",
         });
         return {
           success: false,
@@ -2695,11 +2698,12 @@ export async function createAutoscuolaAppointmentBatch(
         (block) => block.startsAt < entry.endsAt && block.endsAt > entry.startsAt,
       );
       if (hasBlockConflict) {
-        const dateStr = entry.startsAt.toLocaleDateString("it-IT", {
+        const dateStr = entry.startsAt.toLocaleString("it-IT", {
           day: "2-digit",
           month: "2-digit",
           hour: "2-digit",
           minute: "2-digit",
+          timeZone: "Europe/Rome",
         });
         return {
           success: false,
@@ -5155,6 +5159,22 @@ export async function createInstructorBlock(
     const recurrenceGroupId = payload.recurring ? randomUUID() : null;
     const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+    // Format helpers always in Europe/Rome — otherwise the server (UTC) would
+    // surface UTC hours to Italian users and produce a wildly confusing message
+    // (e.g. "blocco delle 19:00" when the user just requested 21:00 CEST).
+    const formatDayItaly = (d: Date) =>
+      d.toLocaleDateString("it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        timeZone: "Europe/Rome",
+      });
+    const formatTimeItaly = (d: Date) =>
+      d.toLocaleTimeString("it-IT", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "Europe/Rome",
+      });
+
     // Check overlap for each week occurrence
     for (let i = 0; i < weeks; i++) {
       const blockStart = new Date(startsAt.getTime() + i * WEEK_MS);
@@ -5169,18 +5189,17 @@ export async function createInstructorBlock(
           startsAt: { lt: blockEnd },
           endsAt: { gt: blockStart },
         },
-        select: { id: true, startsAt: true },
+        select: { id: true, startsAt: true, endsAt: true },
       });
       if (appointmentConflict) {
-        const dateStr = blockStart.toLocaleDateString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        const dayStr = formatDayItaly(blockStart);
+        const requested = `${formatTimeItaly(blockStart)}–${formatTimeItaly(blockEnd)}`;
+        const conflictTime = appointmentConflict.endsAt
+          ? `${formatTimeItaly(appointmentConflict.startsAt)}–${formatTimeItaly(appointmentConflict.endsAt)}`
+          : formatTimeItaly(appointmentConflict.startsAt);
         return {
           success: false as const,
-          message: `Impossibile bloccare lo slot del ${dateStr}: c'è una guida programmata.`,
+          message: `Impossibile bloccare ${dayStr} ${requested}: c'è una guida programmata alle ${conflictTime}.`,
         };
       }
 
@@ -5192,18 +5211,17 @@ export async function createInstructorBlock(
           startsAt: { lt: blockEnd },
           endsAt: { gt: blockStart },
         },
-        select: { id: true, startsAt: true },
+        select: { id: true, startsAt: true, endsAt: true, reason: true },
       });
       if (blockConflict) {
-        const dateStr = blockStart.toLocaleDateString("it-IT", {
-          day: "2-digit",
-          month: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        const dayStr = formatDayItaly(blockStart);
+        const requested = `${formatTimeItaly(blockStart)}–${formatTimeItaly(blockEnd)}`;
+        const conflictTime = `${formatTimeItaly(blockConflict.startsAt)}–${formatTimeItaly(blockConflict.endsAt)}`;
+        const reason = blockConflict.reason?.trim();
+        const conflictLabel = reason ? `«${reason}» ${conflictTime}` : conflictTime;
         return {
           success: false as const,
-          message: `Impossibile bloccare lo slot del ${dateStr}: c'è già un blocco in quell'orario.`,
+          message: `Impossibile bloccare ${dayStr} ${requested}: si sovrappone al blocco ${conflictLabel}.`,
         };
       }
     }

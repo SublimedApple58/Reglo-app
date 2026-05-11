@@ -1377,6 +1377,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           day: "2-digit",
           month: "long",
           year: "numeric",
+          timeZone: "Europe/Rome",
         });
         return {
           success: false,
@@ -4060,7 +4061,7 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
       const weekLabel = weekStart.toLocaleDateString("it-IT", {
         day: "numeric",
         month: "long",
-        timeZone: "UTC",
+        timeZone: "Europe/Rome",
       });
       await sendAutoscuolaPushToUsers({
         companyId,
@@ -4215,12 +4216,12 @@ export async function getPublicationModeFilter(
 
   if (!publicationModeIds.size) return () => true;
 
-  // Expand rangeStart backwards to the Monday of its week so we catch
-  // published weeks whose weekStart < rangeStart but still cover it.
-  // e.g. searching for May 4 (Sun) → weekStart is April 28 (Mon).
-  const adjustedStart = new Date(rangeStart);
-  const dow = adjustedStart.getUTCDay();
-  adjustedStart.setUTCDate(adjustedStart.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+  // Expand rangeStart backwards to the Monday of its week (in Europe/Rome) so
+  // we catch published weeks whose weekStart ≤ rangeStart but still cover it.
+  // IMPORTANT: must use the Italian-zoned week start, not UTC. The caller
+  // typically passes midnight Europe/Rome which is 22:00 UTC of the previous
+  // day — naive UTC arithmetic would shift the week by 1 day on every Monday.
+  const adjustedStart = getWeekStart(rangeStart);
 
   // Load published weeks for publication-mode instructors in range
   const publishedWeeks = await prisma.autoscuolaInstructorPublishedWeek.findMany({
@@ -4231,21 +4232,22 @@ export async function getPublicationModeFilter(
     },
   });
 
-  // Build a set of `instructorId:weekStart` for quick lookup
+  // Build a set of `instructorId:weekStart` for quick lookup. `weekStart` is a
+  // `@db.Date` column so Prisma returns it as a Date at UTC midnight, which is
+  // exactly the format produced by getWeekStart() — safe to compare via UTC parts.
+  const formatWeekKey = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
   const publishedSet = new Set<string>();
   for (const pw of publishedWeeks) {
-    const d = new Date(pw.weekStart);
-    const ws = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-    publishedSet.add(`${pw.instructorId}:${ws}`);
+    publishedSet.add(`${pw.instructorId}:${formatWeekKey(pw.weekStart)}`);
   }
 
   return (instructorId: string, date: Date) => {
     if (!publicationModeIds.has(instructorId)) return true;
-    // Compute week start (Monday) for this date
-    const d = new Date(date);
-    const dow = d.getUTCDay();
-    d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
-    const ws = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+    // Compute week start (Monday) in Europe/Rome — naive UTC arithmetic would
+    // be off by 1 day for any date whose CEST midnight falls on the previous
+    // UTC day (i.e. every Monday in CEST, and a few hours of every other day).
+    const ws = formatWeekKey(getWeekStart(date));
     return publishedSet.has(`${instructorId}:${ws}`);
   };
 }

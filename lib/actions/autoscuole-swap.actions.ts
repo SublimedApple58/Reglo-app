@@ -883,7 +883,7 @@ export async function instructorSwapAppointments(
 
     // Notify both students (fire & forget)
     const formatDate = (d: Date) =>
-      d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
 
     sendAutoscuolaPushToUsers({
       companyId,
