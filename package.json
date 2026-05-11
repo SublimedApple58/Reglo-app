@@ -24,6 +24,8 @@
     "migrate:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config prisma migrate deploy",
     "studio:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config prisma studio",
     "studio:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config prisma studio",
+    "db:dev:query": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config node scripts/db-query.mjs",
+    "db:prod:query": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config node scripts/db-query.mjs",
     "email": "cp .env ./node_modules/react-email && email dev --dir email --port 3001"
   },
   "dependencies": {

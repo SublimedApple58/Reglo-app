@@ -15,6 +15,9 @@
 | `pnpm migrate:dev` | Prisma migrate (dev DB) |
 | `pnpm migrate:prod` | Prisma migrate deploy (prod DB) |
 | `pnpm studio:dev` | Prisma Studio (dev DB) |
+| `pnpm studio:prod` | Prisma Studio (prod DB — read with care) |
+| `pnpm db:dev:query "<SQL>"` | Read-only SQL query against dev DB |
+| `pnpm db:prod:query "<SQL>"` | Read-only SQL query against prod DB |
 | `pnpm trigger:deploy:dev` | Deploy Trigger.dev workflows (dev) |
 | `pnpm trigger:deploy:prod` | Deploy Trigger.dev workflows (prod) |
 
@@ -67,6 +70,27 @@ All feature and architecture docs are in `docs/`. Read `docs/INDEX.md` to find t
 5. Update connected features to remove references
 6. Delete `docs/features/<feature>.md`
 7. Update `docs/INDEX.md` and `docs/impact-map.md`
+
+## Debugging on the production database
+
+For investigating bugs reported by real autoscuole, query prod read-only:
+
+```bash
+# Inline query
+pnpm db:prod:query "SELECT id, name, email FROM \"User\" WHERE email LIKE '%@reglo.it' LIMIT 5"
+
+# From a file
+pnpm db:prod:query --file scripts/queries/find-stale-appointments.sql
+```
+
+`scripts/db-query.mjs` enforces a leading-keyword guard: only `SELECT`, `WITH`, `EXPLAIN`, `SHOW` are allowed. `INSERT/UPDATE/DELETE/DROP/...` are refused with a clear error. Output is JSON (BigInt serialised as string) plus a row count on stderr.
+
+For visual browsing of prod (read AND edit — use with care): `pnpm studio:prod`. Avoid edits unless explicitly told to do so by the user.
+
+**When debugging on prod:**
+1. Start by identifying the company: `pnpm db:prod:query "SELECT id, name FROM \"Company\" WHERE name ILIKE '%<keyword>%'"`.
+2. Scope every follow-up query by `companyId` to avoid cross-tenant leakage in your reasoning.
+3. Never propose or run a write against prod without showing the SQL to the user first and getting an explicit go-ahead.
 
 ## Agent Instructions
 
