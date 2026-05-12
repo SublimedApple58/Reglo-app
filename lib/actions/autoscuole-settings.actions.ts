@@ -338,7 +338,6 @@ const autoscuolaSettingsPatchSchema = z
     voiceAssistantVoice: z.string().min(1).max(50).optional(),
     voiceCustomGreeting: z.string().max(500).nullable().optional(),
     studentNotesEnabled: z.boolean().optional(),
-    instructorClustersEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
@@ -403,7 +402,6 @@ const autoscuolaSettingsPatchSchema = z
       value.voiceAllowedActions !== undefined ||
       value.voiceCustomGreeting !== undefined ||
       value.studentNotesEnabled !== undefined ||
-      value.instructorClustersEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
       value.vehiclesEnabled !== undefined ||
       value.quizEnabled !== undefined ||
@@ -581,7 +579,6 @@ export type AutoscuolaSettingsData = {
   voiceAssistantVoice: string;
   voiceCustomGreeting: string | null;
   studentNotesEnabled: boolean;
-  instructorClustersEnabled: boolean;
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
   quizEnabled: boolean;
@@ -748,10 +745,6 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.studentNotesEnabled === "boolean"
       ? limits.studentNotesEnabled
       : DEFAULT_STUDENT_NOTES_ENABLED;
-  const instructorClustersEnabled =
-    typeof limits.instructorClustersEnabled === "boolean"
-      ? limits.instructorClustersEnabled
-      : false;
   const autoCheckinEnabled =
     typeof limits.autoCheckinEnabled === "boolean"
       ? limits.autoCheckinEnabled
@@ -910,7 +903,6 @@ const resolveAutoscuolaSettingsData = async (
     voiceAssistantVoice,
     voiceCustomGreeting,
     studentNotesEnabled,
-    instructorClustersEnabled,
     autoCheckinEnabled,
     vehiclesEnabled: limits.vehiclesEnabled !== false,
     quizEnabled:
@@ -1087,10 +1079,6 @@ export async function updateAutoscuolaSettings(
       typeof limits.studentNotesEnabled === "boolean"
         ? limits.studentNotesEnabled
         : DEFAULT_STUDENT_NOTES_ENABLED;
-    const previousInstructorClustersEnabled =
-      typeof limits.instructorClustersEnabled === "boolean"
-        ? limits.instructorClustersEnabled
-        : false;
     const previousAutoCheckinEnabled =
       typeof limits.autoCheckinEnabled === "boolean"
         ? limits.autoCheckinEnabled
@@ -1237,8 +1225,6 @@ export async function updateAutoscuolaSettings(
       payload.instructorPreferenceEnabled ?? previousInstructorPreferenceEnabled;
     const nextStudentNotesEnabled =
       payload.studentNotesEnabled ?? previousStudentNotesEnabled;
-    const nextInstructorClustersEnabled =
-      payload.instructorClustersEnabled ?? previousInstructorClustersEnabled;
     const nextAutoCheckinEnabled = payload.autoCheckinEnabled ?? previousAutoCheckinEnabled;
     const nextVehiclesEnabled = payload.vehiclesEnabled ?? previousVehiclesEnabled;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
@@ -1435,7 +1421,6 @@ export async function updateAutoscuolaSettings(
       voiceAssistantVoice: nextVoiceAssistantVoice,
       voiceCustomGreeting: nextVoiceCustomGreeting,
       studentNotesEnabled: nextStudentNotesEnabled,
-      instructorClustersEnabled: nextInstructorClustersEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
       quizEnabled: nextQuizEnabled,
@@ -1514,7 +1499,6 @@ export async function updateAutoscuolaSettings(
         restrictedTimeRangeEnd: nextLimits.restrictedTimeRangeEnd,
         instructorPreferenceEnabled: nextLimits.instructorPreferenceEnabled,
         studentNotesEnabled: nextLimits.studentNotesEnabled,
-        instructorClustersEnabled: nextLimits.instructorClustersEnabled,
         autoCheckinEnabled: nextLimits.autoCheckinEnabled,
         voiceFeatureEnabled: nextLimits.voiceFeatureEnabled,
         voiceProvisioningStatus: nextLimits.voiceProvisioningStatus,

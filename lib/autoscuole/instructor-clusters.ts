@@ -80,13 +80,6 @@ export type EffectiveBookingSettings = {
   studentCancellationEnabled: boolean;
 };
 
-export async function isInstructorClustersEnabled(
-  _companyId: string,
-): Promise<boolean> {
-  // Always enabled — the per-instructor `autonomousMode` flag is the real gate.
-  return true;
-}
-
 const SWAP_NOTIFY_MODES = new Set(["all", "available_only"]);
 const EMPTY_SLOT_TARGETS = new Set(["all", "availability_matching"]);
 const BOOKING_CUTOFF_TIME_RE = /^\d{2}:\d{2}$/;
@@ -273,9 +266,6 @@ export async function resolveEffectiveBookingSettings(
     studentCancellationEnabled: defaults.studentCancellationEnabled,
   };
 
-  const enabled = await isInstructorClustersEnabled(companyId);
-  if (!enabled) return base;
-
   const member = await prisma.companyMember.findFirst({
     where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
     select: {
@@ -391,9 +381,6 @@ export async function isStudentInManualFullCluster(
   companyId: string,
   studentId: string,
 ): Promise<boolean> {
-  const enabled = await isInstructorClustersEnabled(companyId);
-  if (!enabled) return false;
-
   const member = await prisma.companyMember.findFirst({
     where: { companyId, userId: studentId, autoscuolaRole: "STUDENT" },
     select: {
