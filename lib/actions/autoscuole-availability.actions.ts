@@ -2861,14 +2861,15 @@ export async function getDateAvailabilityMap(
       return { success: false, message: "Allievo non valido." };
     }
 
+    const vehiclesEnabled = serviceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((i) => i.id);
-    const activeVehicleIds = activeVehicles.map((v) => v.id);
+    const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((v) => v.id) : [];
 
     const result: Record<string, boolean> = {};
     const instructorsByDate: Record<string, string[]> = {};
 
     // No resources → all dates unavailable
-    if (!activeInstructorIds.length || !activeVehicleIds.length) {
+    if (!activeInstructorIds.length || (vehiclesEnabled && !activeVehicleIds.length)) {
       let cur = { ...fromParts };
       const toMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
       for (;;) {
@@ -3085,17 +3086,19 @@ export async function getDateAvailabilityMap(
           }
           if (!slotInstructors.length) continue;
 
-          let hasVehicle = false;
-          for (const ownerId of activeVehicleIds) {
-            const avail = vehicleResolver.resolve(ownerId, startDate);
-            if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
-              continue;
-            if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
-              continue;
-            hasVehicle = true;
-            break;
+          if (vehiclesEnabled) {
+            let hasVehicle = false;
+            for (const ownerId of activeVehicleIds) {
+              const avail = vehicleResolver.resolve(ownerId, startDate);
+              if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
+                continue;
+              if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
+                continue;
+              hasVehicle = true;
+              break;
+            }
+            if (!hasVehicle) continue;
           }
-          if (!hasVehicle) continue;
 
           // Valid slot — record available instructors
           available = true;
