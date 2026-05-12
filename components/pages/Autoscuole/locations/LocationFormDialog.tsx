@@ -63,7 +63,8 @@ export function LocationFormDialog({
     if (open) {
       sessionTokenRef.current = crypto.randomUUID();
       setName(initialValue?.name ?? (mode === "default" ? "Sede dell'autoscuola" : ""));
-      setIsPrecise(initialValue?.isPrecise ?? mode === "default");
+      // Sede must always be precise; custom inherits from initial or defaults to false
+      setIsPrecise(mode === "default" ? true : (initialValue?.isPrecise ?? false));
       setAddress(initialValue?.address ?? "");
       setLatitude(initialValue?.latitude ?? null);
       setLongitude(initialValue?.longitude ?? null);
