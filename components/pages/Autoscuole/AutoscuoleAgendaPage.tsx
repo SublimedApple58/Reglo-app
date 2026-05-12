@@ -36,6 +36,7 @@ import {
   updateExamTime,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
+import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
 import { AgendaSkeleton } from "@/components/ui/page-skeleton";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -295,9 +296,22 @@ export function AutoscuoleAgendaPage({
     time: "09:00",
     instructorId: "",
     vehicleId: "",
+    locationId: "",
     sendProposal: false,
     duration: "30",
   });
+  type AgendaLocationOption = {
+    id: string;
+    name: string;
+    address: string | null;
+    isDefault: boolean;
+    isPrecise: boolean;
+  };
+  const [agendaLocations, setAgendaLocations] = React.useState<AgendaLocationOption[]>([]);
+  const defaultLocationId = React.useMemo(
+    () => agendaLocations.find((l) => l.isDefault)?.id ?? "",
+    [agendaLocations],
+  );
   const [instructorAvailability, setInstructorAvailability] = React.useState<InstructorAvailabilityWeek[]>([]);
   const [outOfAvailAppointments, setOutOfAvailAppointments] = React.useState<OutOfAvailabilityAppointment[]>([]);
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
@@ -504,6 +518,34 @@ export function AutoscuoleAgendaPage({
     return () => clearInterval(interval);
   }, []);
 
+  // Load company locations once (sede + custom) for the create-appointment Luogo selector
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await getAutoscuolaLocations();
+      if (cancelled || !res.success || !res.data) return;
+      setAgendaLocations(
+        res.data.map((l) => ({
+          id: l.id,
+          name: l.name,
+          address: l.address,
+          isDefault: l.isDefault,
+          isPrecise: l.isPrecise,
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Pre-populate form.locationId with the default sede whenever the dialog opens
+  React.useEffect(() => {
+    if (createOpen && !form.locationId && defaultLocationId) {
+      setForm((prev) => ({ ...prev, locationId: defaultLocationId }));
+    }
+  }, [createOpen, defaultLocationId, form.locationId]);
+
   // Auto-scroll to current time on first load
   React.useEffect(() => {
     if (!loading && calendarScrollRef.current && !hasAutoScrolled.current) {
@@ -613,6 +655,7 @@ export function AutoscuoleAgendaPage({
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
+      locationId: form.locationId || null,
       sendProposal: form.sendProposal,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
@@ -648,6 +691,7 @@ export function AutoscuoleAgendaPage({
       time: "09:00",
       instructorId: "",
       vehicleId: "",
+      locationId: defaultLocationId,
       sendProposal: false,
       duration: "30",
     });
@@ -2187,6 +2231,27 @@ export function AutoscuoleAgendaPage({
                         </FieldGroup>
                       )}
                     </div>
+                    {agendaLocations.length > 0 && (
+                      <FieldGroup
+                        label="Luogo"
+                        description="Modificabile dopo la creazione. Aggiungi luoghi dalle Impostazioni."
+                      >
+                        <Select
+                          value={form.locationId}
+                          onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
+                          <SelectContent>
+                            {agendaLocations.map((loc) => (
+                              <SelectItem key={loc.id} value={loc.id}>
+                                {loc.name}
+                                {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FieldGroup>
+                    )}
                   </motion.div>
                 )}
 
@@ -2215,6 +2280,10 @@ export function AutoscuoleAgendaPage({
                       } />
                       <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
                       {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
+                      <SummaryRow
+                        label="Luogo"
+                        value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}
+                      />
                     </div>
                     <div
                       role="button"
