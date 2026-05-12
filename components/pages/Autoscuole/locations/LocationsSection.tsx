@@ -159,11 +159,32 @@ export function LocationsSection() {
         </div>
         {loading ? (
           <div className="text-xs text-muted-foreground">Caricamento…</div>
-        ) : sede?.address ? (
-          <div className="text-sm text-foreground">{sede.address}</div>
-        ) : (
+        ) : !sede ? (
           <div className="text-sm italic text-muted-foreground">
-            Sede non ancora configurata. Premi &ldquo;Modifica&rdquo; per aggiungere l&apos;indirizzo.
+            Sede non ancora configurata. Premi &ldquo;Modifica&rdquo; per impostarla.
+          </div>
+        ) : (
+          <div className="flex items-start gap-2">
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                sede.isPrecise
+                  ? "bg-green-50 text-green-700"
+                  : "bg-gray-100 text-gray-600",
+              )}
+            >
+              {sede.isPrecise ? "Precisa" : "Generica"}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground truncate">
+                {sede.name}
+              </div>
+              {sede.isPrecise && sede.address ? (
+                <div className="text-xs text-muted-foreground truncate">
+                  {sede.address}
+                </div>
+              ) : null}
+            </div>
           </div>
         )}
       </div>
