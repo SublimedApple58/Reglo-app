@@ -2,7 +2,9 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Check, ChevronDown, ClipboardList } from "lucide-react";
+import { Bell, CalendarDays, Check, ChevronDown, ClipboardList, MapPin } from "lucide-react";
+
+import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -546,7 +548,6 @@ function SettingsTab({
           description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
           expanded={expandedSection === "policy"}
           onToggle={() => toggleSection("policy")}
-          isLast
         >
           <div className="space-y-5">
             {/* Global toggles */}
@@ -683,6 +684,18 @@ function SettingsTab({
               </div>
             </div>
           </div>
+        </AccordionSection>
+
+        {/* ── Sede e luoghi ── */}
+        <AccordionSection
+          icon={MapPin}
+          title="Sede e luoghi"
+          description="Sede dell'autoscuola e luoghi extra per le guide. Mostrati agli allievi nel dettaglio della guida."
+          expanded={expandedSection === "locations"}
+          onToggle={() => toggleSection("locations")}
+          isLast
+        >
+          <LocationsSection />
         </AccordionSection>
       </div>
 
