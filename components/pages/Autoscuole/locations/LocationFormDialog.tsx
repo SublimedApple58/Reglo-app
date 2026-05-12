@@ -32,7 +32,7 @@ export type LocationFormDialogProps = {
   onSubmit: (values: LocationFormValues) => Promise<void>;
 };
 
-const PLACES_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY;
+const PLACES_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 type Suggestion = {
   placeId: string;
@@ -260,7 +260,7 @@ export function LocationFormDialog({
               description={
                 PLACES_API_KEY
                   ? "Cerca via, città o luogo. Selezionalo per agganciare le coordinate."
-                  : "Configura NEXT_PUBLIC_GOOGLE_PLACES_API_KEY per abilitare l'autocomplete."
+                  : "Configura NEXT_PUBLIC_GOOGLE_MAPS_API_KEY per abilitare l'autocomplete."
               }
             >
               <div className="relative">
