@@ -85,14 +85,12 @@ export function LocationsSection() {
   };
 
   const handleUpdateDefault = async (values: LocationFormValues) => {
-    if (!values.address || values.latitude == null || values.longitude == null) {
-      throw new Error("Per la sede serve un indirizzo preciso.");
-    }
     const res = await fetch("/api/autoscuole/locations/default", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: values.name,
+        isPrecise: values.isPrecise,
         address: values.address,
         latitude: values.latitude,
         longitude: values.longitude,

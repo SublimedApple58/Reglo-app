@@ -157,9 +157,10 @@ export async function updateLocation(input: UpdateLocationInput) {
 export type UpdateDefaultLocationInput = {
   companyId: string;
   name?: string;
-  address: string;
-  latitude: number;
-  longitude: number;
+  isPrecise: boolean;
+  address?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   placeId?: string | null;
 };
 
@@ -170,31 +171,36 @@ export async function upsertDefaultLocation(input: UpdateDefaultLocationInput) {
 
   const trimmedName = input.name?.trim() || DEFAULT_LOCATION_LABEL;
 
+  if (input.isPrecise) {
+    if (!input.address || input.latitude == null || input.longitude == null) {
+      throw new Error(
+        "Una sede precisa richiede indirizzo, latitudine e longitudine.",
+      );
+    }
+  }
+
+  const data = {
+    name: trimmedName,
+    isPrecise: input.isPrecise,
+    address: input.isPrecise ? input.address ?? null : null,
+    latitude: input.isPrecise ? toPrismaDecimal(input.latitude) : null,
+    longitude: input.isPrecise ? toPrismaDecimal(input.longitude) : null,
+    placeId: input.isPrecise ? input.placeId ?? null : null,
+    archivedAt: null,
+  };
+
   if (existing) {
     return prisma.autoscuolaLocation.update({
       where: { id: existing.id },
-      data: {
-        name: trimmedName,
-        address: input.address,
-        latitude: toPrismaDecimal(input.latitude),
-        longitude: toPrismaDecimal(input.longitude),
-        placeId: input.placeId ?? null,
-        isPrecise: true,
-        archivedAt: null,
-      },
+      data,
     });
   }
 
   return prisma.autoscuolaLocation.create({
     data: {
       companyId: input.companyId,
-      name: trimmedName,
-      address: input.address,
-      latitude: toPrismaDecimal(input.latitude),
-      longitude: toPrismaDecimal(input.longitude),
-      placeId: input.placeId ?? null,
-      isPrecise: true,
       isDefault: true,
+      ...data,
     },
   });
 }

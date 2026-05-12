@@ -63,8 +63,7 @@ export function LocationFormDialog({
     if (open) {
       sessionTokenRef.current = crypto.randomUUID();
       setName(initialValue?.name ?? (mode === "default" ? "Sede dell'autoscuola" : ""));
-      // Sede must always be precise; custom inherits from initial or defaults to false
-      setIsPrecise(mode === "default" ? true : (initialValue?.isPrecise ?? false));
+      setIsPrecise(initialValue?.isPrecise ?? false);
       setAddress(initialValue?.address ?? "");
       setLatitude(initialValue?.latitude ?? null);
       setLongitude(initialValue?.longitude ?? null);
@@ -73,7 +72,7 @@ export function LocationFormDialog({
     }
   }, [open, mode, initialValue]);
 
-  const lockPreciseToggle = mode === "default";
+  const lockPreciseToggle = false;
 
   useEffect(() => {
     if (!PLACES_API_KEY) return;

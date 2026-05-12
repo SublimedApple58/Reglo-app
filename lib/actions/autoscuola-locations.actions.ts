@@ -35,9 +35,10 @@ const deleteSchema = z.object({ id: z.string().uuid() });
 
 const updateDefaultSchema = z.object({
   name: z.string().min(2).max(80).optional(),
-  address: z.string().min(2).max(255),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  isPrecise: z.boolean(),
+  address: z.string().max(255).nullable().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
   placeId: z.string().max(255).nullable().optional(),
 });
 
@@ -135,9 +136,10 @@ export async function updateDefaultAutoscuolaLocation(
     const location = await upsertDefaultLocation({
       companyId: membership.companyId,
       name: parsed.name,
-      address: parsed.address,
-      latitude: parsed.latitude,
-      longitude: parsed.longitude,
+      isPrecise: parsed.isPrecise,
+      address: parsed.address ?? null,
+      latitude: parsed.latitude ?? null,
+      longitude: parsed.longitude ?? null,
       placeId: parsed.placeId ?? null,
     });
     await invalidate(membership.companyId);
