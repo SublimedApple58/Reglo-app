@@ -82,6 +82,7 @@ const createAppointmentSchema = z.object({
   status: z.string().optional(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
+  locationId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   sendProposal: z.boolean().optional().default(false),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -141,6 +142,7 @@ const updateAppointmentDetailsSchema = z.object({
   lessonTypes: z.array(z.string()).optional(),
   rating: z.number().int().min(1).max(5).nullable().optional(),
   notes: z.string().nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(),
 });
 
 const createInstructorSchema = z.object({
@@ -879,6 +881,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           endsAt: true,
           instructorId: true,
           vehicleId: true,
+          locationId: true,
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
@@ -902,6 +905,19 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
             select: {
               id: true,
               name: true,
+            },
+          },
+          location: {
+            select: {
+              id: true,
+              companyId: true,
+              name: true,
+              address: true,
+              latitude: true,
+              longitude: true,
+              placeId: true,
+              isDefault: true,
+              isPrecise: true,
             },
           },
         },
@@ -1851,6 +1867,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           status: true,
           instructorId: true,
           vehicleId: true,
+          locationId: true,
           notes: true,
           cancellationKind: true,
           cancellationReason: true,
@@ -1888,6 +1905,19 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
               updatedAt: true,
             },
           },
+          location: {
+            select: {
+              id: true,
+              companyId: true,
+              name: true,
+              address: true,
+              latitude: true,
+              longitude: true,
+              placeId: true,
+              isDefault: true,
+              isPrecise: true,
+            },
+          },
         },
         orderBy: { startsAt: "asc" },
         ...(limit ? { take: limit } : {}),
@@ -1917,6 +1947,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         case: true,
         instructor: true,
         vehicle: true,
+        location: true,
       },
       orderBy: { startsAt: "asc" },
       ...(limit ? { take: limit } : {}),
@@ -2321,6 +2352,18 @@ export async function createAutoscuolaAppointment(
       }
     }
 
+    // Validate location ownership (must belong to same company, non-archived)
+    let resolvedLocationId: string | null = payload.locationId ?? null;
+    if (resolvedLocationId) {
+      const loc = await prisma.autoscuolaLocation.findFirst({
+        where: { id: resolvedLocationId, companyId, archivedAt: null },
+        select: { id: true },
+      });
+      if (!loc) {
+        return { success: false, message: "Luogo non valido per questa autoscuola." };
+      }
+    }
+
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
       const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
@@ -2346,6 +2389,7 @@ export async function createAutoscuolaAppointment(
             status: appointmentStatus,
             instructorId: resolvedInstructorId,
             vehicleId: payload.vehicleId ?? null,
+            locationId: resolvedLocationId,
           notes: payload.notes ?? null,
           paymentRequired: paymentSnapshot.paymentRequired,
           paymentStatus: paymentSnapshot.paymentStatus,
@@ -2399,12 +2443,23 @@ export async function createAutoscuolaAppointment(
         minute: "2-digit",
         timeZone: "Europe/Rome",
       });
+      // Include location name in push body when explicitly chosen and not the default sede
+      let locationSuffix = "";
+      if (resolvedLocationId) {
+        const loc = await prisma.autoscuolaLocation.findUnique({
+          where: { id: resolvedLocationId },
+          select: { name: true, isDefault: true },
+        });
+        if (loc && !loc.isDefault) {
+          locationSuffix = ` Luogo: ${loc.name}.`;
+        }
+      }
       try {
         const pushResult = await sendAutoscuolaPushToUsers({
           companyId,
           userIds,
           title: "🚗 Nuova proposta guida",
-          body: `Hai ricevuto una proposta per il ${when}. Apri Reglo per i dettagli.`,
+          body: `Hai ricevuto una proposta per il ${when}.${locationSuffix} Apri Reglo per i dettagli.`,
           data: {
             kind: "appointment_proposal",
             appointmentId: appointment.id,
@@ -4060,7 +4115,7 @@ export async function updateAutoscuolaAppointmentDetails(
       }
     }
 
-    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null } = {};
+    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null } = {};
     const appointmentLessonType = normalizeLessonType(appointment.type);
     const appointmentEnd = computeAppointmentEnd({
       startsAt: appointment.startsAt,
@@ -4151,6 +4206,40 @@ export async function updateAutoscuolaAppointmentDetails(
       updateData.notes = normalizedNotes || null;
     }
 
+    // Handle location change
+    let locationChangedTo: { id: string; name: string; isDefault: boolean } | null = null;
+    let locationChangedFrom: { id: string; name: string; isDefault: boolean } | null = null;
+    if (payload.locationId !== undefined) {
+      if (payload.locationId === null) {
+        if (appointment.locationId !== null) {
+          locationChangedFrom = await loadLocationSummary(appointment.locationId);
+          updateData.locationId = null;
+        }
+      } else {
+        if (payload.locationId !== appointment.locationId) {
+          const newLoc = await prisma.autoscuolaLocation.findFirst({
+            where: {
+              id: payload.locationId,
+              companyId: membership.companyId,
+              archivedAt: null,
+            },
+            select: { id: true, name: true, isDefault: true },
+          });
+          if (!newLoc) {
+            return {
+              success: false,
+              message: "Luogo non valido per questa autoscuola.",
+            };
+          }
+          locationChangedTo = newLoc;
+          if (appointment.locationId) {
+            locationChangedFrom = await loadLocationSummary(appointment.locationId);
+          }
+          updateData.locationId = payload.locationId;
+        }
+      }
+    }
+
     if (!Object.keys(updateData).length) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
@@ -4162,10 +4251,51 @@ export async function updateAutoscuolaAppointmentDetails(
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
+    // Notify student about location change on future appointments
+    if (
+      updateData.locationId !== undefined &&
+      appointment.startsAt.getTime() > Date.now() &&
+      appointment.studentId !== membership.userId
+    ) {
+      try {
+        const when = appointment.startsAt.toLocaleString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Rome",
+        });
+        const newName = locationChangedTo?.name ?? "Sede dell'autoscuola";
+        const oldName = locationChangedFrom?.name ?? "Sede dell'autoscuola";
+        await sendAutoscuolaPushToUsers({
+          companyId: membership.companyId,
+          userIds: [appointment.studentId],
+          title: "📍 Luogo guida aggiornato",
+          body: `Il luogo della tua guida del ${when} è cambiato: ${newName}.`,
+          data: {
+            kind: "appointment_location_changed",
+            appointmentId: appointment.id,
+            startsAt: appointment.startsAt.toISOString(),
+            oldLocationName: oldName,
+            newLocationName: newName,
+          },
+        });
+      } catch (error) {
+        console.error("Appointment location change push error", error);
+      }
+    }
+
     return { success: true, data: updated };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
+}
+
+async function loadLocationSummary(id: string) {
+  return prisma.autoscuolaLocation.findUnique({
+    where: { id },
+    select: { id: true, name: true, isDefault: true },
+  });
 }
 
 export async function getAutoscuolaInstructors() {

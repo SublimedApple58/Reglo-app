@@ -31,6 +31,12 @@ enum AutoscuolaRole {
   STUDENT
 }
 
+enum AutoscuolaStudentPhase {
+  TEORIA
+  PRATICA
+  PATENTATO
+}
+
 enum QuizSessionMode {
   EXAM
   CHAPTER
@@ -80,6 +86,7 @@ model User {
   autoscuolaVoiceCallbackTasksStudent  AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackStudent")
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
   quizSessions                         QuizSession[]
+  autoscuolaLocationsCreated           AutoscuolaLocation[]                   @relation("AutoscuolaLocationCreatedBy")
 
   @@index([phone])
 }
@@ -205,6 +212,7 @@ model Company {
   autoscuolaHolidays             AutoscuolaHoliday[]
   autoscuolaInstructorPublishedWeeks AutoscuolaInstructorPublishedWeek[]
   quizSessions                       QuizSession[]
+  autoscuolaLocations            AutoscuolaLocation[]
 }
 
 model CompanyService {
@@ -228,6 +236,7 @@ model CompanyMember {
   userId         String         @db.Uuid
   role           String         @default("member")
   autoscuolaRole AutoscuolaRole @default(STUDENT)
+  studentPhase   AutoscuolaStudentPhase @default(PRATICA)
   bookingBlocked             Boolean        @default(false)
   weeklyBookingLimitExempt   Boolean        @default(false)
   examPriorityOverride       Boolean?
@@ -350,6 +359,7 @@ model AutoscuolaAppointment {
   lateCancellationAction  String?
   rescheduledAt           DateTime? @db.Timestamp(6)
   rescheduledFromStartsAt DateTime? @db.Timestamp(6)
+  locationId              String?   @db.Uuid
   createdAt               DateTime  @default(now()) @db.Timestamp(6)
   updatedAt               DateTime  @updatedAt
 
@@ -359,6 +369,7 @@ model AutoscuolaAppointment {
   slot                  AutoscuolaAvailabilitySlot?           @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor            AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle               AutoscuolaVehicle?                    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  location              AutoscuolaLocation?                   @relation(fields: [locationId], references: [id], onDelete: SetNull)
   replacedByAppointment AutoscuolaAppointment?                @relation("AutoscuolaAppointmentReplacement", fields: [replacedByAppointmentId], references: [id], onDelete: SetNull)
   replacedAppointments  AutoscuolaAppointment[]               @relation("AutoscuolaAppointmentReplacement")
   payments              AutoscuolaAppointmentPayment[]
@@ -385,6 +396,30 @@ model AutoscuolaAppointment {
   @@index([companyId, studentId, creditApplied])
   @@index([replacedByAppointmentId])
   @@index([companyId, cancellationKind, startsAt])
+  @@index([locationId])
+}
+
+model AutoscuolaLocation {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String    @db.Uuid
+  createdByUserId  String?   @db.Uuid
+  name             String
+  address          String?
+  latitude         Decimal?  @db.Decimal(10, 7)
+  longitude        Decimal?  @db.Decimal(10, 7)
+  placeId          String?
+  isDefault        Boolean   @default(false)
+  isPrecise        Boolean   @default(false)
+  archivedAt       DateTime? @db.Timestamp(6)
+  createdAt        DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt        DateTime  @updatedAt
+
+  company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdByUser User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  appointments  AutoscuolaAppointment[]
+
+  @@index([companyId])
+  @@index([companyId, archivedAt])
 }
 
 model AutoscuolaVoiceLine {

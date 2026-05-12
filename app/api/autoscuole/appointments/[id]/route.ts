@@ -13,6 +13,7 @@ export async function PATCH(
     lessonTypes: payload.lessonTypes,
     rating: payload.rating,
     notes: payload.notes,
+    locationId: payload.locationId,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
