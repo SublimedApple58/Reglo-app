@@ -48,6 +48,14 @@ export async function getDefaultLocation(companyId: string) {
   });
 }
 
+export async function getDefaultLocationId(companyId: string): Promise<string | null> {
+  const loc = await prisma.autoscuolaLocation.findFirst({
+    where: { companyId, isDefault: true, archivedAt: null },
+    select: { id: true },
+  });
+  return loc?.id ?? null;
+}
+
 export type CreateLocationInput = {
   companyId: string;
   createdByUserId: string;

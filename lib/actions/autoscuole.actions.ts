@@ -2352,7 +2352,8 @@ export async function createAutoscuolaAppointment(
       }
     }
 
-    // Validate location ownership (must belong to same company, non-archived)
+    // Validate location ownership (must belong to same company, non-archived).
+    // If caller didn't specify a location, fall back to the company default sede.
     let resolvedLocationId: string | null = payload.locationId ?? null;
     if (resolvedLocationId) {
       const loc = await prisma.autoscuolaLocation.findFirst({
@@ -2362,6 +2363,12 @@ export async function createAutoscuolaAppointment(
       if (!loc) {
         return { success: false, message: "Luogo non valido per questa autoscuola." };
       }
+    } else {
+      const defaultLoc = await prisma.autoscuolaLocation.findFirst({
+        where: { companyId, isDefault: true, archivedAt: null },
+        select: { id: true },
+      });
+      resolvedLocationId = defaultLoc?.id ?? null;
     }
 
     const appointmentId = randomUUID();
@@ -2501,6 +2508,7 @@ const createAppointmentBatchSchema = z.object({
   studentId: z.string().uuid(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
+  locationId: z.string().uuid().optional().nullable(),
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -2778,6 +2786,24 @@ export async function createAutoscuolaAppointmentBatch(
       }
     }
 
+    // Resolve location: explicit payload or company default sede
+    let batchLocationId: string | null = payload.locationId ?? null;
+    if (batchLocationId) {
+      const loc = await prisma.autoscuolaLocation.findFirst({
+        where: { id: batchLocationId, companyId, archivedAt: null },
+        select: { id: true },
+      });
+      if (!loc) {
+        return { success: false, message: "Luogo non valido per questa autoscuola." };
+      }
+    } else {
+      const defaultLoc = await prisma.autoscuolaLocation.findFirst({
+        where: { companyId, isDefault: true, archivedAt: null },
+        select: { id: true },
+      });
+      batchLocationId = defaultLoc?.id ?? null;
+    }
+
     // ── Atomic creation via transaction ──
     const entryIds = parsedEntries.map(() => randomUUID());
 
@@ -2808,6 +2834,7 @@ export async function createAutoscuolaAppointmentBatch(
             status: "scheduled",
             instructorId: resolvedInstructorId,
             vehicleId: payload.vehicleId ?? null,
+            locationId: batchLocationId,
             notes: null,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,

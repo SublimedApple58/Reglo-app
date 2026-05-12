@@ -9,7 +9,9 @@ export async function POST(request: Request) {
     endsAt: payload.endsAt,
     instructorId: payload.instructorId,
     vehicleId: payload.vehicleId,
+    locationId: payload.locationId,
     type: payload.lessonType,
+    types: payload.types,
     sendProposal: false,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
   });

@@ -2049,6 +2049,11 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           throw new Error("Slot non disponibile.");
         }
 
+        // Default location: link student-initiated bookings to the company sede
+        const studentBookingLoc = await tx.autoscuolaLocation.findFirst({
+          where: { companyId: membership.companyId, isDefault: true, archivedAt: null },
+          select: { id: true },
+        });
         return tx.autoscuolaAppointment.create({
           data: {
             id: appointmentId,
@@ -2060,6 +2065,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: "scheduled",
             instructorId: candidate.instructorId,
             vehicleId: candidate.vehicleId,
+            locationId: studentBookingLoc?.id ?? null,
             slotId: studentSlot.id,
             paymentRequired: paymentSnapshot.paymentRequired,
             paymentStatus: paymentSnapshot.paymentStatus,
@@ -3414,6 +3420,11 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
         throw new Error("Slot non disponibile.");
       }
 
+      // Default location: link student-initiated bookings to the company sede
+      const waitlistAcceptLoc = await tx.autoscuolaLocation.findFirst({
+        where: { companyId: membership.companyId, isDefault: true, archivedAt: null },
+        select: { id: true },
+      });
       const appointment = await tx.autoscuolaAppointment.create({
         data: {
           id: appointmentId,
@@ -3428,6 +3439,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           status: "scheduled",
           instructorId: instructorSlot.ownerId,
           vehicleId: vehicleSlot.ownerId,
+          locationId: waitlistAcceptLoc?.id ?? null,
           slotId: offer.slotId,
           ...(await prepareAppointmentPaymentSnapshot({
             prisma: tx as never,

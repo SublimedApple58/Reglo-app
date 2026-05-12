@@ -7,6 +7,7 @@ export async function POST(request: Request) {
     studentId: payload.studentId,
     instructorId: payload.instructorId,
     vehicleId: payload.vehicleId,
+    locationId: payload.locationId,
     entries: payload.entries,
     type: payload.lessonType,
     types: payload.types,
