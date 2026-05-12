@@ -230,6 +230,15 @@ export async function createCompanyForUser(
         ],
       });
 
+      await tx.autoscuolaLocation.create({
+        data: {
+          companyId: createdCompany.id,
+          name: `Sede ${createdCompany.name}`,
+          isDefault: true,
+          isPrecise: false,
+        },
+      });
+
       await tx.user.update({
         where: { id: userId },
         data: { activeCompanyId: createdCompany.id },

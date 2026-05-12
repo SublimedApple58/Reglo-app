@@ -55,6 +55,15 @@ export async function POST(request: Request) {
         ],
       });
 
+      await tx.autoscuolaLocation.create({
+        data: {
+          companyId: company.id,
+          name: `Sede ${company.name}`,
+          isDefault: true,
+          isPrecise: false,
+        },
+      });
+
       return { user, company };
     });
 

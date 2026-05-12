@@ -106,6 +106,15 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
         ],
       });
 
+      await tx.autoscuolaLocation.create({
+        data: {
+          companyId: company.id,
+          name: `Sede ${company.name}`,
+          isDefault: true,
+          isPrecise: false,
+        },
+      });
+
       return createdUser;
     });
 
