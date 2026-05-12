@@ -591,35 +591,10 @@ export function AutoscuoleAgendaPage({
   }, [viewMode, instructors, instructorAvailability, dayFocus]);
 
   const filtered = React.useMemo(() => {
-    // Build a set of active (non-cancelled) appointments keyed by instructor id + time overlap
-    const activeByInstructor = new Map<string, { start: Date; end: Date }[]>();
-    for (const item of regularAppointments) {
-      if ((item.status ?? "").toLowerCase() === "cancelled") continue;
-      if (!item.instructor?.id) continue;
-      const start = toDate(item.startsAt);
-      const end = getAppointmentEnd(item);
-      const list = activeByInstructor.get(item.instructor.id) ?? [];
-      list.push({ start, end });
-      activeByInstructor.set(item.instructor.id, list);
-    }
-
     return regularAppointments.filter((item) => {
-      const isCancelled = (item.status ?? "").toLowerCase() === "cancelled";
-
-      // Hide cancelled appointments that have been replaced
-      if (isCancelled) {
-        // Explicitly replaced via repositioning
-        if (item.replacedByAppointmentId) return false;
-        // Implicitly replaced: another active appointment overlaps the same instructor slot
-        if (item.instructor?.id) {
-          const slots = activeByInstructor.get(item.instructor.id);
-          if (slots) {
-            const cStart = toDate(item.startsAt);
-            const cEnd = getAppointmentEnd(item);
-            if (slots.some((s) => s.start < cEnd && s.end > cStart)) return false;
-          }
-        }
-      }
+      // Always hide cancelled appointments from the agenda — the cancellation
+      // is recorded server-side, but the slot should free up visually.
+      if ((item.status ?? "").toLowerCase() === "cancelled") return false;
 
       const term = search.trim().toLowerCase();
       if (
