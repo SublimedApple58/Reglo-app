@@ -38,6 +38,10 @@ import {
   normalizeLessonType,
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
+import {
+  computeAnchorAwareEntryPoints,
+  computeFreeIntervalsInRange,
+} from "@/lib/autoscuole/slot-packing";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -2632,33 +2636,67 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       );
     };
 
-    // When roundedHoursOnly, collect allowed starts by cascading from each
-    // instructor range start in 60-min steps. Ranges starting at :30 only
-    // produce :30 slots; ranges starting at :00 only produce :00 slots.
-    let allowedRoundedStarts: Set<number> | null = null;
-    if (roundedHoursOnly) {
-      allowedRoundedStarts = new Set<number>();
-      const probe = toTimeZoneDate(dateParts, 0, 0);
-      for (const instrId of activeInstructorIds) {
-        const avail = instructorResolver.resolve(instrId, probe);
-        if (!avail || !avail.daysOfWeek.includes(dayOfWeek)) continue;
-        for (const r of avail.ranges) {
-          for (let s = r.startMinutes; s + payload.durationMinutes <= r.endMinutes; s += 60) {
-            allowedRoundedStarts.add(s);
-          }
+    // Anchor-aware packing: compute the union of admissible entry-point
+    // minutes-from-midnight across all active instructors, taking into
+    // account both their availability windows and their already-booked
+    // intervals. For each instructor:
+    //   - subtract busy intervals from each availability range,
+    //   - feed the resulting free intervals into computeAnchorAwareEntryPoints,
+    //   - which yields entry points anchored to busy edges + a filtered grid
+    //     that never leaves gaps smaller than the minimum bookable duration.
+    //
+    // This replaces the legacy "iterate the static :00/:30 grid" approach,
+    // which was the root cause of orphaned gaps when durations were not
+    // aligned to the grid (e.g. 45-min lessons leaving 15-min orphans).
+    const dayStartMs = dateStart.getTime();
+    const minCompanyDurationMinutes = Math.min(
+      ...(allowedDurations.length ? allowedDurations : [SLOT_MINUTES]),
+    );
+    const slotGridMinutes = roundedHoursOnly ? 60 : SLOT_MINUTES;
+
+    const allowedEntryMinutes = new Set<number>();
+    for (const instrId of activeInstructorIds) {
+      const avail = instructorResolver.resolve(instrId, dateStart);
+      if (!avail || !avail.daysOfWeek.includes(dayOfWeek)) continue;
+
+      // Convert this instructor's busy intervals (appointments + blocks) into
+      // minutes from local midnight, clipped to today.
+      const ownerBusyMs = intervals.get(instrId) ?? [];
+      const ownerBusyMinutes = ownerBusyMs.map((b) => ({
+        startMinutes: Math.round((b.start - dayStartMs) / 60_000),
+        endMinutes: Math.round((b.end - dayStartMs) / 60_000),
+      }));
+
+      for (const range of avail.ranges) {
+        if (range.endMinutes <= range.startMinutes) continue;
+        const free = computeFreeIntervalsInRange(
+          range.startMinutes,
+          range.endMinutes,
+          ownerBusyMinutes,
+        );
+        // gridPhase preserves the cascade-from-range-start semantics used by
+        // the legacy roundedHoursOnly path (a range starting at 09:30 yields
+        // 09:30, 10:30, ... rather than 10:00, 11:00, ...).
+        const gridPhaseMinutes = roundedHoursOnly ? range.startMinutes % 60 : 0;
+        for (const interval of free) {
+          const points = computeAnchorAwareEntryPoints(
+            interval,
+            payload.durationMinutes,
+            minCompanyDurationMinutes,
+            { slotGridMinutes, gridPhaseMinutes },
+          );
+          for (const p of points) allowedEntryMinutes.add(p);
         }
       }
     }
 
+    const sortedEntryMinutes = [...allowedEntryMinutes].sort((a, b) => a - b);
+
     const result: Array<{ startsAt: string; endsAt: string }> = [];
     const studentIntervals = intervals.get(payload.studentId);
 
-    // Scan the full day (0–1440) — instructor/vehicle availability filters naturally
-    const dayLastStart = 1440 - payload.durationMinutes;
     {
-      for (let minutes = 0; minutes <= dayLastStart; minutes += SLOT_MINUTES) {
-        // When roundedHoursOnly, only allow starts that align with instructor range cascades
-        if (roundedHoursOnly && !allowedRoundedStarts!.has(minutes)) continue;
+      for (const minutes of sortedEntryMinutes) {
         const startDate = toTimeZoneDate(dateParts, Math.floor(minutes / 60), minutes % 60);
         const endDate = getSlotEnd(startDate, payload.durationMinutes);
         const startMs = startDate.getTime();
@@ -3015,8 +3053,15 @@ export async function getDateAvailabilityMap(
     if (minDate) minDate.setHours(0, 0, 0, 0);
 
     const studentIntervals = intervals.get(payload.studentId);
-    const dayLastStart = 1440 - defaultDuration;
     const toMs = Date.UTC(toParts.year, toParts.month - 1, toParts.day);
+
+    // Anchor-aware packing inputs (mirror of getAllAvailableSlots).
+    const roundedHoursOnly = clusterSettings.roundedHoursOnly;
+    const slotGridMinutes = roundedHoursOnly ? 60 : SLOT_MINUTES;
+    const clusterDurations = clusterSettings.bookingSlotDurations;
+    const minCompanyDurationMinutes = Math.min(
+      ...(clusterDurations.length ? clusterDurations : [defaultDuration]),
+    );
 
     // ── Per-day scan (in-memory) ──
     let dateParts = { ...fromParts };
@@ -3055,11 +3100,53 @@ export async function getDateAvailabilityMap(
       }
 
       if (!isPast && !isBeforeMin && !isPastCutoff) {
-        for (
-          let minutes = 0;
-          minutes <= dayLastStart;
-          minutes += SLOT_MINUTES
-        ) {
+        // Build the union of admissible entry-point minutes across all active
+        // instructors using anchor-aware packing on each instructor's free
+        // intervals for the day. This ensures the date-availability map stays
+        // in sync with getAllAvailableSlots: a date is marked available only
+        // if at least one anchor-aware slot exists for at least one instructor.
+        const dayStartMs = dateStart.getTime();
+        const entryPointsByInstructor = new Map<string, Set<number>>();
+        const allowedEntryMinutes = new Set<number>();
+        for (const ownerId of activeInstructorIds) {
+          if (!pubFilter(ownerId, dateStart)) continue;
+          const avail = instructorResolver.resolve(ownerId, dateStart);
+          if (!avail || !avail.daysOfWeek.includes(dayOfWeek)) continue;
+
+          const ownerBusyMs = intervals.get(ownerId) ?? [];
+          const ownerBusyMinutes = ownerBusyMs.map((b) => ({
+            startMinutes: Math.round((b.start - dayStartMs) / 60_000),
+            endMinutes: Math.round((b.end - dayStartMs) / 60_000),
+          }));
+
+          const instructorPoints = new Set<number>();
+          for (const range of avail.ranges) {
+            if (range.endMinutes <= range.startMinutes) continue;
+            const freeIntervals = computeFreeIntervalsInRange(
+              range.startMinutes,
+              range.endMinutes,
+              ownerBusyMinutes,
+            );
+            const gridPhaseMinutes = roundedHoursOnly ? range.startMinutes % 60 : 0;
+            for (const interval of freeIntervals) {
+              const points = computeAnchorAwareEntryPoints(
+                interval,
+                defaultDuration,
+                minCompanyDurationMinutes,
+                { slotGridMinutes, gridPhaseMinutes },
+              );
+              for (const p of points) {
+                instructorPoints.add(p);
+                allowedEntryMinutes.add(p);
+              }
+            }
+          }
+          if (instructorPoints.size) {
+            entryPointsByInstructor.set(ownerId, instructorPoints);
+          }
+        }
+
+        for (const minutes of [...allowedEntryMinutes].sort((a, b) => a - b)) {
           const startDate = toTimeZoneDate(
             dateParts,
             Math.floor(minutes / 60),
@@ -3079,10 +3166,14 @@ export async function getDateAvailabilityMap(
 
           const candidateEnd = minutes + defaultDuration;
 
-          // Collect ALL available instructors for this slot
+          // Pick the instructors whose anchor-aware packing emitted this tick
+          // (these are the ones whose availability covers it AND who are free
+          // for the duration); the explicit overlap re-check is a defensive
+          // safety net in case of stale intervals.
           const slotInstructors: string[] = [];
           for (const ownerId of activeInstructorIds) {
-            if (!pubFilter(ownerId, startDate)) continue;
+            const instructorPoints = entryPointsByInstructor.get(ownerId);
+            if (!instructorPoints || !instructorPoints.has(minutes)) continue;
             const avail = instructorResolver.resolve(ownerId, startDate);
             if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
               continue;
