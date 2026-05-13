@@ -1692,9 +1692,21 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       let candidateStarts: Date[] = [];
       if (forcedStart) {
         // When a specific start is forced (free_choice or accepted suggestion),
-        // skip student availability checks — the slot was already validated
+        // skip student availability checks — the slot was already validated.
+        //
+        // Granularity guard: with anchor-aware slot packing, proposed entry
+        // points can land on non-:00/:30 times (e.g. 08:45, when packed flush
+        // against a previous lesson ending at 08:45). The legacy "must be a
+        // multiple of SLOT_MINUTES (30)" gate rejected exactly those anchors
+        // and made them un-bookable — the proposal succeeded, the confirm
+        // failed. We keep a sanity check on a 15-minute granularity (the same
+        // granularity already enforced on `durationMinutes` above), which
+        // still blocks arbitrary client-supplied times while admitting the
+        // anchors the engine itself produces. All real constraints
+        // (availability, overlap, lesson policy, exam priority, ...) are
+        // still validated below.
         const forcedMinutes = minutesFromDate(forcedStart);
-        if (forcedMinutes % SLOT_MINUTES !== 0) return null;
+        if (forcedMinutes % 15 !== 0) return null;
         candidateStarts = [forcedStart];
       } else {
         if (!studentAvailability || !studentAvailability.daysOfWeek.includes(dayOfWeek)) {
