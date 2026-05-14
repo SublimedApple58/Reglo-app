@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { Award, BookOpen, Car, ChevronDown, ChevronRight, ExternalLink, FileText, GraduationCap, Loader2, MailPlus, NotebookPen, UserPlus } from "lucide-react";
+import { Award, BookOpen, Car, ChevronDown, ChevronRight, ExternalLink, FileText, GraduationCap, Hourglass, KeyRound, Loader2, MailPlus, NotebookPen, Ticket, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { cn } from "@/lib/utils";
@@ -51,7 +51,11 @@ import {
   setExamPriorityOverride,
   setManualPaymentStatus,
 } from "@/lib/actions/autoscuole.actions";
-import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import {
+  getAutoscuolaSettings,
+  getQuizSeatsContext,
+  grantQuizSeat,
+} from "@/lib/actions/autoscuole-settings.actions";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
@@ -82,7 +86,7 @@ type StudentProfile = {
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
   assignedInstructorId?: string | null;
-  studentPhase?: "TEORIA" | "PRATICA" | "PATENTATO";
+  studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -134,7 +138,7 @@ type StudentRegister = {
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
   examDate?: string | null;
-  studentPhase?: "TEORIA" | "PRATICA" | "PATENTATO";
+  studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   theoryExamAt?: string | null;
   activeCase: {
     id: string;
@@ -298,16 +302,69 @@ export function AutoscuoleStudentsPage({
   // Collapsible "Patentati" section
   const [patentatiExpanded, setPatentatiExpanded] = React.useState(false);
 
+  // Quiz seats context (banner + AWAITING grant button)
+  type QuizCtx = {
+    quizSeats: number;
+    used: number;
+    available: number;
+    phasesEnabled: ("TEORIA" | "PRATICA")[];
+    autoAssignQuizOnSignup: boolean;
+  };
+  const [quizCtx, setQuizCtx] = React.useState<QuizCtx | null>(null);
+  const [grantSavingId, setGrantSavingId] = React.useState<string | null>(null);
+
+  const refreshQuizCtx = React.useCallback(async () => {
+    const res = await getQuizSeatsContext();
+    if (res.success) {
+      setQuizCtx({
+        quizSeats: res.data.quizSeats,
+        used: res.data.used,
+        available: res.data.available,
+        phasesEnabled: res.data.phasesEnabled,
+        autoAssignQuizOnSignup: res.data.autoAssignQuizOnSignup,
+      });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshQuizCtx();
+  }, [refreshQuizCtx]);
+
+  const handleGrantSeat = async (studentId: string) => {
+    setGrantSavingId(studentId);
+    try {
+      const res = await grantQuizSeat({ studentId });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile assegnare la licenza." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Licenza assegnata." });
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId ? { ...s, studentPhase: "TEORIA" } : s,
+        ),
+      );
+      if (register && register.student.id === studentId) {
+        setRegister((prev) => (prev ? { ...prev, studentPhase: "TEORIA" } : prev));
+      }
+      await refreshQuizCtx();
+    } finally {
+      setGrantSavingId(null);
+    }
+  };
+
   // Group students by phase
   const studentsByPhase = React.useMemo(() => {
     const groups = {
+      awaiting: [] as Student[],
       teoria: [] as Student[],
       pratica: [] as Student[],
       patentato: [] as Student[],
     };
     for (const s of students) {
       const phase = s.studentPhase ?? "PRATICA";
-      if (phase === "TEORIA") groups.teoria.push(s);
+      if (phase === "AWAITING") groups.awaiting.push(s);
+      else if (phase === "TEORIA") groups.teoria.push(s);
       else if (phase === "PATENTATO") groups.patentato.push(s);
       else groups.pratica.push(s);
     }
@@ -731,6 +788,135 @@ export function AutoscuoleStudentsPage({
                   </div>
                 ) : (
                 <div className="space-y-5">
+                  {/* ── Banner licenze quiz (solo se TEORIA è attiva) ── */}
+                  {quizCtx && quizCtx.phasesEnabled.includes("TEORIA") && (
+                    <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+                          <Ticket className="h-4 w-4 text-emerald-700" aria-hidden />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            Licenze Quiz Teoria
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {quizCtx.autoAssignQuizOnSignup
+                              ? "Assegnazione automatica alla registrazione attiva"
+                              : "Assegnazione manuale: gli allievi nuovi entrano in attesa"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                            Posti usati
+                          </p>
+                          <p
+                            className={cn(
+                              "text-base font-semibold tabular-nums",
+                              quizCtx.available <= 0
+                                ? "text-red-600"
+                                : "text-foreground",
+                            )}
+                          >
+                            {quizCtx.used}{" "}
+                            <span className="text-muted-foreground">/ {quizCtx.quizSeats}</span>
+                          </p>
+                        </div>
+                        {quizCtx.available <= 0 && (
+                          <Badge variant="outline" className="border-red-300 bg-red-50 text-red-700">
+                            Posti esauriti
+                          </Badge>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* ── Sezione: In attesa di attivazione (AWAITING) ── */}
+                  {studentsByPhase.awaiting.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+                      <header className="flex items-center justify-between gap-3 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+                            <Hourglass className="h-4 w-4 text-amber-700" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">
+                              In attesa di attivazione
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Si sono registrati ma il percorso non è ancora stato attivato. Assegna una licenza per farli partire dalla teoria.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                          {studentsByPhase.awaiting.length}
+                        </Badge>
+                      </header>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Allievo</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Registrato</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {studentsByPhase.awaiting.map((student) => {
+                            const noSeatsLeft =
+                              quizCtx !== null && quizCtx.available <= 0;
+                            const isSaving = grantSavingId === student.id;
+                            return (
+                              <TableRow key={student.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <span>{student.firstName} {student.lastName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {formatDate(student.createdAt)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="cursor-pointer gap-1.5"
+                                      disabled={noSeatsLeft || isSaving}
+                                      title={noSeatsLeft ? "Nessuna licenza disponibile" : "Assegna una licenza quiz"}
+                                      onClick={() => void handleGrantSeat(student.id)}
+                                    >
+                                      {isSaving ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <KeyRound className="h-3.5 w-3.5" />
+                                      )}
+                                      {isSaving ? "Assegno…" : "Assegna quiz"}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="cursor-pointer"
+                                      onClick={() => {
+                                        setSelectedStudentId(student.id);
+                                        setDrawerOpen(true);
+                                        void loadRegister(student.id);
+                                        void loadCredits(student.id);
+                                      }}
+                                    >
+                                      Dettaglio
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </section>
+                  )}
+
                   {/* ── Sezione: In Teoria ── */}
                   {studentsByPhase.teoria.length > 0 && (
                     <section className="overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
@@ -1093,19 +1279,27 @@ export function AutoscuoleStudentsPage({
               {register?.studentPhase && (
                 <Badge
                   variant={
-                    register.studentPhase === "TEORIA"
+                    register.studentPhase === "AWAITING"
                       ? "outline"
-                      : register.studentPhase === "PATENTATO"
-                        ? "secondary"
-                        : "default"
+                      : register.studentPhase === "TEORIA"
+                        ? "outline"
+                        : register.studentPhase === "PATENTATO"
+                          ? "secondary"
+                          : "default"
                   }
-                  className="shrink-0 text-[10px]"
+                  className={cn(
+                    "shrink-0 text-[10px]",
+                    register.studentPhase === "AWAITING" &&
+                      "border-amber-300 bg-amber-50 text-amber-700",
+                  )}
                 >
-                  {register.studentPhase === "TEORIA"
-                    ? "Teoria"
-                    : register.studentPhase === "PATENTATO"
-                      ? "Patentato"
-                      : "Foglio rosa"}
+                  {register.studentPhase === "AWAITING"
+                    ? "In attesa"
+                    : register.studentPhase === "TEORIA"
+                      ? "Teoria"
+                      : register.studentPhase === "PATENTATO"
+                        ? "Patentato"
+                        : "Foglio rosa"}
                 </Badge>
               )}
               {register?.bookingBlocked && (
@@ -1181,22 +1375,30 @@ export function AutoscuoleStudentsPage({
                         </div>
                         <div>
                           <p className="text-[11px] text-muted-foreground">Fase percorso</p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Badge
                               variant={
-                                register.studentPhase === "TEORIA"
+                                register.studentPhase === "AWAITING"
                                   ? "outline"
-                                  : register.studentPhase === "PATENTATO"
-                                    ? "secondary"
-                                    : "default"
+                                  : register.studentPhase === "TEORIA"
+                                    ? "outline"
+                                    : register.studentPhase === "PATENTATO"
+                                      ? "secondary"
+                                      : "default"
                               }
-                              className="text-[11px]"
+                              className={cn(
+                                "text-[11px]",
+                                register.studentPhase === "AWAITING" &&
+                                  "border-amber-300 bg-amber-50 text-amber-700",
+                              )}
                             >
-                              {register.studentPhase === "TEORIA"
-                                ? "Teoria"
-                                : register.studentPhase === "PATENTATO"
-                                  ? "Patentato"
-                                  : "Foglio rosa"}
+                              {register.studentPhase === "AWAITING"
+                                ? "In attesa"
+                                : register.studentPhase === "TEORIA"
+                                  ? "Teoria"
+                                  : register.studentPhase === "PATENTATO"
+                                    ? "Patentato"
+                                    : "Foglio rosa"}
                             </Badge>
                             <Button
                               variant="ghost"
@@ -1206,6 +1408,31 @@ export function AutoscuoleStudentsPage({
                             >
                               Cambia fase
                             </Button>
+                            {register.studentPhase === "AWAITING" && (
+                              <Button
+                                size="sm"
+                                className="h-6 cursor-pointer gap-1 px-2 text-[11px]"
+                                disabled={
+                                  grantSavingId === register.student.id ||
+                                  (quizCtx !== null && quizCtx.available <= 0)
+                                }
+                                onClick={() => void handleGrantSeat(register.student.id)}
+                                title={
+                                  quizCtx !== null && quizCtx.available <= 0
+                                    ? "Nessuna licenza quiz disponibile"
+                                    : "Assegna licenza quiz e attiva la fase teoria"
+                                }
+                              >
+                                {grantSavingId === register.student.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <KeyRound className="h-3 w-3" />
+                                )}
+                                {grantSavingId === register.student.id
+                                  ? "Assegno…"
+                                  : "Assegna quiz"}
+                              </Button>
+                            )}
                           </div>
                         </div>
                         <div>
@@ -1803,6 +2030,7 @@ export function AutoscuoleStudentsPage({
           studentName={`${register.student.firstName} ${register.student.lastName}`}
           currentPhase={register.studentPhase ?? "PRATICA"}
           currentTheoryExamAt={register.theoryExamAt ?? null}
+          phasesEnabled={quizCtx?.phasesEnabled}
           onSuccess={({ phase, theoryExamAt }) => {
             setRegister((prev) =>
               prev ? { ...prev, studentPhase: phase, theoryExamAt } : prev,

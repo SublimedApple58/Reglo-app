@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, GraduationCap, Car, Award, AlertCircle } from "lucide-react";
+import { Loader2, GraduationCap, Car, Award, AlertCircle, Hourglass } from "lucide-react";
 
 import {
   Dialog,
@@ -24,7 +24,7 @@ import { Label } from "@/components/ui/label";
 import { updateStudentPhase } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 
-export type StudentPhase = "TEORIA" | "PRATICA" | "PATENTATO";
+export type StudentPhase = "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
 
 const PHASE_OPTIONS: Array<{
   value: StudentPhase;
@@ -32,6 +32,13 @@ const PHASE_OPTIONS: Array<{
   description: string;
   Icon: React.ComponentType<{ className?: string }>;
 }> = [
+  {
+    value: "AWAITING",
+    label: "In attesa di attivazione",
+    description:
+      "Si è registrato in app ma il titolare non ha ancora attivato il percorso. Nessun accesso a guide o quiz.",
+    Icon: Hourglass,
+  },
   {
     value: "TEORIA",
     label: "Teoria",
@@ -69,6 +76,14 @@ type Props = {
   studentName: string;
   currentPhase: StudentPhase;
   currentTheoryExamAt: string | null;
+  /**
+   * Phases this autoscuola has enabled. Used to filter the visible options.
+   * AWAITING / TEORIA are shown only when `'TEORIA'` is included.
+   * PRATICA is shown only when `'PRATICA'` is included.
+   * PATENTATO is always shown (terminal state).
+   * If omitted, all options are shown (legacy callers).
+   */
+  phasesEnabled?: ("TEORIA" | "PRATICA")[];
   onSuccess: (next: { phase: StudentPhase; theoryExamAt: string | null }) => void;
 };
 
@@ -79,6 +94,7 @@ export function ChangeStudentPhaseDialog({
   studentName,
   currentPhase,
   currentTheoryExamAt,
+  phasesEnabled,
   onSuccess,
 }: Props) {
   const toast = useFeedbackToast();
@@ -95,8 +111,21 @@ export function ChangeStudentPhaseDialog({
     }
   }, [open, currentPhase, currentTheoryExamAt]);
 
+  const visibleOptions = React.useMemo(() => {
+    if (!phasesEnabled) return PHASE_OPTIONS;
+    return PHASE_OPTIONS.filter((opt) => {
+      if (opt.value === "PATENTATO") return true;
+      if (opt.value === "AWAITING" || opt.value === "TEORIA")
+        return phasesEnabled.includes("TEORIA");
+      if (opt.value === "PRATICA") return phasesEnabled.includes("PRATICA");
+      return true;
+    });
+  }, [phasesEnabled]);
+
   const isDowngradeToTeoria =
-    phase === "TEORIA" && currentPhase !== "TEORIA";
+    (phase === "TEORIA" || phase === "AWAITING") &&
+    currentPhase !== "TEORIA" &&
+    currentPhase !== "AWAITING";
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -151,7 +180,7 @@ export function ChangeStudentPhaseDialog({
                 <SelectValue placeholder="Seleziona la fase" />
               </SelectTrigger>
               <SelectContent>
-                {PHASE_OPTIONS.map((opt) => (
+                {visibleOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
                     <div className="flex items-center gap-2">
                       <opt.Icon className="h-4 w-4 text-pink-500" aria-hidden />
@@ -189,7 +218,7 @@ export function ChangeStudentPhaseDialog({
             >
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
               <p>
-                Riportare un allievo in fase Teoria richiede che <strong>non ci siano lezioni
+                Riportare un allievo in una fase pre-pratica richiede che <strong>non ci siano lezioni
                 di guida future prenotate</strong>. Se ce ne sono, cancellale prima di confermare.
               </p>
             </div>
