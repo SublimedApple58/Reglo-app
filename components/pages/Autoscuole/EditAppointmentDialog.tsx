@@ -4,6 +4,7 @@ import * as React from "react";
 import { AlertCircle, CalendarDays, CheckCircle2, Loader2, UserCog } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DatePickerInput } from "@/components/ui/date-picker";
 import {
   Dialog,
   DialogContent,
@@ -20,7 +21,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { updateAutoscuolaAppointmentDetails } from "@/lib/actions/autoscuole.actions";
+import {
+  rescheduleAutoscuolaAppointment,
+  updateAutoscuolaAppointmentDetails,
+} from "@/lib/actions/autoscuole.actions";
 
 type StudentLite = { firstName: string; lastName: string };
 type InstructorOption = { id: string; name: string };
@@ -64,16 +68,20 @@ const LESSON_TYPE_OPTIONS = [
   { value: "altro", label: "Altro" },
 ] as const;
 
-const formatSlotLabel = (start: Date, end: Date) => {
-  const dayPart = start.toLocaleDateString("it-IT", {
-    weekday: "short",
-    day: "2-digit",
-    month: "short",
-  });
-  const fmtTime = (d: Date) =>
-    d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-  return `${dayPart} · ${fmtTime(start)}–${fmtTime(end)}`;
-};
+const pad = (n: number) => n.toString().padStart(2, "0");
+const toDateStr = (d: Date) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const toTimeStr = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+const TIME_OPTIONS: string[] = (() => {
+  const out: string[] = [];
+  for (let h = 6; h <= 22; h++) {
+    for (const m of [0, 15, 30, 45]) {
+      out.push(`${pad(h)}:${pad(m)}`);
+    }
+  }
+  return out;
+})();
 
 type Props = {
   open: boolean;
@@ -114,6 +122,13 @@ export function EditAppointmentDialog({
   const [lessonType, setLessonType] = React.useState(originalLessonType);
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
+  // Date/time staging — start from the appointment's current slot.
+  const [newDate, setNewDate] = React.useState<string>(
+    originalStart ? toDateStr(originalStart) : "",
+  );
+  const [newTime, setNewTime] = React.useState<string>(
+    originalStart ? toTimeStr(originalStart) : "",
+  );
   const [availability, setAvailability] = React.useState<Availability>({ status: "idle" });
   const [pending, setPending] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
@@ -121,22 +136,63 @@ export function EditAppointmentDialog({
   // Reset state when dialog opens with a (different) appointment.
   React.useEffect(() => {
     if (!open || !appointment) return;
+    const start = new Date(appointment.startsAt);
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonType(appointment.type ?? "guida");
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
+    setNewDate(toDateStr(start));
+    setNewTime(toTimeStr(start));
     setAvailability({ status: "idle" });
     setServerError(null);
     setPending(false);
   }, [open, appointment]);
 
+  // Effective slot: either the original or the user's staged date/time.
+  // We preserve the lesson duration when the time/date changes.
+  const effectiveStart = React.useMemo(() => {
+    if (!newDate || !newTime) return null;
+    const [y, m, d] = newDate.split("-").map(Number);
+    const [h, min] = newTime.split(":").map(Number);
+    if ([y, m, d, h, min].some((v) => Number.isNaN(v))) return null;
+    return new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0, 0);
+  }, [newDate, newTime]);
+
+  const durationMs = React.useMemo(() => {
+    if (!originalStart || !originalEnd) return 60 * 60 * 1000;
+    return originalEnd.getTime() - originalStart.getTime();
+  }, [originalStart, originalEnd]);
+
+  const effectiveEnd = React.useMemo(
+    () => (effectiveStart ? new Date(effectiveStart.getTime() + durationMs) : null),
+    [effectiveStart, durationMs],
+  );
+
+  const dateTimeChanged = React.useMemo(() => {
+    if (!effectiveStart || !originalStart) return false;
+    return effectiveStart.getTime() !== originalStart.getTime();
+  }, [effectiveStart, originalStart]);
+
+  const isNewSlotInPast = effectiveStart
+    ? effectiveStart.getTime() < Date.now()
+    : false;
+
   const instructorChanged = instructorId !== originalInstructorId && instructorId !== "";
 
-  // Live availability check whenever the instructor selection changes to a
-  // different (and non-empty) instructor. Debounced via cancellation token.
+  // Live availability check. We re-run whenever either the staged
+  // instructor or the staged date/time changes. If neither has changed,
+  // there's nothing to verify and the badge stays hidden.
   React.useEffect(() => {
-    if (!open || !appointment || !originalStart || !originalEnd) return;
-    if (!instructorChanged) {
+    if (!open || !appointment || !effectiveStart || !effectiveEnd) return;
+    if (!instructorChanged && !dateTimeChanged) {
+      setAvailability({ status: "idle" });
+      return;
+    }
+    // We always validate the instructor that's going to own the lesson:
+    // if the user only moved the slot, we check the CURRENT instructor;
+    // if the user picked a different one, we check that one.
+    const targetInstructorId = instructorId || originalInstructorId;
+    if (!targetInstructorId) {
       setAvailability({ status: "idle" });
       return;
     }
@@ -145,9 +201,9 @@ export function EditAppointmentDialog({
     setAvailability({ status: "checking" });
 
     const params = new URLSearchParams({
-      instructorId,
-      startsAt: originalStart.toISOString(),
-      endsAt: originalEnd.toISOString(),
+      instructorId: targetInstructorId,
+      startsAt: effectiveStart.toISOString(),
+      endsAt: effectiveEnd.toISOString(),
       excludeAppointmentId: appointment.id,
     });
 
@@ -192,16 +248,27 @@ export function EditAppointmentDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, appointment, originalStart, originalEnd, instructorId, instructorChanged]);
+  }, [
+    open,
+    appointment,
+    effectiveStart,
+    effectiveEnd,
+    instructorId,
+    originalInstructorId,
+    instructorChanged,
+    dateTimeChanged,
+  ]);
 
   if (!appointment || !originalStart || !originalEnd) return null;
 
   const studentLabel =
     `${appointment.student.firstName} ${appointment.student.lastName}`.trim();
-  const slotLabel = formatSlotLabel(originalStart, originalEnd);
 
-  const isInstructorBlockingSave =
-    instructorChanged &&
+  // We block the save if the staged combination of instructor + slot can't
+  // be verified or is known to conflict. The availability badge already
+  // explains the reason in plain language.
+  const isAvailabilityBlockingSave =
+    (instructorChanged || dateTimeChanged) &&
     (availability.status === "checking" ||
       availability.status === "unavailable" ||
       availability.status === "error");
@@ -210,38 +277,72 @@ export function EditAppointmentDialog({
     instructorId !== originalInstructorId ||
     lessonType !== originalLessonType ||
     locationId !== originalLocationId ||
-    (notes ?? "") !== (originalNotes ?? "");
+    (notes ?? "") !== (originalNotes ?? "") ||
+    dateTimeChanged;
 
-  const canSubmit = hasChanges && !pending && !isInstructorBlockingSave;
+  const canSubmit =
+    hasChanges && !pending && !isAvailabilityBlockingSave && !isNewSlotInPast;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !effectiveStart || !effectiveEnd) return;
     setPending(true);
     setServerError(null);
     try {
-      const payload: Parameters<typeof updateAutoscuolaAppointmentDetails>[0] = {
+      // 1. Reschedule first (if date/time changed). Reschedule uses the
+      // current instructor — that's fine because availability has been
+      // pre-checked client-side against the eventual instructor + slot.
+      if (dateTimeChanged) {
+        const reRes = await rescheduleAutoscuolaAppointment({
+          appointmentId: appointment.id,
+          startsAt: effectiveStart.toISOString(),
+          endsAt: effectiveEnd.toISOString(),
+        });
+        if (!reRes.success) {
+          setServerError(reRes.message ?? "Impossibile spostare la guida.");
+          setPending(false);
+          return;
+        }
+      }
+
+      // 2. Update details (instructor swap, lesson type, location, notes).
+      const detailsPayload: Parameters<typeof updateAutoscuolaAppointmentDetails>[0] = {
         appointmentId: appointment.id,
       };
+      let hasDetails = false;
       if (instructorId !== originalInstructorId && instructorId !== "") {
-        payload.instructorId = instructorId;
+        detailsPayload.instructorId = instructorId;
+        hasDetails = true;
       }
       if (lessonType !== originalLessonType) {
-        payload.lessonType = lessonType;
+        detailsPayload.lessonType = lessonType;
+        hasDetails = true;
       }
       if (locationId !== originalLocationId) {
         // Empty string from <Select> means "no location" → null on the wire.
-        payload.locationId = locationId === "" ? null : locationId;
+        detailsPayload.locationId = locationId === "" ? null : locationId;
+        hasDetails = true;
       }
       if ((notes ?? "") !== (originalNotes ?? "")) {
-        payload.notes = notes;
+        detailsPayload.notes = notes;
+        hasDetails = true;
       }
 
-      const res = await updateAutoscuolaAppointmentDetails(payload);
-      if (!res.success) {
-        setServerError(res.message ?? "Impossibile salvare le modifiche.");
-        setPending(false);
-        return;
+      if (hasDetails) {
+        const upRes = await updateAutoscuolaAppointmentDetails(detailsPayload);
+        if (!upRes.success) {
+          // If we already rescheduled, the slot moved successfully but the
+          // detail update failed. Surface a partial-success message so the
+          // titolare knows what to retry.
+          const msg = dateTimeChanged
+            ? `Guida spostata, ma non sono riuscito a salvare gli altri campi: ${upRes.message ?? ""}`.trim()
+            : upRes.message ?? "Impossibile salvare le modifiche.";
+          setServerError(msg);
+          setPending(false);
+          if (dateTimeChanged) onSuccess?.(); // reload the agenda anyway
+          return;
+        }
       }
+
       toast.success({ description: "Guida aggiornata." });
       onSuccess?.();
       onOpenChange(false);
@@ -252,8 +353,11 @@ export function EditAppointmentDialog({
   };
 
   // ── Inline availability badge ─────────────────────────────────────
+  // Shown whenever EITHER the instructor or the slot has been staged to a
+  // different value than the original — both routes change the conflict
+  // calculus and the titolare needs visual confirmation before saving.
   const AvailabilityBadge: React.FC = () => {
-    if (!instructorChanged) return null;
+    if (!instructorChanged && !dateTimeChanged) return null;
     if (availability.status === "checking") {
       return (
         <div className="mt-2 flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600">
@@ -300,7 +404,9 @@ export function EditAppointmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!pending ? onOpenChange(o) : undefined)}>
-      <DialogContent className="sm:max-w-[480px] gap-0 overflow-hidden p-0">
+      {/* overflow-visible so the DatePicker's absolutely-positioned calendar
+          can escape the dialog bounds when opening near the bottom edge. */}
+      <DialogContent className="sm:max-w-[480px] gap-0 overflow-visible p-0">
         <DialogHeader className="p-6 text-left">
           <DialogTitle className="text-[18px] leading-[24px] font-semibold tracking-[-0.01em]">
             Modifica guida
@@ -311,18 +417,49 @@ export function EditAppointmentDialog({
         <div className="border-t border-border" />
 
         <div className="flex flex-col gap-5 p-6">
-          {/* Slot read-only summary */}
-          <div className="flex items-center gap-3 rounded-lg border border-border bg-slate-50 px-4 py-3">
-            <CalendarDays className="size-[18px] shrink-0 text-slate-500" aria-hidden />
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-slate-500">
-                Quando
-              </p>
-              <p className="mt-0.5 text-sm font-medium capitalize text-slate-900">
-                {slotLabel}
-              </p>
+          {/* Date + time pickers — together they replace the old "Sposta" dialog. */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <CalendarDays className="size-3.5 text-slate-500" aria-hidden />
+                Data
+              </label>
+              <DatePickerInput
+                value={newDate}
+                onChange={setNewDate}
+                placeholder="Scegli data"
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-slate-700">Orario</label>
+              <Select
+                value={newTime}
+                onValueChange={setNewTime}
+                disabled={pending}
+              >
+                <SelectTrigger className="h-10 cursor-pointer">
+                  <SelectValue placeholder="--:--" />
+                </SelectTrigger>
+                <SelectContent className="max-h-64">
+                  {TIME_OPTIONS.map((t) => (
+                    <SelectItem key={t} value={t} className="cursor-pointer">
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
+
+          {isNewSlotInPast && (
+            <div
+              role="alert"
+              className="flex items-center gap-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700"
+            >
+              <AlertCircle className="size-3.5 shrink-0" aria-hidden />
+              <span>Non puoi spostare la guida nel passato.</span>
+            </div>
+          )}
 
           {/* Instructor */}
           <div className="flex flex-col gap-2">
@@ -349,8 +486,10 @@ export function EditAppointmentDialog({
                 ))}
               </SelectContent>
             </Select>
-            <AvailabilityBadge />
           </div>
+
+          {/* Combined availability badge (covers instructor swap AND/OR slot move) */}
+          <AvailabilityBadge />
 
           {/* Lesson type */}
           <div className="flex flex-col gap-2">
