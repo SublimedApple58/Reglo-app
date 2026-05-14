@@ -3320,32 +3320,12 @@ export async function rescheduleAutoscuolaAppointment(
       }
     }
 
-    // Booking cutoff: applies to instructor actors; owner/admin bypass.
-    if (isInstructorActor) {
-      const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
-      if (cutoffEnabled) {
-        const cutoffTime =
-          typeof serviceLimits.bookingCutoffTime === "string"
-            ? serviceLimits.bookingCutoffTime
-            : "18:00";
-        const [cutoffH = 18, cutoffM = 0] = cutoffTime
-          .split(":")
-          .map((p) => Number(p));
-        // Cutoff = the day before the booked date at cutoffH:cutoffM, Europe/Rome.
-        // We approximate by using the instructor's local timezone (server tz is UTC;
-        // this mirrors what the availability action does in practice).
-        const cutoffDeadline = new Date(newStart);
-        cutoffDeadline.setHours(cutoffH, cutoffM, 0, 0);
-        cutoffDeadline.setDate(cutoffDeadline.getDate() - 1);
-        if (Date.now() >= cutoffDeadline.getTime()) {
-          return {
-            success: false,
-            message: `Le prenotazioni per questa data sono chiuse dalle ${cutoffTime} del giorno prima.`,
-            code: "BOOKING_CUTOFF_PASSED" as const,
-          };
-        }
-      }
-    }
+    // Booking cutoff intentionally does NOT apply here. The cutoff is a guard
+    // against students booking close to the lesson day; instructors and owners
+    // are immune by product design — they need to reschedule even on the same
+    // day (e.g. to make room for another student). Students don't reach this
+    // function anyway: they're blocked at the top of the action with
+    // "Gli allievi non possono spostare le guide dalla app."
 
     // Weekly limit: only re-check when the new slot falls into a different ISO week.
     const getIsoWeekStart = (date: Date) => {
