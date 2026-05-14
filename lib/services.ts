@@ -53,7 +53,35 @@ export type ServiceLimits = {
   voiceAssistantVoice?: string;
   voiceCustomGreeting?: string | null;
   studentNotesEnabled?: boolean;
+  /**
+   * @deprecated Use `quizSeats` + `phasesEnabled` instead. Kept temporarily for
+   * read compatibility during the student-phase rollout; the field is removed
+   * from the DB JSONB by the migration. Will be deleted from this type once
+   * all consumers have been refactored.
+   */
   quizEnabled?: boolean;
+  /**
+   * Phases of the student journey that this autoscuola offers. At least one
+   * must be active. Default `['PRATICA']` (legacy behaviour). When `'TEORIA'`
+   * is included, the company can grant quiz seats and students born under it
+   * land in AWAITING (or TEORIA if auto-assign + seat available).
+   */
+  phasesEnabled?: Array<"TEORIA" | "PRATICA">;
+  /**
+   * Number of nominal quiz licenses the autoscuola has purchased. Counter of
+   * consumed seats = `COUNT(CompanyMember WHERE quizSeatGrantedAt IS NOT NULL)`.
+   * Once a seat is granted to a student it is burnt for life (non-reassignable),
+   * so this counter only grows. Default 0.
+   */
+  quizSeats?: number;
+  /**
+   * If true, new students registering via the autoscuola code receive a quiz
+   * seat (and TEORIA phase) automatically — provided seats are available.
+   * If false, they land in AWAITING and the titolare assigns manually.
+   * Toggle OFF→ON triggers FIFO promotion of existing AWAITING students.
+   * Only relevant when `'TEORIA'` is in `phasesEnabled`. Default false.
+   */
+  autoAssignQuizOnSignup?: boolean;
 };
 
 export type CompanyServiceInfo = {

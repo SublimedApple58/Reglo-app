@@ -32,6 +32,7 @@ enum AutoscuolaRole {
 }
 
 enum AutoscuolaStudentPhase {
+  AWAITING
   TEORIA
   PRATICA
   PATENTATO
@@ -237,6 +238,14 @@ model CompanyMember {
   role           String         @default("member")
   autoscuolaRole AutoscuolaRole @default(STUDENT)
   studentPhase   AutoscuolaStudentPhase @default(PRATICA)
+  /// When the student was first granted a quiz license seat by the school owner.
+  /// Null = never granted. Once set, the seat is "burnt" for life on this student
+  /// (nominal license, non-reassignable). Drives the quiz tab visibility in mobile.
+  quizSeatGrantedAt          DateTime?
+  /// When the student's phase was explicitly classified by the school owner
+  /// (i.e. not the default migration value). Null = still "default migration"
+  /// (drives the yellow "Conferma fase" badge in the titolare drawer).
+  phaseClassifiedAt          DateTime?
   bookingBlocked             Boolean        @default(false)
   weeklyBookingLimitExempt   Boolean        @default(false)
   examPriorityOverride       Boolean?
@@ -251,6 +260,8 @@ model CompanyMember {
   @@id([companyId, userId])
   @@index([userId])
   @@index([assignedInstructorId])
+  @@index([companyId, studentPhase])
+  @@index([companyId, quizSeatGrantedAt])
 }
 
 model CompanyInvite {
