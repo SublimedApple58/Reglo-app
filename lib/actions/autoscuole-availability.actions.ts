@@ -526,7 +526,10 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  // Block booking if student is in TEORIA phase (no foglio rosa yet)
+  // Block booking if the student is not yet in the practical phase.
+  //   AWAITING → l'autoscuola non ha ancora attivato il percorso
+  //   TEORIA   → ha il modulo quiz ma non ha ancora il foglio rosa
+  // PRATICA e PATENTATO sono entrambi ammessi per coerenza.
   const studentMembership = await prisma.companyMember.findFirst({
     where: {
       companyId,
@@ -535,6 +538,13 @@ const ensureStudentCanBookFromApp = async ({
     },
     select: { studentPhase: true },
   });
+  if (studentMembership?.studentPhase === "AWAITING") {
+    return {
+      allowed: false as const,
+      message:
+        "Il tuo percorso non è ancora stato attivato dall'autoscuola.",
+    };
+  }
   if (studentMembership?.studentPhase === "TEORIA") {
     return {
       allowed: false as const,

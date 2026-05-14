@@ -14,14 +14,35 @@ export async function GET() {
       );
     }
 
+    // Per-student membership: phase + quiz seat status
     const member = await prisma.companyMember.findFirst({
       where: {
         companyId: membership.companyId,
         userId: membership.userId,
         autoscuolaRole: "STUDENT",
       },
-      select: { studentPhase: true },
+      select: {
+        studentPhase: true,
+        quizSeatGrantedAt: true,
+      },
     });
+
+    // Per-company configuration: which phases are active and whether
+    // auto-assign on signup is enabled.
+    const service = await prisma.companyService.findFirst({
+      where: {
+        companyId: membership.companyId,
+        serviceKey: "AUTOSCUOLE",
+      },
+      select: { limits: true },
+    });
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    const phasesEnabled: ("TEORIA" | "PRATICA")[] = Array.isArray(limits.phasesEnabled)
+      ? limits.phasesEnabled.filter(
+          (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
+        )
+      : ["PRATICA"];
+    const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
 
     const latestCase = await prisma.autoscuolaCase.findFirst({
       where: {
@@ -33,6 +54,7 @@ export async function GET() {
     });
 
     const phase = member?.studentPhase ?? "PRATICA";
+    const hasQuizAccess = Boolean(member?.quizSeatGrantedAt);
     const theoryExamAt = latestCase?.theoryExamAt ?? null;
     const drivingExamAt = latestCase?.drivingExamAt ?? null;
 
@@ -40,6 +62,9 @@ export async function GET() {
       success: true,
       data: {
         phase,
+        hasQuizAccess,
+        phasesEnabled,
+        autoAssignQuizOnSignup,
         theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
         drivingExamAt: drivingExamAt ? drivingExamAt.toISOString() : null,
       },

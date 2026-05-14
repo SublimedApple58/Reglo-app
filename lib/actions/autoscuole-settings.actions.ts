@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
@@ -1548,5 +1549,283 @@ export async function triggerEmptySlotNotification() {
     return { success: true, data: { notified: result.notified } };
   } catch (error) {
     return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Student-phase + quiz-seats runtime actions (Phase 3)
+// ---------------------------------------------------------------------------
+
+type QuizSeatsContext = {
+  companyId: string;
+  phasesEnabled: ("TEORIA" | "PRATICA")[];
+  quizSeats: number;
+  autoAssignQuizOnSignup: boolean;
+  used: number;
+  available: number;
+};
+
+async function loadQuizSeatsContext(companyId: string): Promise<QuizSeatsContext> {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+
+  const phasesEnabledRaw = Array.isArray(limits.phasesEnabled)
+    ? limits.phasesEnabled
+    : ["PRATICA"];
+  const phasesEnabled = phasesEnabledRaw.filter(
+    (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
+  );
+
+  const quizSeats =
+    typeof limits.quizSeats === "number" && Number.isFinite(limits.quizSeats)
+      ? Math.max(0, Math.floor(limits.quizSeats as number))
+      : 0;
+
+  const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+
+  const used = await prisma.companyMember.count({
+    where: {
+      companyId,
+      role: "member",
+      quizSeatGrantedAt: { not: null },
+    },
+  });
+
+  return {
+    companyId,
+    phasesEnabled,
+    quizSeats,
+    autoAssignQuizOnSignup,
+    used,
+    available: Math.max(0, quizSeats - used),
+  };
+}
+
+/**
+ * Returns the live quiz-seats usage for the owner's web dashboard.
+ *   { quizSeats, used, available, phasesEnabled, autoAssignQuizOnSignup }
+ */
+export async function getQuizSeatsContext() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+    const ctx = await loadQuizSeatsContext(membership.companyId);
+    return {
+      success: true as const,
+      data: {
+        quizSeats: ctx.quizSeats,
+        used: ctx.used,
+        available: ctx.available,
+        phasesEnabled: ctx.phasesEnabled,
+        autoAssignQuizOnSignup: ctx.autoAssignQuizOnSignup,
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const grantQuizSeatSchema = z.object({
+  studentId: z.string().uuid(),
+});
+
+/**
+ * Owner-only. Grants a quiz seat to a student in AWAITING and promotes them
+ * to TEORIA. The seat is "burnt for life" once granted: it cannot be revoked
+ * by this action.
+ *
+ * Guards (in order):
+ *  - TEORIA must be one of the autoscuola's enabled phases
+ *  - The student must currently be in AWAITING (PRATICA students cannot be
+ *    granted a seat — that path is intentionally blocked)
+ *  - The student must not already have a seat
+ *  - Live seat counter must be strictly less than quizSeats
+ */
+export async function grantQuizSeat(input: z.infer<typeof grantQuizSeatSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+    const payload = grantQuizSeatSchema.parse(input);
+
+    const ctx = await loadQuizSeatsContext(membership.companyId);
+    if (!ctx.phasesEnabled.includes("TEORIA")) {
+      return {
+        success: false as const,
+        message: "La fase Teoria non è attiva per questa autoscuola.",
+      };
+    }
+    if (ctx.available <= 0) {
+      return {
+        success: false as const,
+        message: "Posti quiz esauriti. Contatta Reglo per acquistarne altri.",
+      };
+    }
+
+    const student = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { studentPhase: true, quizSeatGrantedAt: true },
+    });
+    if (!student) {
+      return { success: false as const, message: "Allievo non trovato." };
+    }
+    if (student.quizSeatGrantedAt) {
+      return {
+        success: false as const,
+        message: "Questo allievo ha già una licenza quiz assegnata.",
+      };
+    }
+    if (student.studentPhase !== "AWAITING") {
+      return {
+        success: false as const,
+        message:
+          "Puoi assegnare una licenza solo agli allievi in stato 'In attesa'.",
+      };
+    }
+
+    const now = new Date();
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: {
+        quizSeatGrantedAt: now,
+        studentPhase: "TEORIA",
+        phaseClassifiedAt: now,
+      },
+    });
+
+    return {
+      success: true as const,
+      data: { studentPhase: "TEORIA" as const },
+      message: "Licenza assegnata, allievo passato in TEORIA.",
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const setAutoAssignQuizOnSignupSchema = z.object({
+  enabled: z.boolean(),
+});
+
+/**
+ * Toggles the per-autoscuola `autoAssignQuizOnSignup` flag in the
+ * CompanyService.AUTOSCUOLE limits JSON.
+ *
+ * On OFF→ON transition: also performs an immediate FIFO promotion of the
+ * currently AWAITING students up to the number of free seats.
+ *
+ * Requires TEORIA to be one of the autoscuola's enabled phases — otherwise
+ * the flag has no meaning.
+ */
+export async function setAutoAssignQuizOnSignup(
+  input: z.infer<typeof setAutoAssignQuizOnSignupSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageSettings(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+    const payload = setAutoAssignQuizOnSignupSchema.parse(input);
+
+    const ctx = await loadQuizSeatsContext(membership.companyId);
+    if (!ctx.phasesEnabled.includes("TEORIA")) {
+      return {
+        success: false as const,
+        message: "La fase Teoria non è attiva per questa autoscuola.",
+      };
+    }
+
+    const service = await prisma.companyService.findFirst({
+      where: {
+        companyId: membership.companyId,
+        serviceKey: "AUTOSCUOLE",
+      },
+      select: { id: true, limits: true },
+    });
+    if (!service) {
+      return {
+        success: false as const,
+        message: "Servizio AUTOSCUOLE non configurato per questa autoscuola.",
+      };
+    }
+    const wasEnabled = Boolean(
+      (service.limits as Record<string, unknown> | null)?.autoAssignQuizOnSignup,
+    );
+
+    let promoted = 0;
+
+    await prisma.$transaction(async (tx) => {
+      const currentLimits = (service.limits ?? {}) as Record<string, unknown>;
+      await tx.companyService.update({
+        where: { id: service.id },
+        data: {
+          limits: {
+            ...currentLimits,
+            autoAssignQuizOnSignup: payload.enabled,
+          } as Prisma.InputJsonValue,
+        },
+      });
+
+      if (payload.enabled && !wasEnabled && ctx.available > 0) {
+        // FIFO promotion: read the oldest AWAITING members, up to the
+        // number of free seats, and grant them a seat + move to TEORIA.
+        const candidates = await tx.companyMember.findMany({
+          where: {
+            companyId: membership.companyId,
+            role: "member",
+            autoscuolaRole: "STUDENT",
+            studentPhase: "AWAITING",
+          },
+          orderBy: { createdAt: "asc" },
+          take: ctx.available,
+          select: { userId: true },
+        });
+        if (candidates.length > 0) {
+          const now = new Date();
+          await tx.companyMember.updateMany({
+            where: {
+              companyId: membership.companyId,
+              userId: { in: candidates.map((c) => c.userId) },
+            },
+            data: {
+              quizSeatGrantedAt: now,
+              studentPhase: "TEORIA",
+              phaseClassifiedAt: now,
+            },
+          });
+          promoted = candidates.length;
+        }
+      }
+    });
+
+    return {
+      success: true as const,
+      data: {
+        enabled: payload.enabled,
+        promoted,
+      },
+      message:
+        payload.enabled && promoted > 0
+          ? `Auto-assegnazione attiva. Promossi ${promoted} allievi in attesa.`
+          : payload.enabled
+            ? "Auto-assegnazione attiva."
+            : "Auto-assegnazione disattivata.",
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
   }
 }

@@ -5497,7 +5497,7 @@ const toggleStudentBookingBlockSchema = z.object({
 
 const updateStudentPhaseSchema = z.object({
   studentId: z.string().uuid(),
-  phase: z.enum(["TEORIA", "PRATICA", "PATENTATO"]),
+  phase: z.enum(["AWAITING", "TEORIA", "PRATICA", "PATENTATO"]),
   theoryExamDate: z.string().optional().nullable(),
 });
 
@@ -5554,9 +5554,51 @@ export async function updateStudentPhase(
       return { success: false, message: "Allievo non valido per questa company." };
     }
 
+    // Validate the target phase against the autoscuola's active phases.
+    // PATENTATO is always allowed (terminal state). AWAITING is allowed only
+    // when TEORIA is part of the offered journey.
+    const autoscuolaService = await prisma.companyService.findFirst({
+      where: {
+        companyId: membership.companyId,
+        serviceKey: "AUTOSCUOLE",
+      },
+      select: { limits: true },
+    });
+    const phasesEnabled: ("TEORIA" | "PRATICA")[] = (() => {
+      const raw = (autoscuolaService?.limits as Record<string, unknown> | null)
+        ?.phasesEnabled;
+      if (!Array.isArray(raw)) return ["PRATICA"];
+      return raw.filter(
+        (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
+      );
+    })();
+
+    if (payload.phase === "TEORIA" && !phasesEnabled.includes("TEORIA")) {
+      return {
+        success: false,
+        message:
+          "Impossibile passare in TEORIA: questa autoscuola non ha la fase teoria attiva.",
+      };
+    }
+    if (payload.phase === "AWAITING" && !phasesEnabled.includes("TEORIA")) {
+      return {
+        success: false,
+        message:
+          "Lo stato 'In attesa' è disponibile solo per autoscuole con la fase teoria attiva.",
+      };
+    }
+    if (payload.phase === "PRATICA" && !phasesEnabled.includes("PRATICA")) {
+      return {
+        success: false,
+        message:
+          "Impossibile passare in PRATICA: questa autoscuola non ha la fase pratica attiva.",
+      };
+    }
+
     if (
-      payload.phase === "TEORIA" &&
-      studentMember.studentPhase !== "TEORIA"
+      (payload.phase === "TEORIA" || payload.phase === "AWAITING") &&
+      studentMember.studentPhase !== "TEORIA" &&
+      studentMember.studentPhase !== "AWAITING"
     ) {
       const futureAppointments = await prisma.autoscuolaAppointment.count({
         where: {
@@ -5569,7 +5611,7 @@ export async function updateStudentPhase(
       if (futureAppointments > 0) {
         return {
           success: false,
-          message: `Impossibile passare in fase Teoria: ci sono ${futureAppointments} lezione/i futura/e prenotata/e. Cancellale prima di cambiare fase.`,
+          message: `Impossibile cambiare fase: ci sono ${futureAppointments} lezione/i futura/e prenotata/e. Cancellale prima di cambiare fase.`,
         };
       }
     }
@@ -5580,7 +5622,12 @@ export async function updateStudentPhase(
         userId: payload.studentId,
         autoscuolaRole: "STUDENT",
       },
-      data: { studentPhase: payload.phase },
+      data: {
+        studentPhase: payload.phase,
+        // Mark this as an explicit titolare classification (clears the yellow
+        // "Conferma fase" badge in the drawer).
+        phaseClassifiedAt: new Date(),
+      },
     });
 
     if (payload.theoryExamDate !== undefined) {
