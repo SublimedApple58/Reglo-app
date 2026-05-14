@@ -269,7 +269,7 @@ export function EditAppointmentDialog({
           className="mt-2 flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-xs text-emerald-700"
         >
           <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
-          <span>Disponibile a quest'orario</span>
+          <span>Disponibile a quest&apos;orario</span>
         </div>
       );
     }
@@ -397,7 +397,7 @@ export function EditAppointmentDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__" className="cursor-pointer">
-                    Sede dell'autoscuola
+                    Sede dell&apos;autoscuola
                   </SelectItem>
                   {locations.map((loc) => (
                     <SelectItem key={loc.id} value={loc.id} className="cursor-pointer">
