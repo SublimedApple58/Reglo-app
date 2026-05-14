@@ -126,7 +126,7 @@ function InstructorHoursCard({ entry }: { entry: InstructorHoursEntry }) {
       </div>
 
       {/* Weekly total */}
-      <div className="flex items-end gap-3">
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
         <span className="text-2xl font-bold text-foreground tabular-nums">
           {formatMinutesAsHours(entry.weekly.totalMinutes)}
         </span>
@@ -134,6 +134,11 @@ function InstructorHoursCard({ entry }: { entry: InstructorHoursEntry }) {
         {entry.weekly.outsideWorkingHoursMinutes > 0 && (
           <span className="mb-1 inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 border border-amber-200">
             {formatMinutesAsHours(entry.weekly.outsideWorkingHoursMinutes)} fuori orario
+          </span>
+        )}
+        {entry.weekly.lateCancellationMinutes > 0 && (
+          <span className="mb-1 inline-flex items-center rounded-full bg-rose-50 px-2 py-0.5 text-xs font-medium text-rose-700 border border-rose-200">
+            {formatMinutesAsHours(entry.weekly.lateCancellationMinutes)} cancellazioni tardive
           </span>
         )}
       </div>
@@ -170,15 +175,20 @@ function InstructorHoursCard({ entry }: { entry: InstructorHoursEntry }) {
       </div>
 
       {/* Monthly */}
-      <div className="border-t border-border/60 pt-3 flex items-center justify-between text-sm">
+      <div className="border-t border-border/60 pt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
         <span className="text-muted-foreground">{entry.monthly.monthLabel}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1">
           <span className="font-semibold text-foreground tabular-nums">
             {formatMinutesAsHours(entry.monthly.totalMinutes)}
           </span>
           {entry.monthly.outsideWorkingHoursMinutes > 0 && (
             <span className="text-xs text-amber-600">
               ({formatMinutesAsHours(entry.monthly.outsideWorkingHoursMinutes)} fuori orario)
+            </span>
+          )}
+          {entry.monthly.lateCancellationMinutes > 0 && (
+            <span className="text-xs text-rose-600">
+              ({formatMinutesAsHours(entry.monthly.lateCancellationMinutes)} cancellazioni tardive)
             </span>
           )}
         </div>

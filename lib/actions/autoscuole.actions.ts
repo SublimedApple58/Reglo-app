@@ -6506,12 +6506,14 @@ export type InstructorHoursEntry = {
   weekly: {
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
+    lateCancellationMinutes: number;
     byDay: InstructorHoursDayBreakdown[];
   };
   monthly: {
     monthLabel: string;
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
+    lateCancellationMinutes: number;
   };
 };
 
@@ -6662,6 +6664,35 @@ export async function getInstructorDrivingHours(input: {
       },
     });
 
+    // Late cancellations: status = 'cancelled' AND cancelledAt > penaltyCutoffAt
+    // AND cancellationKind = 'manual_cancel'. We fetch all candidates and then
+    // filter in JS because Prisma's `where` cannot compare two fields directly.
+    const lateCancelledCandidates = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        status: "cancelled",
+        type: { not: "esame" },
+        startsAt: { gte: rangeStart, lt: rangeEnd },
+        cancelledAt: { not: null },
+        penaltyCutoffAt: { not: null },
+        cancellationKind: "manual_cancel",
+      },
+      select: {
+        instructorId: true,
+        startsAt: true,
+        endsAt: true,
+        cancelledAt: true,
+        penaltyCutoffAt: true,
+      },
+    });
+    const lateCancelledAppointments = lateCancelledCandidates.filter(
+      (a) =>
+        a.cancelledAt != null &&
+        a.penaltyCutoffAt != null &&
+        a.cancelledAt.getTime() > a.penaltyCutoffAt.getTime(),
+    );
+
     // Build settings map
     const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
     for (const instr of targetInstructors) {
@@ -6672,6 +6703,24 @@ export async function getInstructorDrivingHours(input: {
     const results: InstructorHoursEntry[] = targetInstructors.map((instr) => {
       const settings = settingsMap.get(instr.id)!;
       const instrAppts = appointments.filter((a) => a.instructorId === instr.id);
+      const instrLateAppts = lateCancelledAppointments.filter(
+        (a) => a.instructorId === instr.id,
+      );
+
+      // Late cancellation totals (weekly + monthly)
+      let weeklyLateCancellationMin = 0;
+      let monthlyLateCancellationMin = 0;
+      for (const appt of instrLateAppts) {
+        const start = appt.startsAt.getTime();
+        const end = appt.endsAt ? appt.endsAt.getTime() : start + 60 * 60 * 1000;
+        const mins = Math.round((end - start) / 60000);
+        if (appt.startsAt >= weekStartDate && appt.startsAt < weekEndDate) {
+          weeklyLateCancellationMin += mins;
+        }
+        if (appt.startsAt >= monthStartDate && appt.startsAt < monthEndDate) {
+          monthlyLateCancellationMin += mins;
+        }
+      }
 
       // Weekly breakdown by day
       const weekDays: InstructorHoursDayBreakdown[] = [];
@@ -6733,12 +6782,14 @@ export async function getInstructorDrivingHours(input: {
         weekly: {
           totalMinutes: weeklyTotal,
           outsideWorkingHoursMinutes: weeklyOutside,
+          lateCancellationMinutes: weeklyLateCancellationMin,
           byDay: weekDays,
         },
         monthly: {
           monthLabel,
           totalMinutes: monthTotal,
           outsideWorkingHoursMinutes: Math.round(monthOutside),
+          lateCancellationMinutes: monthlyLateCancellationMin,
         },
       };
     });
