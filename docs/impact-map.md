@@ -100,8 +100,18 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Settings**: `quizEnabled` feature flag in CompanyService.limits
 - → **Cache**: QUIZ segment, invalidated on answer/complete
 - → **Backoffice**: toggle in company drawer (BackofficeCompaniesPage)
-- → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens)
+- → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens). Tab visibile **solo se `studentPhase === TEORIA`**.
+- → **Student Phase**: la fase TEORIA è il contesto in cui il quiz ha senso; in fase PRATICA/PATENTATO il quiz è nascosto.
 - → Self-contained: global question pool, student-scoped sessions/answers/stats
+
+### Student Phase
+- → **Booking Engine**: `ensureStudentCanBookFromApp` rifiuta se phase = TEORIA. Anche `getAllAvailableSlots` e `getDateAvailabilityMap` ereditano il blocco.
+- → **Quiz Teoria**: la fase TEORIA condiziona la visibilità della tab quiz mobile.
+- → **Cases & Deadlines**: riusa `AutoscuolaCase.theoryExamAt` per countdown (no duplicazione campi).
+- → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg.
+- → **Notifications**: aggiunge `theory_exam_countdown` e `theory_quiz_inactivity` (entrambi mobile-inbox-only).
+- → **Mobile**: cambia home, tab visibili e capacità di booking. AllievoTheoryHomeScreen / AllievoHomeScreen / AllievoLicensedScreen.
+- → Web Titolare: `AutoscuoleStudentsPage` drawer mostra badge fase + dialog `ChangeStudentPhaseDialog`.
 
 ## Critical Call Chains
 

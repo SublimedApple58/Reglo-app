@@ -526,6 +526,23 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
+  // Block booking if student is in TEORIA phase (no foglio rosa yet)
+  const studentMembership = await prisma.companyMember.findFirst({
+    where: {
+      companyId,
+      userId: studentId,
+      autoscuolaRole: "STUDENT",
+    },
+    select: { studentPhase: true },
+  });
+  if (studentMembership?.studentPhase === "TEORIA") {
+    return {
+      allowed: false as const,
+      message:
+        "Le lezioni di guida saranno disponibili dopo l'esame di teoria.",
+    };
+  }
+
   // Resolve cluster-aware governance (instructor cluster override → company default)
   const service = await prisma.companyService.findFirst({
     where: { companyId, serviceKey: "AUTOSCUOLE" },

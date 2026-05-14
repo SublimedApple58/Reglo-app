@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { BookOpen, ExternalLink, FileText, GraduationCap, Loader2, MailPlus, NotebookPen, UserPlus } from "lucide-react";
+import { Award, BookOpen, Car, ChevronDown, ChevronRight, ExternalLink, FileText, GraduationCap, Loader2, MailPlus, NotebookPen, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ import {
   setManualPaymentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,7 +82,9 @@ type StudentProfile = {
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
   assignedInstructorId?: string | null;
+  studentPhase?: "TEORIA" | "PRATICA" | "PATENTATO";
   manualUnpaid?: number;
+  theoryExamAt?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -131,6 +134,8 @@ type StudentRegister = {
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
   examDate?: string | null;
+  studentPhase?: "TEORIA" | "PRATICA" | "PATENTATO";
+  theoryExamAt?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -287,6 +292,27 @@ export function AutoscuoleStudentsPage({
 
   // Booking block toggle
   const [blockSaving, setBlockSaving] = React.useState(false);
+
+  // Phase change dialog
+  const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
+  // Collapsible "Patentati" section
+  const [patentatiExpanded, setPatentatiExpanded] = React.useState(false);
+
+  // Group students by phase
+  const studentsByPhase = React.useMemo(() => {
+    const groups = {
+      teoria: [] as Student[],
+      pratica: [] as Student[],
+      patentato: [] as Student[],
+    };
+    for (const s of students) {
+      const phase = s.studentPhase ?? "PRATICA";
+      if (phase === "TEORIA") groups.teoria.push(s);
+      else if (phase === "PATENTATO") groups.patentato.push(s);
+      else groups.pratica.push(s);
+    }
+    return groups;
+  }, [students]);
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
@@ -699,93 +725,324 @@ export function AutoscuoleStudentsPage({
                       </Table>
                     </div>
                   </div>
+                ) : students.length === 0 ? (
+                  <div className="rounded-2xl border border-border/50 bg-white p-10 text-center text-sm text-muted-foreground">
+                    Nessun allievo trovato.
+                  </div>
                 ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Allievo</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Telefono</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Guide</TableHead>
-                      <TableHead className="text-right">Azioni</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {students.length ? (
-                      students.map((student) => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="size-2.5 shrink-0 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    (student.manualUnpaid ?? 0) >= 5
-                                      ? '#EF4444'   // red — 5+ unpaid
-                                      : (student.manualUnpaid ?? 0) >= 2
-                                        ? '#F59E0B' // amber — 2-4 unpaid
-                                        : (student.manualUnpaid ?? 0) >= 1
-                                          ? '#FACC15' // yellow — 1 unpaid
-                                          : '#22C55E', // green — all paid
-                                }}
-                                title={`${student.manualUnpaid ?? 0} guide da pagare`}
-                              />
-                              <span>{student.firstName} {student.lastName}</span>
-                              {student.bookingBlocked && (
-                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                                  Bloccato
-                                </Badge>
-                              )}
-                              {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  {instructorMap.get(student.assignedInstructorId)}
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{student.email || "—"}</TableCell>
-                          <TableCell>{student.phone || "—"}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {student.status ?? "active"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
-                                {student.summary.completedLessons}/{student.summary.requiredLessons}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {student.summary.isCompleted ? "Completato" : "In corso"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedStudentId(student.id);
-                                setDrawerOpen(true);
-                                void loadRegister(student.id);
-                                void loadCredits(student.id);
-                              }}
-                            >
-                              Dettaglio
-                            </Button>
-                          </TableCell>
+                <div className="space-y-5">
+                  {/* ── Sezione: In Teoria ── */}
+                  {studentsByPhase.teoria.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
+                      <header className="flex items-center justify-between gap-3 border-b border-pink-100 bg-gradient-to-r from-pink-50 to-white px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100">
+                            <GraduationCap className="h-4 w-4 text-pink-600" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">In Teoria</h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Studenti che si stanno preparando per l&apos;esame teorico.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-pink-100 text-pink-700 hover:bg-pink-100">
+                          {studentsByPhase.teoria.length}
+                        </Badge>
+                      </header>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Allievo</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Esame teoria</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {studentsByPhase.teoria.map((student) => {
+                            let countdownLabel: string | null = null;
+                            let countdownTone: "imminent" | "soon" | "later" | "expired" = "later";
+                            if (student.theoryExamAt) {
+                              const exam = new Date(student.theoryExamAt);
+                              const now = new Date();
+                              const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                              const startOfExam = new Date(exam.getFullYear(), exam.getMonth(), exam.getDate());
+                              const days = Math.round((startOfExam.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+                              if (days < 0) {
+                                countdownLabel = "Passato";
+                                countdownTone = "expired";
+                              } else if (days === 0) {
+                                countdownLabel = "Oggi";
+                                countdownTone = "imminent";
+                              } else if (days === 1) {
+                                countdownLabel = "Domani";
+                                countdownTone = "imminent";
+                              } else if (days <= 7) {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "imminent";
+                              } else if (days <= 30) {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "soon";
+                              } else {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "later";
+                              }
+                            }
+                            const examDateText = student.theoryExamAt
+                              ? new Date(student.theoryExamAt).toLocaleDateString("it-IT", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : null;
+                            return (
+                              <TableRow key={student.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="size-2.5 shrink-0 rounded-full"
+                                      style={{
+                                        backgroundColor:
+                                          (student.manualUnpaid ?? 0) >= 5
+                                            ? '#EF4444'
+                                            : (student.manualUnpaid ?? 0) >= 2
+                                              ? '#F59E0B'
+                                              : (student.manualUnpaid ?? 0) >= 1
+                                                ? '#FACC15'
+                                                : '#22C55E',
+                                      }}
+                                      title={`${student.manualUnpaid ?? 0} guide da pagare`}
+                                    />
+                                    <span>{student.firstName} {student.lastName}</span>
+                                    {student.bookingBlocked && (
+                                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">{student.status ?? "active"}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {examDateText ? (
+                                    <div className="flex flex-col gap-1">
+                                      <Badge
+                                        className={`w-fit text-[11px] ${
+                                          countdownTone === "imminent"
+                                            ? "bg-pink-500 text-white hover:bg-pink-500"
+                                            : countdownTone === "soon"
+                                              ? "bg-pink-100 text-pink-700 hover:bg-pink-100"
+                                              : countdownTone === "expired"
+                                                ? "bg-gray-200 text-gray-600 hover:bg-gray-200"
+                                                : "bg-gray-100 text-gray-700 hover:bg-gray-100"
+                                        }`}
+                                      >
+                                        {countdownLabel}
+                                      </Badge>
+                                      <span className="text-[11px] text-muted-foreground">{examDateText}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Da fissare</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedStudentId(student.id);
+                                      setDrawerOpen(true);
+                                      void loadRegister(student.id);
+                                      void loadCredits(student.id);
+                                    }}
+                                  >
+                                    Dettaglio
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </section>
+                  )}
+
+                  {/* ── Sezione: Foglio rosa (Pratica) ── */}
+                  <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
+                    <header className="flex items-center justify-between gap-3 border-b border-border/50 bg-gray-50/60 px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
+                          <Car className="h-4 w-4 text-foreground" aria-hidden />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">Foglio rosa</h3>
+                          <p className="text-[11px] text-muted-foreground">
+                            Studenti che stanno svolgendo le lezioni di guida.
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary">{studentsByPhase.pratica.length}</Badge>
+                    </header>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Allievo</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Telefono</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Guide</TableHead>
+                          <TableHead className="text-right">Azioni</TableHead>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                          Nessun allievo trovato.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {studentsByPhase.pratica.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                              Nessun allievo in fase pratica.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          studentsByPhase.pratica.map((student) => (
+                            <TableRow key={student.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="size-2.5 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        (student.manualUnpaid ?? 0) >= 5
+                                          ? '#EF4444'
+                                          : (student.manualUnpaid ?? 0) >= 2
+                                            ? '#F59E0B'
+                                            : (student.manualUnpaid ?? 0) >= 1
+                                              ? '#FACC15'
+                                              : '#22C55E',
+                                    }}
+                                    title={`${student.manualUnpaid ?? 0} guide da pagare`}
+                                  />
+                                  <span>{student.firstName} {student.lastName}</span>
+                                  {student.bookingBlocked && (
+                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
+                                  )}
+                                  {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {instructorMap.get(student.assignedInstructorId)}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>{student.email || "—"}</TableCell>
+                              <TableCell>{student.phone || "—"}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{student.status ?? "active"}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
+                                    {student.summary.completedLessons}/{student.summary.requiredLessons}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {student.summary.isCompleted ? "Completato" : "In corso"}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedStudentId(student.id);
+                                    setDrawerOpen(true);
+                                    void loadRegister(student.id);
+                                    void loadCredits(student.id);
+                                  }}
+                                >
+                                  Dettaglio
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </section>
+
+                  {/* ── Sezione: Patentati (collassabile) ── */}
+                  {studentsByPhase.patentato.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setPatentatiExpanded((v) => !v)}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-transparent bg-white px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                        aria-expanded={patentatiExpanded}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50">
+                            <Award className="h-4 w-4 text-emerald-600" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">Patentati</h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Allievi che hanno concluso il percorso.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                            {studentsByPhase.patentato.length}
+                          </Badge>
+                          {patentatiExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
+                      {patentatiExpanded && (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Allievo</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Telefono</TableHead>
+                              <TableHead className="text-right">Azioni</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {studentsByPhase.patentato.map((student) => (
+                              <TableRow key={student.id} className="text-muted-foreground">
+                                <TableCell className="font-medium text-foreground">
+                                  {student.firstName} {student.lastName}
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell>{student.phone || "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedStudentId(student.id);
+                                      setDrawerOpen(true);
+                                      void loadRegister(student.id);
+                                      void loadCredits(student.id);
+                                    }}
+                                  >
+                                    Dettaglio
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </section>
+                  )}
+                </div>
                 )}
               </>
             )}
@@ -833,6 +1090,24 @@ export function AutoscuoleStudentsPage({
                   {register?.student.email || register?.student.phone || "Registro guide allievo"}
                 </DrawerDescription>
               </div>
+              {register?.studentPhase && (
+                <Badge
+                  variant={
+                    register.studentPhase === "TEORIA"
+                      ? "outline"
+                      : register.studentPhase === "PATENTATO"
+                        ? "secondary"
+                        : "default"
+                  }
+                  className="shrink-0 text-[10px]"
+                >
+                  {register.studentPhase === "TEORIA"
+                    ? "Teoria"
+                    : register.studentPhase === "PATENTATO"
+                      ? "Patentato"
+                      : "Foglio rosa"}
+                </Badge>
+              )}
               {register?.bookingBlocked && (
                 <Badge variant="destructive" className="shrink-0 text-[10px]">Bloccato</Badge>
               )}
@@ -903,6 +1178,35 @@ export function AutoscuoleStudentsPage({
                               ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
                               : "Nessuna"}
                           </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Fase percorso</p>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant={
+                                register.studentPhase === "TEORIA"
+                                  ? "outline"
+                                  : register.studentPhase === "PATENTATO"
+                                    ? "secondary"
+                                    : "default"
+                              }
+                              className="text-[11px]"
+                            >
+                              {register.studentPhase === "TEORIA"
+                                ? "Teoria"
+                                : register.studentPhase === "PATENTATO"
+                                  ? "Patentato"
+                                  : "Foglio rosa"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 cursor-pointer px-2 text-[11px]"
+                              onClick={() => setPhaseDialogOpen(true)}
+                            >
+                              Cambia fase
+                            </Button>
+                          </div>
                         </div>
                         <div>
                           <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
@@ -1491,6 +1795,26 @@ export function AutoscuoleStudentsPage({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+      {register && selectedStudentId && (
+        <ChangeStudentPhaseDialog
+          open={phaseDialogOpen}
+          onOpenChange={setPhaseDialogOpen}
+          studentId={selectedStudentId}
+          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          currentPhase={register.studentPhase ?? "PRATICA"}
+          currentTheoryExamAt={register.theoryExamAt ?? null}
+          onSuccess={({ phase, theoryExamAt }) => {
+            setRegister((prev) =>
+              prev ? { ...prev, studentPhase: phase, theoryExamAt } : prev,
+            );
+            setStudents((prev) =>
+              prev.map((s) =>
+                s.id === selectedStudentId ? { ...s, studentPhase: phase } : s,
+              ),
+            );
+          }}
+        />
+      )}
     </PageWrapper>
   );
 }

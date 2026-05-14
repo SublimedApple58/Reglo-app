@@ -1177,6 +1177,7 @@ export async function getAutoscuolaStudents(search?: string) {
       data: members.map((m) => ({
         ...toStudentProfile(m.user, m.createdAt),
         assignedInstructorId: m.assignedInstructorId ?? null,
+        studentPhase: m.studentPhase,
       })),
     };
   } catch (error) {
@@ -1305,6 +1306,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     const students = members.map((m) => ({
       ...toStudentProfile(m.user, m.createdAt),
       assignedInstructorId: m.assignedInstructorId ?? null,
+      studentPhase: m.studentPhase,
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -1326,6 +1328,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           studentId: true,
           status: true,
           category: true,
+          theoryExamAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1366,8 +1369,9 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     }
 
     const rows = students.map((student) => {
+      const studentCases = casesByStudent.get(student.id) ?? [];
       const register = buildDrivingRegisterData({
-        cases: casesByStudent.get(student.id) ?? [],
+        cases: studentCases,
         lessons: lessonsByStudent.get(student.id) ?? [],
       });
       const studentLessons = lessonsByStudent.get(student.id) ?? [];
@@ -1382,12 +1386,17 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           );
         },
       ).length;
+      const latestCase = studentCases
+        .slice()
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+      const theoryExamAt = (latestCase as { theoryExamAt?: Date | null } | undefined)?.theoryExamAt ?? null;
       return {
         ...student,
         bookingBlocked: bookingBlockedMap.get(student.id) ?? false,
         activeCase: register.activeCase,
         summary: register.summary,
         manualUnpaid,
+        theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
       };
     });
 
@@ -1500,6 +1509,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           studentId: true,
           status: true,
           category: true,
+          theoryExamAt: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1557,6 +1567,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           l.manualPaymentStatus === "unpaid"),
     ).length;
 
+    const latestCaseTheoryExamAt = cases
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.theoryExamAt ?? null;
+
     return {
       success: true,
       data: {
@@ -1566,6 +1580,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         examPriorityOverride: studentMembership.examPriorityOverride,
         examPriorityActive: examPriorityInfo.active,
         examDate: examPriorityInfo.examDate,
+        studentPhase: studentMembership.studentPhase,
+        theoryExamAt: latestCaseTheoryExamAt
+          ? latestCaseTheoryExamAt.toISOString()
+          : null,
         activeCase: register.activeCase,
         summary: register.summary,
         extendedSummary: { booked, completed, cancelled, upcoming, manualUnpaid },
@@ -5477,6 +5495,12 @@ const toggleStudentBookingBlockSchema = z.object({
   blocked: z.boolean(),
 });
 
+const updateStudentPhaseSchema = z.object({
+  studentId: z.string().uuid(),
+  phase: z.enum(["TEORIA", "PRATICA", "PATENTATO"]),
+  theoryExamDate: z.string().optional().nullable(),
+});
+
 export async function toggleStudentBookingBlock(
   input: z.infer<typeof toggleStudentBookingBlockSchema>,
 ) {
@@ -5502,6 +5526,88 @@ export async function toggleStudentBookingBlock(
       message: payload.blocked
         ? "Prenotazioni bloccate per l'allievo."
         : "Prenotazioni riattivate per l'allievo.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function updateStudentPhase(
+  input: z.infer<typeof updateStudentPhaseSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = updateStudentPhaseSchema.parse(input);
+
+    const studentMember = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { studentPhase: true },
+    });
+    if (!studentMember) {
+      return { success: false, message: "Allievo non valido per questa company." };
+    }
+
+    if (
+      payload.phase === "TEORIA" &&
+      studentMember.studentPhase !== "TEORIA"
+    ) {
+      const futureAppointments = await prisma.autoscuolaAppointment.count({
+        where: {
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+          startsAt: { gte: new Date() },
+          cancelledAt: null,
+        },
+      });
+      if (futureAppointments > 0) {
+        return {
+          success: false,
+          message: `Impossibile passare in fase Teoria: ci sono ${futureAppointments} lezione/i futura/e prenotata/e. Cancellale prima di cambiare fase.`,
+        };
+      }
+    }
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { studentPhase: payload.phase },
+    });
+
+    if (payload.theoryExamDate !== undefined) {
+      const latestCase = await prisma.autoscuolaCase.findFirst({
+        where: {
+          companyId: membership.companyId,
+          studentId: payload.studentId,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      if (latestCase) {
+        await prisma.autoscuolaCase.update({
+          where: { id: latestCase.id },
+          data: {
+            theoryExamAt: payload.theoryExamDate
+              ? new Date(payload.theoryExamDate)
+              : null,
+          },
+        });
+      }
+    }
+
+    return {
+      success: true,
+      data: { phase: payload.phase },
+      message: "Fase aggiornata correttamente.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
