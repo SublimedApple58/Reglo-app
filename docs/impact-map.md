@@ -97,21 +97,23 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → Mostly self-contained (Twilio/Telnyx webhooks, knowledge base, call records)
 
 ### Quiz Teoria
-- → **Settings**: `quizEnabled` feature flag in CompanyService.limits
+- → **Settings**: posti quiz (`quizSeats`, `phasesEnabled`, `autoAssignQuizOnSignup`) in CompanyService.limits. Il legacy `quizEnabled` è stato rimosso dal JSON in migration `20260514000001`.
 - → **Cache**: QUIZ segment, invalidated on answer/complete
-- → **Backoffice**: toggle in company drawer (BackofficeCompaniesPage)
-- → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens). Tab visibile **solo se `studentPhase === TEORIA`**.
-- → **Student Phase**: la fase TEORIA è il contesto in cui il quiz ha senso; in fase PRATICA/PATENTATO il quiz è nascosto.
+- → **Backoffice**: card "Quiz Teoria — Gestione licenze" + card "Fasi attive del percorso" (BackofficeCompaniesPage). Dialog di risoluzione `BackofficeResolveTeoriaDeactivationDialog` quando si disattiva TEORIA con allievi attivi.
+- → **Mobile**: QuizHomeScreen, QuizSessionScreen, QuizResultsScreen (3 screens). Tab visibile **solo se `studentPhase === TEORIA` AND `hasQuizAccess === true`**.
+- → **Student Phase**: la fase TEORIA è il contesto in cui il quiz ha senso. Il seat consumato a vita (`CompanyMember.quizSeatGrantedAt`) determina chi vede il quiz.
 - → Self-contained: global question pool, student-scoped sessions/answers/stats
 
-### Student Phase
-- → **Booking Engine**: `ensureStudentCanBookFromApp` rifiuta se phase = TEORIA. Anche `getAllAvailableSlots` e `getDateAvailabilityMap` ereditano il blocco.
-- → **Quiz Teoria**: la fase TEORIA condiziona la visibilità della tab quiz mobile.
+### Student Phase + Quiz Seats
+- → **Booking Engine**: `ensureStudentCanBookFromApp` rifiuta se phase = AWAITING o TEORIA (messaggi distinti). Anche `getAllAvailableSlots` e `getDateAvailabilityMap` ereditano il blocco.
+- → **Quiz Teoria**: la fase TEORIA + `hasQuizAccess` controllano visibilità tab mobile. Seat = licenza nominale a vita (`CompanyMember.quizSeatGrantedAt`).
 - → **Cases & Deadlines**: riusa `AutoscuolaCase.theoryExamAt` per countdown (no duplicazione campi).
-- → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg.
-- → **Notifications**: aggiunge `theory_exam_countdown` e `theory_quiz_inactivity` (entrambi mobile-inbox-only).
-- → **Mobile**: cambia home, tab visibili e capacità di booking. AllievoTheoryHomeScreen / AllievoHomeScreen / AllievoLicensedScreen.
-- → Web Titolare: `AutoscuoleStudentsPage` drawer mostra badge fase + dialog `ChangeStudentPhaseDialog`.
+- → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg per TEORIA.
+- → **Notifications**: kinds `theory_exam_countdown` e `theory_quiz_inactivity` (mobile-inbox-only).
+- → **Mobile**: 4 home screen per fase (AWAITING / TEORIA / PRATICA / PATENTATO). AWAITING nasconde tutte le tab funzionali; il tab Quiz richiede `hasQuizAccess`.
+- → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `SettingsTab` espone toggle "Modalità registrazione allievi" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
+- → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
+- → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 
 ## Critical Call Chains
 
