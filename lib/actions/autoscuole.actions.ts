@@ -143,6 +143,22 @@ const updateAppointmentDetailsSchema = z.object({
   rating: z.number().int().min(1).max(5).nullable().optional(),
   notes: z.string().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
+  /**
+   * New instructor for the appointment (cluster-level reassignment).
+   * Verified against availability: no overlapping appointments, no manual
+   * block-slot, no company holiday on that day. The vehicle stays attached
+   * and the student's assignedInstructorId is NOT touched (single-lesson
+   * override, not a permanent reassignment).
+   */
+  instructorId: z.string().uuid().optional(),
+});
+
+const checkInstructorAvailabilitySchema = z.object({
+  instructorId: z.string().uuid(),
+  startsAt: z.string(),
+  endsAt: z.string(),
+  /** Exclude this appointment from overlap detection (the one being edited). */
+  excludeAppointmentId: z.string().uuid().optional(),
 });
 
 const createInstructorSchema = z.object({
@@ -4122,7 +4138,7 @@ export async function updateAutoscuolaAppointmentDetails(
       }
     }
 
-    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null } = {};
+    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; instructorId?: string } = {};
     const appointmentLessonType = normalizeLessonType(appointment.type);
     const appointmentEnd = computeAppointmentEnd({
       startsAt: appointment.startsAt,
@@ -4247,6 +4263,49 @@ export async function updateAutoscuolaAppointmentDetails(
       }
     }
 
+    // Handle instructor change (cluster-level single-lesson reassignment).
+    // Allowed for owner/admin and for the current instructor "passing" the
+    // lesson to a colleague. The student's assignedInstructorId is NOT
+    // touched (decision: single-lesson override, not permanent re-assignment).
+    // The vehicle stays attached (decision: vehicles are company resources,
+    // not instructor-owned).
+    if (payload.instructorId !== undefined && payload.instructorId !== appointment.instructorId) {
+      // Block on completed/cancelled appointments: it doesn't make sense to
+      // reassign a guida that's already happened or been called off.
+      const status = normalizeStatus(appointment.status);
+      if (["cancelled", "completed", "no_show"].includes(status)) {
+        return {
+          success: false,
+          message: "Non puoi cambiare l'istruttore di una guida già conclusa o annullata.",
+        };
+      }
+
+      const appointmentEndDate = computeAppointmentEnd({
+        startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+      });
+      const availability = await verifyInstructorAvailability({
+        companyId: membership.companyId,
+        instructorId: payload.instructorId,
+        startsAt: appointment.startsAt,
+        endsAt: appointmentEndDate,
+        excludeAppointmentId: appointment.id,
+      });
+      if (!availability.available) {
+        return {
+          success: false,
+          message: availability.detail,
+          code: "INSTRUCTOR_UNAVAILABLE" as const,
+        };
+      }
+
+      // Push notification to the student about the instructor swap is deferred:
+      // it would require a new notification kind on mobile + handler. For now
+      // the change is silent server-side; the student will see the new
+      // instructor next time the app refetches the appointment.
+      updateData.instructorId = payload.instructorId;
+    }
+
     if (!Object.keys(updateData).length) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
@@ -4303,6 +4362,208 @@ async function loadLocationSummary(id: string) {
     where: { id },
     select: { id: true, name: true, isDefault: true },
   });
+}
+
+/**
+ * Result of verifyInstructorAvailability(): either the instructor is available
+ * for the given time range, or we have a structured reason why not. The
+ * `detail` string is a human-friendly message ready to render in the UI.
+ */
+type InstructorAvailabilityResult =
+  | { available: true }
+  | {
+      available: false;
+      reason: "OVERLAP" | "BLOCK" | "HOLIDAY" | "INSTRUCTOR_INACTIVE";
+      detail: string;
+    };
+
+/**
+ * Check whether a target instructor is free for [startsAt, endsAt) inside a
+ * specific company. Used by:
+ *   - updateAutoscuolaAppointmentDetails when changing the assigned instructor
+ *   - the /api/autoscuole/instructor-availability endpoint (live inline
+ *     validation in the web edit dialog and the mobile picker sheet)
+ *
+ * Checks (in order, short-circuit):
+ *   1. Instructor exists in company and is not inactive.
+ *   2. No company holiday on that calendar day (Europe/Rome).
+ *   3. No instructor block-slot overlapping the range.
+ *   4. No other active (non-cancelled) appointment for the same instructor
+ *      overlapping the range. excludeAppointmentId lets the caller skip the
+ *      appointment currently being edited.
+ *
+ * Note: we intentionally do NOT verify that the range falls within the
+ * instructor's weekly/daily availability — by product decision the titolare
+ * may assign a guida to an instructor even outside their declared schedule
+ * (e.g. to cover an emergency on a day the instructor doesn't normally work).
+ */
+async function verifyInstructorAvailability({
+  companyId,
+  instructorId,
+  startsAt,
+  endsAt,
+  excludeAppointmentId,
+}: {
+  companyId: string;
+  instructorId: string;
+  startsAt: Date;
+  endsAt: Date;
+  excludeAppointmentId?: string;
+}): Promise<InstructorAvailabilityResult> {
+  if (endsAt <= startsAt) {
+    return { available: false, reason: "OVERLAP", detail: "Intervallo non valido." };
+  }
+
+  // 1. Instructor exists + active
+  const instructor = await prisma.autoscuolaInstructor.findFirst({
+    where: { id: instructorId, companyId },
+    select: { id: true, name: true, status: true },
+  });
+  if (!instructor) {
+    return {
+      available: false,
+      reason: "INSTRUCTOR_INACTIVE",
+      detail: "Istruttore non trovato in questa autoscuola.",
+    };
+  }
+  if (instructor.status === "inactive") {
+    return {
+      available: false,
+      reason: "INSTRUCTOR_INACTIVE",
+      detail: `${instructor.name} non è attivo in questa autoscuola.`,
+    };
+  }
+
+  // 2. Company holiday on that day (date is stored as @db.Date in Europe/Rome)
+  // We approximate by checking the day of startsAt; appointments don't span days.
+  const dayStart = new Date(
+    Date.UTC(startsAt.getUTCFullYear(), startsAt.getUTCMonth(), startsAt.getUTCDate()),
+  );
+  const holiday = await prisma.autoscuolaHoliday.findFirst({
+    where: { companyId, date: dayStart },
+    select: { label: true, date: true },
+  });
+  if (holiday) {
+    const dayStr = startsAt.toLocaleDateString("it-IT", {
+      day: "2-digit",
+      month: "long",
+      timeZone: "Europe/Rome",
+    });
+    return {
+      available: false,
+      reason: "HOLIDAY",
+      detail: holiday.label
+        ? `${dayStr} è dichiarato festivo (${holiday.label}).`
+        : `${dayStr} è dichiarato festivo.`,
+    };
+  }
+
+  // 3. Block-slot overlap
+  const overlappingBlock = await prisma.autoscuolaInstructorBlock.findFirst({
+    where: {
+      companyId,
+      instructorId,
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+    },
+    select: { startsAt: true, endsAt: true, reason: true },
+  });
+  if (overlappingBlock) {
+    const from = overlappingBlock.startsAt.toLocaleTimeString("it-IT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Rome",
+    });
+    const to = overlappingBlock.endsAt.toLocaleTimeString("it-IT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Rome",
+    });
+    const reasonSuffix = overlappingBlock.reason ? ` (${overlappingBlock.reason})` : "";
+    return {
+      available: false,
+      reason: "BLOCK",
+      detail: `${instructor.name} ha un blocco manuale dalle ${from} alle ${to}${reasonSuffix}.`,
+    };
+  }
+
+  // 4. Overlapping active appointment
+  const overlappingAppointment = await prisma.autoscuolaAppointment.findFirst({
+    where: {
+      companyId,
+      instructorId,
+      status: { notIn: ["cancelled"] },
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+      ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
+    },
+    select: { startsAt: true, endsAt: true },
+  });
+  if (overlappingAppointment) {
+    const overlapEnd = computeAppointmentEnd({
+      startsAt: overlappingAppointment.startsAt,
+      endsAt: overlappingAppointment.endsAt,
+    });
+    const from = overlappingAppointment.startsAt.toLocaleTimeString("it-IT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Rome",
+    });
+    const to = overlapEnd.toLocaleTimeString("it-IT", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Europe/Rome",
+    });
+    return {
+      available: false,
+      reason: "OVERLAP",
+      detail: `${instructor.name} ha già una guida dalle ${from} alle ${to}.`,
+    };
+  }
+
+  return { available: true };
+}
+
+/**
+ * Public action: check if an instructor is available for a given time range.
+ * Mirrors the validation done inside updateAutoscuolaAppointmentDetails so the
+ * UI can preview the verdict before the user commits.
+ *
+ * Authorization: owner, admin, or any instructor in the company.
+ */
+export async function checkInstructorAvailability(
+  input: z.infer<typeof checkInstructorAvailabilitySchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = checkInstructorAvailabilitySchema.parse(input);
+
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const startsAt = new Date(payload.startsAt);
+    const endsAt = new Date(payload.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+      return { success: false, message: "Date non valide." };
+    }
+
+    const result = await verifyInstructorAvailability({
+      companyId: membership.companyId,
+      instructorId: payload.instructorId,
+      startsAt,
+      endsAt,
+      excludeAppointmentId: payload.excludeAppointmentId,
+    });
+
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
 }
 
 export async function getAutoscuolaInstructors() {
