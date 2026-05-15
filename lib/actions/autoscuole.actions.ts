@@ -27,6 +27,7 @@ import {
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
+import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
 import {
   processAutoscuolaAppointmentSettlementNow,
   adjustStudentLessonCredits,
@@ -5668,6 +5669,20 @@ export async function updateStudentPhase(
         // "Conferma fase" badge in the drawer).
         phaseClassifiedAt: new Date(),
       },
+    });
+
+    // Celebratory push to the student when the owner moves them forward
+    // along the journey. The helper itself filters out non-celebratory
+    // transitions (e.g. regressions to AWAITING) — fire-and-forget.
+    void notifyStudentPhaseChange({
+      companyId: membership.companyId,
+      studentUserId: payload.studentId,
+      fromPhase: studentMember.studentPhase as
+        | "AWAITING"
+        | "TEORIA"
+        | "PRATICA"
+        | "PATENTATO",
+      toPhase: payload.phase,
     });
 
     if (payload.theoryExamDate !== undefined) {

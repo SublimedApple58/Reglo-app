@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
+import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
@@ -1707,6 +1708,14 @@ export async function grantQuizSeat(input: z.infer<typeof grantQuizSeatSchema>) 
       },
     });
 
+    // Celebratory push to the student — fire-and-forget (helper swallows errors).
+    void notifyStudentPhaseChange({
+      companyId: membership.companyId,
+      studentUserId: payload.studentId,
+      fromPhase: "AWAITING",
+      toPhase: "TEORIA",
+    });
+
     return {
       success: true as const,
       data: { studentPhase: "TEORIA" as const },
@@ -1767,6 +1776,7 @@ export async function setAutoAssignQuizOnSignup(
     );
 
     let promoted = 0;
+    let promotedUserIds: string[] = [];
 
     await prisma.$transaction(async (tx) => {
       const currentLimits = (service.limits ?? {}) as Record<string, unknown>;
@@ -1808,9 +1818,20 @@ export async function setAutoAssignQuizOnSignup(
             },
           });
           promoted = candidates.length;
+          promotedUserIds = candidates.map((c) => c.userId);
         }
       }
     });
+
+    // Celebratory push for each promoted student — fire-and-forget.
+    for (const promotedUserId of promotedUserIds) {
+      void notifyStudentPhaseChange({
+        companyId: membership.companyId,
+        studentUserId: promotedUserId,
+        fromPhase: "AWAITING",
+        toPhase: "TEORIA",
+      });
+    }
 
     return {
       success: true as const,
