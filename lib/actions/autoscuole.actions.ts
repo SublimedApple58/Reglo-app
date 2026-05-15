@@ -5274,7 +5274,47 @@ export async function getCompanyInviteCode() {
       where: { id: activeCompanyId },
       select: { inviteCode: true },
     });
-    return { success: true as const, data: company?.inviteCode ?? null };
+    if (company?.inviteCode) {
+      return { success: true as const, data: company.inviteCode };
+    }
+
+    // Lazy backfill: some legacy companies were created before invite codes
+    // existed. Generate one now, persist it, and return it. The collision
+    // window on a 6-hex code is small but non-zero — retry on unique
+    // violations with a fresh code (Prisma error P2002).
+    const { generateInviteCode } = await import("./company.actions");
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = generateInviteCode();
+      try {
+        // `updateMany` with `inviteCode: null` lets us write only if the row
+        // is still without a code. If a concurrent request won the race the
+        // count will be 0 and we re-read the winner below.
+        const result = await prisma.company.updateMany({
+          where: { id: activeCompanyId, inviteCode: null },
+          data: { inviteCode: candidate },
+        });
+        if (result.count > 0) {
+          return { success: true as const, data: candidate };
+        }
+        const fresh = await prisma.company.findUnique({
+          where: { id: activeCompanyId },
+          select: { inviteCode: true },
+        });
+        return { success: true as const, data: fresh?.inviteCode ?? null };
+      } catch (err) {
+        const code = (err as { code?: string })?.code;
+        if (code === "P2002") {
+          // Code collision with another company. Try again with a new code.
+          continue;
+        }
+        throw err;
+      }
+    }
+    return {
+      success: false as const,
+      message: "Impossibile generare un codice univoco. Riprova.",
+      data: null,
+    };
   } catch (error) {
     return { success: false as const, message: formatError(error), data: null };
   }

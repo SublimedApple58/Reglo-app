@@ -11,7 +11,7 @@ import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
 import crypto from 'crypto';
 
-function generateInviteCode(): string {
+export function generateInviteCode(): string {
   return crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
 }
 
