@@ -9,11 +9,7 @@ import { normalizeCompanyServices } from '@/lib/services';
 import { z } from 'zod';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole } from '@/lib/autoscuole/roles';
-import crypto from 'crypto';
-
-export function generateInviteCode(): string {
-  return crypto.randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
-}
+import { generateInviteCode } from '@/lib/company/invite-code';
 
 type CompanyRole = 'admin' | 'member';
 

@@ -26,6 +26,7 @@ import {
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
+import { generateInviteCode } from "@/lib/company/invite-code";
 import {
   processAutoscuolaAppointmentSettlementNow,
   adjustStudentLessonCredits,
@@ -5282,7 +5283,6 @@ export async function getCompanyInviteCode() {
     // existed. Generate one now, persist it, and return it. The collision
     // window on a 6-hex code is small but non-zero — retry on unique
     // violations with a fresh code (Prisma error P2002).
-    const { generateInviteCode } = await import("./company.actions");
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = generateInviteCode();
       try {
