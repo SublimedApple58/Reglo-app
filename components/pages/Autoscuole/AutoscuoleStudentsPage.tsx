@@ -139,6 +139,7 @@ type StudentRegister = {
   examPriorityActive?: boolean;
   examDate?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  quizSeatGrantedAt?: string | null;
   theoryExamAt?: string | null;
   activeCase: {
     id: string;
@@ -2031,15 +2032,27 @@ export function AutoscuoleStudentsPage({
           currentPhase={register.studentPhase ?? "PRATICA"}
           currentTheoryExamAt={register.theoryExamAt ?? null}
           phasesEnabled={quizCtx?.phasesEnabled}
-          onSuccess={({ phase, theoryExamAt }) => {
+          hasQuizSeat={Boolean(register.quizSeatGrantedAt)}
+          quizSeatsAvailable={quizCtx?.available ?? 0}
+          onSuccess={({ phase, theoryExamAt, grantedSeat }) => {
             setRegister((prev) =>
-              prev ? { ...prev, studentPhase: phase, theoryExamAt } : prev,
+              prev
+                ? {
+                    ...prev,
+                    studentPhase: phase,
+                    theoryExamAt,
+                    ...(grantedSeat && { quizSeatGrantedAt: new Date().toISOString() }),
+                  }
+                : prev,
             );
             setStudents((prev) =>
               prev.map((s) =>
                 s.id === selectedStudentId ? { ...s, studentPhase: phase } : s,
               ),
             );
+            if (grantedSeat) {
+              refreshQuizCtx();
+            }
           }}
         />
       )}

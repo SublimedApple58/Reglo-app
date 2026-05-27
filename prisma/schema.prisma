@@ -40,8 +40,10 @@ enum AutoscuolaStudentPhase {
 
 enum QuizSessionMode {
   EXAM
+  PRACTICE
   CHAPTER
   REVIEW
+  SCHEDA
 }
 
 model User {
@@ -1040,6 +1042,22 @@ model QuizChapter {
 
   questions QuizQuestion[]
   sessions  QuizSession[]
+  schede    QuizScheda[]
+}
+
+model QuizScheda {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  chapterId      String   @db.Uuid
+  schedaNumber   Int
+  questionIds    String[] @db.Uuid
+  totalQuestions Int
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+
+  chapter  QuizChapter  @relation(fields: [chapterId], references: [id])
+  sessions QuizSession[]
+
+  @@unique([chapterId, schedaNumber])
+  @@index([chapterId])
 }
 
 model QuizHint {
@@ -1079,6 +1097,7 @@ model QuizSession {
   studentId      String          @db.Uuid
   mode           QuizSessionMode
   chapterId      String?         @db.Uuid
+  schedaId       String?         @db.Uuid
   questionIds    String[]        @db.Uuid
   status         String          @default("in_progress")
   totalQuestions Int
@@ -1094,10 +1113,12 @@ model QuizSession {
   company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
   student  User         @relation(fields: [studentId], references: [id])
   chapter  QuizChapter? @relation(fields: [chapterId], references: [id])
+  scheda   QuizScheda?  @relation(fields: [schedaId], references: [id])
   answers  QuizAnswer[]
 
   @@index([companyId, studentId])
   @@index([companyId, studentId, mode])
+  @@index([companyId, studentId, schedaId])
   @@index([studentId, status])
 }
 

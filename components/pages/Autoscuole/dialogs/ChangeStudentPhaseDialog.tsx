@@ -84,7 +84,11 @@ type Props = {
    * If omitted, all options are shown (legacy callers).
    */
   phasesEnabled?: ("TEORIA" | "PRATICA")[];
-  onSuccess: (next: { phase: StudentPhase; theoryExamAt: string | null }) => void;
+  /** Whether the student already has a quiz seat assigned. */
+  hasQuizSeat?: boolean;
+  /** Number of quiz seats currently available for the autoscuola. */
+  quizSeatsAvailable?: number;
+  onSuccess: (next: { phase: StudentPhase; theoryExamAt: string | null; grantedSeat?: boolean }) => void;
 };
 
 export function ChangeStudentPhaseDialog({
@@ -95,6 +99,8 @@ export function ChangeStudentPhaseDialog({
   currentPhase,
   currentTheoryExamAt,
   phasesEnabled,
+  hasQuizSeat,
+  quizSeatsAvailable = 0,
   onSuccess,
 }: Props) {
   const toast = useFeedbackToast();
@@ -127,6 +133,10 @@ export function ChangeStudentPhaseDialog({
     currentPhase !== "TEORIA" &&
     currentPhase !== "AWAITING";
 
+  const needsSeat = phase === "TEORIA" && !hasQuizSeat;
+  const canGrantSeat = needsSeat && quizSeatsAvailable > 0;
+  const isBlocked = needsSeat && quizSeatsAvailable <= 0;
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSaving(true);
@@ -140,6 +150,7 @@ export function ChangeStudentPhaseDialog({
             : phase === "TEORIA"
               ? null
               : undefined,
+        ...(needsSeat && { grantSeat: true }),
       });
       if (!res.success) {
         toast.error({ description: res.message ?? "Errore aggiornamento fase." });
@@ -152,6 +163,7 @@ export function ChangeStudentPhaseDialog({
           phase === "TEORIA" && theoryExamDate
             ? new Date(theoryExamDate).toISOString()
             : null,
+        grantedSeat: needsSeat,
       });
       onOpenChange(false);
     } catch (error) {
@@ -224,6 +236,32 @@ export function ChangeStudentPhaseDialog({
             </div>
           )}
 
+          {canGrantSeat && (
+            <div
+              role="alert"
+              className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <p>
+                Spostare l&apos;allievo in Teoria richiede l&apos;utilizzo di una licenza quiz.
+                Verrà utilizzata <strong>1 licenza</strong> ({quizSeatsAvailable} disponibil{quizSeatsAvailable === 1 ? "e" : "i"}).
+              </p>
+            </div>
+          )}
+
+          {isBlocked && (
+            <div
+              role="alert"
+              className="flex gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <p>
+                Non ci sono licenze quiz disponibili. Acquista altre licenze per poter spostare
+                l&apos;allievo in fase Teoria.
+              </p>
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
             <Button
               type="button"
@@ -238,7 +276,7 @@ export function ChangeStudentPhaseDialog({
             <Button
               type="submit"
               size="sm"
-              disabled={saving || phase === currentPhase}
+              disabled={saving || phase === currentPhase || isBlocked}
               className="cursor-pointer"
             >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}

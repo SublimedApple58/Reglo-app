@@ -1583,6 +1583,9 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         examPriorityActive: examPriorityInfo.active,
         examDate: examPriorityInfo.examDate,
         studentPhase: studentMembership.studentPhase,
+        quizSeatGrantedAt: studentMembership.quizSeatGrantedAt
+          ? studentMembership.quizSeatGrantedAt.toISOString()
+          : null,
         theoryExamAt: latestCaseTheoryExamAt
           ? latestCaseTheoryExamAt.toISOString()
           : null,
@@ -5540,6 +5543,7 @@ const updateStudentPhaseSchema = z.object({
   studentId: z.string().uuid(),
   phase: z.enum(["AWAITING", "TEORIA", "PRATICA", "PATENTATO"]),
   theoryExamDate: z.string().optional().nullable(),
+  grantSeat: z.boolean().optional(),
 });
 
 export async function toggleStudentBookingBlock(
@@ -5589,7 +5593,7 @@ export async function updateStudentPhase(
         userId: payload.studentId,
         autoscuolaRole: "STUDENT",
       },
-      select: { studentPhase: true },
+      select: { studentPhase: true, quizSeatGrantedAt: true },
     });
     if (!studentMember) {
       return { success: false, message: "Allievo non valido per questa company." };
@@ -5636,6 +5640,41 @@ export async function updateStudentPhase(
       };
     }
 
+    // Guard: moving to TEORIA requires a quiz seat
+    if (payload.phase === "TEORIA" && !studentMember.quizSeatGrantedAt) {
+      if (!payload.grantSeat) {
+        const limits = autoscuolaService?.limits as Record<string, unknown> | null;
+        const quizSeats =
+          typeof limits?.quizSeats === "number" && Number.isFinite(limits.quizSeats)
+            ? Math.max(0, Math.floor(limits.quizSeats as number))
+            : 0;
+        const used = await prisma.companyMember.count({
+          where: { companyId: membership.companyId, role: "member", quizSeatGrantedAt: { not: null } },
+        });
+        return {
+          success: false,
+          code: "SEAT_REQUIRED" as const,
+          available: quizSeats - used,
+          message: "L'allievo non ha una licenza quiz. Conferma l'assegnazione per procedere.",
+        };
+      }
+      // grantSeat === true: verify availability and assign
+      const limits = autoscuolaService?.limits as Record<string, unknown> | null;
+      const quizSeats =
+        typeof limits?.quizSeats === "number" && Number.isFinite(limits.quizSeats)
+          ? Math.max(0, Math.floor(limits.quizSeats as number))
+          : 0;
+      const used = await prisma.companyMember.count({
+        where: { companyId: membership.companyId, role: "member", quizSeatGrantedAt: { not: null } },
+      });
+      if (quizSeats - used <= 0) {
+        return {
+          success: false,
+          message: "Nessuna licenza quiz disponibile. Acquista altre licenze per procedere.",
+        };
+      }
+    }
+
     if (
       (payload.phase === "TEORIA" || payload.phase === "AWAITING") &&
       studentMember.studentPhase !== "TEORIA" &&
@@ -5657,6 +5696,7 @@ export async function updateStudentPhase(
       }
     }
 
+    const now = new Date();
     await prisma.companyMember.updateMany({
       where: {
         companyId: membership.companyId,
@@ -5667,7 +5707,11 @@ export async function updateStudentPhase(
         studentPhase: payload.phase,
         // Mark this as an explicit titolare classification (clears the yellow
         // "Conferma fase" badge in the drawer).
-        phaseClassifiedAt: new Date(),
+        phaseClassifiedAt: now,
+        // Grant quiz seat atomically when moving to TEORIA
+        ...(payload.phase === "TEORIA" &&
+          payload.grantSeat &&
+          !studentMember.quizSeatGrantedAt && { quizSeatGrantedAt: now }),
       },
     });
 
