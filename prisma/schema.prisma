@@ -264,6 +264,7 @@ model CompanyMember {
   @@index([assignedInstructorId])
   @@index([companyId, studentPhase])
   @@index([companyId, quizSeatGrantedAt])
+  @@index([companyId, autoscuolaRole])
 }
 
 model CompanyInvite {
@@ -407,6 +408,7 @@ model AutoscuolaAppointment {
   @@index([companyId, studentId, startsAt])
   @@index([companyId, paymentRequired, startsAt])
   @@index([companyId, studentId, creditApplied])
+  @@index([companyId, studentId, paymentRequired, paymentStatus])
   @@index([replacedByAppointmentId])
   @@index([companyId, cancellationKind, startsAt])
   @@index([locationId])

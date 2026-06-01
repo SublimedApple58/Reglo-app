@@ -4,6 +4,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { notifyStudentPhaseChange } from "@/lib/autoscuole/student-phase-notifications";
+import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
@@ -918,13 +919,10 @@ const resolveAutoscuolaSettingsData = async (
 export async function getAutoscuolaSettingsForCompany(
   companyId: string,
 ): Promise<AutoscuolaSettingsData> {
-  const service = await prisma.companyService.findFirst({
-    where: { companyId, serviceKey: "AUTOSCUOLE" },
-    select: {
-      limits: true,
-    },
-  });
-  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  // Read limits through the Redis-backed cache (5min TTL, invalidated by
+  // updateAutoscuolaSettings via the SETTINGS segment). Called on nearly
+  // every screen, so this removes a DB round-trip from the hot path.
+  const limits = await getCachedCompanyServiceLimits(companyId);
   return await resolveAutoscuolaSettingsData(limits);
 }
 

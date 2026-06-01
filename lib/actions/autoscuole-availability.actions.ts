@@ -71,6 +71,11 @@ const getSlotsSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]).optional(),
   ownerId: z.string().uuid().optional(),
   date: z.string().optional(),
+  // Optional inclusive date range. When both are provided, slots for every
+  // day in [from, to] are returned in a single response (mobile uses this to
+  // fetch a whole week in one call instead of one request per day).
+  from: z.string().optional(),
+  to: z.string().optional(),
 });
 
 const bookingRequestSchema = z.object({
@@ -703,15 +708,41 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = getSlotsSchema.parse(input);
 
-    if (!payload.date) {
-      return { success: true, data: [] };
+    const isoFor = (p: CalendarDateParts) =>
+      `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+
+    // Resolve the list of days to compute: either a single `date` (legacy) or
+    // an inclusive `from`..`to` range (capped at 31 days).
+    let dayPartsList: CalendarDateParts[] = [];
+    if (payload.from && payload.to) {
+      const fromParts = parseDateOnly(payload.from);
+      const toParts = parseDateOnly(payload.to);
+      if (!fromParts || !toParts) {
+        return { success: false, message: "Intervallo date non valido." };
+      }
+      const cursor = new Date(Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day));
+      const end = new Date(Date.UTC(toParts.year, toParts.month - 1, toParts.day));
+      let guard = 0;
+      while (cursor.getTime() <= end.getTime() && guard < 31) {
+        dayPartsList.push({
+          year: cursor.getUTCFullYear(),
+          month: cursor.getUTCMonth() + 1,
+          day: cursor.getUTCDate(),
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        guard += 1;
+      }
+    } else if (payload.date) {
+      const dayParts = parseDateOnly(payload.date);
+      if (!dayParts) {
+        return { success: false, message: "Data non valida." };
+      }
+      dayPartsList = [dayParts];
     }
 
-    const dayParts = parseDateOnly(payload.date);
-    if (!dayParts) {
-      return { success: false, message: "Data non valida." };
+    if (dayPartsList.length === 0) {
+      return { success: true, data: [] };
     }
-    const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
 
     const availabilityWhere: Record<string, unknown> = {
       companyId: membership.companyId,
@@ -719,16 +750,23 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     if (payload.ownerType) availabilityWhere.ownerType = payload.ownerType;
     if (payload.ownerId) availabilityWhere.ownerId = payload.ownerId;
 
-    // Fetch base availabilities
+    // Fetch base availabilities once for the whole range.
     const baseAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
       where: availabilityWhere,
     });
 
-    // Fetch daily overrides for the requested date
-    const dateISO = `${dayParts.year}-${String(dayParts.month).padStart(2, "0")}-${String(dayParts.day).padStart(2, "0")}`;
+    // Fetch every daily override spanning the range in a single query.
+    const firstISO = isoFor(dayPartsList[0]);
+    const lastISO = isoFor(dayPartsList[dayPartsList.length - 1]);
     const overrideWhere: Record<string, unknown> = {
       companyId: membership.companyId,
-      date: new Date(dateISO + "T00:00:00Z"),
+      date:
+        dayPartsList.length === 1
+          ? new Date(firstISO + "T00:00:00Z")
+          : {
+              gte: new Date(firstISO + "T00:00:00Z"),
+              lte: new Date(lastISO + "T00:00:00Z"),
+            },
     };
     if (payload.ownerType) overrideWhere.ownerType = payload.ownerType;
     if (payload.ownerId) overrideWhere.ownerId = payload.ownerId;
@@ -737,81 +775,89 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       where: overrideWhere,
     });
 
-    // Build a map: ownerKey → AvailabilityRecord resolved for this specific day
-    const overrideByOwner = new Map<string, AvailabilityRecord>();
+    // Index overrides by their date (YYYY-MM-DD) for per-day lookups.
+    type OverrideRow = (typeof overrides)[number];
+    const overridesByDate = new Map<string, OverrideRow[]>();
     for (const o of overrides) {
-      const key = `${o.ownerType}:${o.ownerId}`;
-      overrideByOwner.set(key, { daysOfWeek: [dayOfWeek], ranges: parseRanges(o.ranges) });
+      const dateKey = o.date.toISOString().slice(0, 10);
+      const arr = overridesByDate.get(dateKey);
+      if (arr) arr.push(o);
+      else overridesByDate.set(dateKey, [o]);
     }
 
-    // Merge: for owners with an override, use the override; otherwise use base converted
     type SlotAvailability = AvailabilityRecord & { ownerType: string; ownerId: string };
-    const availabilities: SlotAvailability[] = [];
-    const seenOwners = new Set<string>();
+    const slots: Array<{
+      id: string;
+      companyId: string;
+      ownerType: string;
+      ownerId: string;
+      startsAt: Date;
+      endsAt: Date;
+      status: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }> = [];
 
-    for (const base of baseAvailabilities) {
-      const key = `${base.ownerType}:${base.ownerId}`;
-      seenOwners.add(key);
-      const overrideEntry = overrideByOwner.get(key);
-      if (overrideEntry) {
-        availabilities.push({ ...overrideEntry, ownerType: base.ownerType, ownerId: base.ownerId });
-      } else {
-        availabilities.push({ ...defaultToAvailabilityRecord(base), ownerType: base.ownerType, ownerId: base.ownerId });
+    for (const dayParts of dayPartsList) {
+      const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
+      const dayOverrides = overridesByDate.get(isoFor(dayParts)) ?? [];
+
+      // Build a map: ownerKey → AvailabilityRecord resolved for this day.
+      const overrideByOwner = new Map<string, AvailabilityRecord>();
+      for (const o of dayOverrides) {
+        const key = `${o.ownerType}:${o.ownerId}`;
+        overrideByOwner.set(key, { daysOfWeek: [dayOfWeek], ranges: parseRanges(o.ranges) });
       }
-    }
-    // Add override-only owners (no base record)
-    for (const o of overrides) {
-      const key = `${o.ownerType}:${o.ownerId}`;
-      if (!seenOwners.has(key)) {
-        const entry = overrideByOwner.get(key);
-        if (entry) {
-          availabilities.push({ ...entry, ownerType: o.ownerType, ownerId: o.ownerId });
+
+      // Merge: override wins over base; base converted otherwise.
+      const availabilities: SlotAvailability[] = [];
+      const seenOwners = new Set<string>();
+      for (const base of baseAvailabilities) {
+        const key = `${base.ownerType}:${base.ownerId}`;
+        seenOwners.add(key);
+        const overrideEntry = overrideByOwner.get(key);
+        if (overrideEntry) {
+          availabilities.push({ ...overrideEntry, ownerType: base.ownerType, ownerId: base.ownerId });
+        } else {
+          availabilities.push({ ...defaultToAvailabilityRecord(base), ownerType: base.ownerType, ownerId: base.ownerId });
+        }
+      }
+      // Override-only owners (no base record).
+      for (const o of dayOverrides) {
+        const key = `${o.ownerType}:${o.ownerId}`;
+        if (!seenOwners.has(key)) {
+          const entry = overrideByOwner.get(key);
+          if (entry) {
+            availabilities.push({ ...entry, ownerType: o.ownerType, ownerId: o.ownerId });
+          }
+        }
+      }
+
+      for (const availability of availabilities) {
+        if (!availability.daysOfWeek.includes(dayOfWeek)) continue;
+        if (!availability.ranges.length) continue;
+        for (const range of availability.ranges) {
+          if (range.endMinutes <= range.startMinutes) continue;
+          const startMinutes = Math.ceil(range.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+          const lastStart = range.endMinutes - SLOT_MINUTES;
+          for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
+            const startsAt = toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60);
+            const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+            slots.push({
+              id: randomUUID(),
+              companyId: membership.companyId,
+              ownerType: availability.ownerType,
+              ownerId: availability.ownerId,
+              startsAt,
+              endsAt,
+              status: "open",
+              createdAt: startsAt,
+              updatedAt: startsAt,
+            });
+          }
         }
       }
     }
-
-    const slots = availabilities.flatMap((availability) => {
-      if (!availability.daysOfWeek.includes(dayOfWeek)) return [];
-      if (!availability.ranges.length) return [];
-
-      const ownerSlots: Array<{
-        id: string;
-        companyId: string;
-        ownerType: string;
-        ownerId: string;
-        startsAt: Date;
-        endsAt: Date;
-        status: string;
-        createdAt: Date;
-        updatedAt: Date;
-      }> = [];
-
-      for (const range of availability.ranges) {
-        if (range.endMinutes <= range.startMinutes) continue;
-        const startMinutes = Math.ceil(range.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
-        const lastStart = range.endMinutes - SLOT_MINUTES;
-        for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
-          const startsAt = toTimeZoneDate(
-            dayParts,
-            Math.floor(minutes / 60),
-            minutes % 60,
-          );
-          const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-          ownerSlots.push({
-            id: randomUUID(),
-            companyId: membership.companyId,
-            ownerType: availability.ownerType,
-            ownerId: availability.ownerId,
-            startsAt,
-            endsAt,
-            status: "open",
-            createdAt: startsAt,
-            updatedAt: startsAt,
-          });
-        }
-      }
-      return ownerSlots;
-    });
 
     slots.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 

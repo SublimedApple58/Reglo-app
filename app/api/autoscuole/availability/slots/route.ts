@@ -15,6 +15,8 @@ export async function GET(request: Request) {
       | null) ?? undefined,
     ownerId: searchParams.get("ownerId") ?? undefined,
     date: searchParams.get("date") ?? undefined,
+    from: searchParams.get("from") ?? undefined,
+    to: searchParams.get("to") ?? undefined,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next dev\" \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev\"",
+    "dev": "concurrently \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next dev --turbopack\" \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev\"",
     "build": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next build",
     "build:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config next build",
     "start": "concurrently \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next start\" \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev\"",
