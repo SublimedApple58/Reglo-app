@@ -168,11 +168,34 @@ export async function startQuizSession(
       },
     });
 
+    // For REVIEW mode, fetch error stats for each question
+    let reviewStatMap: Map<string, { wrongCount: number; timesAnswered: number; correctRate: number }> | null = null;
+    if (payload.mode === "REVIEW") {
+      const reviewStats = await prisma.quizStudentQuestionStat.findMany({
+        where: {
+          studentId: membership.userId,
+          companyId: membership.companyId,
+          questionId: { in: questionIds },
+        },
+      });
+      reviewStatMap = new Map(
+        reviewStats.map((s) => [
+          s.questionId,
+          {
+            wrongCount: s.timesAnswered - s.timesCorrect,
+            timesAnswered: s.timesAnswered,
+            correctRate: Math.round((s.timesCorrect / s.timesAnswered) * 100),
+          },
+        ]),
+      );
+    }
+
     // Preserve the order from questionIds
     const qMap = new Map(questions.map((q) => [q.id, q]));
     const orderedQuestions = await Promise.all(
       questionIds.map(async (id) => {
         const q = qMap.get(id)!;
+        const stat = reviewStatMap?.get(id);
         return {
           id: q.id,
           questionText: q.questionText,
@@ -182,6 +205,7 @@ export async function startQuizSession(
           hint: q.hint
             ? { title: q.hint.title, descriptionHtml: q.hint.descriptionHtml }
             : null,
+          ...(stat ? { wrongCount: stat.wrongCount, timesAnswered: stat.timesAnswered, correctRate: stat.correctRate } : {}),
         };
       }),
     );
@@ -276,7 +300,7 @@ export async function submitQuizAnswer(
       },
     });
 
-    // Auto-fail exam/scheda if too many errors
+    // Auto-fail exam/scheda if too many errors (NOT for SCHEDA_ESAME — continues until end)
     let sessionStatus: "in_progress" | "completed" | "auto_failed" = "in_progress";
     const shouldAutoFail =
       (session.mode === "EXAM" && updatedSession.wrongCount > EXAM_MAX_ERRORS) ||
@@ -344,7 +368,7 @@ export async function completeQuizSession(
     }
 
     const passed =
-      session.mode === "EXAM"
+      session.mode === "EXAM" || session.mode === "SCHEDA_ESAME"
         ? session.wrongCount <= EXAM_MAX_ERRORS
         : session.mode === "SCHEDA"
           ? session.wrongCount <= SCHEDA_MAX_ERRORS
@@ -465,23 +489,48 @@ export async function getQuizSessionResult(sessionId: string) {
       .sort(([a], [b]) => a - b)
       .map(([chapterNumber, data]) => ({ chapterNumber, ...data }));
 
-    // Wrong answers with hints
+    // Fetch student stats for wrong answers (error frequency)
+    const wrongQuestionIds = session.answers
+      .filter((a) => !a.isCorrect)
+      .map((a) => a.question.id);
+    const wrongQuestionStats = wrongQuestionIds.length > 0
+      ? await prisma.quizStudentQuestionStat.findMany({
+          where: {
+            studentId: session.studentId,
+            companyId: session.companyId,
+            questionId: { in: wrongQuestionIds },
+          },
+        })
+      : [];
+    const wrongStatMap = new Map(wrongQuestionStats.map((s) => [s.questionId, s]));
+
+    // Wrong answers with hints + error stats
     const wrongAnswers = await Promise.all(
       session.answers
         .filter((a) => !a.isCorrect)
-        .map(async (a) => ({
-          id: a.question.id,
-          questionText: a.question.questionText,
-          imageUrl: await resolveImageUrl(a.question.imageKey),
-          chapterNumber: a.question.chapter.chapterNumber,
-          correctAnswer: a.question.correctAnswer,
-          hint: a.question.hint
-            ? {
-                title: a.question.hint.title,
-                descriptionHtml: a.question.hint.descriptionHtml,
-              }
-            : null,
-        })),
+        .map(async (a) => {
+          const stat = wrongStatMap.get(a.question.id);
+          return {
+            id: a.question.id,
+            questionText: a.question.questionText,
+            imageUrl: await resolveImageUrl(a.question.imageKey),
+            chapterNumber: a.question.chapter.chapterNumber,
+            correctAnswer: a.question.correctAnswer,
+            hint: a.question.hint
+              ? {
+                  title: a.question.hint.title,
+                  descriptionHtml: a.question.hint.descriptionHtml,
+                }
+              : null,
+            ...(stat
+              ? {
+                  wrongCount: stat.timesAnswered - stat.timesCorrect,
+                  timesAnswered: stat.timesAnswered,
+                  correctRate: Math.round((stat.timesCorrect / stat.timesAnswered) * 100),
+                }
+              : {}),
+          };
+        }),
     );
 
     const skippedCount = session.totalQuestions - session.correctCount - session.wrongCount;
@@ -761,7 +810,7 @@ export async function getChaptersWithSchedeProgress() {
     const chapters = await prisma.quizChapter.findMany({
       orderBy: { chapterNumber: "asc" },
       include: {
-        schede: { select: { id: true } },
+        schede: { where: { type: "CHAPTER" }, select: { id: true } },
       },
     });
 
@@ -835,7 +884,7 @@ export async function getChapterSchede(chapterId: string) {
     const chapter = await prisma.quizChapter.findUnique({
       where: { id: chapterId },
       include: {
-        schede: { orderBy: { schedaNumber: "asc" } },
+        schede: { where: { type: "CHAPTER" }, orderBy: { schedaNumber: "asc" } },
       },
     });
 
@@ -939,19 +988,21 @@ export async function startSchedaSession(
       include: { chapter: { select: { id: true, chapterNumber: true, description: true } } },
     });
     if (!scheda) throw new Error("Scheda non trovata.");
+    if (scheda.type !== "CHAPTER") throw new Error("Questa scheda non è di tipo capitolo.");
 
-    // Check immutability: already completed?
-    const completedSession = await prisma.quizSession.findFirst({
+    // Check immutability: only passed schede are locked (failed can be retried)
+    const passedSession = await prisma.quizSession.findFirst({
       where: {
         companyId: membership.companyId,
         studentId: membership.userId,
         schedaId: payload.schedaId,
         mode: "SCHEDA",
         status: "completed",
+        passed: true,
       },
     });
-    if (completedSession) {
-      throw new Error("Scheda già completata.");
+    if (passedSession) {
+      throw new Error("Scheda già superata.");
     }
 
     // Check in-progress: resume existing session
@@ -1074,6 +1125,255 @@ export async function startSchedaSession(
         totalQuestions: scheda.totalQuestions,
         schedaNumber: scheda.schedaNumber,
         chapterDescription: scheda.chapter.description,
+        resuming: false,
+        correctCount: 0,
+        wrongCount: 0,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ── getExamSchedeProgress ───────────────────────────────────────────────────
+
+export async function getExamSchedeProgress() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!isStudent(membership.autoscuolaRole)) {
+      throw new Error("Solo gli studenti possono visualizzare le schede d'esame.");
+    }
+
+    const schede = await prisma.quizScheda.findMany({
+      where: { type: "EXAM" },
+      orderBy: { schedaNumber: "asc" },
+    });
+
+    const schedaIds = schede.map((s) => s.id);
+    const sessions = await prisma.quizSession.findMany({
+      where: {
+        companyId: membership.companyId,
+        studentId: membership.userId,
+        mode: "SCHEDA_ESAME",
+        schedaId: { in: schedaIds },
+      },
+      orderBy: { startedAt: "desc" },
+    });
+
+    const sessionByScheda = new Map<string, (typeof sessions)[0]>();
+    for (const s of sessions) {
+      if (s.schedaId && !sessionByScheda.has(s.schedaId)) {
+        sessionByScheda.set(s.schedaId, s);
+      }
+    }
+
+    let completedCount = 0;
+    let passedCount = 0;
+    let failedCount = 0;
+    let totalCorrect = 0;
+    let totalQuestions = 0;
+
+    const schedeData = schede.map((scheda) => {
+      const session = sessionByScheda.get(scheda.id);
+      let status: "not_started" | "in_progress" | "passed" | "failed" = "not_started";
+
+      if (session) {
+        if (session.status === "in_progress") {
+          status = "in_progress";
+        } else if (session.status === "completed") {
+          status = session.passed === true ? "passed" : "failed";
+          completedCount++;
+          if (session.passed === true) passedCount++;
+          else failedCount++;
+          totalCorrect += session.correctCount;
+          totalQuestions += session.totalQuestions;
+        }
+      }
+
+      return {
+        id: scheda.id,
+        schedaNumber: scheda.schedaNumber,
+        totalQuestions: scheda.totalQuestions,
+        status,
+        errorCount: session?.status === "completed" ? session.wrongCount : null,
+        correctCount: session?.status === "completed" ? session.correctCount : null,
+        completedAt: session?.completedAt?.toISOString() ?? null,
+        sessionId: session?.id ?? null,
+      };
+    });
+
+    return {
+      success: true,
+      data: {
+        schede: schedeData,
+        summary: {
+          totalSchede: schede.length,
+          completedCount,
+          passedCount,
+          failedCount,
+          correctRate: totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0,
+        },
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ── startExamSchedaSession ──────────────────────────────────────────────────
+
+const startExamSchedaSessionSchema = z.object({
+  schedaId: z.string().uuid(),
+});
+
+export async function startExamSchedaSession(
+  input: z.infer<typeof startExamSchedaSessionSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!isStudent(membership.autoscuolaRole)) {
+      throw new Error("Solo gli studenti possono avviare schede d'esame.");
+    }
+
+    const payload = startExamSchedaSessionSchema.parse(input);
+
+    const scheda = await prisma.quizScheda.findUnique({
+      where: { id: payload.schedaId },
+    });
+    if (!scheda || scheda.type !== "EXAM") throw new Error("Scheda d'esame non trovata.");
+
+    // Check immutability: only passed exam schede are locked (failed can be retried)
+    const passedSession = await prisma.quizSession.findFirst({
+      where: {
+        companyId: membership.companyId,
+        studentId: membership.userId,
+        schedaId: payload.schedaId,
+        mode: "SCHEDA_ESAME",
+        status: "completed",
+        passed: true,
+      },
+    });
+    if (passedSession) {
+      throw new Error("Scheda d'esame già superata.");
+    }
+
+    // Check in-progress: resume existing session
+    const inProgressSession = await prisma.quizSession.findFirst({
+      where: {
+        companyId: membership.companyId,
+        studentId: membership.userId,
+        schedaId: payload.schedaId,
+        mode: "SCHEDA_ESAME",
+        status: "in_progress",
+      },
+      include: {
+        answers: { select: { questionId: true, studentAnswer: true, isCorrect: true } },
+      },
+    });
+
+    if (inProgressSession) {
+      const questions = await prisma.quizQuestion.findMany({
+        where: { id: { in: scheda.questionIds } },
+        select: {
+          id: true,
+          questionText: true,
+          imageKey: true,
+          correctAnswer: true,
+          chapter: { select: { chapterNumber: true } },
+          hint: { select: { title: true, descriptionHtml: true } },
+        },
+      });
+
+      const qMap = new Map(questions.map((q) => [q.id, q]));
+      const answersMap = new Map(
+        inProgressSession.answers.map((a) => [a.questionId, a]),
+      );
+      const orderedQuestions = await Promise.all(
+        scheda.questionIds.map(async (id) => {
+          const q = qMap.get(id)!;
+          const existingAnswer = answersMap.get(id);
+          return {
+            id: q.id,
+            questionText: q.questionText,
+            imageUrl: await resolveImageUrl(q.imageKey),
+            chapterNumber: q.chapter.chapterNumber,
+            correctAnswer: q.correctAnswer,
+            hint: q.hint
+              ? { title: q.hint.title, descriptionHtml: q.hint.descriptionHtml }
+              : null,
+            answered: existingAnswer
+              ? { studentAnswer: existingAnswer.studentAnswer, isCorrect: existingAnswer.isCorrect }
+              : null,
+          };
+        }),
+      );
+
+      return {
+        success: true,
+        data: {
+          sessionId: inProgressSession.id,
+          questions: orderedQuestions,
+          timeLimitSec: EXAM_TIME_LIMIT_SEC,
+          totalQuestions: scheda.totalQuestions,
+          schedaNumber: scheda.schedaNumber,
+          resuming: true,
+          correctCount: inProgressSession.correctCount,
+          wrongCount: inProgressSession.wrongCount,
+        },
+      };
+    }
+
+    // Create new session
+    const session = await prisma.quizSession.create({
+      data: {
+        companyId: membership.companyId,
+        studentId: membership.userId,
+        mode: "SCHEDA_ESAME",
+        schedaId: scheda.id,
+        questionIds: scheda.questionIds,
+        totalQuestions: scheda.totalQuestions,
+        timeLimitSec: EXAM_TIME_LIMIT_SEC,
+      },
+    });
+
+    const questions = await prisma.quizQuestion.findMany({
+      where: { id: { in: scheda.questionIds } },
+      select: {
+        id: true,
+        questionText: true,
+        imageKey: true,
+        correctAnswer: true,
+        chapter: { select: { chapterNumber: true } },
+        hint: { select: { title: true, descriptionHtml: true } },
+      },
+    });
+
+    const qMap = new Map(questions.map((q) => [q.id, q]));
+    const orderedQuestions = await Promise.all(
+      scheda.questionIds.map(async (id) => {
+        const q = qMap.get(id)!;
+        return {
+          id: q.id,
+          questionText: q.questionText,
+          imageUrl: await resolveImageUrl(q.imageKey),
+          chapterNumber: q.chapter.chapterNumber,
+          correctAnswer: q.correctAnswer,
+          hint: q.hint
+            ? { title: q.hint.title, descriptionHtml: q.hint.descriptionHtml }
+            : null,
+          answered: null,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      data: {
+        sessionId: session.id,
+        questions: orderedQuestions,
+        timeLimitSec: EXAM_TIME_LIMIT_SEC,
+        totalQuestions: scheda.totalQuestions,
+        schedaNumber: scheda.schedaNumber,
         resuming: false,
         correctCount: 0,
         wrongCount: 0,

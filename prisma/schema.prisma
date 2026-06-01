@@ -44,6 +44,7 @@ enum QuizSessionMode {
   CHAPTER
   REVIEW
   SCHEDA
+  SCHEDA_ESAME
 }
 
 model User {
@@ -1049,17 +1050,19 @@ model QuizChapter {
 
 model QuizScheda {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  chapterId      String   @db.Uuid
+  type           String   @default("CHAPTER")
+  chapterId      String?  @db.Uuid
   schedaNumber   Int
   questionIds    String[] @db.Uuid
   totalQuestions Int
   createdAt      DateTime @default(now()) @db.Timestamp(6)
 
-  chapter  QuizChapter  @relation(fields: [chapterId], references: [id])
+  chapter  QuizChapter?  @relation(fields: [chapterId], references: [id])
   sessions QuizSession[]
 
-  @@unique([chapterId, schedaNumber])
+  @@unique([type, chapterId, schedaNumber])
   @@index([chapterId])
+  @@index([type])
 }
 
 model QuizHint {
