@@ -506,7 +506,7 @@ const ensureStudentCanBookFromApp = async ({
   studentId: string;
 }) => {
   if (membership.role === "admin" || isOwner(membership.autoscuolaRole)) {
-    return { allowed: true as const };
+    return { allowed: true as const, settings: null };
   }
   if (membership.autoscuolaRole !== "STUDENT") {
     return {
@@ -521,17 +521,7 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  // Check if student has booking blocked
-  const blocked = await getStudentBookingBlockStatus(companyId, studentId);
-  if (blocked) {
-    return {
-      allowed: false as const,
-      message:
-        "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
-    };
-  }
-
-  // Block booking if the student is not yet in the practical phase.
+  // Single read of the student's membership row: booking block + phase gate.
   //   AWAITING → l'autoscuola non ha ancora attivato il percorso
   //   TEORIA   → ha il modulo quiz ma non ha ancora il foglio rosa
   // PRATICA e PATENTATO sono entrambi ammessi per coerenza.
@@ -541,8 +531,15 @@ const ensureStudentCanBookFromApp = async ({
       userId: studentId,
       autoscuolaRole: "STUDENT",
     },
-    select: { studentPhase: true },
+    select: { bookingBlocked: true, studentPhase: true },
   });
+  if (studentMembership?.bookingBlocked) {
+    return {
+      allowed: false as const,
+      message:
+        "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
+    };
+  }
   if (studentMembership?.studentPhase === "AWAITING") {
     return {
       allowed: false as const,
@@ -570,7 +567,9 @@ const ensureStudentCanBookFromApp = async ({
       message: "La prenotazione da app è abilitata solo per istruttori.",
     };
   }
-  return { allowed: true as const };
+  // Return the resolved cluster settings so the caller can reuse them instead
+  // of resolving them a second time.
+  return { allowed: true as const, settings: effective };
 };
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
@@ -2494,13 +2493,16 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       return { success: true, data: [] };
     }
 
-    // Resolve cluster-aware settings for this student
-    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
-    const clusterSettings = await resolveEffectiveBookingSettings(
-      membership.companyId,
-      payload.studentId,
-      buildCompanyBookingDefaults(serviceLimits),
-    );
+    // Reuse the cluster settings already resolved during the booking-access
+    // check (students); only recompute for admin/owner, who skip that path.
+    const clusterSettings = bookingAccess.settings ?? await (async () => {
+      const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
+      return resolveEffectiveBookingSettings(
+        membership.companyId,
+        payload.studentId,
+        buildCompanyBookingDefaults(serviceLimits),
+      );
+    })();
     const roundedHoursOnly = clusterSettings.roundedHoursOnly;
 
     // If student is locked to an instructor, force the instructorId filter
