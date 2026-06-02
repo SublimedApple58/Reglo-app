@@ -558,12 +558,9 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  // Resolve cluster-aware governance (instructor cluster override → company default)
-  const service = await prisma.companyService.findFirst({
-    where: { companyId, serviceKey: "AUTOSCUOLE" },
-    select: { limits: true },
-  });
-  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  // Resolve cluster-aware governance (instructor cluster override → company default).
+  // Read limits through the Redis cache (shared with the main slot computation).
+  const limits = await getCachedCompanyServiceLimits(companyId);
   const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
   const effective = await resolveEffectiveBookingSettings(companyId, studentId, buildCompanyBookingDefaults(limits));
   const effectiveActors = effective.appBookingActors;
@@ -2483,17 +2480,19 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     // timezone-adjusted dateStart (e.g. April 6 22:00 UTC for April 7 CEST)
     // would incorrectly match the previous day's holiday.
     const holidayDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day));
-    const isHoliday = await prisma.autoscuolaHoliday.findFirst({
-      where: {
-        companyId: membership.companyId,
-        date: holidayDate,
-      },
-    });
+    // Holiday check and service limits are independent — run them together.
+    const [isHoliday, serviceLimits] = await Promise.all([
+      prisma.autoscuolaHoliday.findFirst({
+        where: {
+          companyId: membership.companyId,
+          date: holidayDate,
+        },
+      }),
+      getCachedCompanyServiceLimits(membership.companyId),
+    ]);
     if (isHoliday) {
       return { success: true, data: [] };
     }
-
-    const serviceLimits = await getCachedCompanyServiceLimits(membership.companyId);
 
     // Resolve cluster-aware settings for this student
     const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
@@ -2628,20 +2627,27 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
 
-    let missingRequiredTypes: string[] = [];
-    if (enforceRequiredTypes) {
-      const coverage = await getStudentLessonPolicyCoverage({
-        companyId: membership.companyId,
-        studentId: payload.studentId,
-        policy: lessonPolicy,
-      });
-      missingRequiredTypes = coverage.missingRequiredTypes;
-    }
-
     const rangeStart = dateStart;
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
+    const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
 
-    const [instructorResolver, vehicleResolver] = await Promise.all([
+    // Everything still needed is independent — fetch it in a single parallel
+    // wave instead of four sequential round-trips (policy coverage, the two
+    // availability resolvers, appointments, and instructor blocks).
+    const [
+      lessonCoverage,
+      instructorResolver,
+      vehicleResolver,
+      appointments,
+      instructorBlocks,
+    ] = await Promise.all([
+      enforceRequiredTypes
+        ? getStudentLessonPolicyCoverage({
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            policy: lessonPolicy,
+          })
+        : Promise.resolve(null),
       buildAvailabilityResolver(
         membership.companyId,
         "instructor",
@@ -2656,15 +2662,23 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         rangeStart,
         rangeEnd,
       ),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+        },
+      }),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId: membership.companyId,
+          instructorId: { in: activeInstructorIds },
+          endsAt: { gt: rangeStart },
+          startsAt: { lt: rangeEnd },
+        },
+      }),
     ]);
-    const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-    const appointments = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId: membership.companyId,
-        status: { notIn: ["cancelled"] },
-        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-      },
-    });
+    const missingRequiredTypes = lessonCoverage?.missingRequiredTypes ?? [];
 
     const starts = new Map<string, Set<number>>();
     const intervals = new Map<string, Array<{ start: number; end: number }>>();
@@ -2684,15 +2698,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       if (appt.vehicleId) addInterval(appt.vehicleId);
     }
 
-    // Load instructor blocks (sick leave, etc.) and add them to intervals
-    const instructorBlocks = await prisma.autoscuolaInstructorBlock.findMany({
-      where: {
-        companyId: membership.companyId,
-        instructorId: { in: activeInstructorIds },
-        endsAt: { gt: rangeStart },
-        startsAt: { lt: rangeEnd },
-      },
-    });
+    // Instructor blocks (sick leave, etc.) were fetched in the parallel wave
+    // above — add them to the busy intervals.
     for (const block of instructorBlocks) {
       const list = intervals.get(block.instructorId) ?? [];
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });

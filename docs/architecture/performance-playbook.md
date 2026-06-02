@@ -86,6 +86,16 @@ The number of DB/network round-trips usually dominates, not row volume.
   request → one auth cycle, queries co-located with the DB.
 - **Direct lookups, not list-then-find.** Don't fetch a 500-row list to find one
   record — query the record directly by its key.
+- **Collapse the waterfall.** A handler that `await`s ~10 queries one after another
+  pays ~10 sequential round-trips to Neon (each 50–150ms from the EU region). Map
+  the real data dependencies, then run every *independent* read in the same
+  `Promise.all` "wave". Aim for a few waves, not a long chain.
+  Example: `getAllAvailableSlots` (the booking slot search) had a long sequential
+  tail — policy coverage → instructor resolver → vehicle resolver → appointments →
+  instructor blocks. They're all independent, so they now run in one `Promise.all`
+  (and holiday + service-limits run together too). Same results, far fewer waves.
+  Route shared reads (service limits) through the Redis cache so duplicate calls in
+  governance + the main path are near-free.
 - Parallelize independent server-side queries with `Promise.all` / `$transaction`.
 
 ## 4. Backend — per-request overhead
