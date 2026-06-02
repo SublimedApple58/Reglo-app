@@ -29,6 +29,10 @@ import {
   getCachedHolidays,
 } from "@/lib/autoscuole/cached-service";
 import {
+  resolveEffectiveBookingSettings,
+  buildCompanyBookingDefaults,
+} from "@/lib/autoscuole/instructor-clusters";
+import {
   LESSON_POLICY_TYPES,
   isLessonPolicyType,
   getCompatibleLessonTypesForInterval,
@@ -506,7 +510,7 @@ const ensureStudentCanBookFromApp = async ({
   studentId: string;
 }) => {
   if (membership.role === "admin" || isOwner(membership.autoscuolaRole)) {
-    return { allowed: true as const, settings: null };
+    return { allowed: true as const, settings: null, limits: null };
   }
   if (membership.autoscuolaRole !== "STUDENT") {
     return {
@@ -521,18 +525,22 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  // Single read of the student's membership row: booking block + phase gate.
+  // Read the membership row (block + phase gate) and the service limits in
+  // parallel — they are independent.
   //   AWAITING → l'autoscuola non ha ancora attivato il percorso
   //   TEORIA   → ha il modulo quiz ma non ha ancora il foglio rosa
   // PRATICA e PATENTATO sono entrambi ammessi per coerenza.
-  const studentMembership = await prisma.companyMember.findFirst({
-    where: {
-      companyId,
-      userId: studentId,
-      autoscuolaRole: "STUDENT",
-    },
-    select: { bookingBlocked: true, studentPhase: true },
-  });
+  const [studentMembership, limits] = await Promise.all([
+    prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        userId: studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { bookingBlocked: true, studentPhase: true },
+    }),
+    getCachedCompanyServiceLimits(companyId),
+  ]);
   if (studentMembership?.bookingBlocked) {
     return {
       allowed: false as const,
@@ -556,9 +564,6 @@ const ensureStudentCanBookFromApp = async ({
   }
 
   // Resolve cluster-aware governance (instructor cluster override → company default).
-  // Read limits through the Redis cache (shared with the main slot computation).
-  const limits = await getCachedCompanyServiceLimits(companyId);
-  const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
   const effective = await resolveEffectiveBookingSettings(companyId, studentId, buildCompanyBookingDefaults(limits));
   const effectiveActors = effective.appBookingActors;
   if (effectiveActors === "instructors") {
@@ -567,9 +572,9 @@ const ensureStudentCanBookFromApp = async ({
       message: "La prenotazione da app è abilitata solo per istruttori.",
     };
   }
-  // Return the resolved cluster settings so the caller can reuse them instead
-  // of resolving them a second time.
-  return { allowed: true as const, settings: effective };
+  // Return the resolved cluster settings AND limits so the caller can reuse
+  // them instead of fetching/resolving a second time.
+  return { allowed: true as const, settings: effective, limits };
 };
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
@@ -2479,7 +2484,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     // timezone-adjusted dateStart (e.g. April 6 22:00 UTC for April 7 CEST)
     // would incorrectly match the previous day's holiday.
     const holidayDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day));
-    // Holiday check and service limits are independent — run them together.
+    // Holiday check + service limits. Limits were already fetched during the
+    // booking-access check for students — reuse them; only admin/owner refetch.
     const [isHoliday, serviceLimits] = await Promise.all([
       prisma.autoscuolaHoliday.findFirst({
         where: {
@@ -2487,7 +2493,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           date: holidayDate,
         },
       }),
-      getCachedCompanyServiceLimits(membership.companyId),
+      bookingAccess.limits ?? getCachedCompanyServiceLimits(membership.companyId),
     ]);
     if (isHoliday) {
       return { success: true, data: [] };
@@ -2495,14 +2501,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     // Reuse the cluster settings already resolved during the booking-access
     // check (students); only recompute for admin/owner, who skip that path.
-    const clusterSettings = bookingAccess.settings ?? await (async () => {
-      const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
-      return resolveEffectiveBookingSettings(
-        membership.companyId,
-        payload.studentId,
-        buildCompanyBookingDefaults(serviceLimits),
-      );
-    })();
+    const clusterSettings = bookingAccess.settings ?? await resolveEffectiveBookingSettings(
+      membership.companyId,
+      payload.studentId,
+      buildCompanyBookingDefaults(serviceLimits),
+    );
     const roundedHoursOnly = clusterSettings.roundedHoursOnly;
 
     // If student is locked to an instructor, force the instructorId filter
