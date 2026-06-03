@@ -157,6 +157,15 @@ const respondSwapOfferSchema = z.object({
   response: z.enum(["accept", "decline"]),
 });
 
+const getMySwapOffersSchema = z.object({
+  studentId: z.string().uuid(),
+});
+
+const cancelSwapOfferSchema = z.object({
+  offerId: z.string().uuid(),
+  studentId: z.string().uuid(),
+});
+
 // ── createSwapOffer ─────────────────────────────────────────────────────
 
 export async function createSwapOffer(
@@ -766,6 +775,121 @@ export async function getMyAcceptedSwaps(
     }));
 
     return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ── getMySwapOffers ─────────────────────────────────────────────────────
+// The active swap offers *created by* the viewing student (still broadcasted,
+// not expired, appointment still upcoming). Mirrors the shape of getSwapOffers
+// so the mobile client can reuse the same type.
+
+export async function getMySwapOffers(
+  input: z.infer<typeof getMySwapOffersSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getMySwapOffersSchema.parse(input);
+    const now = new Date();
+
+    const student = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        autoscuolaRole: "STUDENT",
+        userId: payload.studentId,
+      },
+      select: { userId: true },
+    });
+    if (!student) {
+      return { success: false, message: "Allievo non valido." };
+    }
+
+    const offers = await prisma.autoscuolaSwapOffer.findMany({
+      where: {
+        companyId: membership.companyId,
+        requestingStudentId: payload.studentId,
+        status: "broadcasted",
+        expiresAt: { gt: now },
+        appointment: {
+          startsAt: { gt: now },
+          status: { in: ["scheduled", "confirmed"] },
+        },
+      },
+      include: {
+        appointment: {
+          include: {
+            instructor: { select: { name: true } },
+            vehicle: { select: { name: true } },
+          },
+        },
+        requestingStudent: { select: { name: true } },
+      },
+      orderBy: { sentAt: "desc" },
+    });
+
+    const data = offers.map((offer) => ({
+      id: offer.id,
+      companyId: offer.companyId,
+      appointmentId: offer.appointmentId,
+      requestingStudentId: offer.requestingStudentId,
+      requestingStudentName: offer.requestingStudent.name,
+      status: offer.status,
+      sentAt: offer.sentAt.toISOString(),
+      expiresAt: offer.expiresAt.toISOString(),
+      appointment: {
+        startsAt: offer.appointment.startsAt.toISOString(),
+        endsAt: offer.appointment.endsAt?.toISOString() ?? null,
+        type: offer.appointment.type,
+        instructorName: offer.appointment.instructor?.name ?? null,
+        vehicleName: offer.appointment.vehicle?.name ?? null,
+      },
+    }));
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ── cancelSwapOffer ─────────────────────────────────────────────────────
+// The requesting student withdraws their own broadcasted swap offer. No credit
+// movement happens (no swap occurred). Idempotent-friendly: a non-broadcasted
+// offer is reported as already closed.
+
+export async function cancelSwapOffer(
+  input: z.infer<typeof cancelSwapOfferSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = cancelSwapOfferSchema.parse(input);
+
+    const offer = await prisma.autoscuolaSwapOffer.findFirst({
+      where: { id: payload.offerId, companyId: membership.companyId },
+      select: { id: true, requestingStudentId: true, status: true },
+    });
+
+    if (!offer) {
+      return { success: false, message: "Richiesta non trovata." };
+    }
+    if (offer.requestingStudentId !== payload.studentId) {
+      return { success: false, message: "Non sei il titolare di questa richiesta." };
+    }
+    if (offer.status !== "broadcasted") {
+      return { success: false, message: "La richiesta non è più attiva." };
+    }
+
+    await prisma.autoscuolaSwapOffer.update({
+      where: { id: offer.id },
+      data: { status: "cancelled" },
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+
+    return { success: true, data: { cancelled: true } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
