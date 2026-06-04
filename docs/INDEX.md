@@ -12,6 +12,7 @@
 | Holidays | [holidays.md](features/holidays.md) | `autoscuole-holidays.actions.ts` |
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
+| Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
 | Repositioning | [repositioning.md](features/repositioning.md) | `repositioning.ts` |

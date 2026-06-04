@@ -6526,6 +6526,29 @@ export type InstructorHoursEntry = {
   };
 };
 
+// Range-based reporting (mobile period selector). Buckets are days (span ≤ 14)
+// or Mon–Sun weeks (longer spans).
+export type InstructorHoursBucket = {
+  key: string;
+  label: string;
+  startDate: string; // ISO YYYY-MM-DD (day, or week Monday)
+  totalMinutes: number;
+  outsideWorkingHoursMinutes: number;
+  appointmentCount: number;
+};
+
+export type InstructorHoursRange = {
+  instructorId: string;
+  instructorName: string;
+  workingHoursStart: string | null;
+  workingHoursEnd: string | null;
+  rangeStart: string; // ISO YYYY-MM-DD (inclusive)
+  rangeEnd: string; // ISO YYYY-MM-DD (inclusive)
+  granularity: "day" | "week";
+  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number };
+  buckets: InstructorHoursBucket[];
+};
+
 const ITALY_DAY_LABELS = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
 const ITALY_MONTH_LABELS = [
   "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
@@ -6751,6 +6774,179 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: monthTotal,
           outsideWorkingHoursMinutes: Math.round(monthOutside),
         },
+      };
+    });
+
+    return { success: true, data: results };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export async function getInstructorDrivingHoursRange(input: {
+  instructorId?: string;
+  from: string; // YYYY-MM-DD inclusive
+  to: string; // YYYY-MM-DD inclusive
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const role = membership.autoscuolaRole;
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(role);
+    const isSelfInstructor = isInstructor(role);
+
+    // Resolve target instructors (mirrors getInstructorDrivingHours).
+    let targetInstructors: { id: string; name: string; settings: unknown }[];
+    if (input.instructorId) {
+      if (!isOwnerOrAdmin) {
+        const own = await prisma.autoscuolaInstructor.findFirst({
+          where: { companyId, userId: membership.userId, status: "active" },
+          select: { id: true, name: true, settings: true },
+        });
+        if (!own || own.id !== input.instructorId) {
+          return { success: false, message: "Non autorizzato." };
+        }
+        targetInstructors = [own];
+      } else {
+        const instr = await prisma.autoscuolaInstructor.findFirst({
+          where: { companyId, id: input.instructorId },
+          select: { id: true, name: true, settings: true },
+        });
+        if (!instr) return { success: false, message: "Istruttore non trovato." };
+        targetInstructors = [instr];
+      }
+    } else if (isOwnerOrAdmin) {
+      targetInstructors = await prisma.autoscuolaInstructor.findMany({
+        where: {
+          companyId,
+          status: "active",
+          userId: { not: null },
+          user: {
+            companyMembers: {
+              some: { companyId, autoscuolaRole: { in: ["INSTRUCTOR", "INSTRUCTOR_OWNER"] } },
+            },
+          },
+        },
+        select: { id: true, name: true, settings: true },
+        orderBy: { name: "asc" },
+      });
+    } else if (isSelfInstructor) {
+      const own = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId, userId: membership.userId, status: "active" },
+        select: { id: true, name: true, settings: true },
+      });
+      if (!own) return { success: false, message: "Istruttore non trovato." };
+      targetInstructors = [own];
+    } else {
+      return { success: false, message: "Non autorizzato." };
+    }
+
+    if (!targetInstructors.length) {
+      return { success: true, data: [] as InstructorHoursRange[] };
+    }
+
+    // Range [from 00:00, to+1 00:00) in UTC; granularity by span.
+    const rangeStartDate = new Date(input.from + "T00:00:00Z");
+    const rangeEndExclusive = new Date(new Date(input.to + "T00:00:00Z").getTime() + DAY_MS);
+    const spanDays = Math.round((rangeEndExclusive.getTime() - rangeStartDate.getTime()) / DAY_MS);
+    const granularity: "day" | "week" = spanDays <= 14 ? "day" : "week";
+
+    const instructorIds = targetInstructors.map((i) => i.id);
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        status: { in: ["completed", "checked_in", "no_show"] },
+        type: { not: "esame" },
+        startsAt: { gte: rangeStartDate, lt: rangeEndExclusive },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    });
+
+    const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
+    for (const instr of targetInstructors) {
+      settingsMap.set(instr.id, parseInstructorSettings(instr.settings));
+    }
+
+    const sumAppts = (
+      appts: { startsAt: Date; endsAt: Date | null }[],
+      settings: ReturnType<typeof parseInstructorSettings>,
+    ) => {
+      let total = 0;
+      let outside = 0;
+      for (const appt of appts) {
+        const start = appt.startsAt.getTime();
+        const end = appt.endsAt ? appt.endsAt.getTime() : start + 60 * 60 * 1000;
+        total += Math.round((end - start) / 60000);
+        outside += computeOutsideMinutes(
+          appt.startsAt,
+          appt.endsAt ?? new Date(start + 60 * 60 * 1000),
+          settings.workingHoursStart,
+          settings.workingHoursEnd,
+        );
+      }
+      return { total, outside: Math.round(outside) };
+    };
+
+    const results: InstructorHoursRange[] = targetInstructors.map((instr) => {
+      const settings = settingsMap.get(instr.id)!;
+      const instrAppts = appointments.filter((a) => a.instructorId === instr.id);
+      const buckets: InstructorHoursBucket[] = [];
+
+      if (granularity === "day") {
+        for (let t = rangeStartDate.getTime(); t < rangeEndExclusive.getTime(); t += DAY_MS) {
+          const dayDate = new Date(t);
+          const nextDay = new Date(t + DAY_MS);
+          const dayAppts = instrAppts.filter((a) => a.startsAt >= dayDate && a.startsAt < nextDay);
+          const { total, outside } = sumAppts(dayAppts, settings);
+          const dateStr = dayDate.toISOString().slice(0, 10);
+          buckets.push({
+            key: dateStr,
+            label: ITALY_DAY_LABELS[dayDate.getUTCDay()],
+            startDate: dateStr,
+            totalMinutes: total,
+            outsideWorkingHoursMinutes: outside,
+            appointmentCount: dayAppts.length,
+          });
+        }
+      } else {
+        // Mon–Sun weeks covering the range.
+        const firstMonday = new Date(rangeStartDate);
+        const dow = firstMonday.getUTCDay();
+        firstMonday.setUTCDate(firstMonday.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+        for (let ws = firstMonday.getTime(); ws < rangeEndExclusive.getTime(); ws += 7 * DAY_MS) {
+          const weekStartD = new Date(ws);
+          const weekEndD = new Date(ws + 7 * DAY_MS);
+          const wAppts = instrAppts.filter((a) => a.startsAt >= weekStartD && a.startsAt < weekEndD);
+          const { total, outside } = sumAppts(wAppts, settings);
+          const startStr = weekStartD.toISOString().slice(0, 10);
+          buckets.push({
+            key: startStr,
+            label: `${weekStartD.getUTCDate()} ${ITALY_MONTH_LABELS[weekStartD.getUTCMonth()].slice(0, 3).toLowerCase()}`,
+            startDate: startStr,
+            totalMinutes: total,
+            outsideWorkingHoursMinutes: outside,
+            appointmentCount: wAppts.length,
+          });
+        }
+      }
+
+      return {
+        instructorId: instr.id,
+        instructorName: instr.name,
+        workingHoursStart: settings.workingHoursStart ?? null,
+        workingHoursEnd: settings.workingHoursEnd ?? null,
+        rangeStart: input.from,
+        rangeEnd: input.to,
+        granularity,
+        total: {
+          totalMinutes: buckets.reduce((s, b) => s + b.totalMinutes, 0),
+          outsideWorkingHoursMinutes: buckets.reduce((s, b) => s + b.outsideWorkingHoursMinutes, 0),
+          appointmentCount: buckets.reduce((s, b) => s + b.appointmentCount, 0),
+        },
+        buckets,
       };
     });
 
