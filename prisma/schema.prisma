@@ -636,6 +636,10 @@ model AutoscuolaWeeklyAvailability {
   ownerId       String   @db.Uuid
   daysOfWeek    Int[]
   ranges        Json?    @db.Json
+  // Per-weekday ranges: { "0": [{startMinutes,endMinutes}], "1": [...], ... }.
+  // When present it takes precedence over the shared `ranges`/`daysOfWeek` above
+  // (which are kept populated with a representative day for legacy consumers).
+  rangesByDay   Json?    @db.Json
   startMinutes  Int
   endMinutes    Int
   startMinutes2 Int?

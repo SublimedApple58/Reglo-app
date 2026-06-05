@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { Prisma } from "@prisma/client";
 import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
@@ -60,6 +61,16 @@ const slotSchema = z.object({
     startMinutes: z.number().int().min(0).max(1440),
     endMinutes: z.number().int().min(0).max(1440),
   })).optional(),
+  // Per-weekday schedule: { "1": [{startMinutes,endMinutes}], ... }. When present
+  // it is authoritative; the flat daysOfWeek/ranges/startsAt fields are derived
+  // from a representative day for legacy/back-compat consumers.
+  scheduleByDay: z.record(
+    z.string().regex(/^[0-6]$/),
+    z.array(z.object({
+      startMinutes: z.number().int().min(0).max(1440),
+      endMinutes: z.number().int().min(0).max(1440),
+    })),
+  ).optional(),
 });
 
 const deleteSlotsSchema = z.object({
@@ -321,6 +332,9 @@ export type TimeRange = { startMinutes: number; endMinutes: number };
 type AvailabilityRecord = {
   daysOfWeek: number[];
   ranges: TimeRange[];
+  // When present, ranges differ per weekday (0=Sun..6=Sat) and take precedence
+  // over the flat `ranges` field. `rangesForDay()` is the single read accessor.
+  rangesByDay?: Record<number, TimeRange[]>;
 };
 
 const parseRanges = (raw: unknown): TimeRange[] => {
@@ -332,7 +346,47 @@ const parseRanges = (raw: unknown): TimeRange[] => {
   );
 };
 
-const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown }): AvailabilityRecord => {
+// Parse the `rangesByDay` JSON ({ "1": [...], ... }) into a {dayOfWeek: ranges}
+// map, keeping only days that have at least one valid range. Returns null when
+// absent/empty so callers fall back to the shared `ranges`.
+const parseRangesByDay = (raw: unknown): Record<number, TimeRange[]> | null => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const map: Record<number, TimeRange[]> = {};
+  let any = false;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const day = Number(k);
+    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+    const ranges = parseRanges(v).filter((r) => r.endMinutes > r.startMinutes);
+    if (ranges.length) {
+      map[day] = ranges;
+      any = true;
+    }
+  }
+  return any ? map : null;
+};
+
+// Single accessor for "what ranges apply on this weekday" — handles both the
+// per-day model and the legacy shared model transparently.
+const rangesForDay = (a: AvailabilityRecord, dayOfWeek: number): TimeRange[] => {
+  if (a.rangesByDay) return a.rangesByDay[dayOfWeek] ?? [];
+  return a.daysOfWeek.includes(dayOfWeek) ? a.ranges : [];
+};
+
+// Narrow a (possibly per-day) record down to a single date's effective ranges,
+// shaped exactly like the legacy resolved record so every existing consumer
+// (isOwnerAvailable / isAvailabilityCovering copies) keeps working unchanged.
+const narrowToDay = (a: AvailabilityRecord, dayOfWeek: number): AvailabilityRecord => {
+  const ranges = rangesForDay(a, dayOfWeek);
+  return { daysOfWeek: ranges.length ? [dayOfWeek] : [], ranges };
+};
+
+const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown; rangesByDay?: unknown }): AvailabilityRecord => {
+  const rangesByDay = parseRangesByDay(record.rangesByDay);
+  if (rangesByDay) {
+    // daysOfWeek = days that actually have ranges; flat `ranges` left empty (the
+    // per-day map is authoritative and read via rangesForDay()).
+    return { daysOfWeek: Object.keys(rangesByDay).map(Number).sort((a, b) => a - b), ranges: [], rangesByDay };
+  }
   const ranges = record.ranges ? parseRanges(record.ranges) : [];
   if (!ranges.length) {
     ranges.push({ startMinutes: record.startMinutes, endMinutes: record.endMinutes });
@@ -386,7 +440,7 @@ export const resolveEffectiveAvailability = async (
     where: { companyId, ownerType, ownerId },
   });
   if (!base) return null;
-  return defaultToAvailabilityRecord(base);
+  return narrowToDay(defaultToAvailabilityRecord(base), dayOfWeek);
 };
 
 type OverrideRaw = { ownerId: string; date: Date | string; ranges: unknown };
@@ -451,7 +505,8 @@ export const buildAvailabilityResolver = async (
       if (ranges !== undefined) {
         return { daysOfWeek: [dayOfWeek], ranges };
       }
-      return defaultMap.get(ownerId) ?? null;
+      const base = defaultMap.get(ownerId);
+      return base ? narrowToDay(base, dayOfWeek) : null;
     },
     /** Check if an override exists for a given owner + date */
     hasOverride(ownerId: string, date: Date): boolean {
@@ -471,10 +526,11 @@ const isAvailabilityCovering = (
 ) => {
   if (!availability) return false;
   const dayOfWeek = dayOfWeekFromDate(startsAt);
-  if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
+  const dayRanges = rangesForDay(availability, dayOfWeek);
+  if (!dayRanges.length) return false;
   const startMin = minutesFromDate(startsAt);
   const endMin = minutesFromDate(endsAt);
-  return availability.ranges.some(
+  return dayRanges.some(
     (r) => r.endMinutes > r.startMinutes && startMin >= r.startMinutes && endMin <= r.endMinutes,
   );
 };
@@ -585,7 +641,7 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
     const end = new Date(payload.endsAt);
     const daysOfWeek = normalizeDays(payload.daysOfWeek);
 
-    if (!daysOfWeek.length) {
+    if (!daysOfWeek.length && !payload.scheduleByDay) {
       return { success: false, message: "Seleziona almeno un giorno." };
     }
 
@@ -625,6 +681,43 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
           return r;
         })();
 
+    // ── Per-weekday schedule (authoritative when provided) ──
+    // When `scheduleByDay` is present it is persisted to `rangesByDay` and the
+    // flat fields below are derived from the first active day so legacy readers
+    // still get a sensible representative. When absent, `rangesByDay` is cleared
+    // (a shared-hours save reverts the record to the legacy model).
+    let rangesByDayJson: Record<string, TimeRange[]> | null = null;
+    let finalDaysOfWeek = daysOfWeek;
+    let finalRanges = ranges;
+    let finalStartMinutes = startMinutes;
+    let finalEndMinutes = endMinutes;
+    let finalStartMinutes2 = startMinutes2;
+    let finalEndMinutes2 = endMinutes2;
+
+    if (payload.scheduleByDay) {
+      const map: Record<string, TimeRange[]> = {};
+      const activeDays: number[] = [];
+      for (const [k, v] of Object.entries(payload.scheduleByDay)) {
+        const dayRanges = (v as TimeRange[]).filter((r) => r.endMinutes > r.startMinutes);
+        if (dayRanges.length) {
+          map[k] = dayRanges;
+          activeDays.push(Number(k));
+        }
+      }
+      if (!activeDays.length) {
+        return { success: false, message: "Seleziona almeno un giorno." };
+      }
+      activeDays.sort((a, b) => a - b);
+      const rep = map[String(activeDays[0])];
+      rangesByDayJson = map;
+      finalDaysOfWeek = activeDays;
+      finalRanges = rep;
+      finalStartMinutes = rep[0].startMinutes;
+      finalEndMinutes = rep[0].endMinutes;
+      finalStartMinutes2 = rep[1]?.startMinutes ?? null;
+      finalEndMinutes2 = rep[1]?.endMinutes ?? null;
+    }
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -634,23 +727,25 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
         },
       },
       update: {
-        daysOfWeek,
-        startMinutes,
-        endMinutes,
-        startMinutes2,
-        endMinutes2,
-        ranges,
+        daysOfWeek: finalDaysOfWeek,
+        startMinutes: finalStartMinutes,
+        endMinutes: finalEndMinutes,
+        startMinutes2: finalStartMinutes2,
+        endMinutes2: finalEndMinutes2,
+        ranges: finalRanges,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
       },
       create: {
         companyId: membership.companyId,
         ownerType: payload.ownerType,
         ownerId: payload.ownerId,
-        daysOfWeek,
-        startMinutes,
-        endMinutes,
-        startMinutes2,
-        endMinutes2,
-        ranges,
+        daysOfWeek: finalDaysOfWeek,
+        startMinutes: finalStartMinutes,
+        endMinutes: finalEndMinutes,
+        startMinutes2: finalStartMinutes2,
+        endMinutes2: finalEndMinutes2,
+        ranges: finalRanges,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
       },
     });
 
@@ -835,9 +930,9 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       }
 
       for (const availability of availabilities) {
-        if (!availability.daysOfWeek.includes(dayOfWeek)) continue;
-        if (!availability.ranges.length) continue;
-        for (const range of availability.ranges) {
+        const dayRanges = rangesForDay(availability, dayOfWeek);
+        if (!dayRanges.length) continue;
+        for (const range of dayRanges) {
           if (range.endMinutes <= range.startMinutes) continue;
           const startMinutes = Math.ceil(range.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
           const lastStart = range.endMinutes - SLOT_MINUTES;
@@ -890,9 +985,18 @@ export async function getDefaultAvailability(input: z.infer<typeof getDefaultAva
       return { success: true, data: null };
     }
 
-    const { daysOfWeek, ranges } = defaultToAvailabilityRecord(record);
+    const resolved = defaultToAvailabilityRecord(record);
+    // Always expose a per-day map so the mobile editor can paint per-weekday
+    // rows. Legacy records (no rangesByDay) are projected by applying the shared
+    // ranges to each active day.
+    const scheduleByDay: Record<number, TimeRange[]> =
+      resolved.rangesByDay ??
+      Object.fromEntries(resolved.daysOfWeek.map((d) => [d, resolved.ranges]));
 
-    return { success: true, data: { daysOfWeek, ranges } };
+    return {
+      success: true,
+      data: { daysOfWeek: resolved.daysOfWeek, ranges: resolved.ranges, scheduleByDay },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
