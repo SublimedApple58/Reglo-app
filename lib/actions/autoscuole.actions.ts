@@ -3184,14 +3184,12 @@ export async function cancelAndRepositionAutoscuolaAppointment(
     return {
       success: true,
       data: {
-        queued: true,
-        proposalCreated: response.proposalCreated,
-        proposalStartsAt: response.proposalStartsAt,
-        taskId: response.taskId ?? undefined,
+        queued: false,
+        proposalCreated: false,
+        proposalStartsAt: undefined,
+        taskId: undefined,
       },
-      message: response.proposalCreated
-        ? "Guida cancellata e nuova proposta inviata all'allievo."
-        : "Guida cancellata. Ricerca nuovo slot in corso.",
+      message: "Guida cancellata.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -3757,14 +3755,12 @@ export async function deleteAutoscuolaAppointment(
       success: true,
       data: {
         deleted: false,
-        queued: true,
-        proposalCreated: response.proposalCreated,
-        proposalStartsAt: response.proposalStartsAt,
-        taskId: response.taskId ?? undefined,
+        queued: false,
+        proposalCreated: false,
+        proposalStartsAt: undefined,
+        taskId: undefined,
       },
-      message: response.proposalCreated
-        ? "Evento cancellato e nuova proposta inviata all'allievo."
-        : "Evento cancellato. Ricerca nuovo slot in corso.",
+      message: "Guida cancellata.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
