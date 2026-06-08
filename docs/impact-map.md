@@ -8,7 +8,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Appointments
 - → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`), confirm consumes credits, settlement charges Stripe
-- → **Repositioning**: cancel queues reposition (`queueOperationalRepositionForAppointment`)
+- → **Repositioning (retired)**: cancel now cancels only — no reposition/proposal (`queueOperationalRepositionForAppointment` is cancel-only behind `REPOSITIONING_ENABLED=false`)
 - → **Notifications**: push on create/cancel/reschedule/propose
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Communications**: case status change triggers notifications
@@ -80,11 +80,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications**: deadline reminders (pink sheet, medical expiry)
 - → **Notifications**: push on case status change
 
-### Repositioning
-- → **Booking Engine**: uses `findBestAutoscuolaSlot()` to find targets
-- → **Availability**: reads all availability data
-- → **Notifications**: push to student when repositioned
-- → **Cache**: invalidates AGENDA
+### Repositioning (retired 2026-06-08 — cancel-only, see features/repositioning.md)
+- → **Appointments**: cancellation entry points now cancel only (no proposal)
+- → **Payments**: refunds lesson credit on cancel if the lesson was upcoming
+- → **Notifications**: reason-specific cancellation push/email
+- → **Cache**: invalidates AGENDA / PAYMENTS
+- (legacy, dead behind `REPOSITIONING_ENABLED=false`) Booking Engine slot-matching
 
 ### Penalties
 - → **Payments**: penalty charge via Stripe, tracked in AppointmentPayment

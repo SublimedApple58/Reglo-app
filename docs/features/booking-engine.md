@@ -28,6 +28,16 @@ Slot matching, booking governance, waitlist broadcasting, instructor booking sug
 - `bookingCutoffTime`: no booking after this time
 - `bookingBlocked` / `weeklyBookingLimitExempt`: per-student flags
 
+## Booking gate coverage (`bookingMinStartDate` — "Prenotazioni aperte dal")
+The `serviceLimits.bookingMinStartDate` gate is enforced **only** in
+`createBookingRequest()` (student self-booking from the app). It does **not**
+cover swap accepts (`respondSwapOffer`) — a student can still acquire an existing
+appointment dated before the gate by accepting a swap. Repositioning used to
+bypass it too, but repositioning is now retired (see
+[repositioning.md](repositioning.md)) so cancellations no longer create
+pre-gate appointments. If full gate coverage is ever required, add the
+`bookingMinStartDate` check to `respondSwapOffer` as well.
+
 ## Connected features
 - **Availability** — reads weekly, daily overrides, published weeks, holidays
 - **Appointments** — creates appointments when booking confirmed

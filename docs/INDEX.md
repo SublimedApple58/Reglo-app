@@ -14,7 +14,7 @@
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
-| Repositioning | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
+| Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
 | Penalties | [penalties.md](features/penalties.md) | `payments.ts`, `communications.ts` |
 | Voice AI | [voice-ai.md](features/voice-ai.md) | `voice.ts`, `voice-webhook.ts` |
 | Quiz Teoria | [quiz-theory.md](features/quiz-theory.md) | `autoscuole-quiz.actions.ts`, `quiz-engine.ts` |
