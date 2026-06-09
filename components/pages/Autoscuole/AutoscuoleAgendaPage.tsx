@@ -60,7 +60,7 @@ import {
 } from "@/components/pages/Autoscuole/RescheduleAppointmentDialog";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
-type ResourceOption = { id: string; name: string };
+type ResourceOption = { id: string; name: string; assignedInstructorId?: string | null };
 type AppointmentRow = {
   id: string;
   type: string;
@@ -298,7 +298,6 @@ export function AutoscuoleAgendaPage({
     instructorId: "",
     vehicleId: "",
     locationId: "",
-    sendProposal: false,
     duration: "30",
   });
   type AgendaLocationOption = {
@@ -632,7 +631,6 @@ export function AutoscuoleAgendaPage({
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
       locationId: form.locationId || null,
-      sendProposal: form.sendProposal,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
     const res = await createAutoscuolaAppointment(makePayload());
@@ -668,7 +666,6 @@ export function AutoscuoleAgendaPage({
       instructorId: "",
       vehicleId: "",
       locationId: defaultLocationId,
-      sendProposal: false,
       duration: "30",
     });
     toast.success({ description: res.message ?? "Operazione completata." });
@@ -700,7 +697,7 @@ export function AutoscuoleAgendaPage({
   };
 
   const handlePermanentCancel = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler eliminare definitivamente questa guida? Non verrà riposizionata.");
+    const confirmed = window.confirm("Sei sicuro di voler eliminare definitivamente questa guida?");
     if (!confirmed) return;
     setPendingEventActionId(appointmentId);
     const res = await permanentlyCancelAutoscuolaAppointment({ appointmentId });
@@ -726,19 +723,7 @@ export function AutoscuoleAgendaPage({
       setPendingEventActionId(null);
       return;
     }
-    if (res.data?.proposalCreated && res.data?.proposalStartsAt) {
-      toast.success({
-        description: `Guida riposizionata: proposta inviata per ${new Date(
-          res.data.proposalStartsAt,
-        ).toLocaleString("it-IT")}.`,
-      });
-    } else if (res.data?.queued) {
-      toast.info({
-        description: "Guida cancellata. Ricerca nuovo slot in corso.",
-      });
-    } else {
-      toast.success({ description: res.message ?? "Evento cancellato." });
-    }
+    toast.success({ description: res.message ?? "Guida cancellata." });
     await load({ silent: true });
     setPendingEventActionId(null);
   };
@@ -1105,7 +1090,7 @@ export function AutoscuoleAgendaPage({
                               <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>
                               {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1506,7 +1491,7 @@ export function AutoscuoleAgendaPage({
                                   <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                                 </div>
                                 {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                                 <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -1913,7 +1898,7 @@ export function AutoscuoleAgendaPage({
                               <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                             </div>
                             {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella e riposiziona</Button>
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                             <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -2201,9 +2186,19 @@ export function AutoscuoleAgendaPage({
                           >
                             <SelectTrigger><SelectValue placeholder="Veicolo" /></SelectTrigger>
                             <SelectContent>
-                              {vehicles.map((vehicle) => (
-                                <SelectItem key={vehicle.id} value={vehicle.id}>{vehicle.name}</SelectItem>
-                              ))}
+                              {vehicles.map((vehicle) => {
+                                const assignedTo = vehicle.assignedInstructorId
+                                  ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
+                                  : null;
+                                return (
+                                  <SelectItem key={vehicle.id} value={vehicle.id}>
+                                    {vehicle.name}
+                                    {assignedTo ? (
+                                      <span className="text-muted-foreground"> · {assignedTo}</span>
+                                    ) : null}
+                                  </SelectItem>
+                                );
+                              })}
                             </SelectContent>
                           </Select>
                         </FieldGroup>
@@ -2263,24 +2258,6 @@ export function AutoscuoleAgendaPage({
                         value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}
                       />
                     </div>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setForm((prev) => ({ ...prev, sendProposal: !prev.sendProposal }))}
-                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setForm((prev) => ({ ...prev, sendProposal: !prev.sendProposal })); } }}
-                      className={cn(
-                        "flex w-full cursor-pointer items-center justify-between rounded-xl border px-4 py-3 text-left transition",
-                        form.sendProposal
-                          ? "border-yellow-200 bg-yellow-50"
-                          : "border-border bg-white",
-                      )}
-                    >
-                      <div>
-                        <div className="text-sm font-medium text-foreground">Invia come proposta</div>
-                        <div className="text-xs text-muted-foreground">L&apos;allievo potrà accettare o rifiutare</div>
-                      </div>
-                      <InlineToggle checked={form.sendProposal} />
-                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -2332,7 +2309,7 @@ export function AutoscuoleAgendaPage({
                   }
                   onClick={handleCreate}
                 >
-                  {creating ? "Salvataggio..." : form.sendProposal ? "Invia proposta" : "Conferma"}
+                  {creating ? "Salvataggio..." : "Conferma"}
                 </Button>
               )}
             </div>
@@ -3445,7 +3422,6 @@ function getFilterOptions(
   return [
     { value: "all", label: "Tutti gli stati" },
     { value: "scheduled", label: "In programma" },
-    { value: "proposal", label: "Proposta" },
     { value: "checked_in", label: "Presente" },
     { value: "completed", label: "Completata" },
     { value: "no_show", label: "Assente" },

@@ -11,14 +11,11 @@ import {
   processAutoscuolaPaymentRetries as processAutoscuolaPaymentRetriesJob,
   processAutoscuolaPenaltyCharges as processAutoscuolaPenaltyChargesJob,
 } from "@/lib/autoscuole/payments";
-import {
-  parseBookingGovernanceFromLimits,
-} from "@/lib/autoscuole/booking-governance";
-import {
-  normalizeBookingSlotDurations,
-} from "@/lib/autoscuole/lesson-policy";
 import { buildAvailabilityResolver } from "@/lib/actions/autoscuole-availability.actions";
-import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
+import {
+  resolveEffectiveSettingsForInstructor,
+  buildCompanyBookingDefaults,
+} from "@/lib/autoscuole/instructor-clusters";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -1027,27 +1024,6 @@ const emptySlotDefaultToRecord = (record: {
   return { daysOfWeek: record.daysOfWeek, ranges };
 };
 
-const EMPTY_SLOT_NOTIFICATION_TARGETS = ["all", "availability_matching"] as const;
-
-const DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES = ["18:00"];
-
-const resolveEmptySlotSettings = (limits: Record<string, unknown>) => {
-  const enabled =
-    typeof limits.emptySlotNotificationEnabled === "boolean"
-      ? limits.emptySlotNotificationEnabled
-      : false;
-  const targetRaw = limits.emptySlotNotificationTarget as string;
-  const target = (EMPTY_SLOT_NOTIFICATION_TARGETS as readonly string[]).includes(targetRaw)
-    ? (targetRaw as (typeof EMPTY_SLOT_NOTIFICATION_TARGETS)[number])
-    : "availability_matching";
-  const times = Array.isArray(limits.emptySlotNotificationTimes)
-    ? limits.emptySlotNotificationTimes.filter(
-        (item): item is string => typeof item === "string" && /^\d{2}:\d{2}$/.test(item),
-      )
-    : DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES;
-  return { enabled, target, times: times.length ? times : DEFAULT_EMPTY_SLOT_NOTIFICATION_TIMES };
-};
-
 /**
  * Check if at least 1 slot is free tomorrow for a company.
  * Replicates the core logic of getAllAvailableSlots, but short-circuits on
@@ -1262,27 +1238,61 @@ export const processEmptySlotNotifications = async ({
   for (const service of services) {
 
     const limits = (service.limits ?? {}) as Record<string, unknown>;
-    const settings = resolveEmptySlotSettings(limits);
-    if (!settings.enabled) continue;
-
-    // If this is a cron invocation (no companyId filter), check if current time matches configured times
-    if (!filterCompanyId && !settings.times.includes(currentTimeHHMM)) continue;
-
     const companyId = service.companyId;
+    const companyDefaults = buildCompanyBookingDefaults(limits);
 
-    // Check that students can book from the app
-    const governance = parseBookingGovernanceFromLimits(limits);
-    if (governance.appBookingActors === "instructors") continue;
+    // Per-cluster cascade: the empty-slot settings (enabled / times / target)
+    // and governance (appBookingActors, manual_full) come from each student's
+    // assigned autonomous instructor when set, otherwise from the company.
+    // Eligibility is therefore evaluated per student, not gated on the company
+    // defaults — so a cluster that enables the feature while the company has it
+    // off is honoured, and vice versa.
+    const studentMembers = await prisma.companyMember.findMany({
+      where: { companyId, autoscuolaRole: "STUDENT" },
+      select: { userId: true, assignedInstructorId: true },
+    });
+    if (!studentMembers.length) continue;
 
-    // Pick the suggested duration for the quick-check
-    const durations = normalizeBookingSlotDurations(limits.bookingSlotDurations);
-    const checkDuration = durations[0] ?? 60;
+    // Resolve effective settings once per distinct cluster (assigned instructor).
+    const distinctInstructorIds = Array.from(
+      new Set(
+        studentMembers
+          .map((m: { assignedInstructorId: string | null }) => m.assignedInstructorId)
+          .filter((id: string | null): id is string => !!id),
+      ),
+    );
+    const clusterSettingsById = new Map<
+      string,
+      Awaited<ReturnType<typeof resolveEffectiveSettingsForInstructor>>
+    >();
+    await Promise.all(
+      distinctInstructorIds.map(async (instructorId) => {
+        clusterSettingsById.set(
+          instructorId,
+          await resolveEffectiveSettingsForInstructor(companyId, instructorId, companyDefaults),
+        );
+      }),
+    );
+    const effectiveFor = (assignedInstructorId: string | null) =>
+      (assignedInstructorId ? clusterSettingsById.get(assignedInstructorId) : undefined) ??
+      companyDefaults;
 
-    console.log(`[empty-slot] now=${now.toISOString()}, zonedNow=${JSON.stringify(zonedNow)}, tomorrowParts=${JSON.stringify(tomorrowParts)}`);
-    console.log(`[empty-slot] Company ${companyId}: enabled, actors=${governance.appBookingActors}, duration=${checkDuration}`);
-    console.log(`[empty-slot] Tomorrow: ${tomorrowDateStr} (dow=${tomorrowDow}), range: ${rangeStart.toISOString()} -> ${rangeEnd.toISOString()}`);
+    // Keep students whose effective settings enable the notification at this
+    // tick and allow students to book, excluding manual_full clusters.
+    const candidates: { userId: string; target: "all" | "availability_matching" }[] = [];
+    for (const m of studentMembers) {
+      const eff = effectiveFor(m.assignedInstructorId);
+      if (!eff.emptySlotNotificationEnabled) continue;
+      // Cron invocation (no companyId filter): only at the cluster's configured times.
+      if (!filterCompanyId && !eff.emptySlotNotificationTimes.includes(currentTimeHHMM)) continue;
+      if (eff.appBookingActors !== "students" && eff.appBookingActors !== "both") continue;
+      if (eff.instructorBookingMode === "manual_full") continue;
+      candidates.push({ userId: m.userId, target: eff.emptySlotNotificationTarget });
+    }
+    if (!candidates.length) continue;
 
-    // Quick-check: does tomorrow have at least 1 free slot?
+    // Quick-check: does tomorrow have at least 1 free slot? (company-wide)
+    const checkDuration = companyDefaults.bookingSlotDurations[0] ?? 60;
     const hasFree = await hasFreeSlotTomorrow({
       prisma,
       companyId,
@@ -1292,32 +1302,23 @@ export const processEmptySlotNotifications = async ({
       rangeEnd,
       durationMinutes: checkDuration,
     });
-    console.log(`[empty-slot] Company ${companyId}: hasFreeSlotTomorrow=${hasFree}`);
+    console.log(`[empty-slot] Company ${companyId}: candidates=${candidates.length}, hasFreeSlotTomorrow=${hasFree}`);
     if (!hasFree) continue;
 
-    // Get all students in this company
-    const studentMembers = await prisma.companyMember.findMany({
-      where: { companyId, autoscuolaRole: "STUDENT" },
-      select: { userId: true },
-    });
-    if (!studentMembers.length) continue;
-    const studentUserIds = studentMembers.map((m: { userId: string }) => m.userId);
-
-    // Filter by availability if target is "availability_matching"
-    let targetUserIds: string[];
-    if (settings.target === "availability_matching") {
+    // Apply per-student target: "availability_matching" requires the student to
+    // be available tomorrow; "all" is included unconditionally.
+    const matchingIds = candidates.filter((c) => c.target === "availability_matching").map((c) => c.userId);
+    let targetUserIds: string[] = candidates.filter((c) => c.target === "all").map((c) => c.userId);
+    if (matchingIds.length) {
       const studentAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
-        where: { companyId, ownerType: "student", ownerId: { in: studentUserIds } },
+        where: { companyId, ownerType: "student", ownerId: { in: matchingIds } },
       });
-      targetUserIds = [];
+      const availableTomorrow = new Set<string>();
       for (const avail of studentAvailabilities) {
         const record = emptySlotDefaultToRecord(avail as { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown });
-        if (record.daysOfWeek.includes(tomorrowDow)) {
-          targetUserIds.push(avail.ownerId);
-        }
+        if (record.daysOfWeek.includes(tomorrowDow)) availableTomorrow.add(avail.ownerId);
       }
-    } else {
-      targetUserIds = studentUserIds;
+      targetUserIds = [...targetUserIds, ...matchingIds.filter((id) => availableTomorrow.has(id))];
     }
 
     if (!targetUserIds.length) continue;
@@ -1344,15 +1345,6 @@ export const processEmptySlotNotifications = async ({
     });
     const usersWithToken = new Set(devicesWithToken.map((d: { userId: string }) => d.userId));
     targetUserIds = targetUserIds.filter((id) => usersWithToken.has(id));
-
-    if (!targetUserIds.length) continue;
-
-    // Exclude students whose assigned instructor cluster is in manual_full mode
-    // (these students should never receive proactive "you can book" messaging).
-    const manualFullFlags = await Promise.all(
-      targetUserIds.map((id) => isStudentInManualFullCluster(companyId, id)),
-    );
-    targetUserIds = targetUserIds.filter((_, i) => !manualFullFlags[i]);
 
     if (!targetUserIds.length) continue;
 

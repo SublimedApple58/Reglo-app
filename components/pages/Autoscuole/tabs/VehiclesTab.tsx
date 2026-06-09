@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
 
-type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
+type VehicleDetail = {
+  id: string;
+  name: string;
+  plate: string | null;
+  status: string;
+  assignedInstructorId: string | null;
+  followsInstructorAvailability: boolean;
+};
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilityRange = { start: Date; end: Date };
 

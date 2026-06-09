@@ -72,7 +72,14 @@ import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
 type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; _count?: { assignedStudents: number } };
-type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
+type VehicleDetail = {
+  id: string;
+  name: string;
+  plate: string | null;
+  status: string;
+  assignedInstructorId: string | null;
+  followsInstructorAvailability: boolean;
+};
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
   id: string;
@@ -347,6 +354,9 @@ export function AutoscuoleResourcesPage({
   const [editVehicle, setEditVehicle] = React.useState<VehicleDetail | null>(null);
   const [editVehicleName, setEditVehicleName] = React.useState("");
   const [editVehiclePlate, setEditVehiclePlate] = React.useState("");
+  const [editVehicleInstructorId, setEditVehicleInstructorId] = React.useState<string>("");
+  const [editVehicleFollowsAvailability, setEditVehicleFollowsAvailability] =
+    React.useState(true);
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
 
   // ── Availability edit dialog
@@ -391,6 +401,8 @@ export function AutoscuoleResourcesPage({
           name: item.name,
           plate: item.plate ?? null,
           status: item.status,
+          assignedInstructorId: item.assignedInstructorId ?? null,
+          followsInstructorAvailability: item.followsInstructorAvailability ?? true,
         })),
       );
     }
@@ -1071,7 +1083,14 @@ export function AutoscuoleResourcesPage({
     }
     setVehicles((prev) => [
       ...prev,
-      { id: res.data!.id, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status },
+      {
+        id: res.data!.id,
+        name: res.data!.name,
+        plate: res.data!.plate ?? null,
+        status: res.data!.status,
+        assignedInstructorId: res.data!.assignedInstructorId ?? null,
+        followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
+      },
     ]);
     setCreateVehicleOpen(false);
     toast.success({ description: `Veicolo "${res.data.name}" aggiunto.` });
@@ -1081,6 +1100,8 @@ export function AutoscuoleResourcesPage({
     setEditVehicle(vehicle);
     setEditVehicleName(vehicle.name);
     setEditVehiclePlate(vehicle.plate ?? "");
+    setEditVehicleInstructorId(vehicle.assignedInstructorId ?? "");
+    setEditVehicleFollowsAvailability(vehicle.followsInstructorAvailability);
   };
 
   const handleSaveEditVehicle = async () => {
@@ -1095,6 +1116,8 @@ export function AutoscuoleResourcesPage({
       vehicleId: editVehicle.id,
       name,
       plate: editVehiclePlate.trim() || null,
+      assignedInstructorId: editVehicleInstructorId || null,
+      followsInstructorAvailability: editVehicleFollowsAvailability,
     });
     setSavingEditVehicle(false);
     if (!res.success || !res.data) {
@@ -1104,7 +1127,15 @@ export function AutoscuoleResourcesPage({
     setVehicles((prev) =>
       prev.map((v) =>
         v.id === editVehicle.id
-          ? { ...v, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status }
+          ? {
+              ...v,
+              name: res.data!.name,
+              plate: res.data!.plate ?? null,
+              status: res.data!.status,
+              assignedInstructorId: res.data!.assignedInstructorId ?? null,
+              followsInstructorAvailability:
+                res.data!.followsInstructorAvailability ?? true,
+            }
           : v,
       ),
     );
@@ -1127,7 +1158,9 @@ export function AutoscuoleResourcesPage({
     }
     setVehicles((prev) =>
       prev.map((v) =>
-        v.id === editVehicle.id ? { ...v, status: "inactive" } : v,
+        v.id === editVehicle.id
+          ? { ...v, status: "inactive", assignedInstructorId: null }
+          : v,
       ),
     );
     setEditVehicle(null);
@@ -1760,6 +1793,60 @@ export function AutoscuoleResourcesPage({
                   onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
                 />
               </div>
+
+              {/* ── Veicolo fisso (assegnazione istruttore) ── */}
+              <FieldGroup label="Istruttore assegnato">
+                <Select
+                  value={editVehicleInstructorId || "none"}
+                  onValueChange={(v) => setEditVehicleInstructorId(v === "none" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nessuno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nessuno</SelectItem>
+                    {instructors
+                      .filter((ins) => ins.status !== "inactive")
+                      .map((ins) => {
+                        const takenByOther = vehicles.find(
+                          (v) =>
+                            v.assignedInstructorId === ins.id &&
+                            v.id !== editVehicle?.id,
+                        );
+                        return (
+                          <SelectItem key={ins.id} value={ins.id}>
+                            {ins.name}
+                            {takenByOther ? ` · ora su ${takenByOther.name}` : ""}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">
+                  Le guide prenotate con questo istruttore useranno automaticamente
+                  questo veicolo.
+                </span>
+              </FieldGroup>
+
+              {editVehicleInstructorId ? (
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5 pr-3">
+                    <span className="text-sm font-medium">
+                      Disponibilità: segue l&apos;istruttore
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {editVehicleFollowsAvailability
+                        ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
+                        : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
+                    </span>
+                  </div>
+                  <InlineToggle checked={editVehicleFollowsAvailability} size="sm" />
+                </div>
+              ) : null}
+
               {editVehicle && (
                 <div className="pt-1">
                   {editVehicle.status === "active" ? (

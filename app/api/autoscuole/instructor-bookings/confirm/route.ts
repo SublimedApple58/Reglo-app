@@ -12,7 +12,6 @@ export async function POST(request: Request) {
     locationId: payload.locationId,
     type: payload.lessonType,
     types: payload.types,
-    sendProposal: false,
     skipWeeklyLimitCheck: payload.skipWeeklyLimitCheck === true,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });

@@ -13,7 +13,6 @@ import {
   processAutoscuolaPaymentRetries,
   processAutoscuolaInvoiceFinalization,
 } from "@/lib/autoscuole/communications";
-import { processAutoscuolaPendingRepositions } from "@/lib/autoscuole/repositioning";
 import { cleanupAutoscuolaVoiceRetention } from "@/lib/autoscuole/voice";
 import { processAutoscuolaTheoryReminders } from "@/lib/autoscuole/theory-reminders";
 
@@ -40,7 +39,6 @@ export const autoscuoleReminders = schedules.task({
     await safe("lessonSettlement", () => processAutoscuolaLessonSettlement({ prisma }));
     await safe("paymentRetries", () => processAutoscuolaPaymentRetries({ prisma }));
     await safe("invoiceFinalization", () => processAutoscuolaInvoiceFinalization({ prisma }));
-    await safe("pendingRepositions", () => processAutoscuolaPendingRepositions({ prisma, limit: 50 }));
     await safe("configuredReminders", () => processAutoscuolaConfiguredAppointmentReminders({ prisma }));
     await safe("morningReminders", () => processAutoscuolaMorningReminders({ prisma, now }));
     await safe("appointmentReminders", () => processAutoscuolaAppointmentReminders({ prisma }));

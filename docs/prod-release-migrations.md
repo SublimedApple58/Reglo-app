@@ -7,7 +7,7 @@ yet applied to production** (i.e. not on `main`). Run them at release time.
 > DB — applies every pending migration in lexical/folder order, idempotent).
 > After deploy, redeploy the app so the regenerated Prisma client matches.
 
-Last updated: 2026-06-01.
+Last updated: 2026-06-09.
 
 ## Pending migrations (in apply order)
 
@@ -20,9 +20,11 @@ Last updated: 2026-06-01.
 | 5 | `20260526132043_add_quiz_schede` | `ALTER TYPE "QuizSessionMode" ADD VALUE 'SCHEDA'` + QuizScheda tables | Enum add value. |
 | 6 | `20260527000000_add_exam_schede_type` | `ALTER TYPE "QuizSessionMode" ADD VALUE 'SCHEDA_ESAME'` + QuizScheda `type`/nullable chapterId | Enum add value; QuizScheda unique constraint changes to `(type, chapterId, schedaNumber)`. |
 | 7 | `20260601142732_add_settings_perf_indexes` | Indexes `CompanyMember(companyId, autoscuolaRole)` and `AutoscuolaAppointment(companyId, studentId, paymentRequired, paymentStatus)` | ⚠️ `CREATE INDEX` (non-concurrent) **locks writes** on the table during creation. `AutoscuolaAppointment` may be large → run in a low-traffic window, or create the indexes manually with `CREATE INDEX CONCURRENTLY` and mark the migration as applied (`prisma migrate resolve --applied`). |
+| 8 | `20260609035024_drop_reposition_task` | `DROP TABLE "AutoscuolaAppointmentRepositionTask"` (+ its FKs) — automatic repositioning retired | ✅ Order-independent vs the `retire-repositioning.mjs` cleanup: that script no longer touches this table (it only cancels `proposal` appointments). Dropping it just removes the orphaned reposition tasks. |
+| 9 | `20260609120000_add_vehicle_fixed_instructor` | `AutoscuolaVehicle` gets `assignedInstructorId` (nullable FK → `AutoscuolaInstructor`, `ON DELETE SET NULL`) + `followsInstructorAvailability BOOLEAN DEFAULT true`, a partial unique index on `assignedInstructorId` (1:1 instructor↔vehicle), and an index `(companyId, assignedInstructorId)` — fixed-vehicle-per-instructor feature | ✅ Additive, nullable, default on the boolean → no backfill. The unique index allows multiple NULLs (Postgres) so unassigned vehicles are fine. No `trigger:deploy` needed. Redeploy app so the regenerated Prisma client matches. |
 
 ## Notes
-- All 7 are already applied to the **dev** DB.
+- All 9 are already applied to the **dev** DB.
 - Several are `ALTER TYPE … ADD VALUE` (enum extensions): harmless and fast, but
   each must stay in its own migration (already the case).
 - The quiz "scheda esame" feature (#4–#6) is **in-progress** — confirm the

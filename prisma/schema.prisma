@@ -82,8 +82,6 @@ model User {
   autoscuolaLessonCreditLedgerStudent  AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerStudent")
   autoscuolaLessonCreditLedgerActor    AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerActor")
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
-  autoscuolaRepositionTasksStudent     AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskStudent")
-  autoscuolaRepositionTasksActor       AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskActor")
   autoscuolaMessageLogs                AutoscuolaMessageLog[]
   autoscuolaWeeklyAbsences             AutoscuolaStudentWeeklyAbsence[]
   autoscuolaVoiceCallsStudent          AutoscuolaVoiceCall[]                  @relation("AutoscuolaVoiceCallStudent")
@@ -201,7 +199,6 @@ model Company {
   autoscuolaLessonCreditBalances AutoscuolaStudentLessonCreditBalance[]
   autoscuolaLessonCreditLedger   AutoscuolaStudentLessonCreditLedger[]
   autoscuolaAppointmentPayments  AutoscuolaAppointmentPayment[]
-  autoscuolaRepositionTasks      AutoscuolaAppointmentRepositionTask[]
   autoscuolaMessageTemplates     AutoscuolaMessageTemplate[]
   autoscuolaMessageRules         AutoscuolaMessageRule[]
   autoscuolaMessageLogs          AutoscuolaMessageLog[]
@@ -391,8 +388,6 @@ model AutoscuolaAppointment {
   creditLedger          AutoscuolaStudentLessonCreditLedger[]
   messageLogs           AutoscuolaMessageLog[]
   voiceCalls            AutoscuolaVoiceCall[]
-  repositionTaskSource  AutoscuolaAppointmentRepositionTask?  @relation("AutoscuolaRepositionSource")
-  repositionTaskMatched AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionMatched")
   swapOffers            AutoscuolaSwapOffer[]
 
   @@index([companyId])
@@ -544,32 +539,6 @@ model AutoscuolaVoiceKnowledgeChunk {
   @@index([scope, companyId, language, active])
 }
 
-model AutoscuolaAppointmentRepositionTask {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId            String    @db.Uuid
-  sourceAppointmentId  String    @db.Uuid
-  studentId            String    @db.Uuid
-  status               String    @default("pending")
-  reason               String
-  attemptCount         Int       @default(0)
-  nextAttemptAt        DateTime? @db.Timestamp(6)
-  lastAttemptAt        DateTime? @db.Timestamp(6)
-  matchedAppointmentId String?   @db.Uuid
-  createdByUserId      String?   @db.Uuid
-  createdAt            DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt            DateTime  @updatedAt
-
-  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sourceAppointment  AutoscuolaAppointment  @relation("AutoscuolaRepositionSource", fields: [sourceAppointmentId], references: [id], onDelete: Cascade)
-  matchedAppointment AutoscuolaAppointment? @relation("AutoscuolaRepositionMatched", fields: [matchedAppointmentId], references: [id], onDelete: SetNull)
-  student            User                   @relation("AutoscuolaRepositionTaskStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  createdByUser      User?                  @relation("AutoscuolaRepositionTaskActor", fields: [createdByUserId], references: [id], onDelete: SetNull)
-
-  @@unique([sourceAppointmentId])
-  @@index([companyId, status, nextAttemptAt])
-  @@index([studentId, status])
-}
-
 model AutoscuolaInstructor {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId      String   @db.Uuid
@@ -589,6 +558,7 @@ model AutoscuolaInstructor {
   assignedStudents CompanyMember[]               @relation("InstructorAssignedStudents")
   weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
   publishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  fixedVehicle     AutoscuolaVehicle?           @relation("InstructorFixedVehicle")
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -615,18 +585,23 @@ model AutoscuolaInstructorBlock {
 }
 
 model AutoscuolaVehicle {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @db.Uuid
-  name      String
-  plate     String?
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt
+  id                            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                     String   @db.Uuid
+  name                          String
+  plate                         String?
+  status                        String   @default("active")
+  assignedInstructorId          String?  @db.Uuid
+  followsInstructorAvailability Boolean  @default(true)
+  createdAt                     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt                     DateTime @updatedAt
 
-  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointments AutoscuolaAppointment[]
+  company            Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments       AutoscuolaAppointment[]
+  assignedInstructor AutoscuolaInstructor?    @relation("InstructorFixedVehicle", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
 
+  @@unique([assignedInstructorId])
   @@index([companyId])
+  @@index([companyId, assignedInstructorId])
 }
 
 model AutoscuolaWeeklyAvailability {

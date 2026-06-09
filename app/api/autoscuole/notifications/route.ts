@@ -72,37 +72,7 @@ export async function GET(request: Request) {
         });
       }
 
-      // 2. Pending proposals (appointments with status "proposal" for this student)
-      const proposals = await prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId,
-          studentId: userId,
-          status: "proposal",
-          startsAt: { gte: new Date() },
-          createdAt: { gte: since },
-        },
-        include: {
-          instructor: { select: { name: true } },
-          vehicle: { select: { name: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      });
-      for (const p of proposals) {
-        notifications.push({
-          id: `proposal_${p.id}`,
-          kind: "proposal",
-          data: {
-            id: p.id,
-            startsAt: p.startsAt.toISOString(),
-            endsAt: p.endsAt?.toISOString() ?? null,
-            instructorName: p.instructor?.name ?? null,
-            vehicleName: p.vehicle?.name ?? null,
-            type: p.type,
-          },
-          createdAt: p.createdAt.toISOString(),
-        });
-      }
+      // Proposte ritirate: l'endpoint non restituisce più notifiche "proposal".
 
       // 3. Sick leave cancellations (appointments cancelled due to instructor sick)
       const sickCancellations = await prisma.autoscuolaAppointment.findMany({

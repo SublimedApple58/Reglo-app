@@ -7,6 +7,7 @@
 | Appointments | [appointments.md](features/appointments.md) | `autoscuole.actions.ts` |
 | Availability | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts` |
 | Booking Engine | [booking-engine.md](features/booking-engine.md) | `slot-matcher.ts`, `booking-governance.ts` |
+| Vehicles | [vehicles.md](features/vehicles.md) | `autoscuole.actions.ts` (vehicle CRUD), `fixed-vehicle.ts`, `slot-matcher.ts` |
 | Payments & Credits | [payments.md](features/payments.md) | `payments.ts`, `stripe-connect.ts` |
 | Swaps | [swaps.md](features/swaps.md) | `autoscuole-swap.actions.ts` |
 | Holidays | [holidays.md](features/holidays.md) | `autoscuole-holidays.actions.ts` |

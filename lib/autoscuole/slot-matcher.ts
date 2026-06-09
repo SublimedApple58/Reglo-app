@@ -9,6 +9,11 @@ import {
   parseLessonPolicyFromLimits,
 } from "@/lib/autoscuole/lesson-policy";
 import { buildAvailabilityResolver, getPublicationModeFilter } from "@/lib/actions/autoscuole-availability.actions";
+import {
+  buildFixedVehicleMaps,
+  pickBestInstructorVehiclePair,
+  resolveVehicleForInstructor,
+} from "@/lib/autoscuole/fixed-vehicle";
 
 const SLOT_MINUTES = 30;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -250,7 +255,11 @@ export async function findBestAutoscuolaSlot(
       }),
       prisma.autoscuolaVehicle.findMany({
         where: { companyId: input.companyId, status: { not: "inactive" } },
-        select: { id: true },
+        select: {
+          id: true,
+          assignedInstructorId: true,
+          followsInstructorAvailability: true,
+        },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
         where: {
@@ -309,6 +318,7 @@ export async function findBestAutoscuolaSlot(
 
   const activeInstructorIds = activeInstructors.map((item) => item.id);
   const activeVehicleIds = smVehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
+  const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
 
   // Build date-aware availability resolvers that account for per-week overrides
   const searchRangeStart = toTimeZoneDate(preferredDateParts, 0, 0);
@@ -456,38 +466,48 @@ export async function findBestAutoscuolaSlot(
         availableInstructors.push({ id: instructorId, score });
       }
 
-      const availableVehicles: Array<{ id: string; score: number }> = [];
-      if (smVehiclesEnabled) {
-        for (const vehicleId of activeVehicleIds) {
-          const availability = vehicleResolver.resolve(vehicleId, startDate);
-          if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
-            continue;
-          }
-          const intervals = appointmentMaps.intervals.get(vehicleId);
-          if (overlaps(intervals, startMs, endMs)) continue;
-          const score =
-            (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
-            (appointmentMaps.starts.get(vehicleId)?.has(endMs) ? 1 : 0);
-          availableVehicles.push({ id: vehicleId, score });
-        }
-      }
+      if (!availableInstructors.length) continue;
 
-      if (!availableInstructors.length || (smVehiclesEnabled && !availableVehicles.length)) continue;
+      // Instructor and vehicle can no longer be chosen independently: a fixed
+      // vehicle is bound to its instructor, and reserved vehicles are excluded
+      // from the pool offered to other instructors. Pick the best valid pair.
+      const scoreVehicleAt = (vehicleId: string) =>
+        (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
+        (appointmentMaps.starts.get(vehicleId)?.has(endMs) ? 1 : 0);
+      const isVehicleAvailableAt = (vehicleId: string) =>
+        isOwnerAvailable(
+          vehicleResolver.resolve(vehicleId, startDate),
+          dayOfWeek,
+          candidateStartMinutes,
+          candidateEndMinutes,
+        );
+      const hasVehicleOverlapAt = (vehicleId: string) =>
+        overlaps(appointmentMaps.intervals.get(vehicleId), startMs, endMs);
 
-      availableInstructors.sort((a, b) => b.score - a.score);
-      availableVehicles.sort((a, b) => b.score - a.score);
+      const pair = pickBestInstructorVehiclePair({
+        availableInstructors,
+        vehiclesEnabled: smVehiclesEnabled,
+        resolveVehicle: (instructorId) =>
+          resolveVehicleForInstructor({
+            instructorId,
+            activeVehicleIds,
+            maps: fixedVehicleMaps,
+            isVehicleAvailable: isVehicleAvailableAt,
+            hasOverlap: hasVehicleOverlapAt,
+            scoreVehicle: scoreVehicleAt,
+          }),
+      });
+      if (!pair) continue;
 
-      const chosenInstructor = availableInstructors[0];
-      const chosenVehicle = smVehiclesEnabled ? availableVehicles[0] : null;
-      const score = chosenInstructor.score + (chosenVehicle?.score ?? 0);
+      const score = pair.score;
 
       if (!bestForDay || score > bestScore) {
         bestScore = score;
         bestForDay = {
           start: startDate,
           end: endDate,
-          instructorId: chosenInstructor.id,
-          vehicleId: chosenVehicle?.id ?? null,
+          instructorId: pair.instructorId,
+          vehicleId: pair.vehicleId,
           compatibleRequiredTypes,
           missingRequiredTypes,
           resolvedLessonType:

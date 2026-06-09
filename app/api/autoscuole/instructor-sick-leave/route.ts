@@ -8,9 +8,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
-import {
-  queueOperationalRepositionForAppointment,
-} from "@/lib/autoscuole/repositioning";
+import { operationallyCancelAppointment } from "@/lib/autoscuole/operational-cancellation";
 import { isOwner } from "@/lib/autoscuole/roles";
 
 const sickLeaveSchema = z.object({
@@ -126,12 +124,12 @@ export async function POST(request: Request) {
       ),
     );
 
-    // Cancel appointments and queue repositioning
+    // Cancel the instructor's lessons in the sick-leave window.
     const appointments = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId: membership.companyId,
         instructorId: targetInstructor.id,
-        status: { in: ["scheduled", "confirmed", "proposal", "checked_in"] },
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
         startsAt: { gte: sickStart, lte: sickEnd },
       },
       select: { id: true, studentId: true, startsAt: true, status: true },
@@ -151,15 +149,13 @@ export async function POST(request: Request) {
 
     const cancelledIds: string[] = [];
     for (const appointment of appointments) {
-      // Queue repositioning — cancels the appointment, notifies the student
-      // (with sick-leave-specific wording from formatCancellationBody),
-      // and attempts to find a new slot automatically (unless student is in manual_full cluster).
-      await queueOperationalRepositionForAppointment({
+      // Cancel the appointment + refund the credit + notify the student with
+      // sick-leave-specific wording. No automatic repositioning.
+      await operationallyCancelAppointment({
         companyId: membership.companyId,
         appointmentId: appointment.id,
         reason: "instructor_sick",
         actorUserId: membership.userId,
-        attemptNow: true,
       });
       cancelledIds.push(appointment.id);
     }

@@ -42,18 +42,14 @@ export function OutOfAvailabilitySheet({
 
   const handleAction = async (
     appointmentId: string,
-    action: "cancel" | "reposition" | "approve",
+    action: "cancel" | "approve",
   ) => {
     setLoadingId(appointmentId);
     try {
-      let url: string;
-      if (action === "cancel") {
-        url = `/api/autoscuole/appointments/${appointmentId}/permanent-cancel`;
-      } else if (action === "reposition") {
-        url = `/api/autoscuole/appointments/${appointmentId}/reposition`;
-      } else {
-        url = `/api/autoscuole/appointments/${appointmentId}/approve-override`;
-      }
+      const url =
+        action === "cancel"
+          ? `/api/autoscuole/appointments/${appointmentId}/permanent-cancel`
+          : `/api/autoscuole/appointments/${appointmentId}/approve-override`;
 
       const res = await fetch(url, { method: "POST" });
       const data = await res.json();
@@ -65,11 +61,7 @@ export function OutOfAvailabilitySheet({
 
       toast.success({
         description:
-          action === "cancel"
-            ? "Guida cancellata."
-            : action === "reposition"
-              ? "Guida cancellata e riposizionamento avviato."
-              : "Guida mantenuta.",
+          action === "cancel" ? "Guida cancellata." : "Guida mantenuta.",
       });
       onActionComplete();
     } catch {
@@ -168,15 +160,6 @@ export function OutOfAvailabilitySheet({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    disabled={isLoading}
-                    onClick={() => handleAction(apt.id, "reposition")}
-                  >
-                    Cancella e riposiziona
-                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
