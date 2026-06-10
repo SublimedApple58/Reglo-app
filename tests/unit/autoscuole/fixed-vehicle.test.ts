@@ -114,6 +114,69 @@ describe("resolveVehicleForInstructor", () => {
   });
 });
 
+describe("resolveVehicleForInstructor — license category filter", () => {
+  const activeVehicleIds = ["v1", "v2", "v3"];
+  const allAvailable = () => true;
+  const noOverlap = () => false;
+  const flatScore = () => 0;
+
+  it("returns null when the instructor's FIXED vehicle does not serve the student's category", () => {
+    const maps = buildFixedVehicleMaps([vehicle("v1", "i1", true)]);
+    const res = resolveVehicleForInstructor({
+      instructorId: "i1",
+      activeVehicleIds,
+      maps,
+      isVehicleAvailable: allAvailable,
+      hasOverlap: noOverlap,
+      scoreVehicle: flatScore,
+      matchesLicenseCategory: (id) => id !== "v1", // v1 is e.g. a moto, student needs B
+    });
+    expect(res).toBeNull();
+  });
+
+  it("keeps the FIXED vehicle when it serves the student's category", () => {
+    const maps = buildFixedVehicleMaps([vehicle("v1", "i1", true)]);
+    const res = resolveVehicleForInstructor({
+      instructorId: "i1",
+      activeVehicleIds,
+      maps,
+      isVehicleAvailable: allAvailable,
+      hasOverlap: noOverlap,
+      scoreVehicle: flatScore,
+      matchesLicenseCategory: () => true,
+    });
+    expect(res?.id).toBe("v1");
+  });
+
+  it("filters the POOL to vehicles serving the student's category", () => {
+    const maps = buildFixedVehicleMaps([vehicle("v1"), vehicle("v2"), vehicle("v3")]);
+    const res = resolveVehicleForInstructor({
+      instructorId: "iX",
+      activeVehicleIds,
+      maps,
+      isVehicleAvailable: allAvailable,
+      hasOverlap: noOverlap,
+      scoreVehicle: flatScore,
+      matchesLicenseCategory: (id) => id === "v3", // only v3 matches (e.g. the only 125)
+    });
+    expect(res?.id).toBe("v3");
+  });
+
+  it("returns null when no pool vehicle serves the student's category", () => {
+    const maps = buildFixedVehicleMaps([vehicle("v1"), vehicle("v2")]);
+    const res = resolveVehicleForInstructor({
+      instructorId: "iX",
+      activeVehicleIds: ["v1", "v2"],
+      maps,
+      isVehicleAvailable: allAvailable,
+      hasOverlap: noOverlap,
+      scoreVehicle: flatScore,
+      matchesLicenseCategory: () => false,
+    });
+    expect(res).toBeNull();
+  });
+});
+
 describe("pickBestInstructorVehiclePair", () => {
   it("returns the best instructor with null vehicle when vehicles are disabled", () => {
     const pair = pickBestInstructorVehiclePair({

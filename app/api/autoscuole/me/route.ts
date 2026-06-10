@@ -24,6 +24,8 @@ export async function GET() {
       select: {
         studentPhase: true,
         quizSeatGrantedAt: true,
+        licenseCategory: true,
+        transmission: true,
       },
     });
 
@@ -67,6 +69,8 @@ export async function GET() {
         autoAssignQuizOnSignup,
         theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
         drivingExamAt: drivingExamAt ? drivingExamAt.toISOString() : null,
+        licenseCategory: member?.licenseCategory ?? null,
+        transmission: member?.transmission ?? null,
       },
     });
   } catch (error) {

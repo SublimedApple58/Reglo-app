@@ -1029,9 +1029,25 @@ const emptySlotDefaultToRecord = (record: {
  * Replicates the core logic of getAllAvailableSlots, but short-circuits on
  * the first available slot and does not require auth context.
  */
-const hasFreeSlotTomorrow = async ({
+/** Build the canonical "category|transmission" license key. */
+const licenseKey = (
+  licenseCategory?: string | null,
+  transmission?: string | null,
+) => `${licenseCategory ?? ""}|${transmission ?? ""}`;
+
+/**
+ * Scan tomorrow for bookable slots.
+ * Returns `{ hasFree, vehicleKeys }`:
+ *  - when `vehiclesEnabled`, `vehicleKeys` is the SET of license keys
+ *    (`category|transmission`) that have at least one free instructor + free
+ *    matching vehicle — so recipients can be filtered by their pursued license;
+ *  - when vehicles are disabled, `vehicleKeys` is `null` (no license restriction)
+ *    and `hasFree` keeps the legacy "any instructor + any vehicle free" meaning.
+ */
+const freeSlotLicenseKeysTomorrow = async ({
   prisma,
   companyId,
+  vehiclesEnabled,
   tomorrowParts,
   tomorrowDow,
   rangeStart,
@@ -1040,14 +1056,16 @@ const hasFreeSlotTomorrow = async ({
 }: {
   prisma: PrismaClientLike;
   companyId: string;
+  vehiclesEnabled: boolean;
   tomorrowParts: EmptySlotDateParts;
   tomorrowDow: number;
   rangeStart: Date;
   rangeEnd: Date;
   durationMinutes: number;
-}) => {
+}): Promise<{ hasFree: boolean; vehicleKeys: Set<string> | null }> => {
+  const empty = { hasFree: false, vehicleKeys: vehiclesEnabled ? new Set<string>() : null };
   const durationSlots = durationMinutes / EMPTY_SLOT_MINUTES;
-  if (!Number.isInteger(durationSlots) || durationSlots < 1) return false;
+  if (!Number.isInteger(durationSlots) || durationSlots < 1) return empty;
 
   const [activeInstructors, activeVehicles] = await Promise.all([
     prisma.autoscuolaInstructor.findMany({
@@ -1056,14 +1074,19 @@ const hasFreeSlotTomorrow = async ({
     }),
     prisma.autoscuolaVehicle.findMany({
       where: { companyId, status: { not: "inactive" } },
-      select: { id: true },
+      select: { id: true, licenseCategory: true, transmission: true },
     }),
   ]);
 
   const instructorIds = activeInstructors.map((i: { id: string }) => i.id);
   const vehicleIds = activeVehicles.map((v: { id: string }) => v.id);
+  const vehicleKeyById = new Map<string, string>(
+    (activeVehicles as Array<{ id: string; licenseCategory: string | null; transmission: string | null }>).map(
+      (v) => [v.id, licenseKey(v.licenseCategory, v.transmission)],
+    ),
+  );
   console.log(`[empty-slot] hasFree: instructors=${instructorIds.length}, vehicles=${vehicleIds.length}`);
-  if (!instructorIds.length || !vehicleIds.length) return false;
+  if (!instructorIds.length || !vehicleIds.length) return empty;
 
   // Fetch availability for instructors & vehicles
   const [instructorDefaults, vehicleDefaults, instructorOverrides, vehicleOverrides] =
@@ -1163,7 +1186,10 @@ const hasFreeSlotTomorrow = async ({
     );
   };
 
-  // Scan the day for at least 1 free slot
+  // Scan the day. When vehicles are enabled we accumulate the license keys of
+  // every free vehicle paired with a free instructor; otherwise we early-exit on
+  // the first instructor+vehicle free slot (legacy behaviour).
+  const collectedKeys = new Set<string>();
   const dayLastStart = 1440 - durationMinutes;
   for (let minutes = 0; minutes <= dayLastStart; minutes += EMPTY_SLOT_MINUTES) {
     const startDate = emptySlotToTimeZoneDate(tomorrowParts, Math.floor(minutes / 60), minutes % 60);
@@ -1182,21 +1208,32 @@ const hasFreeSlotTomorrow = async ({
     }
     if (!hasInstructor) continue;
 
-    let hasVehicle = false;
+    if (!vehiclesEnabled) {
+      // Legacy path: any free vehicle is enough, no license restriction.
+      for (const id of vehicleIds) {
+        if (!isAvailable(resolveVehicle(id), tomorrowDow, minutes, candidateEndMin)) continue;
+        if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
+        console.log(`[empty-slot] hasFree: found free slot at minute=${minutes}`);
+        return { hasFree: true, vehicleKeys: null };
+      }
+      continue;
+    }
+
+    // Vehicles enabled: record the license key of every free vehicle at this slot.
     for (const id of vehicleIds) {
       if (!isAvailable(resolveVehicle(id), tomorrowDow, minutes, candidateEndMin)) continue;
       if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
-      hasVehicle = true;
-      break;
+      const key = vehicleKeyById.get(id);
+      if (key) collectedKeys.add(key);
     }
-    if (!hasVehicle) continue;
-
-    console.log(`[empty-slot] hasFree: found free slot at minute=${minutes}`);
-    return true; // At least 1 slot found
   }
 
+  if (vehiclesEnabled) {
+    console.log(`[empty-slot] hasFree: license keys with free slots = ${collectedKeys.size}`);
+    return { hasFree: collectedKeys.size > 0, vehicleKeys: collectedKeys };
+  }
   console.log(`[empty-slot] hasFree: no free slots found after scanning all minutes`);
-  return false;
+  return { hasFree: false, vehicleKeys: null };
 };
 
 export const processEmptySlotNotifications = async ({
@@ -1249,9 +1286,10 @@ export const processEmptySlotNotifications = async ({
     // off is honoured, and vice versa.
     const studentMembers = await prisma.companyMember.findMany({
       where: { companyId, autoscuolaRole: "STUDENT" },
-      select: { userId: true, assignedInstructorId: true },
+      select: { userId: true, assignedInstructorId: true, licenseCategory: true, transmission: true },
     });
     if (!studentMembers.length) continue;
+    const vehiclesEnabled = limits.vehiclesEnabled !== false;
 
     // Resolve effective settings once per distinct cluster (assigned instructor).
     const distinctInstructorIds = Array.from(
@@ -1279,7 +1317,12 @@ export const processEmptySlotNotifications = async ({
 
     // Keep students whose effective settings enable the notification at this
     // tick and allow students to book, excluding manual_full clusters.
-    const candidates: { userId: string; target: "all" | "availability_matching" }[] = [];
+    const candidates: {
+      userId: string;
+      target: "all" | "availability_matching";
+      licenseCategory: string | null;
+      transmission: string | null;
+    }[] = [];
     for (const m of studentMembers) {
       const eff = effectiveFor(m.assignedInstructorId);
       if (!eff.emptySlotNotificationEnabled) continue;
@@ -1287,28 +1330,47 @@ export const processEmptySlotNotifications = async ({
       if (!filterCompanyId && !eff.emptySlotNotificationTimes.includes(currentTimeHHMM)) continue;
       if (eff.appBookingActors !== "students" && eff.appBookingActors !== "both") continue;
       if (eff.instructorBookingMode === "manual_full") continue;
-      candidates.push({ userId: m.userId, target: eff.emptySlotNotificationTarget });
+      candidates.push({
+        userId: m.userId,
+        target: eff.emptySlotNotificationTarget,
+        licenseCategory: m.licenseCategory,
+        transmission: m.transmission,
+      });
     }
     if (!candidates.length) continue;
 
-    // Quick-check: does tomorrow have at least 1 free slot? (company-wide)
+    // Quick-check: which license paths have a free slot tomorrow? (company-wide)
     const checkDuration = companyDefaults.bookingSlotDurations[0] ?? 60;
-    const hasFree = await hasFreeSlotTomorrow({
+    const { hasFree, vehicleKeys } = await freeSlotLicenseKeysTomorrow({
       prisma,
       companyId,
+      vehiclesEnabled,
       tomorrowParts,
       tomorrowDow,
       rangeStart,
       rangeEnd,
       durationMinutes: checkDuration,
     });
-    console.log(`[empty-slot] Company ${companyId}: candidates=${candidates.length}, hasFreeSlotTomorrow=${hasFree}`);
+    console.log(`[empty-slot] Company ${companyId}: candidates=${candidates.length}, hasFree=${hasFree}`);
     if (!hasFree) continue;
+
+    // License gate (Vehicles module): drop candidates whose pursued license has
+    // no free matching vehicle tomorrow — they'd be notified for nothing.
+    // `vehicleKeys === null` means no restriction (module off). A student with an
+    // incomplete license (null parts) is kept (permissive).
+    const eligibleCandidates =
+      vehicleKeys === null
+        ? candidates
+        : candidates.filter((c) => {
+            if (!c.licenseCategory || !c.transmission) return true;
+            return vehicleKeys.has(licenseKey(c.licenseCategory, c.transmission));
+          });
+    if (!eligibleCandidates.length) continue;
 
     // Apply per-student target: "availability_matching" requires the student to
     // be available tomorrow; "all" is included unconditionally.
-    const matchingIds = candidates.filter((c) => c.target === "availability_matching").map((c) => c.userId);
-    let targetUserIds: string[] = candidates.filter((c) => c.target === "all").map((c) => c.userId);
+    const matchingIds = eligibleCandidates.filter((c) => c.target === "availability_matching").map((c) => c.userId);
+    let targetUserIds: string[] = eligibleCandidates.filter((c) => c.target === "all").map((c) => c.userId);
     if (matchingIds.length) {
       const studentAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
         where: { companyId, ownerType: "student", ownerId: { in: matchingIds } },

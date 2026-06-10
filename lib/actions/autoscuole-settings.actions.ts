@@ -9,6 +9,7 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
 import { isOwner } from "@/lib/autoscuole/roles";
+import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
@@ -343,6 +344,10 @@ const autoscuolaSettingsPatchSchema = z
     studentNotesEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
+    // Default license path assigned to a student at registration. Lets moto-only
+    // schools onboard new students already on the right category.
+    defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
+    defaultTransmission: z.enum(TRANSMISSIONS).optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
   })
@@ -407,6 +412,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentNotesEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
       value.vehiclesEnabled !== undefined ||
+      value.defaultLicenseCategory !== undefined ||
+      value.defaultTransmission !== undefined ||
       value.quizEnabled !== undefined ||
       value.studentCancellationEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
@@ -584,6 +591,8 @@ export type AutoscuolaSettingsData = {
   studentNotesEnabled: boolean;
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
+  defaultLicenseCategory: string;
+  defaultTransmission: string;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
 };
@@ -908,6 +917,14 @@ const resolveAutoscuolaSettingsData = async (
     studentNotesEnabled,
     autoCheckinEnabled,
     vehiclesEnabled: limits.vehiclesEnabled !== false,
+    defaultLicenseCategory:
+      typeof limits.defaultLicenseCategory === "string"
+        ? limits.defaultLicenseCategory
+        : "B",
+    defaultTransmission:
+      typeof limits.defaultTransmission === "string"
+        ? limits.defaultTransmission
+        : "manual",
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
@@ -1227,6 +1244,12 @@ export async function updateAutoscuolaSettings(
       payload.studentNotesEnabled ?? previousStudentNotesEnabled;
     const nextAutoCheckinEnabled = payload.autoCheckinEnabled ?? previousAutoCheckinEnabled;
     const nextVehiclesEnabled = payload.vehiclesEnabled ?? previousVehiclesEnabled;
+    const nextDefaultLicenseCategory =
+      payload.defaultLicenseCategory ??
+      (typeof limits.defaultLicenseCategory === "string" ? limits.defaultLicenseCategory : "B");
+    const nextDefaultTransmission =
+      payload.defaultTransmission ??
+      (typeof limits.defaultTransmission === "string" ? limits.defaultTransmission : "manual");
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
     const nextStudentCancellationEnabled = payload.studentCancellationEnabled ?? previousStudentCancellationEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1423,6 +1446,8 @@ export async function updateAutoscuolaSettings(
       studentNotesEnabled: nextStudentNotesEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
+      defaultLicenseCategory: nextDefaultLicenseCategory,
+      defaultTransmission: nextDefaultTransmission,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
     };

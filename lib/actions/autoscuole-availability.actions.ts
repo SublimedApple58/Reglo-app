@@ -22,6 +22,7 @@ import {
   pickBestInstructorVehiclePair,
   resolveVehicleForInstructor,
 } from "@/lib/autoscuole/fixed-vehicle";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   buildAutoscuoleCacheKey,
@@ -552,8 +553,36 @@ const ensureStudentMembership = async (companyId: string, studentId: string) =>
       autoscuolaRole: "STUDENT",
       userId: studentId,
     },
-    select: { userId: true },
+    select: { userId: true, licenseCategory: true, transmission: true },
   });
+
+/** The student's pursued license (category + transmission), used to filter vehicles. */
+const getStudentLicense = async (companyId: string, studentId: string) =>
+  prisma.companyMember.findUnique({
+    where: { companyId_userId: { companyId, userId: studentId } },
+    select: { licenseCategory: true, transmission: true },
+  });
+
+/**
+ * Build the `matchesLicenseCategory(vehicleId)` predicate for the slot matcher:
+ * a vehicle is eligible only if its category+transmission serve the student's
+ * pursued license. Null on either side is permissive (see vehicleServesLicense).
+ */
+const buildMatchesLicenseCategory = (
+  activeVehicles: Array<{
+    id: string;
+    licenseCategory?: string | null;
+    transmission?: string | null;
+  }>,
+  student: { licenseCategory?: string | null; transmission?: string | null } | null,
+) => {
+  const byId = new Map(activeVehicles.map((v) => [v.id, v]));
+  return (vehicleId: string) => {
+    const vehicle = byId.get(vehicleId);
+    if (!vehicle) return false;
+    return vehicleServesLicense(vehicle, student ?? {});
+  };
+};
 
 const ensureStudentCanBookFromApp = async ({
   companyId,
@@ -1601,7 +1630,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const effectiveInstructorId = clusterBookingSettings.isLockedToInstructor && clusterBookingSettings.assignedInstructorId
       ? clusterBookingSettings.assignedInstructorId
       : payload.instructorId;
-    const [activeInstructors, activeVehicles, studentAvailabilityRaw] = await Promise.all([
+    const [activeInstructors, activeVehicles, studentAvailabilityRaw, studentLicense] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
           companyId: membership.companyId,
@@ -1616,6 +1645,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           id: true,
           assignedInstructorId: true,
           followsInstructorAvailability: true,
+          licenseCategory: true,
+          transmission: true,
         },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
@@ -1625,6 +1656,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           ownerId: payload.studentId,
         },
       }),
+      getStudentLicense(membership.companyId, payload.studentId),
     ]);
     const autoscuolaService = autoscuolaServicePre;
     const studentAvailability = studentAvailabilityRaw ? defaultToAvailabilityRecord(studentAvailabilityRaw) : null;
@@ -1679,6 +1711,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
     const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, studentLicense);
 
     const resolverRangeStart = preferredDate;
     const resolverRangeEnd = toTimeZoneDate(
@@ -2031,6 +2064,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
               scoreVehicle: (vehicleId) =>
                 (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
                 (appointmentMaps.starts.get(vehicleId)?.has(endTime) ? 1 : 0),
+              matchesLicenseCategory,
             }),
         });
         if (!pair) {
@@ -2686,6 +2720,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           id: true,
           assignedInstructorId: true,
           followsInstructorAvailability: true,
+          licenseCategory: true,
+          transmission: true,
         },
       }),
       ensureStudentMembership(membership.companyId, payload.studentId),
@@ -2736,6 +2772,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     const activeVehicleIds = vehiclesEnabledForSlots ? activeVehicles.map((v) => v.id) : [];
     const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
     if (!activeInstructorIds.length) {
       return { success: true, data: [] };
     }
@@ -2977,6 +3014,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
               hasOverlap: (vehicleId) =>
                 overlaps(intervals.get(vehicleId), startMs, endTime),
               scoreVehicle: () => 0,
+              matchesLicenseCategory,
             }),
         });
         if (!pair) continue;
@@ -3091,6 +3129,8 @@ export async function getDateAvailabilityMap(
             id: true,
             assignedInstructorId: true,
             followsInstructorAvailability: true,
+            licenseCategory: true,
+            transmission: true,
           },
         }),
         ensureStudentMembership(membership.companyId, payload.studentId),
@@ -3134,6 +3174,7 @@ export async function getDateAvailabilityMap(
     const activeInstructorIds = activeInstructors.map((i) => i.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((v) => v.id) : [];
     const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
 
     const result: Record<string, boolean> = {};
     const instructorsByDate: Record<string, string[]> = {};
@@ -3429,6 +3470,7 @@ export async function getDateAvailabilityMap(
                     hasOverlap: (vehicleId) =>
                       overlaps(intervals.get(vehicleId), startMs, endTime),
                     scoreVehicle: () => 0,
+                    matchesLicenseCategory,
                   }) !== null,
               )
             : slotInstructors;
@@ -3684,7 +3726,9 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     }
 
     const slotTime = offer.slot.startsAt;
-    const [instructorSlot, vehicleSlot] = await Promise.all([
+    const waitlistVehiclesEnabled =
+      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    const [instructorSlot, openVehicleSlots] = await Promise.all([
       prisma.autoscuolaAvailabilitySlot.findFirst({
         where: {
           companyId: membership.companyId,
@@ -3693,7 +3737,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           startsAt: slotTime,
         },
       }),
-      prisma.autoscuolaAvailabilitySlot.findFirst({
+      prisma.autoscuolaAvailabilitySlot.findMany({
         where: {
           companyId: membership.companyId,
           ownerType: "vehicle",
@@ -3703,9 +3747,34 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       }),
     ]);
 
+    // Pick a vehicle slot whose vehicle serves the student's license (Vehicles
+    // module). When the module is off, any open vehicle slot is fine.
+    type OpenVehicleSlot = (typeof openVehicleSlots)[number];
+    let vehicleSlot: OpenVehicleSlot | null = openVehicleSlots.length ? openVehicleSlots[0] : null;
+    if (waitlistVehiclesEnabled && openVehicleSlots.length) {
+      const candidateVehicleIds = openVehicleSlots.map((s) => s.ownerId);
+      const candidateVehicles = await prisma.autoscuolaVehicle.findMany({
+        where: { id: { in: candidateVehicleIds } },
+        select: { id: true, licenseCategory: true, transmission: true },
+      });
+      const vehicleById = new Map(candidateVehicles.map((v) => [v.id, v]));
+      const studentLicense = {
+        licenseCategory: student.licenseCategory,
+        transmission: student.transmission,
+      };
+      vehicleSlot =
+        openVehicleSlots.find((s) => {
+          const v = vehicleById.get(s.ownerId);
+          return v ? vehicleServesLicense(v, studentLicense) : false;
+        }) ?? null;
+    }
+
     if (!instructorSlot || !vehicleSlot) {
       return { success: false, message: "Slot non disponibile." };
     }
+    // Capture as consts so the values narrow inside the transaction closure.
+    const bookedInstructorSlot = instructorSlot;
+    const bookedVehicleSlot = vehicleSlot;
 
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
@@ -3720,7 +3789,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
 
       const bookedSlots = await tx.autoscuolaAvailabilitySlot.updateMany({
         where: {
-          id: { in: [offer.slotId, instructorSlot.id, vehicleSlot.id] },
+          id: { in: [offer.slotId, bookedInstructorSlot.id, bookedVehicleSlot.id] },
           status: "open",
         },
         data: { status: "booked" },
@@ -3766,8 +3835,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           startsAt: offer.slot.startsAt,
           endsAt: offer.slot.endsAt,
           status: "scheduled",
-          instructorId: instructorSlot.ownerId,
-          vehicleId: vehicleSlot.ownerId,
+          instructorId: bookedInstructorSlot.ownerId,
+          vehicleId: bookedVehicleSlot.ownerId,
           locationId: waitlistAcceptLoc?.id ?? null,
           slotId: offer.slotId,
           ...(await prepareAppointmentPaymentSnapshot({
@@ -3886,6 +3955,41 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
       return { success: true, data: [] };
     }
 
+    // License gate (Vehicles module): hide offers whose time has no OPEN vehicle
+    // slot serving the student's pursued license.
+    const waitlistVehiclesEnabled =
+      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    const studentLicense = {
+      licenseCategory: student.licenseCategory,
+      transmission: student.transmission,
+    };
+    const licenseOkByTimeMs = new Map<number, boolean>();
+    if (waitlistVehiclesEnabled) {
+      const offerTimes = Array.from(new Set(offers.map((o) => o.slot.startsAt.getTime()))).map(
+        (ms) => new Date(ms),
+      );
+      const openVehicleSlots = offerTimes.length
+        ? await prisma.autoscuolaAvailabilitySlot.findMany({
+            where: { companyId: membership.companyId, ownerType: "vehicle", status: "open", startsAt: { in: offerTimes } },
+            select: { ownerId: true, startsAt: true },
+          })
+        : [];
+      const vehicleIds = Array.from(new Set(openVehicleSlots.map((s) => s.ownerId)));
+      const vehicles = vehicleIds.length
+        ? await prisma.autoscuolaVehicle.findMany({
+            where: { id: { in: vehicleIds } },
+            select: { id: true, licenseCategory: true, transmission: true },
+          })
+        : [];
+      const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+      for (const s of openVehicleSlots) {
+        const v = vehicleById.get(s.ownerId);
+        if (v && vehicleServesLicense(v, studentLicense)) {
+          licenseOkByTimeMs.set(s.startsAt.getTime(), true);
+        }
+      }
+    }
+
     const visible = offers
       .filter((offer) => !offer.responses.length)
       .filter((offer) =>
@@ -3902,6 +4006,10 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
             offer.slot.startsAt,
             offer.slot.endsAt,
           ),
+      )
+      .filter(
+        (offer) =>
+          !waitlistVehiclesEnabled || licenseOkByTimeMs.get(offer.slot.startsAt.getTime()) === true,
       )
       .filter((offer) => {
         if (!enforceRequiredTypes || !missingRequiredTypes.length) return true;
@@ -4026,13 +4134,43 @@ export async function broadcastWaitlistOffer({
     appointmentsByStudent.set(appointment.studentId, list);
   }
 
+  // License gate (Vehicles module): only students whose pursued license matches
+  // an OPEN vehicle slot at this time could actually take it.
+  const waitlistVehiclesEnabled =
+    (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+  let openVehicleLicenses: Array<{ licenseCategory: string | null; transmission: string | null }> | null =
+    null;
+  if (waitlistVehiclesEnabled) {
+    const openVehicleSlots = await prisma.autoscuolaAvailabilitySlot.findMany({
+      where: { companyId, ownerType: "vehicle", status: "open", startsAt: slot.startsAt },
+      select: { ownerId: true },
+    });
+    const openVehicleIds = openVehicleSlots.map((s) => s.ownerId);
+    openVehicleLicenses = openVehicleIds.length
+      ? await prisma.autoscuolaVehicle.findMany({
+          where: { id: { in: openVehicleIds } },
+          select: { licenseCategory: true, transmission: true },
+        })
+      : [];
+  }
+
   const availableStudents = students.filter((student) => {
     const availability = availabilityByStudent.get(student.user.id);
     if (!isAvailabilityCovering(availability, slot.startsAt, slot.endsAt)) {
       return false;
     }
     const booked = appointmentsByStudent.get(student.user.id) ?? [];
-    return !hasAppointmentConflict(booked, slot.startsAt, slot.endsAt);
+    if (hasAppointmentConflict(booked, slot.startsAt, slot.endsAt)) return false;
+    if (openVehicleLicenses !== null) {
+      const studentLicense = {
+        licenseCategory: student.licenseCategory,
+        transmission: student.transmission,
+      };
+      if (!openVehicleLicenses.some((v) => vehicleServesLicense(v, studentLicense))) {
+        return false;
+      }
+    }
+    return true;
   });
   if (!availableStudents.length) return offer;
 

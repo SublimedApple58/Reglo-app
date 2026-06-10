@@ -26,6 +26,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
@@ -152,6 +153,8 @@ const createInstructorSchema = z.object({
 const createVehicleSchema = z.object({
   name: z.string().min(1),
   plate: z.string().optional(),
+  licenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
+  transmission: z.enum(TRANSMISSIONS).optional(),
 });
 
 const instructorSettingsSchema = z.object({
@@ -199,6 +202,9 @@ const updateVehicleSchema = z.object({
   // instructor (1:1). Omitting the key leaves the current assignment untouched.
   assignedInstructorId: z.string().uuid().nullable().optional(),
   followsInstructorAvailability: z.boolean().optional(),
+  // License category + transmission this vehicle serves (Vehicles module).
+  licenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
+  transmission: z.enum(TRANSMISSIONS).optional(),
 });
 
 const adjustStudentLessonCreditsSchema = z.object({
@@ -1175,6 +1181,8 @@ export async function getAutoscuolaStudents(search?: string) {
         ...toStudentProfile(m.user, m.createdAt),
         assignedInstructorId: m.assignedInstructorId ?? null,
         studentPhase: m.studentPhase,
+        licenseCategory: m.licenseCategory ?? null,
+        transmission: m.transmission ?? null,
       })),
     };
   } catch (error) {
@@ -1304,6 +1312,8 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       ...toStudentProfile(m.user, m.createdAt),
       assignedInstructorId: m.assignedInstructorId ?? null,
       studentPhase: m.studentPhase,
+      licenseCategory: m.licenseCategory ?? null,
+      transmission: m.transmission ?? null,
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -1578,6 +1588,8 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         examPriorityActive: examPriorityInfo.active,
         examDate: examPriorityInfo.examDate,
         studentPhase: studentMembership.studentPhase,
+        licenseCategory: studentMembership.licenseCategory ?? null,
+        transmission: studentMembership.transmission ?? null,
         quizSeatGrantedAt: studentMembership.quizSeatGrantedAt
           ? studentMembership.quizSeatGrantedAt.toISOString()
           : null,
@@ -4338,6 +4350,8 @@ export async function createAutoscuolaVehicle(
         companyId,
         name: payload.name,
         plate: payload.plate || null,
+        ...(payload.licenseCategory ? { licenseCategory: payload.licenseCategory } : {}),
+        ...(payload.transmission ? { transmission: payload.transmission } : {}),
       },
     });
 
@@ -4574,6 +4588,12 @@ export async function updateAutoscuolaVehicle(
           : {}),
       ...(payload.followsInstructorAvailability !== undefined
         ? { followsInstructorAvailability: payload.followsInstructorAvailability }
+        : {}),
+      ...(payload.licenseCategory !== undefined
+        ? { licenseCategory: payload.licenseCategory }
+        : {}),
+      ...(payload.transmission !== undefined
+        ? { transmission: payload.transmission }
         : {}),
     };
 
@@ -5464,6 +5484,15 @@ const updateStudentPhaseSchema = z.object({
   grantSeat: z.boolean().optional(),
 });
 
+// The pursued license path is a separate attribute from the phase: it is known
+// from the theory stage onward, so it is edited via its own dialog/action,
+// independent of phase transitions.
+const updateStudentLicensePathSchema = z.object({
+  studentId: z.string().uuid(),
+  licenseCategory: z.enum(LICENSE_CATEGORIES),
+  transmission: z.enum(TRANSMISSIONS),
+});
+
 export async function toggleStudentBookingBlock(
   input: z.infer<typeof toggleStudentBookingBlockSchema>,
 ) {
@@ -5672,6 +5701,49 @@ export async function updateStudentPhase(
       success: true,
       data: { phase: payload.phase },
       message: "Fase aggiornata correttamente.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * Update the student's pursued license path (category + transmission).
+ * Independent of the phase: the license is known from the theory stage onward,
+ * so it has its own editor. Owner/admin only.
+ */
+export async function updateStudentLicensePath(
+  input: z.infer<typeof updateStudentLicensePathSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = updateStudentLicensePathSchema.parse(input);
+
+    const updated = await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: {
+        licenseCategory: payload.licenseCategory,
+        transmission: payload.transmission,
+      },
+    });
+    if (!updated.count) {
+      return { success: false, message: "Allievo non valido per questa company." };
+    }
+
+    return {
+      success: true,
+      data: {
+        licenseCategory: payload.licenseCategory,
+        transmission: payload.transmission,
+      },
+      message: "Percorso patente aggiornato.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

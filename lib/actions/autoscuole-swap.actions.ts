@@ -13,6 +13,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
@@ -200,7 +201,7 @@ export async function createSwapOffer(
       },
       include: {
         instructor: { select: { id: true, name: true, userId: true } },
-        vehicle: { select: { id: true, name: true } },
+        vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
         student: { select: { id: true, name: true } },
       },
     });
@@ -278,10 +279,25 @@ export async function createSwapOffer(
       return { success: true, data: offer };
     }
 
-    let eligibleStudents = students;
+    // License gate (Vehicles module): only notify students whose pursued license
+    // matches the offered slot's vehicle — others could never take it.
+    const swapVehicle = appointment.vehicle;
+    let eligibleStudents =
+      settings.vehiclesEnabled && swapVehicle
+        ? students.filter((student) =>
+            vehicleServesLicense(swapVehicle, {
+              licenseCategory: student.licenseCategory,
+              transmission: student.transmission,
+            }),
+          )
+        : students;
+
+    if (!eligibleStudents.length) {
+      return { success: true, data: offer };
+    }
 
     if (effectiveSettings.swapNotifyMode === "available_only") {
-      const studentIds = students.map((s) => s.user.id);
+      const studentIds = eligibleStudents.map((s) => s.user.id);
       const [availabilities, appointments_] = await Promise.all([
         prisma.autoscuolaWeeklyAvailability.findMany({
           where: {
@@ -311,7 +327,7 @@ export async function createSwapOffer(
         appointmentsByStudent.set(apt.studentId, list);
       }
 
-      eligibleStudents = students.filter((student) => {
+      eligibleStudents = eligibleStudents.filter((student) => {
         const availability = availabilityByStudent.get(student.user.id);
         if (!isAvailabilityCovering(availability, appointment.startsAt, appointment.endsAt)) {
           return false;
@@ -427,7 +443,12 @@ export async function getSwapOffers(
     // If student is in a cluster, only see offers from same cluster
     const viewerMember = await prisma.companyMember.findFirst({
       where: { companyId: membership.companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
-      select: { assignedInstructorId: true, assignedInstructor: { select: { autonomousMode: true } } },
+      select: {
+        assignedInstructorId: true,
+        assignedInstructor: { select: { autonomousMode: true } },
+        licenseCategory: true,
+        transmission: true,
+      },
     });
     const viewerClusterInstructorId =
       viewerMember?.assignedInstructorId && viewerMember.assignedInstructor?.autonomousMode
@@ -465,7 +486,7 @@ export async function getSwapOffers(
         appointment: {
           include: {
             instructor: { select: { name: true } },
-            vehicle: { select: { name: true } },
+            vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
           },
         },
         requestingStudent: { select: { name: true } },
@@ -477,6 +498,14 @@ export async function getSwapOffers(
       orderBy: { sentAt: "desc" },
       take: limit * 3,
     });
+
+    // License gate (Vehicles module): hide offers whose vehicle does not serve
+    // the viewer's pursued license — they could not actually take the slot.
+    const swapSettings = await getAutoscuolaSettingsForCompany(membership.companyId);
+    const viewerLicense = {
+      licenseCategory: viewerMember?.licenseCategory,
+      transmission: viewerMember?.transmission,
+    };
 
     // Filter: not already responded, no conflicts
     const studentAppointments = await prisma.autoscuolaAppointment.findMany({
@@ -498,6 +527,12 @@ export async function getSwapOffers(
             offer.appointment.startsAt,
             offer.appointment.endsAt,
           ),
+      )
+      .filter(
+        (offer) =>
+          !swapSettings.vehiclesEnabled ||
+          !offer.appointment.vehicle ||
+          vehicleServesLicense(offer.appointment.vehicle, viewerLicense),
       )
       .slice(0, limit)
       .map((offer) => ({
@@ -557,6 +592,7 @@ export async function respondSwapOffer(
           include: {
             instructor: { select: { name: true, userId: true } },
             student: { select: { id: true, name: true } },
+            vehicle: { select: { licenseCategory: true, transmission: true } },
           },
         },
       },
@@ -570,7 +606,12 @@ export async function respondSwapOffer(
     if (payload.response === "accept") {
       const acceptingMember = await prisma.companyMember.findFirst({
         where: { companyId: membership.companyId, userId: payload.studentId, autoscuolaRole: "STUDENT" },
-        select: { assignedInstructorId: true, assignedInstructor: { select: { autonomousMode: true } } },
+        select: {
+          assignedInstructorId: true,
+          assignedInstructor: { select: { autonomousMode: true } },
+          licenseCategory: true,
+          transmission: true,
+        },
       });
       if (acceptingMember?.assignedInstructorId && acceptingMember.assignedInstructor?.autonomousMode) {
         const offerCreatorMember = await prisma.companyMember.findFirst({
@@ -580,6 +621,24 @@ export async function respondSwapOffer(
         if (offerCreatorMember?.assignedInstructorId !== acceptingMember.assignedInstructorId) {
           return { success: false, message: "Non puoi accettare scambi da allievi di un altro gruppo." };
         }
+      }
+
+      // License validation (Vehicles module): the taker can only inherit a slot
+      // whose vehicle serves their pursued license (a moto student can't take a
+      // car slot and vice versa). The swap keeps the original instructor+vehicle.
+      const swapSettings = await getAutoscuolaSettingsForCompany(membership.companyId);
+      if (
+        swapSettings.vehiclesEnabled &&
+        offer.appointment.vehicle &&
+        !vehicleServesLicense(offer.appointment.vehicle, {
+          licenseCategory: acceptingMember?.licenseCategory,
+          transmission: acceptingMember?.transmission,
+        })
+      ) {
+        return {
+          success: false,
+          message: "Questo scambio usa un veicolo non compatibile con la tua patente.",
+        };
       }
     }
 
@@ -926,11 +985,17 @@ export async function instructorSwapAppointments(
     const [apptA, apptB] = await Promise.all([
       prisma.autoscuolaAppointment.findFirst({
         where: { id: payload.appointmentIdA, companyId },
-        include: { student: { select: { id: true, name: true } } },
+        include: {
+          student: { select: { id: true, name: true } },
+          vehicle: { select: { licenseCategory: true, transmission: true } },
+        },
       }),
       prisma.autoscuolaAppointment.findFirst({
         where: { id: payload.appointmentIdB, companyId },
-        include: { student: { select: { id: true, name: true } } },
+        include: {
+          student: { select: { id: true, name: true } },
+          vehicle: { select: { licenseCategory: true, transmission: true } },
+        },
       }),
     ]);
 
@@ -983,6 +1048,39 @@ export async function instructorSwapAppointments(
     // Students must be different
     if (apptA.studentId === apptB.studentId) {
       return { success: false, message: "Le due guide devono appartenere ad allievi diversi." };
+    }
+
+    // License validation (Vehicles module): after the swap each student inherits
+    // the OTHER appointment's vehicle, so both must be compatible with the
+    // vehicle they end up on (no moto↔auto cross-assignment).
+    const instrSwapSettings = await getAutoscuolaSettingsForCompany(companyId);
+    if (instrSwapSettings.vehiclesEnabled && (apptA.vehicle || apptB.vehicle)) {
+      const licenseMembers = await prisma.companyMember.findMany({
+        where: {
+          companyId,
+          userId: { in: [apptA.studentId, apptB.studentId] },
+          autoscuolaRole: "STUDENT",
+        },
+        select: { userId: true, licenseCategory: true, transmission: true },
+      });
+      const licenseByUser = new Map(licenseMembers.map((m) => [m.userId, m]));
+      const studentALicense = licenseByUser.get(apptA.studentId);
+      const studentBLicense = licenseByUser.get(apptB.studentId);
+      // Student A moves onto appointment B's vehicle; student B onto A's vehicle.
+      const aOk = !apptB.vehicle || vehicleServesLicense(apptB.vehicle, {
+        licenseCategory: studentALicense?.licenseCategory,
+        transmission: studentALicense?.transmission,
+      });
+      const bOk = !apptA.vehicle || vehicleServesLicense(apptA.vehicle, {
+        licenseCategory: studentBLicense?.licenseCategory,
+        transmission: studentBLicense?.transmission,
+      });
+      if (!aOk || !bOk) {
+        return {
+          success: false,
+          message: "Scambio non possibile: il veicolo di una guida non è compatibile con la patente dell'altro allievo.",
+        };
+      }
     }
 
     // Swap studentId and caseId

@@ -49,6 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
+import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import {
   OutOfAvailabilitySheet,
@@ -60,7 +61,13 @@ import {
 } from "@/components/pages/Autoscuole/RescheduleAppointmentDialog";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
-type ResourceOption = { id: string; name: string; assignedInstructorId?: string | null };
+type ResourceOption = {
+  id: string;
+  name: string;
+  assignedInstructorId?: string | null;
+  licenseCategory?: string | null;
+  transmission?: string | null;
+};
 type AppointmentRow = {
   id: string;
   type: string;
@@ -2190,9 +2197,19 @@ export function AutoscuoleAgendaPage({
                                 const assignedTo = vehicle.assignedInstructorId
                                   ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
                                   : null;
+                                const licenseLabel = vehicle.licenseCategory
+                                  ? `${vehicle.licenseCategory} · ${
+                                      TRANSMISSION_LABELS[
+                                        vehicle.transmission as Transmission
+                                      ] ?? vehicle.transmission
+                                    }`
+                                  : null;
                                 return (
                                   <SelectItem key={vehicle.id} value={vehicle.id}>
                                     {vehicle.name}
+                                    {licenseLabel ? (
+                                      <span className="text-muted-foreground"> · {licenseLabel}</span>
+                                    ) : null}
                                     {assignedTo ? (
                                       <span className="text-muted-foreground"> · {assignedTo}</span>
                                     ) : null}

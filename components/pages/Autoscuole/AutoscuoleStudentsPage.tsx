@@ -57,6 +57,8 @@ import {
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
+import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,6 +89,8 @@ type Student = StudentProfile & {
   bookingBlocked?: boolean;
   assignedInstructorId?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  licenseCategory?: string | null;
+  transmission?: string | null;
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -139,6 +143,8 @@ type StudentRegister = {
   examPriorityActive?: boolean;
   examDate?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  licenseCategory?: string | null;
+  transmission?: string | null;
   quizSeatGrantedAt?: string | null;
   theoryExamAt?: string | null;
   activeCase: {
@@ -300,6 +306,7 @@ export function AutoscuoleStudentsPage({
 
   // Phase change dialog
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
+  const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
   // Collapsible "Patentati" section
   const [patentatiExpanded, setPatentatiExpanded] = React.useState(false);
 
@@ -1119,6 +1126,14 @@ export function AutoscuoleStudentsPage({
                                       {instructorMap.get(student.assignedInstructorId)}
                                     </Badge>
                                   )}
+                                  {student.licenseCategory && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                      {student.licenseCategory} ·{" "}
+                                      {TRANSMISSION_LABELS[
+                                        student.transmission as Transmission
+                                      ] ?? student.transmission}
+                                    </Badge>
+                                  )}
                                 </div>
                               </TableCell>
                               <TableCell>{student.email || "—"}</TableCell>
@@ -1373,6 +1388,28 @@ export function AutoscuoleStudentsPage({
                               ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
                               : "Nessuna"}
                           </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Percorso patente</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {register.licenseCategory
+                                ? `${register.licenseCategory} · ${
+                                    TRANSMISSION_LABELS[
+                                      register.transmission as Transmission
+                                    ] ?? register.transmission ?? "—"
+                                  }`
+                                : "—"}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 cursor-pointer px-2 text-[11px]"
+                              onClick={() => setLicenseDialogOpen(true)}
+                            >
+                              Modifica
+                            </Button>
+                          </div>
                         </div>
                         <div>
                           <p className="text-[11px] text-muted-foreground">Fase percorso</p>
@@ -2053,6 +2090,28 @@ export function AutoscuoleStudentsPage({
             if (grantedSeat) {
               refreshQuizCtx();
             }
+          }}
+        />
+      )}
+      {register && selectedStudentId && (
+        <EditStudentLicenseDialog
+          open={licenseDialogOpen}
+          onOpenChange={setLicenseDialogOpen}
+          studentId={selectedStudentId}
+          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          currentLicenseCategory={register.licenseCategory ?? null}
+          currentTransmission={register.transmission ?? null}
+          onSuccess={({ licenseCategory, transmission }) => {
+            setRegister((prev) =>
+              prev ? { ...prev, licenseCategory, transmission } : prev,
+            );
+            setStudents((prev) =>
+              prev.map((s) =>
+                s.id === selectedStudentId
+                  ? { ...s, licenseCategory, transmission }
+                  : s,
+              ),
+            );
           }}
         />
       )}

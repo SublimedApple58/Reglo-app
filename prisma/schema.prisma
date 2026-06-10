@@ -250,6 +250,12 @@ model CompanyMember {
   weeklyBookingLimitExempt   Boolean        @default(false)
   examPriorityOverride       Boolean?
   assignedInstructorId       String?        @db.Uuid
+  /// License path the student is pursuing (PRATICA phase). Part of the Vehicles
+  /// module: drives category-aware slot matching only when vehiclesEnabled.
+  /// Null on non-student members. Values: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
+  licenseCategory            String?
+  /// Transmission of the pursued license: manual | automatic.
+  transmission               String?
   createdAt                  DateTime       @default(now()) @db.Timestamp(6)
   updatedAt      DateTime       @updatedAt
 
@@ -592,6 +598,10 @@ model AutoscuolaVehicle {
   status                        String   @default("active")
   assignedInstructorId          String?  @db.Uuid
   followsInstructorAvailability Boolean  @default(true)
+  /// License category this vehicle serves: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
+  licenseCategory               String   @default("B")
+  /// Transmission: manual | automatic.
+  transmission                  String   @default("manual")
   createdAt                     DateTime @default(now()) @db.Timestamp(6)
   updatedAt                     DateTime @updatedAt
 

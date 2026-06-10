@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/select";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { FieldGroup } from "@/components/ui/field-group";
+import {
+  LICENSE_CATEGORIES,
+  LICENSE_CATEGORY_LABELS,
+  TRANSMISSIONS,
+  TRANSMISSION_LABELS,
+} from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 
 const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
@@ -79,6 +85,8 @@ type VehicleDetail = {
   status: string;
   assignedInstructorId: string | null;
   followsInstructorAvailability: boolean;
+  licenseCategory: string;
+  transmission: string;
 };
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
@@ -264,6 +272,8 @@ export function AutoscuoleResourcesPage({
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
+  const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
+  const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -357,6 +367,8 @@ export function AutoscuoleResourcesPage({
   const [editVehicleInstructorId, setEditVehicleInstructorId] = React.useState<string>("");
   const [editVehicleFollowsAvailability, setEditVehicleFollowsAvailability] =
     React.useState(true);
+  const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
+  const [editVehicleTransmission, setEditVehicleTransmission] = React.useState<string>("manual");
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
 
   // ── Availability edit dialog
@@ -403,6 +415,8 @@ export function AutoscuoleResourcesPage({
           status: item.status,
           assignedInstructorId: item.assignedInstructorId ?? null,
           followsInstructorAvailability: item.followsInstructorAvailability ?? true,
+          licenseCategory: item.licenseCategory ?? "B",
+          transmission: item.transmission ?? "manual",
         })),
       );
     }
@@ -510,6 +524,8 @@ export function AutoscuoleResourcesPage({
       setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
       setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
       setVehiclesEnabled(res.data.vehiclesEnabled !== false);
+      setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
+      setDefaultTransmission(res.data.defaultTransmission ?? "manual");
 
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -659,6 +675,8 @@ export function AutoscuoleResourcesPage({
       studentNotesEnabled,
       autoCheckinEnabled,
       vehiclesEnabled,
+      defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
+      defaultTransmission: defaultTransmission as "manual" | "automatic",
       appBookingActors,
       instructorBookingMode,
     });
@@ -1090,6 +1108,8 @@ export function AutoscuoleResourcesPage({
         status: res.data!.status,
         assignedInstructorId: res.data!.assignedInstructorId ?? null,
         followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
+        licenseCategory: res.data!.licenseCategory ?? "B",
+        transmission: res.data!.transmission ?? "manual",
       },
     ]);
     setCreateVehicleOpen(false);
@@ -1102,6 +1122,8 @@ export function AutoscuoleResourcesPage({
     setEditVehiclePlate(vehicle.plate ?? "");
     setEditVehicleInstructorId(vehicle.assignedInstructorId ?? "");
     setEditVehicleFollowsAvailability(vehicle.followsInstructorAvailability);
+    setEditVehicleCategory(vehicle.licenseCategory ?? "B");
+    setEditVehicleTransmission(vehicle.transmission ?? "manual");
   };
 
   const handleSaveEditVehicle = async () => {
@@ -1118,6 +1140,8 @@ export function AutoscuoleResourcesPage({
       plate: editVehiclePlate.trim() || null,
       assignedInstructorId: editVehicleInstructorId || null,
       followsInstructorAvailability: editVehicleFollowsAvailability,
+      licenseCategory: editVehicleCategory as "B" | "AM" | "A1" | "A2" | "A",
+      transmission: editVehicleTransmission as "manual" | "automatic",
     });
     setSavingEditVehicle(false);
     if (!res.success || !res.data) {
@@ -1135,6 +1159,8 @@ export function AutoscuoleResourcesPage({
               assignedInstructorId: res.data!.assignedInstructorId ?? null,
               followsInstructorAvailability:
                 res.data!.followsInstructorAvailability ?? true,
+              licenseCategory: res.data!.licenseCategory ?? "B",
+              transmission: res.data!.transmission ?? "manual",
             }
           : v,
       ),
@@ -1556,6 +1582,10 @@ export function AutoscuoleResourcesPage({
             loading={loading}
             vehiclesEnabled={vehiclesEnabled}
             setVehiclesEnabled={setVehiclesEnabled}
+            defaultLicenseCategory={defaultLicenseCategory}
+            setDefaultLicenseCategory={setDefaultLicenseCategory}
+            defaultTransmission={defaultTransmission}
+            setDefaultTransmission={setDefaultTransmission}
             openCreateVehicle={openCreateVehicle}
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
@@ -1792,6 +1822,44 @@ export function AutoscuoleResourcesPage({
                   value={editVehiclePlate}
                   onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
                 />
+              </div>
+
+              {/* ── Categoria patente + cambio ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <FieldGroup label="Categoria patente">
+                  <Select
+                    value={editVehicleCategory}
+                    onValueChange={setEditVehicleCategory}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LICENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {LICENSE_CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="Cambio">
+                  <Select
+                    value={editVehicleTransmission}
+                    onValueChange={setEditVehicleTransmission}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSMISSIONS.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {TRANSMISSION_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
               </div>
 
               {/* ── Veicolo fisso (assegnazione istruttore) ── */}

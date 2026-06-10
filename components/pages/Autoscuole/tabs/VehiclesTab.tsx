@@ -4,6 +4,20 @@ import { Plus, Clock, Pencil, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  LICENSE_CATEGORIES,
+  LICENSE_CATEGORY_LABELS,
+  TRANSMISSIONS,
+  TRANSMISSION_LABELS,
+  type Transmission,
+} from "@/lib/autoscuole/license";
 
 type VehicleDetail = {
   id: string;
@@ -12,6 +26,8 @@ type VehicleDetail = {
   status: string;
   assignedInstructorId: string | null;
   followsInstructorAvailability: boolean;
+  licenseCategory: string;
+  transmission: string;
 };
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilityRange = { start: Date; end: Date };
@@ -23,6 +39,10 @@ export type VehiclesTabProps = {
   loading: boolean;
   vehiclesEnabled: boolean;
   setVehiclesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  defaultLicenseCategory: string;
+  setDefaultLicenseCategory: React.Dispatch<React.SetStateAction<string>>;
+  defaultTransmission: string;
+  setDefaultTransmission: React.Dispatch<React.SetStateAction<string>>;
   openCreateVehicle: () => void;
   openEditVehicle: (vehicle: VehicleDetail) => void;
   openAvailabilityDialog: (vehicle: VehicleDetail) => void;
@@ -93,12 +113,21 @@ function VehiclesTabContent({
             <ResourceCard
               key={vehicle.id}
               name={vehicle.name}
-              subtitle={vehicle.plate ? (
-                <span className="flex items-center gap-1">
-                  <Car className="size-3" />
-                  {vehicle.plate}
+              subtitle={
+                <span className="flex items-center gap-1.5">
+                  {vehicle.plate ? (
+                    <span className="flex items-center gap-1">
+                      <Car className="size-3" />
+                      {vehicle.plate}
+                    </span>
+                  ) : null}
+                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                    {vehicle.licenseCategory} ·{" "}
+                    {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ??
+                      vehicle.transmission}
+                  </span>
                 </span>
-              ) : undefined}
+              }
               inactive={vehicle.status === "inactive"}
               actions={
                 <>
@@ -159,6 +188,10 @@ export default function VehiclesTab({
   loading,
   vehiclesEnabled,
   setVehiclesEnabled,
+  defaultLicenseCategory,
+  setDefaultLicenseCategory,
+  defaultTransmission,
+  setDefaultTransmission,
   openCreateVehicle,
   openEditVehicle,
   openAvailabilityDialog,
@@ -183,6 +216,41 @@ export default function VehiclesTab({
           <InlineToggle checked={vehiclesEnabled} size="sm" />
         </div>
       </div>
+      {vehiclesEnabled && (
+        <div className="rounded-2xl border border-border bg-white shadow-card p-4">
+          <div className="flex flex-col gap-0.5 mb-3">
+            <span className="text-sm font-semibold">Percorso patente di default</span>
+            <span className="text-xs text-muted-foreground">
+              Assegnato ai nuovi allievi alla registrazione. Le autoscuole moto
+              possono impostarlo una volta sola (es. A1 · Manuale).
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Categoria</label>
+              <Select value={defaultLicenseCategory} onValueChange={setDefaultLicenseCategory}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {LICENSE_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Cambio</label>
+              <Select value={defaultTransmission} onValueChange={setDefaultTransmission}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TRANSMISSIONS.map((t) => (
+                    <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      )}
       {vehiclesEnabled && (
         <VehiclesTabContent
           vehicles={vehicles}

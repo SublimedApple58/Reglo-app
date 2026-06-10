@@ -14,6 +14,7 @@ import {
   pickBestInstructorVehiclePair,
   resolveVehicleForInstructor,
 } from "@/lib/autoscuole/fixed-vehicle";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 
 const SLOT_MINUTES = 30;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -243,8 +244,13 @@ export async function findBestAutoscuolaSlot(
   );
   if (preferredDate < todayStart) return null;
 
-  const [activeInstructors, activeVehicles, studentAvailability, autoscuolaService] =
-    await Promise.all([
+  const [
+    activeInstructors,
+    activeVehicles,
+    studentAvailability,
+    autoscuolaService,
+    studentMember,
+  ] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
           companyId: input.companyId,
@@ -259,6 +265,8 @@ export async function findBestAutoscuolaSlot(
           id: true,
           assignedInstructorId: true,
           followsInstructorAvailability: true,
+          licenseCategory: true,
+          transmission: true,
         },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
@@ -271,6 +279,10 @@ export async function findBestAutoscuolaSlot(
       prisma.companyService.findFirst({
         where: { companyId: input.companyId, serviceKey: "AUTOSCUOLE" },
         select: { limits: true },
+      }),
+      prisma.companyMember.findUnique({
+        where: { companyId_userId: { companyId: input.companyId, userId: input.studentId } },
+        select: { licenseCategory: true, transmission: true },
       }),
     ]);
 
@@ -319,6 +331,19 @@ export async function findBestAutoscuolaSlot(
   const activeInstructorIds = activeInstructors.map((item) => item.id);
   const activeVehicleIds = smVehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
   const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+
+  // License-category matching (only meaningful when vehicles are enabled): a
+  // vehicle is eligible only if it serves the student's pursued license.
+  const vehicleById = new Map(activeVehicles.map((v) => [v.id, v]));
+  const studentLicense = {
+    licenseCategory: studentMember?.licenseCategory ?? null,
+    transmission: studentMember?.transmission ?? null,
+  };
+  const matchesLicenseCategory = (vehicleId: string) => {
+    const vehicle = vehicleById.get(vehicleId);
+    if (!vehicle) return false;
+    return vehicleServesLicense(vehicle, studentLicense);
+  };
 
   // Build date-aware availability resolvers that account for per-week overrides
   const searchRangeStart = toTimeZoneDate(preferredDateParts, 0, 0);
@@ -495,6 +520,7 @@ export async function findBestAutoscuolaSlot(
             isVehicleAvailable: isVehicleAvailableAt,
             hasOverlap: hasVehicleOverlapAt,
             scoreVehicle: scoreVehicleAt,
+            matchesLicenseCategory,
           }),
       });
       if (!pair) continue;

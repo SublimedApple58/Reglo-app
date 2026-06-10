@@ -21,6 +21,10 @@ export type FixedVehicleRow = {
   id: string;
   assignedInstructorId: string | null;
   followsInstructorAvailability: boolean;
+  /** License category this vehicle serves (B | AM | A1 | A2 | A). */
+  licenseCategory?: string | null;
+  /** Transmission this vehicle serves (manual | automatic). */
+  transmission?: string | null;
 };
 
 export type FixedVehicleMaps = {
@@ -64,6 +68,12 @@ export function resolveVehicleForInstructor(args: {
   hasOverlap: (vehicleId: string) => boolean;
   /** packing score (higher = tighter fit) for the vehicle in the slot */
   scoreVehicle: (vehicleId: string) => number;
+  /**
+   * true if the vehicle's license category + transmission serve the student's
+   * pursued license. Defaults to always-true (no category constraint) so legacy
+   * callers and the module-off path keep working unchanged.
+   */
+  matchesLicenseCategory?: (vehicleId: string) => boolean;
 }): { id: string; score: number } | null {
   const {
     instructorId,
@@ -72,10 +82,14 @@ export function resolveVehicleForInstructor(args: {
     isVehicleAvailable,
     hasOverlap,
     scoreVehicle,
+    matchesLicenseCategory = () => true,
   } = args;
 
   const fixed = maps.fixedByInstructor.get(instructorId);
   if (fixed) {
+    // Forced vehicle: it must also serve the student's license category. If it
+    // doesn't, this instructor cannot serve this student (e.g. moto-only).
+    if (!matchesLicenseCategory(fixed.id)) return null;
     // Forced vehicle: overlap is always disqualifying.
     if (hasOverlap(fixed.id)) return null;
     // Own availability enforced only when it does NOT follow the instructor.
@@ -85,10 +99,12 @@ export function resolveVehicleForInstructor(args: {
     return { id: fixed.id, score: scoreVehicle(fixed.id) };
   }
 
-  // No fixed vehicle: best-fit from the pool, excluding reserved vehicles.
+  // No fixed vehicle: best-fit from the pool, excluding reserved vehicles and
+  // vehicles that don't serve the student's license category.
   let best: { id: string; score: number } | null = null;
   for (const vehicleId of activeVehicleIds) {
     if (maps.reservedVehicleIds.has(vehicleId)) continue;
+    if (!matchesLicenseCategory(vehicleId)) continue;
     if (!isVehicleAvailable(vehicleId)) continue;
     if (hasOverlap(vehicleId)) continue;
     const score = scoreVehicle(vehicleId);
