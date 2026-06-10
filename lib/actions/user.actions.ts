@@ -17,7 +17,7 @@ import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from '@/lib/autoscuole/roles';
-import { cancelAndQueueOperationalRepositionByResource } from '@/lib/autoscuole/repositioning';
+import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -408,12 +408,12 @@ export async function deleteUser(id: string) {
             companyId: context.companyId,
             instructorId: instructor.id,
             startsAt: { gt: new Date() },
-            status: { in: ['scheduled', 'confirmed', 'proposal', 'checked_in'] },
+            status: { in: ['scheduled', 'confirmed', 'checked_in'] },
           },
           select: { id: true },
         });
 
-        await cancelAndQueueOperationalRepositionByResource({
+        await operationallyCancelAppointmentsByResource({
           companyId: context.companyId,
           appointmentIds: impactedAppointments.map((item) => item.id),
           reason: 'directory_instructor_removed',

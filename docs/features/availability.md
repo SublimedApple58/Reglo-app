@@ -20,8 +20,15 @@ Instructor and vehicle availability management: weekly schedules, daily override
 - Vehicle: `setAutoscuolaVehicleWeeklyAvailability()`
 
 ## DB models
-- `AutoscuolaWeeklyAvailability` — recurring slots (daysOfWeek, startMinutes, endMinutes, splitShift)
+- `AutoscuolaWeeklyAvailability` — recurring base schedule (daysOfWeek, startMinutes, endMinutes, JSON `ranges`, JSON `rangesByDay`)
 - `AutoscuolaDailyAvailabilityOverride` — date exceptions with JSON ranges
+
+### Per-weekday base schedule (`rangesByDay`)
+The base schedule supports **different ranges per weekday**. `AutoscuolaWeeklyAvailability.rangesByDay` is a nullable JSON map `{ "0": [{startMinutes,endMinutes}], "1": [...], ... }` (0=Sun..6=Sat). When present it is **authoritative**; the flat `daysOfWeek/ranges/startMinutes…` are kept populated with a **representative day** (first active) for legacy/back-compat readers. When absent, the record uses the legacy shared model.
+
+Read accessor: `rangesForDay(record, dayOfWeek)` returns the ranges effective on a weekday for either model. `narrowToDay(record, dayOfWeek)` projects a record to a single date shaped like the legacy resolved record, so **every existing consumer** (`isOwnerAvailable`/`isAvailabilityCovering` copies in slot-matcher, repositioning, swap) keeps working unchanged — both `buildAvailabilityResolver().resolve()` and `resolveEffectiveAvailability()` narrow before returning.
+
+Write: `createAvailabilitySlots()` accepts an optional `scheduleByDay` map; when provided it persists `rangesByDay` and derives the flat fields from the first active day. A shared-hours save (no `scheduleByDay`) clears `rangesByDay` (reverts to legacy). Read: `getDefaultAvailability()` always returns `scheduleByDay` (legacy records are projected by applying the shared ranges to each active day). Daily overrides are unchanged and still win over the base.
 - `AutoscuolaAvailabilitySlot` — published bookable slots (open/booked)
 - `AutoscuolaInstructorPublishedWeek` — unique on companyId + instructorId + weekStart
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import React from "react";
-import { BookOpen, ExternalLink, FileText, GraduationCap, Loader2, MailPlus, NotebookPen, UserPlus } from "lucide-react";
+import { Award, BookOpen, Car, ChevronDown, ChevronRight, ExternalLink, FileText, GraduationCap, Hourglass, KeyRound, Loader2, MailPlus, NotebookPen, Ticket, UserPlus } from "lucide-react";
 import { useLocale } from "next-intl";
 
 import { cn } from "@/lib/utils";
@@ -26,6 +26,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -50,8 +51,16 @@ import {
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
   setManualPaymentStatus,
+  updateStudentGroupLessonOptIn,
 } from "@/lib/actions/autoscuole.actions";
-import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import {
+  getAutoscuolaSettings,
+  getQuizSeatsContext,
+  grantQuizSeat,
+} from "@/lib/actions/autoscuole-settings.actions";
+import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
+import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
+import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,7 +90,11 @@ type StudentProfile = {
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
   assignedInstructorId?: string | null;
+  studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  licenseCategory?: string | null;
+  transmission?: string | null;
   manualUnpaid?: number;
+  theoryExamAt?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -131,6 +144,12 @@ type StudentRegister = {
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
   examDate?: string | null;
+  studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  licenseCategory?: string | null;
+  transmission?: string | null;
+  groupLessonsOptIn?: boolean;
+  quizSeatGrantedAt?: string | null;
+  theoryExamAt?: string | null;
   activeCase: {
     id: string;
     status: string;
@@ -249,6 +268,8 @@ export function AutoscuoleStudentsPage({
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
+  const [groupLessonsEnabledGlobal, setGroupLessonsEnabledGlobal] = React.useState(false);
+  const [groupOptInSaving, setGroupOptInSaving] = React.useState(false);
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
   const [exemptSaving, setExemptSaving] = React.useState(false);
   const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
@@ -287,6 +308,81 @@ export function AutoscuoleStudentsPage({
 
   // Booking block toggle
   const [blockSaving, setBlockSaving] = React.useState(false);
+
+  // Phase change dialog
+  const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
+  const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
+  // Collapsible "Patentati" section
+  const [patentatiExpanded, setPatentatiExpanded] = React.useState(false);
+
+  // Quiz seats context (banner + AWAITING grant button)
+  type QuizCtx = {
+    quizSeats: number;
+    used: number;
+    available: number;
+    phasesEnabled: ("TEORIA" | "PRATICA")[];
+    autoAssignQuizOnSignup: boolean;
+  };
+  const [quizCtx, setQuizCtx] = React.useState<QuizCtx | null>(null);
+  const [grantSavingId, setGrantSavingId] = React.useState<string | null>(null);
+
+  const refreshQuizCtx = React.useCallback(async () => {
+    const res = await getQuizSeatsContext();
+    if (res.success) {
+      setQuizCtx({
+        quizSeats: res.data.quizSeats,
+        used: res.data.used,
+        available: res.data.available,
+        phasesEnabled: res.data.phasesEnabled,
+        autoAssignQuizOnSignup: res.data.autoAssignQuizOnSignup,
+      });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refreshQuizCtx();
+  }, [refreshQuizCtx]);
+
+  const handleGrantSeat = async (studentId: string) => {
+    setGrantSavingId(studentId);
+    try {
+      const res = await grantQuizSeat({ studentId });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile assegnare la licenza." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Licenza assegnata." });
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId ? { ...s, studentPhase: "TEORIA" } : s,
+        ),
+      );
+      if (register && register.student.id === studentId) {
+        setRegister((prev) => (prev ? { ...prev, studentPhase: "TEORIA" } : prev));
+      }
+      await refreshQuizCtx();
+    } finally {
+      setGrantSavingId(null);
+    }
+  };
+
+  // Group students by phase
+  const studentsByPhase = React.useMemo(() => {
+    const groups = {
+      awaiting: [] as Student[],
+      teoria: [] as Student[],
+      pratica: [] as Student[],
+      patentato: [] as Student[],
+    };
+    for (const s of students) {
+      const phase = s.studentPhase ?? "PRATICA";
+      if (phase === "AWAITING") groups.awaiting.push(s);
+      else if (phase === "TEORIA") groups.teoria.push(s);
+      else if (phase === "PATENTATO") groups.patentato.push(s);
+      else groups.pratica.push(s);
+    }
+    return groups;
+  }, [students]);
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
@@ -496,6 +592,7 @@ export function AutoscuoleStudentsPage({
       if (res.success && res.data) {
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
+        setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
       }
     });
     getAutoscuolaInstructors().then((res) => {
@@ -699,93 +796,461 @@ export function AutoscuoleStudentsPage({
                       </Table>
                     </div>
                   </div>
+                ) : students.length === 0 ? (
+                  <div className="rounded-2xl border border-border/50 bg-white p-10 text-center text-sm text-muted-foreground">
+                    Nessun allievo trovato.
+                  </div>
                 ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Allievo</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Telefono</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Guide</TableHead>
-                      <TableHead className="text-right">Azioni</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {students.length ? (
-                      students.map((student) => (
-                        <TableRow key={student.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className="size-2.5 shrink-0 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    (student.manualUnpaid ?? 0) >= 5
-                                      ? '#EF4444'   // red — 5+ unpaid
-                                      : (student.manualUnpaid ?? 0) >= 2
-                                        ? '#F59E0B' // amber — 2-4 unpaid
-                                        : (student.manualUnpaid ?? 0) >= 1
-                                          ? '#FACC15' // yellow — 1 unpaid
-                                          : '#22C55E', // green — all paid
-                                }}
-                                title={`${student.manualUnpaid ?? 0} guide da pagare`}
-                              />
-                              <span>{student.firstName} {student.lastName}</span>
-                              {student.bookingBlocked && (
-                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                                  Bloccato
-                                </Badge>
-                              )}
-                              {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
-                                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                  {instructorMap.get(student.assignedInstructorId)}
-                                </Badge>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{student.email || "—"}</TableCell>
-                          <TableCell>{student.phone || "—"}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {student.status ?? "active"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
-                                {student.summary.completedLessons}/{student.summary.requiredLessons}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">
-                                {student.summary.isCompleted ? "Completato" : "In corso"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedStudentId(student.id);
-                                setDrawerOpen(true);
-                                void loadRegister(student.id);
-                                void loadCredits(student.id);
-                              }}
-                            >
-                              Dettaglio
-                            </Button>
-                          </TableCell>
+                <div className="space-y-5">
+                  {/* ── Banner licenze quiz (solo se TEORIA è attiva) ── */}
+                  {quizCtx && quizCtx.phasesEnabled.includes("TEORIA") && (
+                    <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+                          <Ticket className="h-4 w-4 text-emerald-700" aria-hidden />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            Licenze Quiz Teoria
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {quizCtx.autoAssignQuizOnSignup
+                              ? "Assegnazione automatica alla registrazione attiva"
+                              : "Assegnazione manuale: gli allievi nuovi entrano in attesa"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                            Posti usati
+                          </p>
+                          <p
+                            className={cn(
+                              "text-base font-semibold tabular-nums",
+                              quizCtx.available <= 0
+                                ? "text-red-600"
+                                : "text-foreground",
+                            )}
+                          >
+                            {quizCtx.used}{" "}
+                            <span className="text-muted-foreground">/ {quizCtx.quizSeats}</span>
+                          </p>
+                        </div>
+                        {quizCtx.available <= 0 && (
+                          <Badge variant="outline" className="border-red-300 bg-red-50 text-red-700">
+                            Posti esauriti
+                          </Badge>
+                        )}
+                      </div>
+                    </section>
+                  )}
+
+                  {/* ── Sezione: In attesa di attivazione (AWAITING) ── */}
+                  {studentsByPhase.awaiting.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+                      <header className="flex items-center justify-between gap-3 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+                            <Hourglass className="h-4 w-4 text-amber-700" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">
+                              In attesa di attivazione
+                            </h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Si sono registrati ma il percorso non è ancora stato attivato. Assegna una licenza per farli partire dalla teoria.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
+                          {studentsByPhase.awaiting.length}
+                        </Badge>
+                      </header>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Allievo</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Registrato</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {studentsByPhase.awaiting.map((student) => {
+                            const noSeatsLeft =
+                              quizCtx !== null && quizCtx.available <= 0;
+                            const isSaving = grantSavingId === student.id;
+                            return (
+                              <TableRow key={student.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <span>{student.firstName} {student.lastName}</span>
+                                  </div>
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {formatDate(student.createdAt)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="cursor-pointer gap-1.5"
+                                      disabled={noSeatsLeft || isSaving}
+                                      title={noSeatsLeft ? "Nessuna licenza disponibile" : "Assegna una licenza quiz"}
+                                      onClick={() => void handleGrantSeat(student.id)}
+                                    >
+                                      {isSaving ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <KeyRound className="h-3.5 w-3.5" />
+                                      )}
+                                      {isSaving ? "Assegno…" : "Assegna quiz"}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="cursor-pointer"
+                                      onClick={() => {
+                                        setSelectedStudentId(student.id);
+                                        setDrawerOpen(true);
+                                        void loadRegister(student.id);
+                                        void loadCredits(student.id);
+                                      }}
+                                    >
+                                      Dettaglio
+                                    </Button>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </section>
+                  )}
+
+                  {/* ── Sezione: In Teoria ── */}
+                  {studentsByPhase.teoria.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
+                      <header className="flex items-center justify-between gap-3 border-b border-pink-100 bg-gradient-to-r from-pink-50 to-white px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100">
+                            <GraduationCap className="h-4 w-4 text-pink-600" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">In Teoria</h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Studenti che si stanno preparando per l&apos;esame teorico.
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-pink-100 text-pink-700 hover:bg-pink-100">
+                          {studentsByPhase.teoria.length}
+                        </Badge>
+                      </header>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Allievo</TableHead>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Esame teoria</TableHead>
+                            <TableHead className="text-right">Azioni</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {studentsByPhase.teoria.map((student) => {
+                            let countdownLabel: string | null = null;
+                            let countdownTone: "imminent" | "soon" | "later" | "expired" = "later";
+                            if (student.theoryExamAt) {
+                              const exam = new Date(student.theoryExamAt);
+                              const now = new Date();
+                              const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                              const startOfExam = new Date(exam.getFullYear(), exam.getMonth(), exam.getDate());
+                              const days = Math.round((startOfExam.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+                              if (days < 0) {
+                                countdownLabel = "Passato";
+                                countdownTone = "expired";
+                              } else if (days === 0) {
+                                countdownLabel = "Oggi";
+                                countdownTone = "imminent";
+                              } else if (days === 1) {
+                                countdownLabel = "Domani";
+                                countdownTone = "imminent";
+                              } else if (days <= 7) {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "imminent";
+                              } else if (days <= 30) {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "soon";
+                              } else {
+                                countdownLabel = `Fra ${days} gg`;
+                                countdownTone = "later";
+                              }
+                            }
+                            const examDateText = student.theoryExamAt
+                              ? new Date(student.theoryExamAt).toLocaleDateString("it-IT", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : null;
+                            return (
+                              <TableRow key={student.id}>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="size-2.5 shrink-0 rounded-full"
+                                      style={{
+                                        backgroundColor:
+                                          (student.manualUnpaid ?? 0) >= 5
+                                            ? '#EF4444'
+                                            : (student.manualUnpaid ?? 0) >= 2
+                                              ? '#F59E0B'
+                                              : (student.manualUnpaid ?? 0) >= 1
+                                                ? '#FACC15'
+                                                : '#22C55E',
+                                      }}
+                                      title={`${student.manualUnpaid ?? 0} guide da pagare`}
+                                    />
+                                    <span>{student.firstName} {student.lastName}</span>
+                                    {student.bookingBlocked && (
+                                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell>
+                                  <Badge variant="secondary">{student.status ?? "active"}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {examDateText ? (
+                                    <div className="flex flex-col gap-1">
+                                      <Badge
+                                        className={`w-fit text-[11px] ${
+                                          countdownTone === "imminent"
+                                            ? "bg-pink-500 text-white hover:bg-pink-500"
+                                            : countdownTone === "soon"
+                                              ? "bg-pink-100 text-pink-700 hover:bg-pink-100"
+                                              : countdownTone === "expired"
+                                                ? "bg-gray-200 text-gray-600 hover:bg-gray-200"
+                                                : "bg-gray-100 text-gray-700 hover:bg-gray-100"
+                                        }`}
+                                      >
+                                        {countdownLabel}
+                                      </Badge>
+                                      <span className="text-[11px] text-muted-foreground">{examDateText}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Da fissare</span>
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedStudentId(student.id);
+                                      setDrawerOpen(true);
+                                      void loadRegister(student.id);
+                                      void loadCredits(student.id);
+                                    }}
+                                  >
+                                    Dettaglio
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </section>
+                  )}
+
+                  {/* ── Sezione: Foglio rosa (Pratica) ── */}
+                  <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
+                    <header className="flex items-center justify-between gap-3 border-b border-border/50 bg-gray-50/60 px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
+                          <Car className="h-4 w-4 text-foreground" aria-hidden />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">Foglio rosa</h3>
+                          <p className="text-[11px] text-muted-foreground">
+                            Studenti che stanno svolgendo le lezioni di guida.
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="secondary">{studentsByPhase.pratica.length}</Badge>
+                    </header>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Allievo</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Telefono</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Guide</TableHead>
+                          <TableHead className="text-right">Azioni</TableHead>
                         </TableRow>
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
-                          Nessun allievo trovato.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {studentsByPhase.pratica.length === 0 ? (
+                          <TableRow>
+                            <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                              Nessun allievo in fase pratica.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          studentsByPhase.pratica.map((student) => (
+                            <TableRow key={student.id}>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className="size-2.5 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        (student.manualUnpaid ?? 0) >= 5
+                                          ? '#EF4444'
+                                          : (student.manualUnpaid ?? 0) >= 2
+                                            ? '#F59E0B'
+                                            : (student.manualUnpaid ?? 0) >= 1
+                                              ? '#FACC15'
+                                              : '#22C55E',
+                                    }}
+                                    title={`${student.manualUnpaid ?? 0} guide da pagare`}
+                                  />
+                                  <span>{student.firstName} {student.lastName}</span>
+                                  {student.bookingBlocked && (
+                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
+                                  )}
+                                  {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                      {instructorMap.get(student.assignedInstructorId)}
+                                    </Badge>
+                                  )}
+                                  {student.licenseCategory && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                      {student.licenseCategory} ·{" "}
+                                      {TRANSMISSION_LABELS[
+                                        student.transmission as Transmission
+                                      ] ?? student.transmission}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>{student.email || "—"}</TableCell>
+                              <TableCell>{student.phone || "—"}</TableCell>
+                              <TableCell>
+                                <Badge variant="secondary">{student.status ?? "active"}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex flex-col gap-1">
+                                  <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
+                                    {student.summary.completedLessons}/{student.summary.requiredLessons}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">
+                                    {student.summary.isCompleted ? "Completato" : "In corso"}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedStudentId(student.id);
+                                    setDrawerOpen(true);
+                                    void loadRegister(student.id);
+                                    void loadCredits(student.id);
+                                  }}
+                                >
+                                  Dettaglio
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </section>
+
+                  {/* ── Sezione: Patentati (collassabile) ── */}
+                  {studentsByPhase.patentato.length > 0 && (
+                    <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setPatentatiExpanded((v) => !v)}
+                        className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-transparent bg-white px-4 py-3 text-left transition-colors hover:bg-gray-50"
+                        aria-expanded={patentatiExpanded}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50">
+                            <Award className="h-4 w-4 text-emerald-600" aria-hidden />
+                          </div>
+                          <div>
+                            <h3 className="text-sm font-semibold text-foreground">Patentati</h3>
+                            <p className="text-[11px] text-muted-foreground">
+                              Allievi che hanno concluso il percorso.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                            {studentsByPhase.patentato.length}
+                          </Badge>
+                          {patentatiExpanded ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </div>
+                      </button>
+                      {patentatiExpanded && (
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Allievo</TableHead>
+                              <TableHead>Email</TableHead>
+                              <TableHead>Telefono</TableHead>
+                              <TableHead className="text-right">Azioni</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {studentsByPhase.patentato.map((student) => (
+                              <TableRow key={student.id} className="text-muted-foreground">
+                                <TableCell className="font-medium text-foreground">
+                                  {student.firstName} {student.lastName}
+                                </TableCell>
+                                <TableCell>{student.email || "—"}</TableCell>
+                                <TableCell>{student.phone || "—"}</TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="cursor-pointer"
+                                    onClick={() => {
+                                      setSelectedStudentId(student.id);
+                                      setDrawerOpen(true);
+                                      void loadRegister(student.id);
+                                      void loadCredits(student.id);
+                                    }}
+                                  >
+                                    Dettaglio
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </section>
+                  )}
+                </div>
                 )}
               </>
             )}
@@ -833,6 +1298,32 @@ export function AutoscuoleStudentsPage({
                   {register?.student.email || register?.student.phone || "Registro guide allievo"}
                 </DrawerDescription>
               </div>
+              {register?.studentPhase && (
+                <Badge
+                  variant={
+                    register.studentPhase === "AWAITING"
+                      ? "outline"
+                      : register.studentPhase === "TEORIA"
+                        ? "outline"
+                        : register.studentPhase === "PATENTATO"
+                          ? "secondary"
+                          : "default"
+                  }
+                  className={cn(
+                    "shrink-0 text-[10px]",
+                    register.studentPhase === "AWAITING" &&
+                      "border-amber-300 bg-amber-50 text-amber-700",
+                  )}
+                >
+                  {register.studentPhase === "AWAITING"
+                    ? "In attesa"
+                    : register.studentPhase === "TEORIA"
+                      ? "Teoria"
+                      : register.studentPhase === "PATENTATO"
+                        ? "Patentato"
+                        : "Foglio rosa"}
+                </Badge>
+              )}
               {register?.bookingBlocked && (
                 <Badge variant="destructive" className="shrink-0 text-[10px]">Bloccato</Badge>
               )}
@@ -903,6 +1394,130 @@ export function AutoscuoleStudentsPage({
                               ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
                               : "Nessuna"}
                           </p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Percorso patente</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              {register.licenseCategory
+                                ? `${register.licenseCategory} · ${
+                                    TRANSMISSION_LABELS[
+                                      register.transmission as Transmission
+                                    ] ?? register.transmission ?? "—"
+                                  }`
+                                : "—"}
+                            </p>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 cursor-pointer px-2 text-[11px]"
+                              onClick={() => setLicenseDialogOpen(true)}
+                            >
+                              Modifica
+                            </Button>
+                          </div>
+                        </div>
+                        {groupLessonsEnabledGlobal && (
+                          <div className="sm:col-span-2">
+                            <div
+                              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-white/70 px-3.5 py-2.5 cursor-pointer"
+                              onClick={async () => {
+                                if (groupOptInSaving) return;
+                                const next = !(register.groupLessonsOptIn ?? false);
+                                setGroupOptInSaving(true);
+                                try {
+                                  const res = await updateStudentGroupLessonOptIn({
+                                    studentId: register.student.id,
+                                    optIn: next,
+                                  });
+                                  if (res.success) {
+                                    setRegister((prev) =>
+                                      prev ? { ...prev, groupLessonsOptIn: next } : prev,
+                                    );
+                                    toast.success({ description: res.message ?? "Aggiornato." });
+                                  } else {
+                                    toast.error({ description: res.message ?? "Errore." });
+                                  }
+                                } catch {
+                                  toast.error({ description: "Errore aggiornamento." });
+                                } finally {
+                                  setGroupOptInSaving(false);
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium text-foreground">Guide di gruppo</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {(register.groupLessonsOptIn ?? false)
+                                    ? "L'allievo può partecipare alle guide di gruppo."
+                                    : "L'allievo non può partecipare alle guide di gruppo."}
+                                </span>
+                              </div>
+                              <InlineToggle checked={register.groupLessonsOptIn ?? false} size="sm" />
+                            </div>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-[11px] text-muted-foreground">Fase percorso</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge
+                              variant={
+                                register.studentPhase === "AWAITING"
+                                  ? "outline"
+                                  : register.studentPhase === "TEORIA"
+                                    ? "outline"
+                                    : register.studentPhase === "PATENTATO"
+                                      ? "secondary"
+                                      : "default"
+                              }
+                              className={cn(
+                                "text-[11px]",
+                                register.studentPhase === "AWAITING" &&
+                                  "border-amber-300 bg-amber-50 text-amber-700",
+                              )}
+                            >
+                              {register.studentPhase === "AWAITING"
+                                ? "In attesa"
+                                : register.studentPhase === "TEORIA"
+                                  ? "Teoria"
+                                  : register.studentPhase === "PATENTATO"
+                                    ? "Patentato"
+                                    : "Foglio rosa"}
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 cursor-pointer px-2 text-[11px]"
+                              onClick={() => setPhaseDialogOpen(true)}
+                            >
+                              Cambia fase
+                            </Button>
+                            {register.studentPhase === "AWAITING" && (
+                              <Button
+                                size="sm"
+                                className="h-6 cursor-pointer gap-1 px-2 text-[11px]"
+                                disabled={
+                                  grantSavingId === register.student.id ||
+                                  (quizCtx !== null && quizCtx.available <= 0)
+                                }
+                                onClick={() => void handleGrantSeat(register.student.id)}
+                                title={
+                                  quizCtx !== null && quizCtx.available <= 0
+                                    ? "Nessuna licenza quiz disponibile"
+                                    : "Assegna licenza quiz e attiva la fase teoria"
+                                }
+                              >
+                                {grantSavingId === register.student.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <KeyRound className="h-3 w-3" />
+                                )}
+                                {grantSavingId === register.student.id
+                                  ? "Assegno…"
+                                  : "Assegna quiz"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div>
                           <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
@@ -1491,6 +2106,61 @@ export function AutoscuoleStudentsPage({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+      {register && selectedStudentId && (
+        <ChangeStudentPhaseDialog
+          open={phaseDialogOpen}
+          onOpenChange={setPhaseDialogOpen}
+          studentId={selectedStudentId}
+          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          currentPhase={register.studentPhase ?? "PRATICA"}
+          currentTheoryExamAt={register.theoryExamAt ?? null}
+          phasesEnabled={quizCtx?.phasesEnabled}
+          hasQuizSeat={Boolean(register.quizSeatGrantedAt)}
+          quizSeatsAvailable={quizCtx?.available ?? 0}
+          onSuccess={({ phase, theoryExamAt, grantedSeat }) => {
+            setRegister((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    studentPhase: phase,
+                    theoryExamAt,
+                    ...(grantedSeat && { quizSeatGrantedAt: new Date().toISOString() }),
+                  }
+                : prev,
+            );
+            setStudents((prev) =>
+              prev.map((s) =>
+                s.id === selectedStudentId ? { ...s, studentPhase: phase } : s,
+              ),
+            );
+            if (grantedSeat) {
+              refreshQuizCtx();
+            }
+          }}
+        />
+      )}
+      {register && selectedStudentId && (
+        <EditStudentLicenseDialog
+          open={licenseDialogOpen}
+          onOpenChange={setLicenseDialogOpen}
+          studentId={selectedStudentId}
+          studentName={`${register.student.firstName} ${register.student.lastName}`}
+          currentLicenseCategory={register.licenseCategory ?? null}
+          currentTransmission={register.transmission ?? null}
+          onSuccess={({ licenseCategory, transmission }) => {
+            setRegister((prev) =>
+              prev ? { ...prev, licenseCategory, transmission } : prev,
+            );
+            setStudents((prev) =>
+              prev.map((s) =>
+                s.id === selectedStudentId
+                  ? { ...s, licenseCategory, transmission }
+                  : s,
+              ),
+            );
+          }}
+        />
+      )}
     </PageWrapper>
   );
 }

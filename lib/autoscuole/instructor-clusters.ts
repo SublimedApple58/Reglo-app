@@ -375,7 +375,7 @@ export async function getAssignedStudentIds(
 /**
  * Returns true if the student's assigned instructor cluster has booking mode "manual_full".
  * In this mode, no proactive "book a new lesson" messaging should reach the student
- * (no reposition proposals, no empty slot notifications, no swap broadcasts, etc.).
+ * (no empty slot notifications, no swap broadcasts, etc.).
  */
 export async function isStudentInManualFullCluster(
   companyId: string,

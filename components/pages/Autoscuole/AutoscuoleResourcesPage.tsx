@@ -17,6 +17,12 @@ import {
 } from "@/components/ui/select";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { FieldGroup } from "@/components/ui/field-group";
+import {
+  LICENSE_CATEGORIES,
+  LICENSE_CATEGORY_LABELS,
+  TRANSMISSIONS,
+  TRANSMISSION_LABELS,
+} from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 
 const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
@@ -72,7 +78,16 @@ import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
 type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; _count?: { assignedStudents: number } };
-type VehicleDetail = { id: string; name: string; plate: string | null; status: string };
+type VehicleDetail = {
+  id: string;
+  name: string;
+  plate: string | null;
+  status: string;
+  assignedInstructorId: string | null;
+  followsInstructorAvailability: boolean;
+  licenseCategory: string;
+  transmission: string;
+};
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
   id: string;
@@ -257,6 +272,9 @@ export function AutoscuoleResourcesPage({
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
+  const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
+  const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
+  const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -347,6 +365,11 @@ export function AutoscuoleResourcesPage({
   const [editVehicle, setEditVehicle] = React.useState<VehicleDetail | null>(null);
   const [editVehicleName, setEditVehicleName] = React.useState("");
   const [editVehiclePlate, setEditVehiclePlate] = React.useState("");
+  const [editVehicleInstructorId, setEditVehicleInstructorId] = React.useState<string>("");
+  const [editVehicleFollowsAvailability, setEditVehicleFollowsAvailability] =
+    React.useState(true);
+  const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
+  const [editVehicleTransmission, setEditVehicleTransmission] = React.useState<string>("manual");
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
 
   // ── Availability edit dialog
@@ -391,6 +414,10 @@ export function AutoscuoleResourcesPage({
           name: item.name,
           plate: item.plate ?? null,
           status: item.status,
+          assignedInstructorId: item.assignedInstructorId ?? null,
+          followsInstructorAvailability: item.followsInstructorAvailability ?? true,
+          licenseCategory: item.licenseCategory ?? "B",
+          transmission: item.transmission ?? "manual",
         })),
       );
     }
@@ -498,6 +525,9 @@ export function AutoscuoleResourcesPage({
       setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
       setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
       setVehiclesEnabled(res.data.vehiclesEnabled !== false);
+      setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
+      setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+      setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
 
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -647,6 +677,9 @@ export function AutoscuoleResourcesPage({
       studentNotesEnabled,
       autoCheckinEnabled,
       vehiclesEnabled,
+      defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
+      defaultTransmission: defaultTransmission as "manual" | "automatic",
+      groupLessonsEnabled,
       appBookingActors,
       instructorBookingMode,
     });
@@ -1071,7 +1104,16 @@ export function AutoscuoleResourcesPage({
     }
     setVehicles((prev) => [
       ...prev,
-      { id: res.data!.id, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status },
+      {
+        id: res.data!.id,
+        name: res.data!.name,
+        plate: res.data!.plate ?? null,
+        status: res.data!.status,
+        assignedInstructorId: res.data!.assignedInstructorId ?? null,
+        followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
+        licenseCategory: res.data!.licenseCategory ?? "B",
+        transmission: res.data!.transmission ?? "manual",
+      },
     ]);
     setCreateVehicleOpen(false);
     toast.success({ description: `Veicolo "${res.data.name}" aggiunto.` });
@@ -1081,6 +1123,10 @@ export function AutoscuoleResourcesPage({
     setEditVehicle(vehicle);
     setEditVehicleName(vehicle.name);
     setEditVehiclePlate(vehicle.plate ?? "");
+    setEditVehicleInstructorId(vehicle.assignedInstructorId ?? "");
+    setEditVehicleFollowsAvailability(vehicle.followsInstructorAvailability);
+    setEditVehicleCategory(vehicle.licenseCategory ?? "B");
+    setEditVehicleTransmission(vehicle.transmission ?? "manual");
   };
 
   const handleSaveEditVehicle = async () => {
@@ -1095,6 +1141,10 @@ export function AutoscuoleResourcesPage({
       vehicleId: editVehicle.id,
       name,
       plate: editVehiclePlate.trim() || null,
+      assignedInstructorId: editVehicleInstructorId || null,
+      followsInstructorAvailability: editVehicleFollowsAvailability,
+      licenseCategory: editVehicleCategory as "B" | "AM" | "A1" | "A2" | "A",
+      transmission: editVehicleTransmission as "manual" | "automatic",
     });
     setSavingEditVehicle(false);
     if (!res.success || !res.data) {
@@ -1104,7 +1154,17 @@ export function AutoscuoleResourcesPage({
     setVehicles((prev) =>
       prev.map((v) =>
         v.id === editVehicle.id
-          ? { ...v, name: res.data!.name, plate: res.data!.plate ?? null, status: res.data!.status }
+          ? {
+              ...v,
+              name: res.data!.name,
+              plate: res.data!.plate ?? null,
+              status: res.data!.status,
+              assignedInstructorId: res.data!.assignedInstructorId ?? null,
+              followsInstructorAvailability:
+                res.data!.followsInstructorAvailability ?? true,
+              licenseCategory: res.data!.licenseCategory ?? "B",
+              transmission: res.data!.transmission ?? "manual",
+            }
           : v,
       ),
     );
@@ -1127,7 +1187,9 @@ export function AutoscuoleResourcesPage({
     }
     setVehicles((prev) =>
       prev.map((v) =>
-        v.id === editVehicle.id ? { ...v, status: "inactive" } : v,
+        v.id === editVehicle.id
+          ? { ...v, status: "inactive", assignedInstructorId: null }
+          : v,
       ),
     );
     setEditVehicle(null);
@@ -1499,6 +1561,8 @@ export function AutoscuoleResourcesPage({
             setAutoCheckinEnabled={setAutoCheckinEnabled}
             studentNotesEnabled={studentNotesEnabled}
             setStudentNotesEnabled={setStudentNotesEnabled}
+            groupLessonsEnabled={groupLessonsEnabled}
+            setGroupLessonsEnabled={setGroupLessonsEnabled}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}
             setEmptySlotNotificationEnabled={setEmptySlotNotificationEnabled}
             emptySlotNotificationTarget={emptySlotNotificationTarget}
@@ -1523,6 +1587,10 @@ export function AutoscuoleResourcesPage({
             loading={loading}
             vehiclesEnabled={vehiclesEnabled}
             setVehiclesEnabled={setVehiclesEnabled}
+            defaultLicenseCategory={defaultLicenseCategory}
+            setDefaultLicenseCategory={setDefaultLicenseCategory}
+            defaultTransmission={defaultTransmission}
+            setDefaultTransmission={setDefaultTransmission}
             openCreateVehicle={openCreateVehicle}
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
@@ -1760,6 +1828,98 @@ export function AutoscuoleResourcesPage({
                   onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
                 />
               </div>
+
+              {/* ── Categoria patente + cambio ── */}
+              <div className="grid grid-cols-2 gap-3">
+                <FieldGroup label="Categoria patente">
+                  <Select
+                    value={editVehicleCategory}
+                    onValueChange={setEditVehicleCategory}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LICENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {LICENSE_CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="Cambio">
+                  <Select
+                    value={editVehicleTransmission}
+                    onValueChange={setEditVehicleTransmission}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSMISSIONS.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {TRANSMISSION_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+              </div>
+
+              {/* ── Veicolo fisso (assegnazione istruttore) ── */}
+              <FieldGroup label="Istruttore assegnato">
+                <Select
+                  value={editVehicleInstructorId || "none"}
+                  onValueChange={(v) => setEditVehicleInstructorId(v === "none" ? "" : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nessuno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nessuno</SelectItem>
+                    {instructors
+                      .filter((ins) => ins.status !== "inactive")
+                      .map((ins) => {
+                        const takenByOther = vehicles.find(
+                          (v) =>
+                            v.assignedInstructorId === ins.id &&
+                            v.id !== editVehicle?.id,
+                        );
+                        return (
+                          <SelectItem key={ins.id} value={ins.id}>
+                            {ins.name}
+                            {takenByOther ? ` · ora su ${takenByOther.name}` : ""}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">
+                  Le guide prenotate con questo istruttore useranno automaticamente
+                  questo veicolo.
+                </span>
+              </FieldGroup>
+
+              {editVehicleInstructorId ? (
+                <div
+                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
+                >
+                  <div className="flex flex-col gap-0.5 pr-3">
+                    <span className="text-sm font-medium">
+                      Disponibilità: segue l&apos;istruttore
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {editVehicleFollowsAvailability
+                        ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
+                        : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
+                    </span>
+                  </div>
+                  <InlineToggle checked={editVehicleFollowsAvailability} size="sm" />
+                </div>
+              ) : null}
+
               {editVehicle && (
                 <div className="pt-1">
                   {editVehicle.status === "active" ? (

@@ -32,6 +32,7 @@ enum AutoscuolaRole {
 }
 
 enum AutoscuolaStudentPhase {
+  AWAITING
   TEORIA
   PRATICA
   PATENTATO
@@ -39,8 +40,11 @@ enum AutoscuolaStudentPhase {
 
 enum QuizSessionMode {
   EXAM
+  PRACTICE
   CHAPTER
   REVIEW
+  SCHEDA
+  SCHEDA_ESAME
 }
 
 model User {
@@ -71,6 +75,8 @@ model User {
   autoscuolaWaitlistResponses          AutoscuolaWaitlistResponse[]
   autoscuolaSwapOfferRequests          AutoscuolaSwapOffer[]                  @relation("SwapOfferRequester")
   autoscuolaSwapResponses              AutoscuolaSwapResponse[]               @relation("SwapResponseStudent")
+  autoscuolaGroupLessonsCreated        AutoscuolaGroupLesson[]                @relation("GroupLessonCreatedBy")
+  autoscuolaGroupLessonInviteResponses AutoscuolaGroupLessonInviteResponse[]
   autoscuolaDocuments                  AutoscuolaDocument[]
   autoscuolaPaymentPlans               AutoscuolaPaymentPlan[]
   autoscuolaPaymentProfiles            AutoscuolaStudentPaymentProfile[]
@@ -78,8 +84,6 @@ model User {
   autoscuolaLessonCreditLedgerStudent  AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerStudent")
   autoscuolaLessonCreditLedgerActor    AutoscuolaStudentLessonCreditLedger[]  @relation("AutoscuolaCreditLedgerActor")
   autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
-  autoscuolaRepositionTasksStudent     AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskStudent")
-  autoscuolaRepositionTasksActor       AutoscuolaAppointmentRepositionTask[]  @relation("AutoscuolaRepositionTaskActor")
   autoscuolaMessageLogs                AutoscuolaMessageLog[]
   autoscuolaWeeklyAbsences             AutoscuolaStudentWeeklyAbsence[]
   autoscuolaVoiceCallsStudent          AutoscuolaVoiceCall[]                  @relation("AutoscuolaVoiceCallStudent")
@@ -169,50 +173,51 @@ model MobilePushDevice {
 }
 
 model Company {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name      String
-  logoKey   String?
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt   DateTime @updatedAt
-  inviteCode  String?  @unique
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  logoKey    String?
+  createdAt  DateTime @default(now()) @db.Timestamp(6)
+  updatedAt  DateTime @updatedAt
+  inviteCode String?  @unique
 
-  members                        CompanyMember[]
-  activeUsers                    User[]                                 @relation("UserActiveCompany")
-  invites                        CompanyInvite[]
-  integrationConnections         IntegrationConnection[]
-  autoscuolaCases                AutoscuolaCase[]
-  autoscuolaAppointments         AutoscuolaAppointment[]
-  autoscuolaInstructors          AutoscuolaInstructor[]
-  autoscuolaInstructorBlocks     AutoscuolaInstructorBlock[]
-  autoscuolaVehicles             AutoscuolaVehicle[]
-  autoscuolaAvailabilitySlots    AutoscuolaAvailabilitySlot[]
-  autoscuolaWeeklyAvailabilities         AutoscuolaWeeklyAvailability[]
-  autoscuolaDailyAvailabilityOverrides  AutoscuolaDailyAvailabilityOverride[]
-  autoscuolaBookingRequests      AutoscuolaBookingRequest[]
-  autoscuolaWaitlistOffers       AutoscuolaWaitlistOffer[]
-  autoscuolaSwapOffers           AutoscuolaSwapOffer[]
-  autoscuolaDocuments            AutoscuolaDocument[]
-  autoscuolaPaymentPlans         AutoscuolaPaymentPlan[]
-  autoscuolaPaymentProfiles      AutoscuolaStudentPaymentProfile[]
-  autoscuolaLessonCreditBalances AutoscuolaStudentLessonCreditBalance[]
-  autoscuolaLessonCreditLedger   AutoscuolaStudentLessonCreditLedger[]
-  autoscuolaAppointmentPayments  AutoscuolaAppointmentPayment[]
-  autoscuolaRepositionTasks      AutoscuolaAppointmentRepositionTask[]
-  autoscuolaMessageTemplates     AutoscuolaMessageTemplate[]
-  autoscuolaMessageRules         AutoscuolaMessageRule[]
-  autoscuolaMessageLogs          AutoscuolaMessageLog[]
-  autoscuolaWeeklyAbsences       AutoscuolaStudentWeeklyAbsence[]
-  autoscuolaVoiceLines           AutoscuolaVoiceLine[]
-  autoscuolaVoiceCalls           AutoscuolaVoiceCall[]
-  autoscuolaVoiceCallbackTasks   AutoscuolaVoiceCallbackTask[]
-  autoscuolaVoiceKnowledgeChunks AutoscuolaVoiceKnowledgeChunk[]
-  services                       CompanyService[]
-  mobileTokens                   MobileAccessToken[]
-  pushDevices                    MobilePushDevice[]
-  autoscuolaHolidays             AutoscuolaHoliday[]
-  autoscuolaInstructorPublishedWeeks AutoscuolaInstructorPublishedWeek[]
-  quizSessions                       QuizSession[]
-  autoscuolaLocations            AutoscuolaLocation[]
+  members                              CompanyMember[]
+  activeUsers                          User[]                                 @relation("UserActiveCompany")
+  invites                              CompanyInvite[]
+  integrationConnections               IntegrationConnection[]
+  autoscuolaCases                      AutoscuolaCase[]
+  autoscuolaAppointments               AutoscuolaAppointment[]
+  autoscuolaInstructors                AutoscuolaInstructor[]
+  autoscuolaInstructorBlocks           AutoscuolaInstructorBlock[]
+  autoscuolaVehicles                   AutoscuolaVehicle[]
+  autoscuolaAvailabilitySlots          AutoscuolaAvailabilitySlot[]
+  autoscuolaWeeklyAvailabilities       AutoscuolaWeeklyAvailability[]
+  autoscuolaDailyAvailabilityOverrides AutoscuolaDailyAvailabilityOverride[]
+  autoscuolaBookingRequests            AutoscuolaBookingRequest[]
+  autoscuolaWaitlistOffers             AutoscuolaWaitlistOffer[]
+  autoscuolaSwapOffers                 AutoscuolaSwapOffer[]
+  autoscuolaGroupLessons               AutoscuolaGroupLesson[]
+  autoscuolaGroupLessonInvites         AutoscuolaGroupLessonInvite[]
+  autoscuolaDocuments                  AutoscuolaDocument[]
+  autoscuolaPaymentPlans               AutoscuolaPaymentPlan[]
+  autoscuolaPaymentProfiles            AutoscuolaStudentPaymentProfile[]
+  autoscuolaLessonCreditBalances       AutoscuolaStudentLessonCreditBalance[]
+  autoscuolaLessonCreditLedger         AutoscuolaStudentLessonCreditLedger[]
+  autoscuolaAppointmentPayments        AutoscuolaAppointmentPayment[]
+  autoscuolaMessageTemplates           AutoscuolaMessageTemplate[]
+  autoscuolaMessageRules               AutoscuolaMessageRule[]
+  autoscuolaMessageLogs                AutoscuolaMessageLog[]
+  autoscuolaWeeklyAbsences             AutoscuolaStudentWeeklyAbsence[]
+  autoscuolaVoiceLines                 AutoscuolaVoiceLine[]
+  autoscuolaVoiceCalls                 AutoscuolaVoiceCall[]
+  autoscuolaVoiceCallbackTasks         AutoscuolaVoiceCallbackTask[]
+  autoscuolaVoiceKnowledgeChunks       AutoscuolaVoiceKnowledgeChunk[]
+  services                             CompanyService[]
+  mobileTokens                         MobileAccessToken[]
+  pushDevices                          MobilePushDevice[]
+  autoscuolaHolidays                   AutoscuolaHoliday[]
+  autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  quizSessions                         QuizSession[]
+  autoscuolaLocations                  AutoscuolaLocation[]
 }
 
 model CompanyService {
@@ -232,17 +237,34 @@ model CompanyService {
 }
 
 model CompanyMember {
-  companyId      String         @db.Uuid
-  userId         String         @db.Uuid
-  role           String         @default("member")
-  autoscuolaRole AutoscuolaRole @default(STUDENT)
-  studentPhase   AutoscuolaStudentPhase @default(PRATICA)
-  bookingBlocked             Boolean        @default(false)
-  weeklyBookingLimitExempt   Boolean        @default(false)
-  examPriorityOverride       Boolean?
-  assignedInstructorId       String?        @db.Uuid
-  createdAt                  DateTime       @default(now()) @db.Timestamp(6)
-  updatedAt      DateTime       @updatedAt
+  companyId                String                 @db.Uuid
+  userId                   String                 @db.Uuid
+  role                     String                 @default("member")
+  autoscuolaRole           AutoscuolaRole         @default(STUDENT)
+  studentPhase             AutoscuolaStudentPhase @default(PRATICA)
+  /// When the student was first granted a quiz license seat by the school owner.
+  /// Null = never granted. Once set, the seat is "burnt" for life on this student
+  /// (nominal license, non-reassignable). Drives the quiz tab visibility in mobile.
+  quizSeatGrantedAt        DateTime?
+  /// When the student's phase was explicitly classified by the school owner
+  /// (i.e. not the default migration value). Null = still "default migration"
+  /// (drives the yellow "Conferma fase" badge in the titolare drawer).
+  phaseClassifiedAt        DateTime?
+  bookingBlocked           Boolean                @default(false)
+  weeklyBookingLimitExempt Boolean                @default(false)
+  examPriorityOverride     Boolean?
+  assignedInstructorId     String?                @db.Uuid
+  /// License path the student is pursuing (PRATICA phase). Part of the Vehicles
+  /// module: drives category-aware slot matching only when vehiclesEnabled.
+  /// Null on non-student members. Values: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
+  licenseCategory          String?
+  /// Transmission of the pursued license: manual | automatic.
+  transmission             String?
+  /// Whether this student may participate in group driving lessons (Guide di gruppo).
+  /// Opt-in, default false. Only meaningful when limits.groupLessonsEnabled is on.
+  groupLessonsOptIn        Boolean                @default(false)
+  createdAt                DateTime               @default(now()) @db.Timestamp(6)
+  updatedAt                DateTime               @updatedAt
 
   company            Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -251,6 +273,9 @@ model CompanyMember {
   @@id([companyId, userId])
   @@index([userId])
   @@index([assignedInstructorId])
+  @@index([companyId, studentPhase])
+  @@index([companyId, quizSeatGrantedAt])
+  @@index([companyId, autoscuolaRole])
 }
 
 model CompanyInvite {
@@ -325,43 +350,46 @@ model AutoscuolaCase {
 }
 
 model AutoscuolaAppointment {
-  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId               String    @db.Uuid
-  studentId               String    @db.Uuid
-  caseId                  String?   @db.Uuid
-  slotId                  String?   @db.Uuid
-  type                    String
-  types                   String[]  @default([])
-  rating                  Int?
-  startsAt                DateTime  @db.Timestamp(6)
-  endsAt                  DateTime? @db.Timestamp(6)
-  status                  String    @default("scheduled")
-  instructorId            String?   @db.Uuid
-  vehicleId               String?   @db.Uuid
-  notes                   String?
-  paymentRequired         Boolean   @default(false)
-  paymentStatus           String    @default("not_required")
-  priceAmount             Decimal   @default(0) @db.Decimal(12, 2)
-  penaltyAmount           Decimal   @default(0) @db.Decimal(12, 2)
-  penaltyCutoffAt         DateTime? @db.Timestamp(6)
-  paidAmount              Decimal   @default(0) @db.Decimal(12, 2)
-  cancelledAt             DateTime? @db.Timestamp(6)
-  cancelledByUserId       String?   @db.Uuid
-  cancellationKind        String?
-  cancellationReason      String?
-  replacedByAppointmentId String?   @db.Uuid
-  invoiceId               String?
-  invoiceStatus           String?
-  creditApplied           Boolean   @default(false)
-  creditRefundedAt        DateTime? @db.Timestamp(6)
-  availabilityOverrideApproved Boolean @default(false)
-  manualPaymentStatus     String?
-  lateCancellationAction  String?
-  rescheduledAt           DateTime? @db.Timestamp(6)
-  rescheduledFromStartsAt DateTime? @db.Timestamp(6)
-  locationId              String?   @db.Uuid
-  createdAt               DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt               DateTime  @updatedAt
+  id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                    String    @db.Uuid
+  studentId                    String    @db.Uuid
+  caseId                       String?   @db.Uuid
+  slotId                       String?   @db.Uuid
+  type                         String
+  types                        String[]  @default([])
+  rating                       Int?
+  startsAt                     DateTime  @db.Timestamp(6)
+  endsAt                       DateTime? @db.Timestamp(6)
+  status                       String    @default("scheduled")
+  instructorId                 String?   @db.Uuid
+  vehicleId                    String?   @db.Uuid
+  notes                        String?
+  paymentRequired              Boolean   @default(false)
+  paymentStatus                String    @default("not_required")
+  priceAmount                  Decimal   @default(0) @db.Decimal(12, 2)
+  penaltyAmount                Decimal   @default(0) @db.Decimal(12, 2)
+  penaltyCutoffAt              DateTime? @db.Timestamp(6)
+  paidAmount                   Decimal   @default(0) @db.Decimal(12, 2)
+  cancelledAt                  DateTime? @db.Timestamp(6)
+  cancelledByUserId            String?   @db.Uuid
+  cancellationKind             String?
+  cancellationReason           String?
+  replacedByAppointmentId      String?   @db.Uuid
+  invoiceId                    String?
+  invoiceStatus                String?
+  creditApplied                Boolean   @default(false)
+  creditRefundedAt             DateTime? @db.Timestamp(6)
+  availabilityOverrideApproved Boolean   @default(false)
+  manualPaymentStatus          String?
+  lateCancellationAction       String?
+  rescheduledAt                DateTime? @db.Timestamp(6)
+  rescheduledFromStartsAt      DateTime? @db.Timestamp(6)
+  locationId                   String?   @db.Uuid
+  /// When set, this appointment is one participant seat of a group lesson
+  /// (Guide di gruppo). type = "group_lesson". Null for normal lessons/exams.
+  groupLessonId                String?   @db.Uuid
+  createdAt                    DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt                    DateTime  @updatedAt
 
   company               Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   student               User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
@@ -370,14 +398,13 @@ model AutoscuolaAppointment {
   instructor            AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)
   vehicle               AutoscuolaVehicle?                    @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   location              AutoscuolaLocation?                   @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  groupLesson           AutoscuolaGroupLesson?                @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
   replacedByAppointment AutoscuolaAppointment?                @relation("AutoscuolaAppointmentReplacement", fields: [replacedByAppointmentId], references: [id], onDelete: SetNull)
   replacedAppointments  AutoscuolaAppointment[]               @relation("AutoscuolaAppointmentReplacement")
   payments              AutoscuolaAppointmentPayment[]
   creditLedger          AutoscuolaStudentLessonCreditLedger[]
   messageLogs           AutoscuolaMessageLog[]
   voiceCalls            AutoscuolaVoiceCall[]
-  repositionTaskSource  AutoscuolaAppointmentRepositionTask?  @relation("AutoscuolaRepositionSource")
-  repositionTaskMatched AutoscuolaAppointmentRepositionTask[] @relation("AutoscuolaRepositionMatched")
   swapOffers            AutoscuolaSwapOffer[]
 
   @@index([companyId])
@@ -394,25 +421,27 @@ model AutoscuolaAppointment {
   @@index([companyId, studentId, startsAt])
   @@index([companyId, paymentRequired, startsAt])
   @@index([companyId, studentId, creditApplied])
+  @@index([companyId, studentId, paymentRequired, paymentStatus])
   @@index([replacedByAppointmentId])
   @@index([companyId, cancellationKind, startsAt])
   @@index([locationId])
+  @@index([groupLessonId])
 }
 
 model AutoscuolaLocation {
-  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId        String    @db.Uuid
-  createdByUserId  String?   @db.Uuid
-  name             String
-  address          String?
-  latitude         Decimal?  @db.Decimal(10, 7)
-  longitude        Decimal?  @db.Decimal(10, 7)
-  placeId          String?
-  isDefault        Boolean   @default(false)
-  isPrecise        Boolean   @default(false)
-  archivedAt       DateTime? @db.Timestamp(6)
-  createdAt        DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String    @db.Uuid
+  createdByUserId String?   @db.Uuid
+  name            String
+  address         String?
+  latitude        Decimal?  @db.Decimal(10, 7)
+  longitude       Decimal?  @db.Decimal(10, 7)
+  placeId         String?
+  isDefault       Boolean   @default(false)
+  isPrecise       Boolean   @default(false)
+  archivedAt      DateTime? @db.Timestamp(6)
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt
 
   company       Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   createdByUser User?                   @relation("AutoscuolaLocationCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
@@ -528,32 +557,6 @@ model AutoscuolaVoiceKnowledgeChunk {
   @@index([scope, companyId, language, active])
 }
 
-model AutoscuolaAppointmentRepositionTask {
-  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId            String    @db.Uuid
-  sourceAppointmentId  String    @db.Uuid
-  studentId            String    @db.Uuid
-  status               String    @default("pending")
-  reason               String
-  attemptCount         Int       @default(0)
-  nextAttemptAt        DateTime? @db.Timestamp(6)
-  lastAttemptAt        DateTime? @db.Timestamp(6)
-  matchedAppointmentId String?   @db.Uuid
-  createdByUserId      String?   @db.Uuid
-  createdAt            DateTime  @default(now()) @db.Timestamp(6)
-  updatedAt            DateTime  @updatedAt
-
-  company            Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  sourceAppointment  AutoscuolaAppointment  @relation("AutoscuolaRepositionSource", fields: [sourceAppointmentId], references: [id], onDelete: Cascade)
-  matchedAppointment AutoscuolaAppointment? @relation("AutoscuolaRepositionMatched", fields: [matchedAppointmentId], references: [id], onDelete: SetNull)
-  student            User                   @relation("AutoscuolaRepositionTaskStudent", fields: [studentId], references: [id], onDelete: Restrict)
-  createdByUser      User?                  @relation("AutoscuolaRepositionTaskActor", fields: [createdByUserId], references: [id], onDelete: SetNull)
-
-  @@unique([sourceAppointmentId])
-  @@index([companyId, status, nextAttemptAt])
-  @@index([studentId, status])
-}
-
 model AutoscuolaInstructor {
   id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId      String   @db.Uuid
@@ -566,13 +569,15 @@ model AutoscuolaInstructor {
   createdAt      DateTime @default(now()) @db.Timestamp(6)
   updatedAt      DateTime @updatedAt
 
-  company          Company                      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user             User?                        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company          Company                             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user             User?                               @relation(fields: [userId], references: [id], onDelete: SetNull)
   appointments     AutoscuolaAppointment[]
   blocks           AutoscuolaInstructorBlock[]
-  assignedStudents CompanyMember[]               @relation("InstructorAssignedStudents")
+  assignedStudents CompanyMember[]                     @relation("InstructorAssignedStudents")
   weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
   publishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  fixedVehicle     AutoscuolaVehicle?                  @relation("InstructorFixedVehicle")
+  groupLessons     AutoscuolaGroupLesson[]
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -599,18 +604,28 @@ model AutoscuolaInstructorBlock {
 }
 
 model AutoscuolaVehicle {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @db.Uuid
-  name      String
-  plate     String?
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @db.Timestamp(6)
-  updatedAt DateTime @updatedAt
+  id                            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                     String   @db.Uuid
+  name                          String
+  plate                         String?
+  status                        String   @default("active")
+  assignedInstructorId          String?  @db.Uuid
+  followsInstructorAvailability Boolean  @default(true)
+  /// License category this vehicle serves: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
+  licenseCategory               String   @default("B")
+  /// Transmission: manual | automatic.
+  transmission                  String   @default("manual")
+  createdAt                     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt                     DateTime @updatedAt
 
-  company      Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointments AutoscuolaAppointment[]
+  company            Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments       AutoscuolaAppointment[]
+  groupLessons       AutoscuolaGroupLesson[]
+  assignedInstructor AutoscuolaInstructor?   @relation("InstructorFixedVehicle", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
 
+  @@unique([assignedInstructorId])
   @@index([companyId])
+  @@index([companyId, assignedInstructorId])
 }
 
 model AutoscuolaWeeklyAvailability {
@@ -620,6 +635,10 @@ model AutoscuolaWeeklyAvailability {
   ownerId       String   @db.Uuid
   daysOfWeek    Int[]
   ranges        Json?    @db.Json
+  // Per-weekday ranges: { "0": [{startMinutes,endMinutes}], "1": [...], ... }.
+  // When present it takes precedence over the shared `ranges`/`daysOfWeek` above
+  // (which are kept populated with a representative day for legacy consumers).
+  rangesByDay   Json?    @db.Json
   startMinutes  Int
   endMinutes    Int
   startMinutes2 Int?
@@ -659,7 +678,7 @@ model AutoscuolaHoliday {
   createdBy String?  @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamp(6)
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, date])
   @@index([companyId, date])
@@ -765,9 +784,9 @@ model AutoscuolaSwapOffer {
   createdAt           DateTime @default(now()) @db.Timestamp(6)
   updatedAt           DateTime @updatedAt
 
-  company           Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointment       AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  requestingStudent User                  @relation("SwapOfferRequester", fields: [requestingStudentId], references: [id], onDelete: Restrict)
+  company           Company                  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointment       AutoscuolaAppointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  requestingStudent User                     @relation("SwapOfferRequester", fields: [requestingStudentId], references: [id], onDelete: Restrict)
   responses         AutoscuolaSwapResponse[]
 
   @@index([companyId])
@@ -788,6 +807,75 @@ model AutoscuolaSwapResponse {
   student User                @relation("SwapResponseStudent", fields: [studentId], references: [id], onDelete: Restrict)
 
   @@index([offerId])
+  @@index([studentId])
+}
+
+/// Guide di gruppo — a group driving lesson: one instructor + one vehicle + up to
+/// `capacity` students. The container exists independently of its participants
+/// (open seats); participants are AutoscuolaAppointment rows with type="group_lesson"
+/// and groupLessonId set. Does NOT consume a lesson credit; each participant
+/// appointment is created as "da pagare" (paymentRequired, paymentStatus="pending").
+model AutoscuolaGroupLesson {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId       String    @db.Uuid
+  instructorId    String?   @db.Uuid
+  vehicleId       String?   @db.Uuid
+  startsAt        DateTime  @db.Timestamp(6)
+  endsAt          DateTime? @db.Timestamp(6)
+  capacity        Int       @default(3)
+  status          String    @default("scheduled")
+  priceAmount     Decimal   @default(0) @db.Decimal(12, 2)
+  notes           String?
+  createdByUserId String?   @db.Uuid
+  createdAt       DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime  @updatedAt
+
+  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  instructor   AutoscuolaInstructor?         @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  vehicle      AutoscuolaVehicle?            @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  createdBy    User?                         @relation("GroupLessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  appointments AutoscuolaAppointment[]
+  invites      AutoscuolaGroupLessonInvite[]
+
+  @@index([companyId])
+  @@index([companyId, startsAt])
+  @@index([instructorId])
+  @@index([vehicleId])
+}
+
+model AutoscuolaGroupLessonInvite {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId     String   @db.Uuid
+  groupLessonId String   @db.Uuid
+  status        String   @default("broadcasted")
+  sentAt        DateTime @db.Timestamp(6)
+  expiresAt     DateTime @db.Timestamp(6)
+  createdAt     DateTime @default(now()) @db.Timestamp(6)
+  updatedAt     DateTime @updatedAt
+
+  company     Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  groupLesson AutoscuolaGroupLesson                 @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
+  responses   AutoscuolaGroupLessonInviteResponse[]
+
+  @@index([companyId])
+  @@index([groupLessonId])
+  @@index([status])
+}
+
+model AutoscuolaGroupLessonInviteResponse {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inviteId    String   @db.Uuid
+  studentId   String   @db.Uuid
+  status      String   @default("accepted")
+  respondedAt DateTime @db.Timestamp(6)
+  createdAt   DateTime @default(now()) @db.Timestamp(6)
+  updatedAt   DateTime @updatedAt
+
+  invite  AutoscuolaGroupLessonInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  student User                        @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([inviteId, studentId])
+  @@index([inviteId])
   @@index([studentId])
 }
 
@@ -1013,9 +1101,9 @@ model AutoscuolaStudentWeeklyAbsence {
   weekStart    DateTime @db.Date
   createdAt    DateTime @default(now()) @db.Timestamp(6)
 
-  company    Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student    User                   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  instructor AutoscuolaInstructor   @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  company    Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student    User                 @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, studentId, weekStart])
   @@index([companyId, instructorId, weekStart])
@@ -1029,6 +1117,24 @@ model QuizChapter {
 
   questions QuizQuestion[]
   sessions  QuizSession[]
+  schede    QuizScheda[]
+}
+
+model QuizScheda {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type           String   @default("CHAPTER")
+  chapterId      String?  @db.Uuid
+  schedaNumber   Int
+  questionIds    String[] @db.Uuid
+  totalQuestions Int
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+
+  chapter  QuizChapter?  @relation(fields: [chapterId], references: [id])
+  sessions QuizSession[]
+
+  @@unique([type, chapterId, schedaNumber])
+  @@index([chapterId])
+  @@index([type])
 }
 
 model QuizHint {
@@ -1052,8 +1158,8 @@ model QuizQuestion {
   correctAnswer Boolean
   createdAt     DateTime @default(now()) @db.Timestamp(6)
 
-  chapter QuizChapter @relation(fields: [chapterId], references: [id])
-  hint    QuizHint?   @relation(fields: [hintId], references: [id])
+  chapter QuizChapter               @relation(fields: [chapterId], references: [id])
+  hint    QuizHint?                 @relation(fields: [hintId], references: [id])
   answers QuizAnswer[]
   stats   QuizStudentQuestionStat[]
 
@@ -1068,6 +1174,7 @@ model QuizSession {
   studentId      String          @db.Uuid
   mode           QuizSessionMode
   chapterId      String?         @db.Uuid
+  schedaId       String?         @db.Uuid
   questionIds    String[]        @db.Uuid
   status         String          @default("in_progress")
   totalQuestions Int
@@ -1080,13 +1187,15 @@ model QuizSession {
   createdAt      DateTime        @default(now()) @db.Timestamp(6)
   updatedAt      DateTime        @updatedAt
 
-  company  Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student  User         @relation(fields: [studentId], references: [id])
-  chapter  QuizChapter? @relation(fields: [chapterId], references: [id])
-  answers  QuizAnswer[]
+  company Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  student User         @relation(fields: [studentId], references: [id])
+  chapter QuizChapter? @relation(fields: [chapterId], references: [id])
+  scheda  QuizScheda?  @relation(fields: [schedaId], references: [id])
+  answers QuizAnswer[]
 
   @@index([companyId, studentId])
   @@index([companyId, studentId, mode])
+  @@index([companyId, studentId, schedaId])
   @@index([studentId, status])
 }
 

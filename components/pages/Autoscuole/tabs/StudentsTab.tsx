@@ -14,6 +14,7 @@ import {
   UserCheck,
   UserRoundCog,
   Users,
+  UsersRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +66,8 @@ export type StudentsTabProps = {
   setAutoCheckinEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentNotesEnabled: boolean;
   setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  groupLessonsEnabled: boolean;
+  setGroupLessonsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   emptySlotNotificationEnabled: boolean;
   setEmptySlotNotificationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   emptySlotNotificationTarget: "all" | "availability_matching";
@@ -182,6 +185,8 @@ export default function StudentsTab({
   setAutoCheckinEnabled,
   studentNotesEnabled,
   setStudentNotesEnabled,
+  groupLessonsEnabled,
+  setGroupLessonsEnabled,
   emptySlotNotificationEnabled,
   setEmptySlotNotificationEnabled,
   emptySlotNotificationTarget,
@@ -492,6 +497,34 @@ export default function StudentsTab({
               </div>
               <InlineToggle checked={autoCheckinEnabled} size="sm" />
             </div>
+          </div>
+        </AccordionSection>
+        <AccordionSection
+          icon={UsersRound}
+          title="Guide di gruppo"
+          description="Guide con 1 istruttore e 1 veicolo per fino a 3 allievi abilitati. Si abilita l'allievo dal suo dettaglio."
+          expanded={expandedSection === "groupLessons"}
+          onToggle={() => toggleSection("groupLessons")}
+        >
+          <div className="space-y-5 max-w-2xl">
+            <div
+              className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+              onClick={() => setGroupLessonsEnabled((prev) => !prev)}
+            >
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-medium">Attiva guide di gruppo</span>
+                <span className="text-xs text-muted-foreground">
+                  Potrai programmare guide di gruppo dall&apos;agenda e invitare gli allievi abilitati a iscriversi. Ogni allievo va abilitato singolarmente dal suo dettaglio.
+                </span>
+              </div>
+              <InlineToggle checked={groupLessonsEnabled} size="sm" />
+            </div>
+
+            {groupLessonsEnabled ? (
+              <p className="px-1 text-xs text-muted-foreground">
+                Non scala crediti: ogni partecipante avrà una guida &quot;da pagare&quot; al prezzo di una guida normale.
+              </p>
+            ) : null}
           </div>
         </AccordionSection>
         <AccordionSection

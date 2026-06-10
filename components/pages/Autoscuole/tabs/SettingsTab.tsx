@@ -2,12 +2,17 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Check, ChevronDown, ClipboardList, MapPin } from "lucide-react";
+import { Bell, CalendarDays, Check, ChevronDown, ClipboardList, KeyRound, Loader2, MapPin } from "lucide-react";
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
+import {
+  getQuizSeatsContext,
+  setAutoAssignQuizOnSignup,
+} from "@/lib/actions/autoscuole-settings.actions";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   Select,
   SelectContent,
@@ -137,6 +142,128 @@ export type SettingsTabProps = {
 };
 
 // ── Sub-components (local) ────────────────────────────────────────────────────
+
+/**
+ * Self-contained accordion section for the "Modalità registrazione allievi"
+ * setting. Fetches its own quiz-seats context (so it can show the live
+ * counter + preview the FIFO promotion when toggling ON) and persists
+ * autoAssignQuizOnSignup through its own server action.
+ *
+ * Visible only when the autoscuola has 'TEORIA' in phasesEnabled — otherwise
+ * the toggle has no semantic meaning.
+ */
+function RegistrationModeSection({
+  expanded,
+  onToggle,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const toast = useFeedbackToast();
+  type Ctx = {
+    quizSeats: number;
+    used: number;
+    available: number;
+    phasesEnabled: ("TEORIA" | "PRATICA")[];
+    autoAssignQuizOnSignup: boolean;
+  };
+  const [ctx, setCtx] = React.useState<Ctx | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [saving, setSaving] = React.useState(false);
+
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await getQuizSeatsContext();
+      if (res.success) setCtx(res.data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // If TEORIA is not part of the autoscuola's journey, the toggle has no
+  // meaning — hide the entire section.
+  if (!loading && (!ctx || !ctx.phasesEnabled.includes("TEORIA"))) {
+    return null;
+  }
+
+  const handleToggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      const res = await setAutoAssignQuizOnSignup({ enabled: next });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile aggiornare." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Modalità aggiornata." });
+      await refresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const enabled = ctx?.autoAssignQuizOnSignup ?? false;
+  const available = ctx?.available ?? 0;
+  const used = ctx?.used ?? 0;
+  const quizSeats = ctx?.quizSeats ?? 0;
+
+  return (
+    <AccordionSection
+      icon={KeyRound}
+      title="Modalità registrazione allievi"
+      description="Cosa succede quando un nuovo allievo si registra con il codice autoscuola."
+      expanded={expanded}
+      onToggle={onToggle}
+      isLast
+    >
+      <div className="space-y-4">
+        <div className="rounded-xl border border-border bg-white p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Assegnazione automatica della licenza quiz alla registrazione
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {enabled
+                  ? "I nuovi allievi ricevono subito una licenza quiz (se disponibile) e partono direttamente in fase Teoria."
+                  : "I nuovi allievi entrano in stato 'In attesa di attivazione'. Devi assegnare la licenza manualmente per farli partire dalla teoria."}
+              </p>
+              {!enabled && available > 0 && (
+                <p className="mt-2 text-[11px] text-amber-700">
+                  Attivando l&apos;auto-assegnazione, gli allievi attualmente in attesa
+                  riceveranno automaticamente una licenza (fino a {available} posti
+                  liberi, ordine cronologico di registrazione).
+                </p>
+              )}
+            </div>
+            <Checkbox
+              checked={enabled}
+              disabled={saving || loading}
+              onCheckedChange={(checked) => void handleToggle(Boolean(checked))}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-xl border border-border bg-gray-50/60 px-4 py-3 text-xs">
+          <span className="text-muted-foreground">Licenze quiz</span>
+          <span className="font-medium text-foreground tabular-nums">
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                {used} <span className="text-muted-foreground">/ {quizSeats}</span> usate
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    </AccordionSection>
+  );
+}
 
 function AccordionSection({
   icon: Icon,
@@ -693,10 +820,15 @@ function SettingsTab({
           description="Sede dell'autoscuola e luoghi extra per le guide. Mostrati agli allievi nel dettaglio della guida."
           expanded={expandedSection === "locations"}
           onToggle={() => toggleSection("locations")}
-          isLast
         >
           <LocationsSection />
         </AccordionSection>
+
+        {/* ── Modalità registrazione allievi (solo se TEORIA è attiva) ── */}
+        <RegistrationModeSection
+          expanded={expandedSection === "registration"}
+          onToggle={() => toggleSection("registration")}
+        />
       </div>
 
       {/* Save button */}

@@ -3,19 +3,29 @@
 import { randomUUID } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
+import { Prisma } from "@prisma/client";
 import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
-import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
 import {
-  getBookingGovernanceForCompany,
+  prepareAppointmentPaymentSnapshot,
+  getGroupLessonPenaltySnapshot,
+} from "@/lib/autoscuole/payments";
+import {
+  getBookingGovernanceForInstructor,
   isStudentAppBookingEnabled,
   parseBookingGovernanceFromLimits,
 } from "@/lib/autoscuole/booking-governance";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
+import {
+  buildFixedVehicleMaps,
+  pickBestInstructorVehiclePair,
+  resolveVehicleForInstructor,
+} from "@/lib/autoscuole/fixed-vehicle";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   buildAutoscuoleCacheKey,
@@ -28,6 +38,10 @@ import {
   getCachedCompanyServiceLimits,
   getCachedHolidays,
 } from "@/lib/autoscuole/cached-service";
+import {
+  resolveEffectiveBookingSettings,
+  buildCompanyBookingDefaults,
+} from "@/lib/autoscuole/instructor-clusters";
 import {
   LESSON_POLICY_TYPES,
   isLessonPolicyType,
@@ -56,6 +70,16 @@ const slotSchema = z.object({
     startMinutes: z.number().int().min(0).max(1440),
     endMinutes: z.number().int().min(0).max(1440),
   })).optional(),
+  // Per-weekday schedule: { "1": [{startMinutes,endMinutes}], ... }. When present
+  // it is authoritative; the flat daysOfWeek/ranges/startsAt fields are derived
+  // from a representative day for legacy/back-compat consumers.
+  scheduleByDay: z.record(
+    z.string().regex(/^[0-6]$/),
+    z.array(z.object({
+      startMinutes: z.number().int().min(0).max(1440),
+      endMinutes: z.number().int().min(0).max(1440),
+    })),
+  ).optional(),
 });
 
 const deleteSlotsSchema = z.object({
@@ -71,6 +95,11 @@ const getSlotsSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]).optional(),
   ownerId: z.string().uuid().optional(),
   date: z.string().optional(),
+  // Optional inclusive date range. When both are provided, slots for every
+  // day in [from, to] are returned in a single response (mobile uses this to
+  // fetch a whole week in one call instead of one request per day).
+  from: z.string().optional(),
+  to: z.string().optional(),
 });
 
 const bookingRequestSchema = z.object({
@@ -115,12 +144,6 @@ const DEFAULT_MAX_DAYS = 4;
 const DURATION_PRIORITY = [60, 45, 30, 90, 120] as const;
 const DEFAULT_SLOT_FILL_CHANNELS = ["push", "whatsapp", "email"] as const;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
-const OPERATIONAL_REPOSITIONABLE_STATUSES = [
-  "scheduled",
-  "confirmed",
-  "proposal",
-  "checked_in",
-] as const;
 const WEEKDAY_TO_INDEX: Record<string, number> = {
   Sun: 0,
   Mon: 1,
@@ -312,6 +335,9 @@ export type TimeRange = { startMinutes: number; endMinutes: number };
 type AvailabilityRecord = {
   daysOfWeek: number[];
   ranges: TimeRange[];
+  // When present, ranges differ per weekday (0=Sun..6=Sat) and take precedence
+  // over the flat `ranges` field. `rangesForDay()` is the single read accessor.
+  rangesByDay?: Record<number, TimeRange[]>;
 };
 
 const parseRanges = (raw: unknown): TimeRange[] => {
@@ -323,7 +349,47 @@ const parseRanges = (raw: unknown): TimeRange[] => {
   );
 };
 
-const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown }): AvailabilityRecord => {
+// Parse the `rangesByDay` JSON ({ "1": [...], ... }) into a {dayOfWeek: ranges}
+// map, keeping only days that have at least one valid range. Returns null when
+// absent/empty so callers fall back to the shared `ranges`.
+const parseRangesByDay = (raw: unknown): Record<number, TimeRange[]> | null => {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const map: Record<number, TimeRange[]> = {};
+  let any = false;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const day = Number(k);
+    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+    const ranges = parseRanges(v).filter((r) => r.endMinutes > r.startMinutes);
+    if (ranges.length) {
+      map[day] = ranges;
+      any = true;
+    }
+  }
+  return any ? map : null;
+};
+
+// Single accessor for "what ranges apply on this weekday" — handles both the
+// per-day model and the legacy shared model transparently.
+const rangesForDay = (a: AvailabilityRecord, dayOfWeek: number): TimeRange[] => {
+  if (a.rangesByDay) return a.rangesByDay[dayOfWeek] ?? [];
+  return a.daysOfWeek.includes(dayOfWeek) ? a.ranges : [];
+};
+
+// Narrow a (possibly per-day) record down to a single date's effective ranges,
+// shaped exactly like the legacy resolved record so every existing consumer
+// (isOwnerAvailable / isAvailabilityCovering copies) keeps working unchanged.
+const narrowToDay = (a: AvailabilityRecord, dayOfWeek: number): AvailabilityRecord => {
+  const ranges = rangesForDay(a, dayOfWeek);
+  return { daysOfWeek: ranges.length ? [dayOfWeek] : [], ranges };
+};
+
+const defaultToAvailabilityRecord = (record: { daysOfWeek: number[]; startMinutes: number; endMinutes: number; startMinutes2?: number | null; endMinutes2?: number | null; ranges?: unknown; rangesByDay?: unknown }): AvailabilityRecord => {
+  const rangesByDay = parseRangesByDay(record.rangesByDay);
+  if (rangesByDay) {
+    // daysOfWeek = days that actually have ranges; flat `ranges` left empty (the
+    // per-day map is authoritative and read via rangesForDay()).
+    return { daysOfWeek: Object.keys(rangesByDay).map(Number).sort((a, b) => a - b), ranges: [], rangesByDay };
+  }
   const ranges = record.ranges ? parseRanges(record.ranges) : [];
   if (!ranges.length) {
     ranges.push({ startMinutes: record.startMinutes, endMinutes: record.endMinutes });
@@ -377,7 +443,7 @@ export const resolveEffectiveAvailability = async (
     where: { companyId, ownerType, ownerId },
   });
   if (!base) return null;
-  return defaultToAvailabilityRecord(base);
+  return narrowToDay(defaultToAvailabilityRecord(base), dayOfWeek);
 };
 
 type OverrideRaw = { ownerId: string; date: Date | string; ranges: unknown };
@@ -442,7 +508,8 @@ export const buildAvailabilityResolver = async (
       if (ranges !== undefined) {
         return { daysOfWeek: [dayOfWeek], ranges };
       }
-      return defaultMap.get(ownerId) ?? null;
+      const base = defaultMap.get(ownerId);
+      return base ? narrowToDay(base, dayOfWeek) : null;
     },
     /** Check if an override exists for a given owner + date */
     hasOverride(ownerId: string, date: Date): boolean {
@@ -462,10 +529,11 @@ const isAvailabilityCovering = (
 ) => {
   if (!availability) return false;
   const dayOfWeek = dayOfWeekFromDate(startsAt);
-  if (!availability.daysOfWeek.includes(dayOfWeek)) return false;
+  const dayRanges = rangesForDay(availability, dayOfWeek);
+  if (!dayRanges.length) return false;
   const startMin = minutesFromDate(startsAt);
   const endMin = minutesFromDate(endsAt);
-  return availability.ranges.some(
+  return dayRanges.some(
     (r) => r.endMinutes > r.startMinutes && startMin >= r.startMinutes && endMin <= r.endMinutes,
   );
 };
@@ -488,8 +556,36 @@ const ensureStudentMembership = async (companyId: string, studentId: string) =>
       autoscuolaRole: "STUDENT",
       userId: studentId,
     },
-    select: { userId: true },
+    select: { userId: true, licenseCategory: true, transmission: true },
   });
+
+/** The student's pursued license (category + transmission), used to filter vehicles. */
+const getStudentLicense = async (companyId: string, studentId: string) =>
+  prisma.companyMember.findUnique({
+    where: { companyId_userId: { companyId, userId: studentId } },
+    select: { licenseCategory: true, transmission: true },
+  });
+
+/**
+ * Build the `matchesLicenseCategory(vehicleId)` predicate for the slot matcher:
+ * a vehicle is eligible only if its category+transmission serve the student's
+ * pursued license. Null on either side is permissive (see vehicleServesLicense).
+ */
+const buildMatchesLicenseCategory = (
+  activeVehicles: Array<{
+    id: string;
+    licenseCategory?: string | null;
+    transmission?: string | null;
+  }>,
+  student: { licenseCategory?: string | null; transmission?: string | null } | null,
+) => {
+  const byId = new Map(activeVehicles.map((v) => [v.id, v]));
+  return (vehicleId: string) => {
+    const vehicle = byId.get(vehicleId);
+    if (!vehicle) return false;
+    return vehicleServesLicense(vehicle, student ?? {});
+  };
+};
 
 const ensureStudentCanBookFromApp = async ({
   companyId,
@@ -501,7 +597,7 @@ const ensureStudentCanBookFromApp = async ({
   studentId: string;
 }) => {
   if (membership.role === "admin" || isOwner(membership.autoscuolaRole)) {
-    return { allowed: true as const };
+    return { allowed: true as const, settings: null, limits: null };
   }
   if (membership.autoscuolaRole !== "STUDENT") {
     return {
@@ -516,23 +612,45 @@ const ensureStudentCanBookFromApp = async ({
     };
   }
 
-  // Check if student has booking blocked
-  const blocked = await getStudentBookingBlockStatus(companyId, studentId);
-  if (blocked) {
+  // Read the membership row (block + phase gate) and the service limits in
+  // parallel — they are independent.
+  //   AWAITING → l'autoscuola non ha ancora attivato il percorso
+  //   TEORIA   → ha il modulo quiz ma non ha ancora il foglio rosa
+  // PRATICA e PATENTATO sono entrambi ammessi per coerenza.
+  const [studentMembership, limits] = await Promise.all([
+    prisma.companyMember.findFirst({
+      where: {
+        companyId,
+        userId: studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { bookingBlocked: true, studentPhase: true },
+    }),
+    getCachedCompanyServiceLimits(companyId),
+  ]);
+  if (studentMembership?.bookingBlocked) {
     return {
       allowed: false as const,
       message:
         "Le tue prenotazioni sono temporaneamente sospese. Contatta la segreteria.",
     };
   }
+  if (studentMembership?.studentPhase === "AWAITING") {
+    return {
+      allowed: false as const,
+      message:
+        "Il tuo percorso non è ancora stato attivato dall'autoscuola.",
+    };
+  }
+  if (studentMembership?.studentPhase === "TEORIA") {
+    return {
+      allowed: false as const,
+      message:
+        "Le lezioni di guida saranno disponibili dopo l'esame di teoria.",
+    };
+  }
 
-  // Resolve cluster-aware governance (instructor cluster override → company default)
-  const service = await prisma.companyService.findFirst({
-    where: { companyId, serviceKey: "AUTOSCUOLE" },
-    select: { limits: true },
-  });
-  const limits = (service?.limits ?? {}) as Record<string, unknown>;
-  const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
+  // Resolve cluster-aware governance (instructor cluster override → company default).
   const effective = await resolveEffectiveBookingSettings(companyId, studentId, buildCompanyBookingDefaults(limits));
   const effectiveActors = effective.appBookingActors;
   if (effectiveActors === "instructors") {
@@ -541,7 +659,9 @@ const ensureStudentCanBookFromApp = async ({
       message: "La prenotazione da app è abilitata solo per istruttori.",
     };
   }
-  return { allowed: true as const };
+  // Return the resolved cluster settings AND limits so the caller can reuse
+  // them instead of fetching/resolving a second time.
+  return { allowed: true as const, settings: effective, limits };
 };
 
 export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>) {
@@ -552,7 +672,7 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
     const end = new Date(payload.endsAt);
     const daysOfWeek = normalizeDays(payload.daysOfWeek);
 
-    if (!daysOfWeek.length) {
+    if (!daysOfWeek.length && !payload.scheduleByDay) {
       return { success: false, message: "Seleziona almeno un giorno." };
     }
 
@@ -592,6 +712,43 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
           return r;
         })();
 
+    // ── Per-weekday schedule (authoritative when provided) ──
+    // When `scheduleByDay` is present it is persisted to `rangesByDay` and the
+    // flat fields below are derived from the first active day so legacy readers
+    // still get a sensible representative. When absent, `rangesByDay` is cleared
+    // (a shared-hours save reverts the record to the legacy model).
+    let rangesByDayJson: Record<string, TimeRange[]> | null = null;
+    let finalDaysOfWeek = daysOfWeek;
+    let finalRanges = ranges;
+    let finalStartMinutes = startMinutes;
+    let finalEndMinutes = endMinutes;
+    let finalStartMinutes2 = startMinutes2;
+    let finalEndMinutes2 = endMinutes2;
+
+    if (payload.scheduleByDay) {
+      const map: Record<string, TimeRange[]> = {};
+      const activeDays: number[] = [];
+      for (const [k, v] of Object.entries(payload.scheduleByDay)) {
+        const dayRanges = (v as TimeRange[]).filter((r) => r.endMinutes > r.startMinutes);
+        if (dayRanges.length) {
+          map[k] = dayRanges;
+          activeDays.push(Number(k));
+        }
+      }
+      if (!activeDays.length) {
+        return { success: false, message: "Seleziona almeno un giorno." };
+      }
+      activeDays.sort((a, b) => a - b);
+      const rep = map[String(activeDays[0])];
+      rangesByDayJson = map;
+      finalDaysOfWeek = activeDays;
+      finalRanges = rep;
+      finalStartMinutes = rep[0].startMinutes;
+      finalEndMinutes = rep[0].endMinutes;
+      finalStartMinutes2 = rep[1]?.startMinutes ?? null;
+      finalEndMinutes2 = rep[1]?.endMinutes ?? null;
+    }
+
     const availability = await prisma.autoscuolaWeeklyAvailability.upsert({
       where: {
         companyId_ownerType_ownerId: {
@@ -601,23 +758,25 @@ export async function createAvailabilitySlots(input: z.infer<typeof slotSchema>)
         },
       },
       update: {
-        daysOfWeek,
-        startMinutes,
-        endMinutes,
-        startMinutes2,
-        endMinutes2,
-        ranges,
+        daysOfWeek: finalDaysOfWeek,
+        startMinutes: finalStartMinutes,
+        endMinutes: finalEndMinutes,
+        startMinutes2: finalStartMinutes2,
+        endMinutes2: finalEndMinutes2,
+        ranges: finalRanges,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
       },
       create: {
         companyId: membership.companyId,
         ownerType: payload.ownerType,
         ownerId: payload.ownerId,
-        daysOfWeek,
-        startMinutes,
-        endMinutes,
-        startMinutes2,
-        endMinutes2,
-        ranges,
+        daysOfWeek: finalDaysOfWeek,
+        startMinutes: finalStartMinutes,
+        endMinutes: finalEndMinutes,
+        startMinutes2: finalStartMinutes2,
+        endMinutes2: finalEndMinutes2,
+        ranges: finalRanges,
+        rangesByDay: rangesByDayJson ?? Prisma.DbNull,
       },
     });
 
@@ -676,15 +835,41 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const payload = getSlotsSchema.parse(input);
 
-    if (!payload.date) {
-      return { success: true, data: [] };
+    const isoFor = (p: CalendarDateParts) =>
+      `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+
+    // Resolve the list of days to compute: either a single `date` (legacy) or
+    // an inclusive `from`..`to` range (capped at 31 days).
+    let dayPartsList: CalendarDateParts[] = [];
+    if (payload.from && payload.to) {
+      const fromParts = parseDateOnly(payload.from);
+      const toParts = parseDateOnly(payload.to);
+      if (!fromParts || !toParts) {
+        return { success: false, message: "Intervallo date non valido." };
+      }
+      const cursor = new Date(Date.UTC(fromParts.year, fromParts.month - 1, fromParts.day));
+      const end = new Date(Date.UTC(toParts.year, toParts.month - 1, toParts.day));
+      let guard = 0;
+      while (cursor.getTime() <= end.getTime() && guard < 31) {
+        dayPartsList.push({
+          year: cursor.getUTCFullYear(),
+          month: cursor.getUTCMonth() + 1,
+          day: cursor.getUTCDate(),
+        });
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+        guard += 1;
+      }
+    } else if (payload.date) {
+      const dayParts = parseDateOnly(payload.date);
+      if (!dayParts) {
+        return { success: false, message: "Data non valida." };
+      }
+      dayPartsList = [dayParts];
     }
 
-    const dayParts = parseDateOnly(payload.date);
-    if (!dayParts) {
-      return { success: false, message: "Data non valida." };
+    if (dayPartsList.length === 0) {
+      return { success: true, data: [] };
     }
-    const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
 
     const availabilityWhere: Record<string, unknown> = {
       companyId: membership.companyId,
@@ -692,16 +877,23 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
     if (payload.ownerType) availabilityWhere.ownerType = payload.ownerType;
     if (payload.ownerId) availabilityWhere.ownerId = payload.ownerId;
 
-    // Fetch base availabilities
+    // Fetch base availabilities once for the whole range.
     const baseAvailabilities = await prisma.autoscuolaWeeklyAvailability.findMany({
       where: availabilityWhere,
     });
 
-    // Fetch daily overrides for the requested date
-    const dateISO = `${dayParts.year}-${String(dayParts.month).padStart(2, "0")}-${String(dayParts.day).padStart(2, "0")}`;
+    // Fetch every daily override spanning the range in a single query.
+    const firstISO = isoFor(dayPartsList[0]);
+    const lastISO = isoFor(dayPartsList[dayPartsList.length - 1]);
     const overrideWhere: Record<string, unknown> = {
       companyId: membership.companyId,
-      date: new Date(dateISO + "T00:00:00Z"),
+      date:
+        dayPartsList.length === 1
+          ? new Date(firstISO + "T00:00:00Z")
+          : {
+              gte: new Date(firstISO + "T00:00:00Z"),
+              lte: new Date(lastISO + "T00:00:00Z"),
+            },
     };
     if (payload.ownerType) overrideWhere.ownerType = payload.ownerType;
     if (payload.ownerId) overrideWhere.ownerId = payload.ownerId;
@@ -710,81 +902,89 @@ export async function getAvailabilitySlots(input: z.infer<typeof getSlotsSchema>
       where: overrideWhere,
     });
 
-    // Build a map: ownerKey → AvailabilityRecord resolved for this specific day
-    const overrideByOwner = new Map<string, AvailabilityRecord>();
+    // Index overrides by their date (YYYY-MM-DD) for per-day lookups.
+    type OverrideRow = (typeof overrides)[number];
+    const overridesByDate = new Map<string, OverrideRow[]>();
     for (const o of overrides) {
-      const key = `${o.ownerType}:${o.ownerId}`;
-      overrideByOwner.set(key, { daysOfWeek: [dayOfWeek], ranges: parseRanges(o.ranges) });
+      const dateKey = o.date.toISOString().slice(0, 10);
+      const arr = overridesByDate.get(dateKey);
+      if (arr) arr.push(o);
+      else overridesByDate.set(dateKey, [o]);
     }
 
-    // Merge: for owners with an override, use the override; otherwise use base converted
     type SlotAvailability = AvailabilityRecord & { ownerType: string; ownerId: string };
-    const availabilities: SlotAvailability[] = [];
-    const seenOwners = new Set<string>();
+    const slots: Array<{
+      id: string;
+      companyId: string;
+      ownerType: string;
+      ownerId: string;
+      startsAt: Date;
+      endsAt: Date;
+      status: string;
+      createdAt: Date;
+      updatedAt: Date;
+    }> = [];
 
-    for (const base of baseAvailabilities) {
-      const key = `${base.ownerType}:${base.ownerId}`;
-      seenOwners.add(key);
-      const overrideEntry = overrideByOwner.get(key);
-      if (overrideEntry) {
-        availabilities.push({ ...overrideEntry, ownerType: base.ownerType, ownerId: base.ownerId });
-      } else {
-        availabilities.push({ ...defaultToAvailabilityRecord(base), ownerType: base.ownerType, ownerId: base.ownerId });
+    for (const dayParts of dayPartsList) {
+      const dayOfWeek = getDayOfWeekFromDateParts(dayParts);
+      const dayOverrides = overridesByDate.get(isoFor(dayParts)) ?? [];
+
+      // Build a map: ownerKey → AvailabilityRecord resolved for this day.
+      const overrideByOwner = new Map<string, AvailabilityRecord>();
+      for (const o of dayOverrides) {
+        const key = `${o.ownerType}:${o.ownerId}`;
+        overrideByOwner.set(key, { daysOfWeek: [dayOfWeek], ranges: parseRanges(o.ranges) });
       }
-    }
-    // Add override-only owners (no base record)
-    for (const o of overrides) {
-      const key = `${o.ownerType}:${o.ownerId}`;
-      if (!seenOwners.has(key)) {
-        const entry = overrideByOwner.get(key);
-        if (entry) {
-          availabilities.push({ ...entry, ownerType: o.ownerType, ownerId: o.ownerId });
+
+      // Merge: override wins over base; base converted otherwise.
+      const availabilities: SlotAvailability[] = [];
+      const seenOwners = new Set<string>();
+      for (const base of baseAvailabilities) {
+        const key = `${base.ownerType}:${base.ownerId}`;
+        seenOwners.add(key);
+        const overrideEntry = overrideByOwner.get(key);
+        if (overrideEntry) {
+          availabilities.push({ ...overrideEntry, ownerType: base.ownerType, ownerId: base.ownerId });
+        } else {
+          availabilities.push({ ...defaultToAvailabilityRecord(base), ownerType: base.ownerType, ownerId: base.ownerId });
+        }
+      }
+      // Override-only owners (no base record).
+      for (const o of dayOverrides) {
+        const key = `${o.ownerType}:${o.ownerId}`;
+        if (!seenOwners.has(key)) {
+          const entry = overrideByOwner.get(key);
+          if (entry) {
+            availabilities.push({ ...entry, ownerType: o.ownerType, ownerId: o.ownerId });
+          }
+        }
+      }
+
+      for (const availability of availabilities) {
+        const dayRanges = rangesForDay(availability, dayOfWeek);
+        if (!dayRanges.length) continue;
+        for (const range of dayRanges) {
+          if (range.endMinutes <= range.startMinutes) continue;
+          const startMinutes = Math.ceil(range.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+          const lastStart = range.endMinutes - SLOT_MINUTES;
+          for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
+            const startsAt = toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60);
+            const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
+            slots.push({
+              id: randomUUID(),
+              companyId: membership.companyId,
+              ownerType: availability.ownerType,
+              ownerId: availability.ownerId,
+              startsAt,
+              endsAt,
+              status: "open",
+              createdAt: startsAt,
+              updatedAt: startsAt,
+            });
+          }
         }
       }
     }
-
-    const slots = availabilities.flatMap((availability) => {
-      if (!availability.daysOfWeek.includes(dayOfWeek)) return [];
-      if (!availability.ranges.length) return [];
-
-      const ownerSlots: Array<{
-        id: string;
-        companyId: string;
-        ownerType: string;
-        ownerId: string;
-        startsAt: Date;
-        endsAt: Date;
-        status: string;
-        createdAt: Date;
-        updatedAt: Date;
-      }> = [];
-
-      for (const range of availability.ranges) {
-        if (range.endMinutes <= range.startMinutes) continue;
-        const startMinutes = Math.ceil(range.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
-        const lastStart = range.endMinutes - SLOT_MINUTES;
-        for (let minutes = startMinutes; minutes <= lastStart; minutes += SLOT_MINUTES) {
-          const startsAt = toTimeZoneDate(
-            dayParts,
-            Math.floor(minutes / 60),
-            minutes % 60,
-          );
-          const endsAt = new Date(startsAt.getTime() + SLOT_MINUTES * 60 * 1000);
-          ownerSlots.push({
-            id: randomUUID(),
-            companyId: membership.companyId,
-            ownerType: availability.ownerType,
-            ownerId: availability.ownerId,
-            startsAt,
-            endsAt,
-            status: "open",
-            createdAt: startsAt,
-            updatedAt: startsAt,
-          });
-        }
-      }
-      return ownerSlots;
-    });
 
     slots.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
 
@@ -816,9 +1016,18 @@ export async function getDefaultAvailability(input: z.infer<typeof getDefaultAva
       return { success: true, data: null };
     }
 
-    const { daysOfWeek, ranges } = defaultToAvailabilityRecord(record);
+    const resolved = defaultToAvailabilityRecord(record);
+    // Always expose a per-day map so the mobile editor can paint per-weekday
+    // rows. Legacy records (no rangesByDay) are projected by applying the shared
+    // ranges to each active day.
+    const scheduleByDay: Record<number, TimeRange[]> =
+      resolved.rangesByDay ??
+      Object.fromEntries(resolved.daysOfWeek.map((d) => [d, resolved.ranges]));
 
-    return { success: true, data: { daysOfWeek, ranges } };
+    return {
+      success: true,
+      data: { daysOfWeek: resolved.daysOfWeek, ranges: resolved.ranges, scheduleByDay },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -1390,24 +1599,6 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }
     }
 
-    // Booking cutoff: block if past the deadline (day before at cutoff time)
-    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
-    if (cutoffEnabled) {
-      const cutoffTime = typeof serviceLimits.bookingCutoffTime === "string"
-        ? serviceLimits.bookingCutoffTime
-        : "18:00";
-      const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
-      const prevDate = new Date(Date.UTC(preferredDateParts.year, preferredDateParts.month - 1, preferredDateParts.day - 1));
-      const prevParts = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
-      const cutoffDeadline = toTimeZoneDate(prevParts, cutoffH, cutoffM);
-      if (now >= cutoffDeadline) {
-        return {
-          success: false,
-          message: "Le prenotazioni per questa data sono chiuse dalle " + cutoffTime + " del giorno prima.",
-        };
-      }
-    }
-
     const maxDays = payload.maxDays ?? DEFAULT_MAX_DAYS;
     // Resolve cluster settings FIRST so we can force instructor filter when student is locked to a cluster
     const autoscuolaServicePre = await prisma.companyService.findFirst({
@@ -1421,11 +1612,28 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       payload.studentId,
       buildCompanyBookingDefaults(preServiceLimits),
     );
+
+    // Booking cutoff: block if past the deadline (day before at cutoff time).
+    // Uses cluster-resolved settings (cluster overrides company).
+    if (clusterBookingSettings.bookingCutoffEnabled) {
+      const cutoffTime = clusterBookingSettings.bookingCutoffTime;
+      const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
+      const prevDate = new Date(Date.UTC(preferredDateParts.year, preferredDateParts.month - 1, preferredDateParts.day - 1));
+      const prevParts = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
+      const cutoffDeadline = toTimeZoneDate(prevParts, cutoffH, cutoffM);
+      if (now >= cutoffDeadline) {
+        return {
+          success: false,
+          message: "Le prenotazioni per questa data sono chiuse dalle " + cutoffTime + " del giorno prima.",
+        };
+      }
+    }
+
     // If student is locked to a cluster instructor, ALWAYS use that instructor
     const effectiveInstructorId = clusterBookingSettings.isLockedToInstructor && clusterBookingSettings.assignedInstructorId
       ? clusterBookingSettings.assignedInstructorId
       : payload.instructorId;
-    const [activeInstructors, activeVehicles, studentAvailabilityRaw] = await Promise.all([
+    const [activeInstructors, activeVehicles, studentAvailabilityRaw, studentLicense] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
           companyId: membership.companyId,
@@ -1436,7 +1644,13 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       }),
       prisma.autoscuolaVehicle.findMany({
         where: { companyId: membership.companyId, status: { not: "inactive" } },
-        select: { id: true },
+        select: {
+          id: true,
+          assignedInstructorId: true,
+          followsInstructorAvailability: true,
+          licenseCategory: true,
+          transmission: true,
+        },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
         where: {
@@ -1445,6 +1659,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           ownerId: payload.studentId,
         },
       }),
+      getStudentLicense(membership.companyId, payload.studentId),
     ]);
     const autoscuolaService = autoscuolaServicePre;
     const studentAvailability = studentAvailabilityRaw ? defaultToAvailabilityRecord(studentAvailabilityRaw) : null;
@@ -1498,6 +1713,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const vehiclesEnabled = preServiceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
+    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, studentLicense);
 
     const resolverRangeStart = preferredDate;
     const resolverRangeEnd = toTimeZoneDate(
@@ -1823,38 +2040,41 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           });
         }
 
-        const availableVehicles: Array<{
-          id: string;
-          score: number;
-        }> = [];
-        if (vehiclesEnabled) {
-          for (const ownerId of activeVehicleIds) {
-            const availability = vehicleAvailabilityResolver.resolve(ownerId, startDate);
-            if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) {
-              continue;
-            }
-            const intervals = appointmentMaps.intervals.get(ownerId);
-            if (overlaps(intervals, startMs, endDate.getTime())) continue;
-            const score =
-              (appointmentMaps.ends.get(ownerId)?.has(startMs) ? 1 : 0) +
-              (appointmentMaps.starts.get(ownerId)?.has(endDate.getTime()) ? 1 : 0);
-            availableVehicles.push({
-              id: ownerId,
-              score,
-            });
-          }
-        }
-
-        if (!availableInstructors.length || (vehiclesEnabled && !availableVehicles.length)) {
+        if (!availableInstructors.length) {
           continue;
         }
 
-        availableInstructors.sort((a, b) => b.score - a.score);
-        availableVehicles.sort((a, b) => b.score - a.score);
+        // Couple instructor↔vehicle: a fixed vehicle is bound to its instructor
+        // and reserved vehicles are excluded from other instructors' pool.
+        const endTime = endDate.getTime();
+        const pair = pickBestInstructorVehiclePair({
+          availableInstructors,
+          vehiclesEnabled,
+          resolveVehicle: (instructorId) =>
+            resolveVehicleForInstructor({
+              instructorId,
+              activeVehicleIds,
+              maps: fixedVehicleMaps,
+              isVehicleAvailable: (vehicleId) =>
+                isOwnerAvailable(
+                  vehicleAvailabilityResolver.resolve(vehicleId, startDate),
+                  dayOfWeek,
+                  candidateStartMinutes,
+                  candidateEndMinutes,
+                ),
+              hasOverlap: (vehicleId) =>
+                overlaps(appointmentMaps.intervals.get(vehicleId), startMs, endTime),
+              scoreVehicle: (vehicleId) =>
+                (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
+                (appointmentMaps.starts.get(vehicleId)?.has(endTime) ? 1 : 0),
+              matchesLicenseCategory,
+            }),
+        });
+        if (!pair) {
+          continue;
+        }
 
-        const instructorChoice = availableInstructors[0];
-        const vehicleChoice = vehiclesEnabled ? availableVehicles[0] : null;
-        const score = instructorChoice.score + (vehicleChoice?.score ?? 0);
+        const score = pair.score;
 
         if (
           !best ||
@@ -1864,8 +2084,8 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           best = {
             start: startDate,
             end: endDate,
-            instructorId: instructorChoice.id,
-            vehicleId: vehicleChoice?.id ?? null,
+            instructorId: pair.instructorId,
+            vehicleId: pair.vehicleId,
             score,
             compatibleRequiredTypes,
             resolvedLessonType:
@@ -2227,10 +2447,11 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         ? limits.instructorPreferenceEnabled
         : false;
 
-    // Weekly booking limit info
-    const weeklyBookingLimitEnabled = limits.weeklyBookingLimitEnabled === true;
-    const weeklyBookingLimit = typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
-      ? limits.weeklyBookingLimit
+    // Weekly booking limit info — cluster overrides company (clusterSettings is
+    // already resolved with the full company defaults above).
+    const weeklyBookingLimitEnabled = clusterSettings.weeklyBookingLimitEnabled;
+    const weeklyBookingLimit = typeof clusterSettings.weeklyBookingLimit === "number" && clusterSettings.weeklyBookingLimit >= 1
+      ? clusterSettings.weeklyBookingLimit
       : 3;
     // Exam priority settings (new model — gated by examPriorityEnabled master toggle)
     const examPriorityEnabled = limits.examPriorityEnabled === true;
@@ -2410,21 +2631,24 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     // timezone-adjusted dateStart (e.g. April 6 22:00 UTC for April 7 CEST)
     // would incorrectly match the previous day's holiday.
     const holidayDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day));
-    const isHoliday = await prisma.autoscuolaHoliday.findFirst({
-      where: {
-        companyId: membership.companyId,
-        date: holidayDate,
-      },
-    });
+    // Holiday check + service limits. Limits were already fetched during the
+    // booking-access check for students — reuse them; only admin/owner refetch.
+    const [isHoliday, serviceLimits] = await Promise.all([
+      prisma.autoscuolaHoliday.findFirst({
+        where: {
+          companyId: membership.companyId,
+          date: holidayDate,
+        },
+      }),
+      bookingAccess.limits ?? getCachedCompanyServiceLimits(membership.companyId),
+    ]);
     if (isHoliday) {
       return { success: true, data: [] };
     }
 
-    const serviceLimits = await getCachedCompanyServiceLimits(membership.companyId);
-
-    // Resolve cluster-aware settings for this student
-    const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import("@/lib/autoscuole/instructor-clusters");
-    const clusterSettings = await resolveEffectiveBookingSettings(
+    // Reuse the cluster settings already resolved during the booking-access
+    // check (students); only recompute for admin/owner, who skip that path.
+    const clusterSettings = bookingAccess.settings ?? await resolveEffectiveBookingSettings(
       membership.companyId,
       payload.studentId,
       buildCompanyBookingDefaults(serviceLimits),
@@ -2448,12 +2672,10 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       }
     }
 
-    // Booking cutoff: block if past the deadline (day before at cutoff time)
-    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
-    if (cutoffEnabled) {
-      const cutoffTime = typeof serviceLimits.bookingCutoffTime === "string"
-        ? serviceLimits.bookingCutoffTime
-        : "18:00";
+    // Booking cutoff: block if past the deadline (day before at cutoff time).
+    // Uses cluster-resolved settings (cluster overrides company).
+    if (clusterSettings.bookingCutoffEnabled) {
+      const cutoffTime = clusterSettings.bookingCutoffTime;
       const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
       const prevDate = new Date(Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day - 1));
       const prevParts = { year: prevDate.getUTCFullYear(), month: prevDate.getUTCMonth() + 1, day: prevDate.getUTCDate() };
@@ -2497,7 +2719,13 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       }),
       prisma.autoscuolaVehicle.findMany({
         where: { companyId: membership.companyId, status: { not: "inactive" } },
-        select: { id: true },
+        select: {
+          id: true,
+          assignedInstructorId: true,
+          followsInstructorAvailability: true,
+          licenseCategory: true,
+          transmission: true,
+        },
       }),
       ensureStudentMembership(membership.companyId, payload.studentId),
       needStudentAvailability
@@ -2546,6 +2774,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const activeInstructorIds = allInstructorIds.filter((id) => pubFilter(id, dateStart));
 
     const activeVehicleIds = vehiclesEnabledForSlots ? activeVehicles.map((v) => v.id) : [];
+    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
     if (!activeInstructorIds.length) {
       return { success: true, data: [] };
     }
@@ -2555,20 +2785,27 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     const dayOfWeek = getDayOfWeekFromDateParts(dateParts);
 
-    let missingRequiredTypes: string[] = [];
-    if (enforceRequiredTypes) {
-      const coverage = await getStudentLessonPolicyCoverage({
-        companyId: membership.companyId,
-        studentId: payload.studentId,
-        policy: lessonPolicy,
-      });
-      missingRequiredTypes = coverage.missingRequiredTypes;
-    }
-
     const rangeStart = dateStart;
     const rangeEnd = toTimeZoneDate(addDaysToDateParts(dateParts, 1), 0, 0);
+    const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
 
-    const [instructorResolver, vehicleResolver] = await Promise.all([
+    // Everything still needed is independent — fetch it in a single parallel
+    // wave instead of four sequential round-trips (policy coverage, the two
+    // availability resolvers, appointments, and instructor blocks).
+    const [
+      lessonCoverage,
+      instructorResolver,
+      vehicleResolver,
+      appointments,
+      instructorBlocks,
+    ] = await Promise.all([
+      enforceRequiredTypes
+        ? getStudentLessonPolicyCoverage({
+            companyId: membership.companyId,
+            studentId: payload.studentId,
+            policy: lessonPolicy,
+          })
+        : Promise.resolve(null),
       buildAvailabilityResolver(
         membership.companyId,
         "instructor",
@@ -2583,15 +2820,23 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         rangeStart,
         rangeEnd,
       ),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId: membership.companyId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+        },
+      }),
+      prisma.autoscuolaInstructorBlock.findMany({
+        where: {
+          companyId: membership.companyId,
+          instructorId: { in: activeInstructorIds },
+          endsAt: { gt: rangeStart },
+          startsAt: { lt: rangeEnd },
+        },
+      }),
     ]);
-    const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-    const appointments = await prisma.autoscuolaAppointment.findMany({
-      where: {
-        companyId: membership.companyId,
-        status: { notIn: ["cancelled"] },
-        startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-      },
-    });
+    const missingRequiredTypes = lessonCoverage?.missingRequiredTypes ?? [];
 
     const starts = new Map<string, Set<number>>();
     const intervals = new Map<string, Array<{ start: number; end: number }>>();
@@ -2611,15 +2856,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       if (appt.vehicleId) addInterval(appt.vehicleId);
     }
 
-    // Load instructor blocks (sick leave, etc.) and add them to intervals
-    const instructorBlocks = await prisma.autoscuolaInstructorBlock.findMany({
-      where: {
-        companyId: membership.companyId,
-        instructorId: { in: activeInstructorIds },
-        endsAt: { gt: rangeStart },
-        startsAt: { lt: rangeEnd },
-      },
-    });
+    // Instructor blocks (sick leave, etc.) were fetched in the parallel wave
+    // above — add them to the busy intervals.
     for (const block of instructorBlocks) {
       const list = intervals.get(block.instructorId) ?? [];
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
@@ -2749,27 +2987,40 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         const candidateStartMinutes = minutes;
         const candidateEndMinutes = minutes + payload.durationMinutes;
 
-        let hasInstructor = false;
+        const availableInstructors: Array<{ id: string; score: number }> = [];
         for (const ownerId of activeInstructorIds) {
           const availability = instructorResolver.resolve(ownerId, startDate);
           if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
           if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
-          hasInstructor = true;
-          break;
+          availableInstructors.push({ id: ownerId, score: 0 });
         }
-        if (!hasInstructor) continue;
+        if (!availableInstructors.length) continue;
 
-        if (vehiclesEnabledForSlots) {
-          let hasVehicle = false;
-          for (const ownerId of activeVehicleIds) {
-            const availability = vehicleResolver.resolve(ownerId, startDate);
-            if (!isOwnerAvailable(availability, dayOfWeek, candidateStartMinutes, candidateEndMinutes)) continue;
-            if (overlaps(intervals.get(ownerId), startMs, endDate.getTime())) continue;
-            hasVehicle = true;
-            break;
-          }
-          if (!hasVehicle) continue;
-        }
+        // A slot exists only if some instructor can be paired with a vehicle
+        // (its fixed one, or a non-reserved pool vehicle).
+        const endTime = endDate.getTime();
+        const pair = pickBestInstructorVehiclePair({
+          availableInstructors,
+          vehiclesEnabled: vehiclesEnabledForSlots,
+          resolveVehicle: (instructorId) =>
+            resolveVehicleForInstructor({
+              instructorId,
+              activeVehicleIds,
+              maps: fixedVehicleMaps,
+              isVehicleAvailable: (vehicleId) =>
+                isOwnerAvailable(
+                  vehicleResolver.resolve(vehicleId, startDate),
+                  dayOfWeek,
+                  candidateStartMinutes,
+                  candidateEndMinutes,
+                ),
+              hasOverlap: (vehicleId) =>
+                overlaps(intervals.get(vehicleId), startMs, endTime),
+              scoreVehicle: () => 0,
+              matchesLicenseCategory,
+            }),
+        });
+        if (!pair) continue;
 
         result.push({
           startsAt: startDate.toISOString(),
@@ -2836,12 +3087,6 @@ export async function getDateAvailabilityMap(
       typeof serviceLimits.bookingMinStartDate === "string"
         ? serviceLimits.bookingMinStartDate.trim()
         : null;
-    const cutoffEnabled = serviceLimits.bookingCutoffEnabled === true;
-    const cutoffTime =
-      typeof serviceLimits.bookingCutoffTime === "string"
-        ? serviceLimits.bookingCutoffTime
-        : "18:00";
-    const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
     const defaultDuration = normalizeBookingSlotDurations(
       serviceLimits.bookingSlotDurations,
     )[0];
@@ -2853,6 +3098,11 @@ export async function getDateAvailabilityMap(
       payload.studentId,
       buildCompanyBookingDefaults(serviceLimits),
     );
+
+    // Booking cutoff (cluster overrides company).
+    const cutoffEnabled = clusterSettings.bookingCutoffEnabled;
+    const cutoffTime = clusterSettings.bookingCutoffTime;
+    const [cutoffH, cutoffM] = cutoffTime.split(":").map(Number);
 
     // Need student availability when restricted time range is active
     const needStudentAvailability = clusterSettings.restrictedTimeRangeEnabled;
@@ -2878,7 +3128,13 @@ export async function getDateAvailabilityMap(
             companyId: membership.companyId,
             status: { not: "inactive" },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            assignedInstructorId: true,
+            followsInstructorAvailability: true,
+            licenseCategory: true,
+            transmission: true,
+          },
         }),
         ensureStudentMembership(membership.companyId, payload.studentId),
         needStudentAvailability
@@ -2920,6 +3176,8 @@ export async function getDateAvailabilityMap(
     const vehiclesEnabled = serviceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((i) => i.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((v) => v.id) : [];
+    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
 
     const result: Record<string, boolean> = {};
     const instructorsByDate: Record<string, string[]> = {};
@@ -3195,23 +3453,35 @@ export async function getDateAvailabilityMap(
           }
           if (!slotInstructors.length) continue;
 
-          if (vehiclesEnabled) {
-            let hasVehicle = false;
-            for (const ownerId of activeVehicleIds) {
-              const avail = vehicleResolver.resolve(ownerId, startDate);
-              if (!isOwnerAvail(avail, dayOfWeek, minutes, candidateEnd))
-                continue;
-              if (overlaps(intervals.get(ownerId), startMs, endDate.getTime()))
-                continue;
-              hasVehicle = true;
-              break;
-            }
-            if (!hasVehicle) continue;
-          }
+          // Each instructor counts only if it can also be paired with a vehicle
+          // (its fixed one, or a non-reserved pool vehicle).
+          const endTime = endDate.getTime();
+          const pairableInstructors = vehiclesEnabled
+            ? slotInstructors.filter(
+                (instructorId) =>
+                  resolveVehicleForInstructor({
+                    instructorId,
+                    activeVehicleIds,
+                    maps: fixedVehicleMaps,
+                    isVehicleAvailable: (vehicleId) =>
+                      isOwnerAvail(
+                        vehicleResolver.resolve(vehicleId, startDate),
+                        dayOfWeek,
+                        minutes,
+                        candidateEnd,
+                      ),
+                    hasOverlap: (vehicleId) =>
+                      overlaps(intervals.get(vehicleId), startMs, endTime),
+                    scoreVehicle: () => 0,
+                    matchesLicenseCategory,
+                  }) !== null,
+              )
+            : slotInstructors;
+          if (!pairableInstructors.length) continue;
 
           // Valid slot — record available instructors
           available = true;
-          for (const id of slotInstructors) dayInstructors.add(id);
+          for (const id of pairableInstructors) dayInstructors.add(id);
 
           // Short-circuit when all instructors found
           if (dayInstructors.size >= activeInstructorIds.length) break;
@@ -3250,17 +3520,6 @@ export async function suggestInstructorBooking(
       return { success: false, message: "Operazione consentita solo agli istruttori." };
     }
 
-    const governance = await getBookingGovernanceForCompany(membership.companyId);
-    if (
-      governance.appBookingActors !== "instructors" &&
-      governance.appBookingActors !== "both"
-    ) {
-      return {
-        success: false,
-        message: "La prenotazione da app è abilitata solo per allievi.",
-      };
-    }
-
     const ownInstructor = await prisma.autoscuolaInstructor.findFirst({
       where: {
         companyId: membership.companyId,
@@ -3273,6 +3532,18 @@ export async function suggestInstructorBooking(
       return {
         success: false,
         message: "Profilo istruttore non trovato per questo account.",
+      };
+    }
+
+    // Governance resolved with cascade cluster → company for this instructor.
+    const governance = await getBookingGovernanceForInstructor(membership.companyId, ownInstructor.id);
+    if (
+      governance.appBookingActors !== "instructors" &&
+      governance.appBookingActors !== "both"
+    ) {
+      return {
+        success: false,
+        message: "La prenotazione da app è abilitata solo per allievi.",
       };
     }
 
@@ -3458,7 +3729,9 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
     }
 
     const slotTime = offer.slot.startsAt;
-    const [instructorSlot, vehicleSlot] = await Promise.all([
+    const waitlistVehiclesEnabled =
+      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    const [instructorSlot, openVehicleSlots] = await Promise.all([
       prisma.autoscuolaAvailabilitySlot.findFirst({
         where: {
           companyId: membership.companyId,
@@ -3467,7 +3740,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           startsAt: slotTime,
         },
       }),
-      prisma.autoscuolaAvailabilitySlot.findFirst({
+      prisma.autoscuolaAvailabilitySlot.findMany({
         where: {
           companyId: membership.companyId,
           ownerType: "vehicle",
@@ -3477,9 +3750,34 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       }),
     ]);
 
+    // Pick a vehicle slot whose vehicle serves the student's license (Vehicles
+    // module). When the module is off, any open vehicle slot is fine.
+    type OpenVehicleSlot = (typeof openVehicleSlots)[number];
+    let vehicleSlot: OpenVehicleSlot | null = openVehicleSlots.length ? openVehicleSlots[0] : null;
+    if (waitlistVehiclesEnabled && openVehicleSlots.length) {
+      const candidateVehicleIds = openVehicleSlots.map((s) => s.ownerId);
+      const candidateVehicles = await prisma.autoscuolaVehicle.findMany({
+        where: { id: { in: candidateVehicleIds } },
+        select: { id: true, licenseCategory: true, transmission: true },
+      });
+      const vehicleById = new Map(candidateVehicles.map((v) => [v.id, v]));
+      const studentLicense = {
+        licenseCategory: student.licenseCategory,
+        transmission: student.transmission,
+      };
+      vehicleSlot =
+        openVehicleSlots.find((s) => {
+          const v = vehicleById.get(s.ownerId);
+          return v ? vehicleServesLicense(v, studentLicense) : false;
+        }) ?? null;
+    }
+
     if (!instructorSlot || !vehicleSlot) {
       return { success: false, message: "Slot non disponibile." };
     }
+    // Capture as consts so the values narrow inside the transaction closure.
+    const bookedInstructorSlot = instructorSlot;
+    const bookedVehicleSlot = vehicleSlot;
 
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
@@ -3494,7 +3792,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
 
       const bookedSlots = await tx.autoscuolaAvailabilitySlot.updateMany({
         where: {
-          id: { in: [offer.slotId, instructorSlot.id, vehicleSlot.id] },
+          id: { in: [offer.slotId, bookedInstructorSlot.id, bookedVehicleSlot.id] },
           status: "open",
         },
         data: { status: "booked" },
@@ -3540,8 +3838,8 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           startsAt: offer.slot.startsAt,
           endsAt: offer.slot.endsAt,
           status: "scheduled",
-          instructorId: instructorSlot.ownerId,
-          vehicleId: vehicleSlot.ownerId,
+          instructorId: bookedInstructorSlot.ownerId,
+          vehicleId: bookedVehicleSlot.ownerId,
           locationId: waitlistAcceptLoc?.id ?? null,
           slotId: offer.slotId,
           ...(await prepareAppointmentPaymentSnapshot({
@@ -3660,6 +3958,41 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
       return { success: true, data: [] };
     }
 
+    // License gate (Vehicles module): hide offers whose time has no OPEN vehicle
+    // slot serving the student's pursued license.
+    const waitlistVehiclesEnabled =
+      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    const studentLicense = {
+      licenseCategory: student.licenseCategory,
+      transmission: student.transmission,
+    };
+    const licenseOkByTimeMs = new Map<number, boolean>();
+    if (waitlistVehiclesEnabled) {
+      const offerTimes = Array.from(new Set(offers.map((o) => o.slot.startsAt.getTime()))).map(
+        (ms) => new Date(ms),
+      );
+      const openVehicleSlots = offerTimes.length
+        ? await prisma.autoscuolaAvailabilitySlot.findMany({
+            where: { companyId: membership.companyId, ownerType: "vehicle", status: "open", startsAt: { in: offerTimes } },
+            select: { ownerId: true, startsAt: true },
+          })
+        : [];
+      const vehicleIds = Array.from(new Set(openVehicleSlots.map((s) => s.ownerId)));
+      const vehicles = vehicleIds.length
+        ? await prisma.autoscuolaVehicle.findMany({
+            where: { id: { in: vehicleIds } },
+            select: { id: true, licenseCategory: true, transmission: true },
+          })
+        : [];
+      const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+      for (const s of openVehicleSlots) {
+        const v = vehicleById.get(s.ownerId);
+        if (v && vehicleServesLicense(v, studentLicense)) {
+          licenseOkByTimeMs.set(s.startsAt.getTime(), true);
+        }
+      }
+    }
+
     const visible = offers
       .filter((offer) => !offer.responses.length)
       .filter((offer) =>
@@ -3676,6 +4009,10 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
             offer.slot.startsAt,
             offer.slot.endsAt,
           ),
+      )
+      .filter(
+        (offer) =>
+          !waitlistVehiclesEnabled || licenseOkByTimeMs.get(offer.slot.startsAt.getTime()) === true,
       )
       .filter((offer) => {
         if (!enforceRequiredTypes || !missingRequiredTypes.length) return true;
@@ -3800,13 +4137,43 @@ export async function broadcastWaitlistOffer({
     appointmentsByStudent.set(appointment.studentId, list);
   }
 
+  // License gate (Vehicles module): only students whose pursued license matches
+  // an OPEN vehicle slot at this time could actually take it.
+  const waitlistVehiclesEnabled =
+    (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+  let openVehicleLicenses: Array<{ licenseCategory: string | null; transmission: string | null }> | null =
+    null;
+  if (waitlistVehiclesEnabled) {
+    const openVehicleSlots = await prisma.autoscuolaAvailabilitySlot.findMany({
+      where: { companyId, ownerType: "vehicle", status: "open", startsAt: slot.startsAt },
+      select: { ownerId: true },
+    });
+    const openVehicleIds = openVehicleSlots.map((s) => s.ownerId);
+    openVehicleLicenses = openVehicleIds.length
+      ? await prisma.autoscuolaVehicle.findMany({
+          where: { id: { in: openVehicleIds } },
+          select: { licenseCategory: true, transmission: true },
+        })
+      : [];
+  }
+
   const availableStudents = students.filter((student) => {
     const availability = availabilityByStudent.get(student.user.id);
     if (!isAvailabilityCovering(availability, slot.startsAt, slot.endsAt)) {
       return false;
     }
     const booked = appointmentsByStudent.get(student.user.id) ?? [];
-    return !hasAppointmentConflict(booked, slot.startsAt, slot.endsAt);
+    if (hasAppointmentConflict(booked, slot.startsAt, slot.endsAt)) return false;
+    if (openVehicleLicenses !== null) {
+      const studentLicense = {
+        licenseCategory: student.licenseCategory,
+        transmission: student.transmission,
+      };
+      if (!openVehicleLicenses.some((v) => vehicleServesLicense(v, studentLicense))) {
+        return false;
+      }
+    }
+    return true;
   });
   if (!availableStudents.length) return offer;
 
@@ -3878,6 +4245,667 @@ export async function broadcastWaitlistOffer({
   }
 
   return offer;
+}
+
+// ── Group lesson invites (Guide di gruppo) ────────────────────────────
+// Invite eligible students to self-enrol into a group lesson. Mirrors the
+// waitlist offer pattern, but seats live on the AutoscuolaGroupLesson container
+// (capacity), so accept fills a seat via an optimistic-locked transaction
+// (SELECT ... FOR UPDATE on the lesson row) instead of booking availability slots.
+
+const GROUP_LESSON_ACTIVE_STATUSES = ["scheduled", "confirmed", "proposal", "checked_in"];
+
+const respondGroupLessonInviteSchema = z.object({
+  inviteId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  response: z.enum(["accept", "decline"]),
+});
+
+const getGroupLessonInvitesSchema = z.object({
+  studentId: z.string().uuid(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
+const inviteToGroupLessonSchema = z.object({
+  groupLessonId: z.string().uuid(),
+  expiresInHours: z.number().int().min(1).max(168).optional(),
+});
+
+type GroupLessonVehicleLicense = {
+  licenseCategory: string | null;
+  transmission: string | null;
+} | null;
+
+/**
+ * Create an invite for a group lesson and notify all eligible students
+ * (opted-in, license-compatible with the lesson vehicle when the vehicles
+ * module is on, available, no time conflict, not already enrolled). Returns the
+ * created invite (or null if the lesson is full / has no open seats).
+ */
+export async function broadcastGroupLessonInvite({
+  companyId,
+  groupLessonId,
+  expiresAt,
+}: {
+  companyId: string;
+  groupLessonId: string;
+  expiresAt: Date;
+}) {
+  const gl = await prisma.autoscuolaGroupLesson.findFirst({
+    where: { id: groupLessonId, companyId, status: "scheduled" },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      capacity: true,
+      vehicle: { select: { licenseCategory: true, transmission: true } },
+      appointments: {
+        where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        select: { studentId: true },
+      },
+    },
+  });
+  if (!gl || !gl.endsAt) return null;
+  const openSeats = gl.capacity - gl.appointments.length;
+  if (openSeats <= 0) return null;
+
+  // Keep at most ONE active invite per group lesson: supersede any previous
+  // broadcasted invites for this lesson before creating the new one. Avoids the
+  // student seeing N notifications for the same lesson after re-inviting.
+  await prisma.autoscuolaGroupLessonInvite.updateMany({
+    where: { groupLessonId: gl.id, status: "broadcasted" },
+    data: { status: "superseded" },
+  });
+
+  const invite = await prisma.autoscuolaGroupLessonInvite.create({
+    data: {
+      companyId,
+      groupLessonId: gl.id,
+      status: "broadcasted",
+      sentAt: new Date(),
+      expiresAt,
+    },
+  });
+
+  const enrolled = new Set(gl.appointments.map((a) => a.studentId));
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const vehiclesEnabled =
+    (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+  const vehicle: GroupLessonVehicleLicense = gl.vehicle ?? null;
+
+  const students = await prisma.companyMember.findMany({
+    where: { companyId, autoscuolaRole: "STUDENT", groupLessonsOptIn: true },
+    include: { user: { select: { id: true, email: true, phone: true } } },
+  });
+  const candidateIds = students
+    .map((s) => s.user.id)
+    .filter((id) => !enrolled.has(id));
+  if (!candidateIds.length) return invite;
+
+  // A group lesson is a fixed-time event the school offers, NOT a student-driven
+  // booking — so we do NOT require the student to have declared a weekly
+  // availability covering the slot (that gate excluded students with no
+  // availability set). Eligibility = opted-in + license-compatible + not already
+  // busy at that exact time.
+  const dayBounds = getDayBoundsForDate(gl.startsAt);
+  const appointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId: { in: candidateIds },
+      status: { not: "cancelled" },
+      startsAt: { gte: dayBounds.start, lt: dayBounds.end },
+    },
+    select: { studentId: true, startsAt: true, endsAt: true },
+  });
+  const appointmentsByStudent = new Map<string, Array<{ startsAt: Date; endsAt: Date | null }>>();
+  for (const appointment of appointments) {
+    const list = appointmentsByStudent.get(appointment.studentId) ?? [];
+    list.push({ startsAt: appointment.startsAt, endsAt: appointment.endsAt });
+    appointmentsByStudent.set(appointment.studentId, list);
+  }
+
+  const eligible = students.filter((student) => {
+    const id = student.user.id;
+    if (enrolled.has(id)) return false;
+    if (vehiclesEnabled && vehicle && !vehicleServesLicense(vehicle, student)) return false;
+    const booked = appointmentsByStudent.get(id) ?? [];
+    if (hasAppointmentConflict(booked, gl.startsAt, gl.endsAt!)) return false;
+    return true;
+  });
+  if (!eligible.length) return invite;
+
+  const channels = normalizeChannels(
+    (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
+    DEFAULT_SLOT_FILL_CHANNELS,
+  );
+  const formattedDate = gl.startsAt.toLocaleDateString("it-IT", { timeZone: AUTOSCUOLA_TIMEZONE });
+  const formattedTime = gl.startsAt.toLocaleTimeString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const title = "👥 Guida di gruppo disponibile";
+  const message = `C'è posto in una guida di gruppo il ${formattedDate} alle ${formattedTime}. Apri Reglo per iscriverti.`;
+
+  if (channels.includes("push")) {
+    const userIds = Array.from(new Set(eligible.map((s) => s.user.id)));
+    if (userIds.length) {
+      try {
+        await sendAutoscuolaPushToUsers({
+          companyId,
+          userIds,
+          title,
+          body: message,
+          data: {
+            kind: "group_lesson_invite",
+            inviteId: invite.id,
+            groupLessonId: gl.id,
+            startsAt: gl.startsAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        console.error("Group lesson invite push error", error);
+      }
+    }
+  }
+  for (const student of eligible) {
+    if (channels.includes("email") && student.user.email) {
+      try {
+        await sendDynamicEmail({ to: student.user.email, subject: title, body: message });
+      } catch (error) {
+        console.error("Group lesson invite email error", error);
+      }
+    }
+    if (channels.includes("whatsapp") && student.user.phone) {
+      try {
+        await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
+      } catch (error) {
+        console.error("Group lesson invite WhatsApp error", error);
+      }
+    }
+  }
+
+  return invite;
+}
+
+/** Owner/instructor-triggered broadcast of a group-lesson invite. */
+export async function inviteToGroupLesson(input: z.infer<typeof inviteToGroupLessonSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = inviteToGroupLessonSchema.parse(input);
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: payload.groupLessonId, companyId: membership.companyId, status: "scheduled" },
+      select: { id: true, startsAt: true },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    // Expire at the lesson start or in `expiresInHours` (default 24h), whichever is sooner.
+    const hours = payload.expiresInHours ?? 24;
+    const byHours = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const expiresAt = gl.startsAt < byHours ? gl.startsAt : byHours;
+    if (expiresAt <= new Date()) {
+      return { success: false as const, message: "La guida è già iniziata." };
+    }
+
+    const invite = await broadcastGroupLessonInvite({
+      companyId: membership.companyId,
+      groupLessonId: gl.id,
+      expiresAt,
+    });
+    if (!invite) {
+      return { success: false as const, message: "Nessun posto disponibile da invitare." };
+    }
+    return { success: true as const, data: { inviteId: invite.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function respondGroupLessonInvite(
+  input: z.infer<typeof respondGroupLessonInviteSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = respondGroupLessonInviteSchema.parse(input);
+    const companyId = membership.companyId;
+    const now = new Date();
+
+    const invite = await prisma.autoscuolaGroupLessonInvite.findFirst({
+      where: { id: payload.inviteId, companyId },
+      include: {
+        groupLesson: {
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            capacity: true,
+            status: true,
+            instructorId: true,
+            priceAmount: true,
+            notes: true,
+            vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
+          },
+        },
+      },
+    });
+    if (!invite) return { success: false as const, message: "Invito non trovato." };
+    if (invite.status !== "broadcasted" || invite.expiresAt < now) {
+      return { success: false as const, message: "Invito non più valido." };
+    }
+    const gl = invite.groupLesson;
+    if (!gl || gl.status !== "scheduled" || !gl.endsAt) {
+      return { success: false as const, message: "Guida di gruppo non più disponibile." };
+    }
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
+      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+    });
+    if (!member) return { success: false as const, message: "Allievo non valido." };
+
+    const existingResponse = await prisma.autoscuolaGroupLessonInviteResponse.findFirst({
+      where: { inviteId: invite.id, studentId: payload.studentId },
+      select: { id: true },
+    });
+    if (existingResponse) {
+      return { success: false as const, message: "Hai già risposto a questo invito." };
+    }
+
+    if (payload.response === "decline") {
+      await prisma.autoscuolaGroupLessonInviteResponse.create({
+        data: {
+          inviteId: invite.id,
+          studentId: payload.studentId,
+          status: "declined",
+          respondedAt: now,
+        },
+      });
+      return { success: true as const, data: { accepted: false } };
+    }
+
+    // Accept path — validate eligibility before competing for a seat.
+    if (!member.groupLessonsOptIn) {
+      return { success: false as const, message: "Non sei abilitato alle guide di gruppo." };
+    }
+    const service = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const vehiclesEnabled =
+      (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
+      return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
+    }
+
+    const dayBounds = getDayBoundsForDate(gl.startsAt);
+    const studentAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: payload.studentId,
+        status: { not: "cancelled" },
+        startsAt: { gte: dayBounds.start, lt: dayBounds.end },
+      },
+      select: { startsAt: true, endsAt: true },
+    });
+    if (hasAppointmentConflict(studentAppointments, gl.startsAt, gl.endsAt)) {
+      return { success: false as const, message: "Hai già un impegno in questa fascia oraria." };
+    }
+
+    const { penaltyCutoffAt, penaltyAmount } = await getGroupLessonPenaltySnapshot({
+      companyId,
+      startsAt: gl.startsAt,
+      price: Number(gl.priceAmount),
+    });
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Serialize concurrent accepts on this lesson so the seat count is exact.
+      await tx.$queryRaw`SELECT id FROM "AutoscuolaGroupLesson" WHERE id = ${gl.id}::uuid FOR UPDATE`;
+
+      const filled = await tx.autoscuolaAppointment.count({
+        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+      });
+      if (filled >= gl.capacity) {
+        throw new Error("Posti esauriti.");
+      }
+
+      await tx.autoscuolaGroupLessonInviteResponse.create({
+        data: {
+          inviteId: invite.id,
+          studentId: payload.studentId,
+          status: "accepted",
+          respondedAt: now,
+        },
+      });
+
+      const appointment = await tx.autoscuolaAppointment.create({
+        data: {
+          companyId,
+          studentId: payload.studentId,
+          type: "group_lesson",
+          startsAt: gl.startsAt,
+          endsAt: gl.endsAt,
+          status: "scheduled",
+          instructorId: gl.instructorId,
+          vehicleId: gl.vehicle?.id ?? null,
+          notes: gl.notes,
+          groupLessonId: gl.id,
+          paymentRequired: true,
+          paymentStatus: "pending",
+          manualPaymentStatus: "unpaid",
+          priceAmount: gl.priceAmount,
+          penaltyAmount,
+          penaltyCutoffAt,
+          creditApplied: false,
+        },
+      });
+
+      // Close the invite once the last seat is taken.
+      if (filled + 1 >= gl.capacity) {
+        await tx.autoscuolaGroupLessonInvite.updateMany({
+          where: { id: invite.id, status: "broadcasted" },
+          data: { status: "filled" },
+        });
+      }
+
+      return appointment;
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const, data: { accepted: true, appointmentId: result.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * Cancel a single group-lesson seat (student withdrawal or instructor removal).
+ * Shared source of truth for the payment treatment + seat re-broadcast.
+ * Authorization is the caller's responsibility — it must pass an
+ * already-resolved appointment that belongs to `companyId`.
+ *
+ * Payment behaviour mirrors a normal lesson (option A): an early cancellation
+ * (before `penaltyCutoffAt`) frees the seat with no charge; a late one — or a
+ * removal after the lesson has happened — stays "da pagare" and surfaces in the
+ * late-cancellations inbox via `cancellationKind` + `penaltyCutoffAt`.
+ */
+export async function cancelGroupLessonParticipantAppointment({
+  companyId,
+  appointmentId,
+  actorUserId,
+}: {
+  companyId: string;
+  appointmentId: string;
+  actorUserId: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const now = new Date();
+
+  const appt = await prisma.autoscuolaAppointment.findFirst({
+    where: {
+      id: appointmentId,
+      companyId,
+      type: "group_lesson",
+      status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      groupLessonId: true,
+      penaltyCutoffAt: true,
+    },
+  });
+  if (!appt || !appt.groupLessonId) {
+    return { success: false, message: "Partecipante non trovato." };
+  }
+
+  const cancelledBeforeCutoff =
+    appt.penaltyCutoffAt != null && now < appt.penaltyCutoffAt;
+
+  await prisma.autoscuolaAppointment.update({
+    where: { id: appt.id },
+    data: {
+      status: "cancelled",
+      cancelledAt: now,
+      cancelledByUserId: actorUserId,
+      cancellationKind: "manual_cancel",
+      ...(cancelledBeforeCutoff
+        ? {
+            paymentRequired: false,
+            paymentStatus: "not_required",
+            manualPaymentStatus: null,
+          }
+        : {}),
+    },
+  });
+
+  const gl = await prisma.autoscuolaGroupLesson.findFirst({
+    where: { id: appt.groupLessonId, companyId },
+    select: {
+      id: true,
+      startsAt: true,
+      status: true,
+      capacity: true,
+      instructor: { select: { userId: true } },
+      _count: {
+        select: {
+          appointments: { where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } } },
+        },
+      },
+    },
+  });
+
+  if (gl) {
+    const openSeats = gl.capacity - gl._count.appointments;
+    const isUpcoming = gl.status === "scheduled" && gl.startsAt > now;
+
+    // Free seat → re-broadcast an invite to the eligible students.
+    if (isUpcoming && openSeats > 0) {
+      const byHours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const expiresAt = gl.startsAt < byHours ? gl.startsAt : byHours;
+      if (expiresAt > now) {
+        try {
+          await broadcastGroupLessonInvite({
+            companyId,
+            groupLessonId: gl.id,
+            expiresAt,
+          });
+        } catch (error) {
+          console.error("Group lesson re-broadcast error", error);
+        }
+      }
+    }
+
+    // A student withdrawing themselves notifies their instructor.
+    const studentWithdrew = actorUserId === appt.studentId;
+    if (studentWithdrew && gl.instructor?.userId) {
+      const dateLabel = gl.startsAt.toLocaleDateString("it-IT", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: AUTOSCUOLA_TIMEZONE,
+      });
+      const timeLabel = gl.startsAt.toLocaleTimeString("it-IT", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: AUTOSCUOLA_TIMEZONE,
+      });
+      const student = await prisma.user.findUnique({
+        where: { id: appt.studentId },
+        select: { name: true },
+      });
+      try {
+        await sendAutoscuolaPushToUsers({
+          companyId,
+          userIds: [gl.instructor.userId],
+          title: "Ritiro guida di gruppo",
+          body: `${student?.name ?? "Un allievo"} si è ritirato dalla guida di gruppo di ${dateLabel} alle ${timeLabel}.`,
+          data: {
+            kind: "appointment_cancelled",
+            appointmentId: appt.id,
+            startsAt: gl.startsAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        console.error("Group lesson withdrawal push error", error);
+      }
+    }
+  }
+
+  await invalidateAgendaAndPaymentsCache(companyId);
+  return { success: true };
+}
+
+const withdrawFromGroupLessonSchema = z.object({
+  groupLessonId: z.string().uuid(),
+});
+
+/** Student withdraws themselves from a group lesson they are enrolled in. */
+export async function withdrawFromGroupLesson(
+  input: z.infer<typeof withdrawFromGroupLessonSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = withdrawFromGroupLessonSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const appt = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        groupLessonId: payload.groupLessonId,
+        studentId: membership.userId,
+        type: "group_lesson",
+        status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+      },
+      select: { id: true, startsAt: true },
+    });
+    if (!appt) return { success: false as const, message: "Iscrizione non trovata." };
+    if (appt.startsAt <= new Date()) {
+      return { success: false as const, message: "La guida è già iniziata." };
+    }
+
+    return await cancelGroupLessonParticipantAppointment({
+      companyId,
+      appointmentId: appt.id,
+      actorUserId: membership.userId,
+    });
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Group-lesson invites visible to a student (for the inbox + offline recovery). */
+export async function getGroupLessonInvites(
+  input: z.infer<typeof getGroupLessonInvitesSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getGroupLessonInvitesSchema.parse(input);
+    const companyId = membership.companyId;
+    const now = new Date();
+    const limit = payload.limit ?? 5;
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
+      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+    });
+    if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
+
+    const [invites, appointments, service] = await Promise.all([
+      prisma.autoscuolaGroupLessonInvite.findMany({
+        where: {
+          companyId,
+          status: "broadcasted",
+          expiresAt: { gt: now },
+          groupLesson: { status: "scheduled", startsAt: { gt: now } },
+        },
+        include: {
+          groupLesson: {
+            select: {
+              id: true,
+              startsAt: true,
+              endsAt: true,
+              capacity: true,
+              notes: true,
+              instructor: { select: { name: true } },
+              vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+              appointments: {
+                where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+                select: { studentId: true },
+              },
+            },
+          },
+          responses: { where: { studentId: payload.studentId }, select: { id: true } },
+        },
+        orderBy: { sentAt: "desc" },
+        take: limit * 3,
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: payload.studentId,
+          status: { not: "cancelled" },
+          startsAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        },
+        select: { startsAt: true, endsAt: true },
+      }),
+      prisma.companyService.findFirst({
+        where: { companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
+    ]);
+
+    const vehiclesEnabled =
+      (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+
+    // No weekly-availability gate: a group lesson is a fixed-time offer. Show it
+    // to any opted-in, license-compatible student who isn't already enrolled or
+    // busy at that time. Dedup to ONE invite per group lesson (latest first).
+    const seenGroupLessons = new Set<string>();
+    const visible = invites
+      .filter((inv) => !inv.responses.length)
+      .filter((inv) => {
+        const gl = inv.groupLesson;
+        if (!gl || !gl.endsAt) return false;
+        if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
+        if (gl.appointments.length >= gl.capacity) return false;
+        if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) return false;
+        if (hasAppointmentConflict(appointments, gl.startsAt, gl.endsAt)) return false;
+        if (seenGroupLessons.has(gl.id)) return false;
+        seenGroupLessons.add(gl.id);
+        return true;
+      })
+      .slice(0, limit)
+      .map((inv) => {
+        const gl = inv.groupLesson!;
+        return {
+          inviteId: inv.id,
+          groupLessonId: gl.id,
+          startsAt: gl.startsAt.toISOString(),
+          endsAt: gl.endsAt ? gl.endsAt.toISOString() : null,
+          capacity: gl.capacity,
+          filledSeats: gl.appointments.length,
+          openSeats: Math.max(0, gl.capacity - gl.appointments.length),
+          instructorName: gl.instructor?.name ?? null,
+          vehicleName: gl.vehicle?.name ?? null,
+          notes: gl.notes,
+          expiresAt: inv.expiresAt.toISOString(),
+        };
+      });
+
+    return { success: true as const, data: visible };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
 }
 
 // ── Out-of-availability detection & override approval ─────────────────

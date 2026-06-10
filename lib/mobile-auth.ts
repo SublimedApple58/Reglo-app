@@ -52,13 +52,24 @@ export async function getMobileToken(token: string) {
     ? new Date(now.getTime() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000)
     : undefined;
 
-  await prisma.mobileAccessToken.update({
-    where: { id: record.id },
-    data: {
-      lastUsedAt: now,
-      ...(newExpiresAt ? { expiresAt: newExpiresAt } : {}),
-    },
-  });
+  // Throttle the lastUsedAt write so we don't issue a DB write on every single
+  // mobile request. Persist at most once per hour, or whenever the sliding
+  // expiration actually needs extending. Revocation stays immediate because
+  // the findFirst above always hits the DB.
+  const LAST_USED_THROTTLE_MS = 60 * 60 * 1000;
+  const lastUsedStale =
+    !record.lastUsedAt ||
+    now.getTime() - record.lastUsedAt.getTime() > LAST_USED_THROTTLE_MS;
+
+  if (newExpiresAt || lastUsedStale) {
+    await prisma.mobileAccessToken.update({
+      where: { id: record.id },
+      data: {
+        lastUsedAt: now,
+        ...(newExpiresAt ? { expiresAt: newExpiresAt } : {}),
+      },
+    });
+  }
   return record;
 }
 

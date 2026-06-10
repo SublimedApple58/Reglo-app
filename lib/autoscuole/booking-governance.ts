@@ -10,7 +10,6 @@ export type AppBookingActors = (typeof APP_BOOKING_ACTOR_OPTIONS)[number];
 export const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   "manual_full",
   "manual_engine",
-  "guided_proposal",
 ] as const;
 export type InstructorBookingMode = (typeof INSTRUCTOR_BOOKING_MODE_OPTIONS)[number];
 
@@ -66,4 +65,53 @@ export const getBookingGovernanceForCompany = async (
 ): Promise<BookingGovernanceSettings> => {
   const limits = await getCachedCompanyServiceLimits(companyId);
   return parseBookingGovernanceFromLimits(limits);
+};
+
+/**
+ * Governance resolved with the cascade cluster → company for a given student
+ * (via their assigned autonomous instructor). An unset cluster value inherits
+ * the company default. Use this instead of `getBookingGovernanceForCompany`
+ * whenever a specific student is in scope.
+ */
+export const getBookingGovernanceForStudent = async (
+  companyId: string,
+  studentId: string,
+): Promise<BookingGovernanceSettings> => {
+  const { resolveEffectiveBookingSettings, buildCompanyBookingDefaults } = await import(
+    "@/lib/autoscuole/instructor-clusters"
+  );
+  const limits = await getCachedCompanyServiceLimits(companyId);
+  const effective = await resolveEffectiveBookingSettings(
+    companyId,
+    studentId,
+    buildCompanyBookingDefaults(limits),
+  );
+  return {
+    appBookingActors: effective.appBookingActors,
+    instructorBookingMode: effective.instructorBookingMode,
+  };
+};
+
+/**
+ * Governance resolved with the cascade cluster → company for a given instructor
+ * (their own cluster). An unset cluster value inherits the company default. Use
+ * this whenever a specific instructor is the actor.
+ */
+export const getBookingGovernanceForInstructor = async (
+  companyId: string,
+  instructorId: string,
+): Promise<BookingGovernanceSettings> => {
+  const { resolveEffectiveSettingsForInstructor, buildCompanyBookingDefaults } = await import(
+    "@/lib/autoscuole/instructor-clusters"
+  );
+  const limits = await getCachedCompanyServiceLimits(companyId);
+  const effective = await resolveEffectiveSettingsForInstructor(
+    companyId,
+    instructorId,
+    buildCompanyBookingDefaults(limits),
+  );
+  return {
+    appBookingActors: effective.appBookingActors,
+    instructorBookingMode: effective.instructorBookingMode,
+  };
 };

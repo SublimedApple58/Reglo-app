@@ -12,13 +12,13 @@ Quiz ministeriali per la teoria della patente. Pool globale di domande condiviso
 
 ### Student tables (companyId + studentId)
 
-- **QuizSession** — una per tentativo (`mode` EXAM/CHAPTER/REVIEW, `questionIds[]`, `status`, `correctCount`, `wrongCount`, `passed`, `timeLimitSec`)
+- **QuizSession** — una per tentativo (`mode` EXAM/PRACTICE/CHAPTER/REVIEW, `questionIds[]`, `status`, `correctCount`, `wrongCount`, `passed`, `timeLimitSec`)
 - **QuizAnswer** — una per risposta (`sessionId` FK, `questionId` FK, `studentAnswer`, `isCorrect`)
 - **QuizStudentQuestionStat** — stats aggregate per domanda per studente (unique `[companyId, studentId, questionId]`)
 
 ### Enum
 
-- **QuizSessionMode**: `EXAM`, `CHAPTER`, `REVIEW`
+- **QuizSessionMode**: `EXAM`, `PRACTICE`, `CHAPTER`, `REVIEW`
 
 ## Feature Flag
 
@@ -54,8 +54,15 @@ Quiz ministeriali per la teoria della patente. Pool globale di domande condiviso
 ### Exam (30 domande, 20 min, max 3 errori)
 - Cap 1-10: 2 domande random ciascuno = 20
 - Cap 11-25: 10 capitoli random su 15, 1 domanda ciascuno = 10
-- Escludi domande delle ultime 3 sessioni esame
+- Escludi domande delle ultime 3 sessioni EXAM/PRACTICE
 - Auto-fail se wrongCount > 3
+- Mobile: nessun feedback durante la sessione, risultati solo alla fine
+
+### Practice (30 domande, no timer, no auto-fail)
+- Stesse domande di Exam (stessa `generateExamQuestions`)
+- `timeLimitSec = null`, `passed = null`
+- Mobile: feedback immediato domanda per domanda (banner + hint)
+- Escluso da exam stats e readinessScore (filtra solo EXAM)
 
 ### Chapter (max 20 domande)
 - Priorità: mai viste > sbagliate > corrette

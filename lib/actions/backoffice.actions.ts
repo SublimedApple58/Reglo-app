@@ -484,6 +484,138 @@ export async function getCompanyStudentPlatforms(companyId: string) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Student-phase / quiz-seats — backoffice helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the live count of quiz seats currently consumed by the autoscuola.
+ * A seat is "consumed" when a member has a non-null `quizSeatGrantedAt`.
+ * Once granted, it is burnt for life and the counter only grows.
+ */
+export async function getQuizSeatsUsage(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+    const used = await prisma.companyMember.count({
+      where: {
+        companyId,
+        role: "member",
+        quizSeatGrantedAt: { not: null },
+      },
+    });
+    return { success: true as const, data: { used } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export type TeoriaAffectedStudent = {
+  /**
+   * Stable identifier of the affected student within this company.
+   * It is the user's UUID (CompanyMember has a composite PK on
+   * `(companyId, userId)`, so userId uniquely identifies the member here).
+   */
+  id: string;
+  name: string | null;
+  email: string;
+  phase: "TEORIA" | "AWAITING";
+  quizSeatGrantedAt: string | null;
+  createdAt: string;
+};
+
+/**
+ * Returns the list of students that would be affected if the autoscuola
+ * disabled the TEORIA phase: every member currently in TEORIA or AWAITING.
+ */
+export async function getTeoriaAffectedStudents(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+    const members = await prisma.companyMember.findMany({
+      where: {
+        companyId,
+        role: "member",
+        studentPhase: { in: ["TEORIA", "AWAITING"] },
+      },
+      select: {
+        userId: true,
+        studentPhase: true,
+        quizSeatGrantedAt: true,
+        createdAt: true,
+        user: { select: { name: true, email: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const data: TeoriaAffectedStudent[] = members.map((m) => ({
+      id: m.userId,
+      name: m.user?.name ?? null,
+      email: m.user?.email ?? "",
+      phase: m.studentPhase as "TEORIA" | "AWAITING",
+      quizSeatGrantedAt: m.quizSeatGrantedAt?.toISOString() ?? null,
+      createdAt: m.createdAt.toISOString(),
+    }));
+    return { success: true as const, data };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const deactivateTeoriaWithResolutionSchema = z.object({
+  companyId: z.string().uuid(),
+  resolutions: z.array(
+    z.object({
+      // Member identifier in the dialog payload — equals the user's UUID,
+      // matching `TeoriaAffectedStudent.id` returned by getTeoriaAffectedStudents.
+      memberId: z.string().uuid(),
+      action: z.enum(["move_to_pratica", "keep_in_teoria"]),
+    }),
+  ),
+});
+
+/**
+ * Applies a batch resolution when the global admin is about to deactivate
+ * TEORIA on an autoscuola that still has students in TEORIA or AWAITING.
+ *
+ * Per the product decision: the seat (quizSeatGrantedAt) is burnt for life
+ * and is never revoked here — only the phase moves. AWAITING students
+ * "moved to PRATICA" simply leave the awaiting state. Students "kept in
+ * TEORIA" remain there even though the company-wide phase is disabled
+ * (edge-case grandfathering).
+ *
+ * NOTE: this only mutates students. The caller (UI) is then responsible
+ * for calling `updateCompanyService` to persist `phasesEnabled` without
+ * 'TEORIA'.
+ */
+export async function deactivateTeoriaWithResolution(
+  input: z.infer<typeof deactivateTeoriaWithResolutionSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const payload = deactivateTeoriaWithResolutionSchema.parse(input);
+
+    const toMoveUserIds = payload.resolutions
+      .filter((r) => r.action === "move_to_pratica")
+      .map((r) => r.memberId);
+
+    if (toMoveUserIds.length > 0) {
+      await prisma.companyMember.updateMany({
+        where: {
+          companyId: payload.companyId,
+          userId: { in: toMoveUserIds },
+        },
+        data: {
+          studentPhase: "PRATICA",
+          phaseClassifiedAt: new Date(),
+        },
+      });
+    }
+
+    return { success: true as const, data: { moved: toMoveUserIds.length } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function backofficeSignIn(input: z.infer<typeof backofficeSignInSchema>) {
   try {
     const payload = backofficeSignInSchema.parse(input);

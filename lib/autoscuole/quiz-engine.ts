@@ -15,7 +15,7 @@ export async function generateExamQuestions(
 ): Promise<string[]> {
   // Get question IDs from last 3 exam sessions to exclude
   const recentSessions = await prisma.quizSession.findMany({
-    where: { studentId, companyId, mode: "EXAM" },
+    where: { studentId, companyId, mode: { in: ["EXAM", "PRACTICE"] } },
     orderBy: { startedAt: "desc" },
     take: 3,
     select: { questionIds: true },

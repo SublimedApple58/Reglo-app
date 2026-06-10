@@ -5,6 +5,41 @@ import { hash } from "@/lib/encrypt";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
+import type { ServiceLimits } from "@/lib/services";
+
+/**
+ * Decide which student phase and quiz seat status a new sign-up should land in,
+ * based on the autoscuola configuration (`phasesEnabled`, `autoAssignQuizOnSignup`,
+ * `quizSeats`) and the live count of seats already consumed.
+ *
+ *   TEORIA disabled  → PRATICA (legacy default, no quiz seat)
+ *   TEORIA enabled + auto-assign OFF → AWAITING
+ *   TEORIA enabled + auto-assign ON + free seat → TEORIA + seat granted
+ *   TEORIA enabled + auto-assign ON + no free seat → AWAITING (soft degrade)
+ */
+function decideOnboardingPhase(
+  limits: ServiceLimits | null,
+  seatsConsumed: number,
+): { studentPhase: "TEORIA" | "PRATICA" | "AWAITING"; grantSeat: boolean } {
+  const phasesEnabled = Array.isArray(limits?.phasesEnabled)
+    ? limits!.phasesEnabled
+    : ["PRATICA"];
+  if (!phasesEnabled.includes("TEORIA")) {
+    return { studentPhase: "PRATICA", grantSeat: false };
+  }
+  const autoAssign = Boolean(limits?.autoAssignQuizOnSignup);
+  if (!autoAssign) {
+    return { studentPhase: "AWAITING", grantSeat: false };
+  }
+  const quizSeats =
+    typeof limits?.quizSeats === "number" && Number.isFinite(limits.quizSeats)
+      ? Math.max(0, Math.floor(limits.quizSeats))
+      : 0;
+  if (seatsConsumed < quizSeats) {
+    return { studentPhase: "TEORIA", grantSeat: true };
+  }
+  return { studentPhase: "AWAITING", grantSeat: false };
+}
 
 export async function POST(request: Request) {
   try {
@@ -53,6 +88,19 @@ export async function POST(request: Request) {
     const passwordHash = await hash(parsed.password);
 
     const result = await prisma.$transaction(async (tx) => {
+      // Resolve the phase + quiz seat state INSIDE the transaction so that
+      // a concurrent registration on the same autoscuola cannot race past the
+      // quizSeats limit (we read the live counter atomically with the create).
+      const limits = (autoscuoleService.limits ?? null) as ServiceLimits | null;
+      const seatsConsumed = await tx.companyMember.count({
+        where: {
+          companyId: company.id,
+          role: "member",
+          quizSeatGrantedAt: { not: null },
+        },
+      });
+      const decision = decideOnboardingPhase(limits, seatsConsumed);
+
       const user = await tx.user.create({
         data: {
           name: parsed.name,
@@ -70,6 +118,23 @@ export async function POST(request: Request) {
           userId: user.id,
           role: "member",
           autoscuolaRole: "STUDENT",
+          studentPhase: decision.studentPhase,
+          quizSeatGrantedAt: decision.grantSeat ? new Date() : null,
+          // We classify the phase explicitly here (auto-assigned by the
+          // system following titolare-configured rules), so the "Conferma
+          // fase" badge in the titolare dashboard does NOT trigger.
+          phaseClassifiedAt: new Date(),
+          // Default pursued license: the autoscuola's configured default (moto
+          // schools set it once), falling back to B / manual. The titolare can
+          // still change it per-student when classifying in PRATICA.
+          licenseCategory:
+            (limits as Record<string, unknown> | null)?.defaultLicenseCategory as
+              | string
+              | undefined ?? "B",
+          transmission:
+            (limits as Record<string, unknown> | null)?.defaultTransmission as
+              | string
+              | undefined ?? "manual",
         },
       });
 

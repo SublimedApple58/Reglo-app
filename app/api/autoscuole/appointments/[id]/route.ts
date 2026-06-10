@@ -14,6 +14,7 @@ export async function PATCH(
     rating: payload.rating,
     notes: payload.notes,
     locationId: payload.locationId,
+    instructorId: payload.instructorId,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

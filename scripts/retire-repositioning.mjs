@@ -2,12 +2,13 @@
 // scripts/retire-repositioning.mjs
 //
 // One-off cleanup for the "repositioning retired" flash release.
-// Across ALL companies it:
-//   1. Cancels every still-pending reposition task (so the engine stops trying).
-//   2. Cancels every live `proposal` appointment (orphaned offers that can no
-//      longer be regenerated), refunding the lesson credit when the proposal is
-//      still in the future and a credit had been applied — mirroring
-//      refundLessonCreditIfEligible + adjustStudentLessonCredits.
+// Across ALL companies it cancels every live `proposal` appointment (orphaned
+// offers that can no longer be regenerated), refunding the lesson credit when
+// the proposal is still in the future and a credit had been applied — mirroring
+// refundLessonCreditIfEligible + adjustStudentLessonCredits.
+//
+// (The AutoscuolaAppointmentRepositionTask table is dropped by the same release
+// migration, so there are no reposition tasks left to close here.)
 //
 // DRY RUN by default — prints what it would do. Pass --apply to write.
 //
@@ -29,14 +30,7 @@ async function main() {
     `\n=== Retire repositioning — ${APPLY ? "APPLY (writing)" : "DRY RUN (no writes)"} — ${fmt(now)} ===\n`,
   );
 
-  // ── 1. Pending reposition tasks ───────────────────────────────────────────
-  const pendingTasks = await prisma.autoscuolaAppointmentRepositionTask.findMany({
-    where: { status: "pending" },
-    select: { id: true, companyId: true, reason: true },
-  });
-  console.log(`Pending reposition tasks to cancel: ${pendingTasks.length}`);
-
-  // ── 2. Live proposals (all companies) ─────────────────────────────────────
+  // ── Live proposals (all companies) ────────────────────────────────────────
   const proposals = await prisma.autoscuolaAppointment.findMany({
     where: { status: "proposal" },
     select: {
@@ -75,12 +69,6 @@ async function main() {
   }
 
   // ── Execute ───────────────────────────────────────────────────────────────
-  const taskRes = await prisma.autoscuolaAppointmentRepositionTask.updateMany({
-    where: { status: "pending" },
-    data: { status: "cancelled", lastAttemptAt: now, nextAttemptAt: null },
-  });
-  console.log(`Cancelled ${taskRes.count} pending reposition tasks.`);
-
   let cancelled = 0;
   let refunded = 0;
   for (const p of proposals) {

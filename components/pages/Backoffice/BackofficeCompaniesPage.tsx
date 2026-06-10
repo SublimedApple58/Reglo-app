@@ -12,6 +12,7 @@ import {
   PhoneOff,
   CircleCheck,
   CircleX,
+  Layers,
 } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -44,14 +45,22 @@ import {
 } from "@/components/ui/table";
 import {
   assignAutoscuolaVoiceLine,
+  deactivateTeoriaWithResolution,
   deleteCompany,
   getCompanyStudentPlatforms,
+  getQuizSeatsUsage,
+  getTeoriaAffectedStudents,
   getVoiceLineDisplayNumber,
   provisionAutoscuolaVoiceLine,
   checkVoiceLineStatus,
   unassignAutoscuolaVoiceLine,
   updateCompanyService,
+  type TeoriaAffectedStudent,
 } from "@/lib/actions/backoffice.actions";
+import {
+  BackofficeResolveTeoriaDeactivationDialog,
+  type TeoriaResolution,
+} from "@/components/pages/Backoffice/BackofficeResolveTeoriaDeactivationDialog";
 import {
   DEFAULT_SERVICE_LIMITS,
   type CompanyServiceInfo,
@@ -74,9 +83,11 @@ export type BackofficeCompanyRow = {
 
 function AutoscuolaDrawerContent({
   companyId,
+  companyName,
   service,
 }: {
   companyId: string;
+  companyName: string;
   service?: CompanyServiceInfo;
 }) {
   const toast = useFeedbackToast();
@@ -135,6 +146,55 @@ function AutoscuolaDrawerContent({
       });
     }
   }, [voiceDisplayNumber, voiceLineRef]);
+
+  // ── Student-phase: quiz seats usage + TEORIA deactivation flow ──────────
+  const phasesEnabled: ("TEORIA" | "PRATICA")[] = Array.isArray(limits.phasesEnabled)
+    ? (limits.phasesEnabled.filter(
+        (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
+      ))
+    : ["PRATICA"];
+  const teoriaEnabled = phasesEnabled.includes("TEORIA");
+  const praticaEnabled = phasesEnabled.includes("PRATICA");
+  const quizSeats =
+    typeof limits.quizSeats === "number" && Number.isFinite(limits.quizSeats)
+      ? Math.max(0, Math.floor(limits.quizSeats))
+      : 0;
+  const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+
+  const [quizSeatsUsed, setQuizSeatsUsed] = useState<number | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getQuizSeatsUsage(companyId).then((res) => {
+      if (cancelled) return;
+      if (res.success) setQuizSeatsUsed(res.data.used);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
+
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolveStudents, setResolveStudents] = useState<TeoriaAffectedStudent[]>([]);
+  const [isResolving, setIsResolving] = useState(false);
+
+  const togglePhase = (phase: "TEORIA" | "PRATICA", checked: boolean) => {
+    setLimits((prev) => {
+      const current = Array.isArray(prev.phasesEnabled)
+        ? prev.phasesEnabled.filter((p) => p === "TEORIA" || p === "PRATICA")
+        : ["PRATICA" as const];
+      let next = checked
+        ? Array.from(new Set([...current, phase]))
+        : current.filter((p) => p !== phase);
+      // Constraint: at least one phase must remain
+      if (next.length === 0) next = [phase === "TEORIA" ? "PRATICA" : "TEORIA"];
+      return {
+        ...prev,
+        phasesEnabled: next as ("TEORIA" | "PRATICA")[],
+        // When TEORIA is removed, auto-assign loses meaning — reset it.
+        autoAssignQuizOnSignup: next.includes("TEORIA") ? prev.autoAssignQuizOnSignup : false,
+      };
+    });
+  };
 
   const [isCheckingStatus, startCheckingStatus] = useTransition();
 
@@ -227,20 +287,81 @@ function AutoscuolaDrawerContent({
     });
   };
 
+  const persistLimits = async (limitsToPersist: ServiceLimits) => {
+    const res = await updateCompanyService({
+      companyId,
+      serviceKey: "AUTOSCUOLE",
+      status,
+      // ServiceLimits values are JSON-friendly; the action's Zod schema accepts
+      // the same shape but typed as Record<string, primitive>. Cast to the
+      // expected loose record type.
+      limits: limitsToPersist as Record<
+        string,
+        string | number | boolean | null | string[] | number[] | Record<string, unknown>
+      >,
+    });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare." });
+      return false;
+    }
+    toast.success({ description: "Autoscuola aggiornata." });
+    return true;
+  };
+
   const handleSave = () => {
     startTransition(async () => {
-      const res = await updateCompanyService({
+      // Detect TEORIA deactivation: previously enabled (from service.limits)
+      // and now disabled (in working `limits`).
+      const prevTeoria = Array.isArray(service?.limits?.phasesEnabled)
+        ? service.limits.phasesEnabled.includes("TEORIA")
+        : false;
+      const nextTeoria = teoriaEnabled;
+
+      if (prevTeoria && !nextTeoria) {
+        const affected = await getTeoriaAffectedStudents(companyId);
+        if (!affected.success) {
+          toast.error({
+            description: affected.message ?? "Impossibile leggere gli allievi.",
+          });
+          return;
+        }
+        if (affected.data.length > 0) {
+          // Open the dialog and stop here. The dialog's onConfirm will resume
+          // the save flow with the resolutions applied.
+          setResolveStudents(affected.data);
+          setResolveOpen(true);
+          return;
+        }
+      }
+
+      await persistLimits(limits);
+    });
+  };
+
+  const handleResolveConfirm = async (resolutions: TeoriaResolution[]) => {
+    setIsResolving(true);
+    try {
+      const res = await deactivateTeoriaWithResolution({
         companyId,
-        serviceKey: "AUTOSCUOLE",
-        status,
-        limits,
+        resolutions,
       });
       if (!res.success) {
-        toast.error({ description: res.message ?? "Impossibile aggiornare." });
+        toast.error({
+          description: res.message ?? "Impossibile applicare le decisioni.",
+        });
         return;
       }
-      toast.success({ description: "Autoscuola aggiornata." });
-    });
+      const ok = await persistLimits(limits);
+      if (!ok) return;
+      setResolveOpen(false);
+      // Refresh seat counter (count never decreases, but resolutions might
+      // include AWAITING members so the visible numbers can change).
+      getQuizSeatsUsage(companyId).then((u) => {
+        if (u.success) setQuizSeatsUsed(u.data.used);
+      });
+    } finally {
+      setIsResolving(false);
+    }
   };
 
   return (
@@ -534,31 +655,124 @@ function AutoscuolaDrawerContent({
         )}
       </section>
 
-      {/* ── Quiz Patente ── */}
+      {/* ── Fasi attive del percorso ── */}
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
-              <GraduationCap className="h-4 w-4 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground">Quiz Patente</p>
-              <p className="text-xs text-muted-foreground">Quiz teoria ministeriali per gli studenti</p>
-            </div>
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50">
+            <Layers className="h-4 w-4 text-indigo-600" />
           </div>
-          <Checkbox
-            checked={Boolean(limits.quizEnabled)}
-            onCheckedChange={(checked) =>
-              setLimits((prev) => ({ ...prev, quizEnabled: Boolean(checked) }))
-            }
-          />
+          <div>
+            <p className="text-sm font-semibold text-foreground">Fasi attive del percorso</p>
+            <p className="text-xs text-muted-foreground">
+              Scegli quali fasi del percorso allievo questa autoscuola offre. Almeno una deve essere attiva.
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+            <div>
+              <p className="text-sm font-medium text-foreground">Teoria</p>
+              <p className="text-xs text-muted-foreground">
+                Allievi possono fare quiz teoria. Abilita la gestione licenze qui sotto.
+              </p>
+            </div>
+            <Checkbox
+              checked={teoriaEnabled}
+              onCheckedChange={(checked) => togglePhase("TEORIA", Boolean(checked))}
+            />
+          </label>
+          <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+            <div>
+              <p className="text-sm font-medium text-foreground">Pratica</p>
+              <p className="text-xs text-muted-foreground">
+                Allievi possono prenotare guide. Comportamento di default.
+              </p>
+            </div>
+            <Checkbox
+              checked={praticaEnabled}
+              onCheckedChange={(checked) => togglePhase("PRATICA", Boolean(checked))}
+            />
+          </label>
         </div>
       </section>
+
+      {/* ── Quiz Teoria — Gestione licenze (visibile solo se TEORIA è attiva) ── */}
+      {teoriaEnabled && (
+        <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50">
+                <GraduationCap className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Quiz Teoria — Gestione licenze</p>
+                <p className="text-xs text-muted-foreground">
+                  Numero di posti allievo acquistati. I posti sono nominali e si consumano a vita.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <label className="mb-1.5 block text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Posti acquistati
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step={1}
+                value={String(quizSeats)}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  const n = raw === "" ? 0 : Math.max(0, Math.floor(Number(raw)));
+                  setLimits((prev) => ({
+                    ...prev,
+                    quizSeats: Number.isFinite(n) ? n : 0,
+                  }));
+                }}
+                className="h-9 w-32"
+              />
+            </div>
+            <div className="mb-1 flex-1 text-right">
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                Posti usati
+              </p>
+              <p
+                className={cn(
+                  "text-base font-semibold tabular-nums",
+                  quizSeatsUsed !== null && quizSeatsUsed > quizSeats
+                    ? "text-red-600"
+                    : "text-foreground",
+                )}
+              >
+                {quizSeatsUsed ?? "—"} <span className="text-muted-foreground">/ {quizSeats}</span>
+              </p>
+            </div>
+          </div>
+          {quizSeatsUsed !== null && quizSeatsUsed > quizSeats && (
+            <p className="mt-2 text-xs text-red-600">
+              Attenzione: i posti usati superano la soglia. Gli allievi già attivi mantengono la licenza, ma nuove assegnazioni saranno bloccate.
+            </p>
+          )}
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            Suggerimento: il valore <strong>autoAssignQuizOnSignup</strong> ({autoAssignQuizOnSignup ? "ON" : "OFF"}) si gestisce dalla web app del titolare.
+          </p>
+        </section>
+      )}
 
       {/* ── Save ── */}
       <Button onClick={handleSave} disabled={isPending} className="w-full">
         {isPending ? "Salvataggio..." : "Salva modifiche"}
       </Button>
+
+      <BackofficeResolveTeoriaDeactivationDialog
+        open={resolveOpen}
+        onOpenChange={setResolveOpen}
+        companyName={companyName}
+        students={resolveStudents}
+        isSubmitting={isResolving}
+        onConfirm={handleResolveConfirm}
+      />
     </div>
   );
 }
@@ -812,6 +1026,7 @@ export default function BackofficeCompaniesPage({
               <AutoscuolaDrawerContent
                 key={selected.id}
                 companyId={selected.id}
+                companyName={selected.name}
                 service={selected.services.find((s) => s.key === "AUTOSCUOLE")}
               />
             )}
