@@ -9,7 +9,10 @@ import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
-import { prepareAppointmentPaymentSnapshot } from "@/lib/autoscuole/payments";
+import {
+  prepareAppointmentPaymentSnapshot,
+  getGroupLessonPenaltySnapshot,
+} from "@/lib/autoscuole/payments";
 import {
   getBookingGovernanceForInstructor,
   isStudentAppBookingEnabled,
@@ -4242,6 +4245,667 @@ export async function broadcastWaitlistOffer({
   }
 
   return offer;
+}
+
+// ── Group lesson invites (Guide di gruppo) ────────────────────────────
+// Invite eligible students to self-enrol into a group lesson. Mirrors the
+// waitlist offer pattern, but seats live on the AutoscuolaGroupLesson container
+// (capacity), so accept fills a seat via an optimistic-locked transaction
+// (SELECT ... FOR UPDATE on the lesson row) instead of booking availability slots.
+
+const GROUP_LESSON_ACTIVE_STATUSES = ["scheduled", "confirmed", "proposal", "checked_in"];
+
+const respondGroupLessonInviteSchema = z.object({
+  inviteId: z.string().uuid(),
+  studentId: z.string().uuid(),
+  response: z.enum(["accept", "decline"]),
+});
+
+const getGroupLessonInvitesSchema = z.object({
+  studentId: z.string().uuid(),
+  limit: z.number().int().min(1).max(20).optional(),
+});
+
+const inviteToGroupLessonSchema = z.object({
+  groupLessonId: z.string().uuid(),
+  expiresInHours: z.number().int().min(1).max(168).optional(),
+});
+
+type GroupLessonVehicleLicense = {
+  licenseCategory: string | null;
+  transmission: string | null;
+} | null;
+
+/**
+ * Create an invite for a group lesson and notify all eligible students
+ * (opted-in, license-compatible with the lesson vehicle when the vehicles
+ * module is on, available, no time conflict, not already enrolled). Returns the
+ * created invite (or null if the lesson is full / has no open seats).
+ */
+export async function broadcastGroupLessonInvite({
+  companyId,
+  groupLessonId,
+  expiresAt,
+}: {
+  companyId: string;
+  groupLessonId: string;
+  expiresAt: Date;
+}) {
+  const gl = await prisma.autoscuolaGroupLesson.findFirst({
+    where: { id: groupLessonId, companyId, status: "scheduled" },
+    select: {
+      id: true,
+      startsAt: true,
+      endsAt: true,
+      capacity: true,
+      vehicle: { select: { licenseCategory: true, transmission: true } },
+      appointments: {
+        where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        select: { studentId: true },
+      },
+    },
+  });
+  if (!gl || !gl.endsAt) return null;
+  const openSeats = gl.capacity - gl.appointments.length;
+  if (openSeats <= 0) return null;
+
+  // Keep at most ONE active invite per group lesson: supersede any previous
+  // broadcasted invites for this lesson before creating the new one. Avoids the
+  // student seeing N notifications for the same lesson after re-inviting.
+  await prisma.autoscuolaGroupLessonInvite.updateMany({
+    where: { groupLessonId: gl.id, status: "broadcasted" },
+    data: { status: "superseded" },
+  });
+
+  const invite = await prisma.autoscuolaGroupLessonInvite.create({
+    data: {
+      companyId,
+      groupLessonId: gl.id,
+      status: "broadcasted",
+      sentAt: new Date(),
+      expiresAt,
+    },
+  });
+
+  const enrolled = new Set(gl.appointments.map((a) => a.studentId));
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const vehiclesEnabled =
+    (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+  const vehicle: GroupLessonVehicleLicense = gl.vehicle ?? null;
+
+  const students = await prisma.companyMember.findMany({
+    where: { companyId, autoscuolaRole: "STUDENT", groupLessonsOptIn: true },
+    include: { user: { select: { id: true, email: true, phone: true } } },
+  });
+  const candidateIds = students
+    .map((s) => s.user.id)
+    .filter((id) => !enrolled.has(id));
+  if (!candidateIds.length) return invite;
+
+  // A group lesson is a fixed-time event the school offers, NOT a student-driven
+  // booking — so we do NOT require the student to have declared a weekly
+  // availability covering the slot (that gate excluded students with no
+  // availability set). Eligibility = opted-in + license-compatible + not already
+  // busy at that exact time.
+  const dayBounds = getDayBoundsForDate(gl.startsAt);
+  const appointments = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId: { in: candidateIds },
+      status: { not: "cancelled" },
+      startsAt: { gte: dayBounds.start, lt: dayBounds.end },
+    },
+    select: { studentId: true, startsAt: true, endsAt: true },
+  });
+  const appointmentsByStudent = new Map<string, Array<{ startsAt: Date; endsAt: Date | null }>>();
+  for (const appointment of appointments) {
+    const list = appointmentsByStudent.get(appointment.studentId) ?? [];
+    list.push({ startsAt: appointment.startsAt, endsAt: appointment.endsAt });
+    appointmentsByStudent.set(appointment.studentId, list);
+  }
+
+  const eligible = students.filter((student) => {
+    const id = student.user.id;
+    if (enrolled.has(id)) return false;
+    if (vehiclesEnabled && vehicle && !vehicleServesLicense(vehicle, student)) return false;
+    const booked = appointmentsByStudent.get(id) ?? [];
+    if (hasAppointmentConflict(booked, gl.startsAt, gl.endsAt!)) return false;
+    return true;
+  });
+  if (!eligible.length) return invite;
+
+  const channels = normalizeChannels(
+    (service?.limits as Record<string, unknown> | null)?.slotFillChannels,
+    DEFAULT_SLOT_FILL_CHANNELS,
+  );
+  const formattedDate = gl.startsAt.toLocaleDateString("it-IT", { timeZone: AUTOSCUOLA_TIMEZONE });
+  const formattedTime = gl.startsAt.toLocaleTimeString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const title = "👥 Guida di gruppo disponibile";
+  const message = `C'è posto in una guida di gruppo il ${formattedDate} alle ${formattedTime}. Apri Reglo per iscriverti.`;
+
+  if (channels.includes("push")) {
+    const userIds = Array.from(new Set(eligible.map((s) => s.user.id)));
+    if (userIds.length) {
+      try {
+        await sendAutoscuolaPushToUsers({
+          companyId,
+          userIds,
+          title,
+          body: message,
+          data: {
+            kind: "group_lesson_invite",
+            inviteId: invite.id,
+            groupLessonId: gl.id,
+            startsAt: gl.startsAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        console.error("Group lesson invite push error", error);
+      }
+    }
+  }
+  for (const student of eligible) {
+    if (channels.includes("email") && student.user.email) {
+      try {
+        await sendDynamicEmail({ to: student.user.email, subject: title, body: message });
+      } catch (error) {
+        console.error("Group lesson invite email error", error);
+      }
+    }
+    if (channels.includes("whatsapp") && student.user.phone) {
+      try {
+        await sendAutoscuolaWhatsApp({ to: student.user.phone, body: message });
+      } catch (error) {
+        console.error("Group lesson invite WhatsApp error", error);
+      }
+    }
+  }
+
+  return invite;
+}
+
+/** Owner/instructor-triggered broadcast of a group-lesson invite. */
+export async function inviteToGroupLesson(input: z.infer<typeof inviteToGroupLessonSchema>) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = inviteToGroupLessonSchema.parse(input);
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: payload.groupLessonId, companyId: membership.companyId, status: "scheduled" },
+      select: { id: true, startsAt: true },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    // Expire at the lesson start or in `expiresInHours` (default 24h), whichever is sooner.
+    const hours = payload.expiresInHours ?? 24;
+    const byHours = new Date(Date.now() + hours * 60 * 60 * 1000);
+    const expiresAt = gl.startsAt < byHours ? gl.startsAt : byHours;
+    if (expiresAt <= new Date()) {
+      return { success: false as const, message: "La guida è già iniziata." };
+    }
+
+    const invite = await broadcastGroupLessonInvite({
+      companyId: membership.companyId,
+      groupLessonId: gl.id,
+      expiresAt,
+    });
+    if (!invite) {
+      return { success: false as const, message: "Nessun posto disponibile da invitare." };
+    }
+    return { success: true as const, data: { inviteId: invite.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function respondGroupLessonInvite(
+  input: z.infer<typeof respondGroupLessonInviteSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = respondGroupLessonInviteSchema.parse(input);
+    const companyId = membership.companyId;
+    const now = new Date();
+
+    const invite = await prisma.autoscuolaGroupLessonInvite.findFirst({
+      where: { id: payload.inviteId, companyId },
+      include: {
+        groupLesson: {
+          select: {
+            id: true,
+            startsAt: true,
+            endsAt: true,
+            capacity: true,
+            status: true,
+            instructorId: true,
+            priceAmount: true,
+            notes: true,
+            vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
+          },
+        },
+      },
+    });
+    if (!invite) return { success: false as const, message: "Invito non trovato." };
+    if (invite.status !== "broadcasted" || invite.expiresAt < now) {
+      return { success: false as const, message: "Invito non più valido." };
+    }
+    const gl = invite.groupLesson;
+    if (!gl || gl.status !== "scheduled" || !gl.endsAt) {
+      return { success: false as const, message: "Guida di gruppo non più disponibile." };
+    }
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
+      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+    });
+    if (!member) return { success: false as const, message: "Allievo non valido." };
+
+    const existingResponse = await prisma.autoscuolaGroupLessonInviteResponse.findFirst({
+      where: { inviteId: invite.id, studentId: payload.studentId },
+      select: { id: true },
+    });
+    if (existingResponse) {
+      return { success: false as const, message: "Hai già risposto a questo invito." };
+    }
+
+    if (payload.response === "decline") {
+      await prisma.autoscuolaGroupLessonInviteResponse.create({
+        data: {
+          inviteId: invite.id,
+          studentId: payload.studentId,
+          status: "declined",
+          respondedAt: now,
+        },
+      });
+      return { success: true as const, data: { accepted: false } };
+    }
+
+    // Accept path — validate eligibility before competing for a seat.
+    if (!member.groupLessonsOptIn) {
+      return { success: false as const, message: "Non sei abilitato alle guide di gruppo." };
+    }
+    const service = await prisma.companyService.findFirst({
+      where: { companyId, serviceKey: "AUTOSCUOLE" },
+      select: { limits: true },
+    });
+    const vehiclesEnabled =
+      (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
+      return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
+    }
+
+    const dayBounds = getDayBoundsForDate(gl.startsAt);
+    const studentAppointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: payload.studentId,
+        status: { not: "cancelled" },
+        startsAt: { gte: dayBounds.start, lt: dayBounds.end },
+      },
+      select: { startsAt: true, endsAt: true },
+    });
+    if (hasAppointmentConflict(studentAppointments, gl.startsAt, gl.endsAt)) {
+      return { success: false as const, message: "Hai già un impegno in questa fascia oraria." };
+    }
+
+    const { penaltyCutoffAt, penaltyAmount } = await getGroupLessonPenaltySnapshot({
+      companyId,
+      startsAt: gl.startsAt,
+      price: Number(gl.priceAmount),
+    });
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Serialize concurrent accepts on this lesson so the seat count is exact.
+      await tx.$queryRaw`SELECT id FROM "AutoscuolaGroupLesson" WHERE id = ${gl.id}::uuid FOR UPDATE`;
+
+      const filled = await tx.autoscuolaAppointment.count({
+        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+      });
+      if (filled >= gl.capacity) {
+        throw new Error("Posti esauriti.");
+      }
+
+      await tx.autoscuolaGroupLessonInviteResponse.create({
+        data: {
+          inviteId: invite.id,
+          studentId: payload.studentId,
+          status: "accepted",
+          respondedAt: now,
+        },
+      });
+
+      const appointment = await tx.autoscuolaAppointment.create({
+        data: {
+          companyId,
+          studentId: payload.studentId,
+          type: "group_lesson",
+          startsAt: gl.startsAt,
+          endsAt: gl.endsAt,
+          status: "scheduled",
+          instructorId: gl.instructorId,
+          vehicleId: gl.vehicle?.id ?? null,
+          notes: gl.notes,
+          groupLessonId: gl.id,
+          paymentRequired: true,
+          paymentStatus: "pending",
+          manualPaymentStatus: "unpaid",
+          priceAmount: gl.priceAmount,
+          penaltyAmount,
+          penaltyCutoffAt,
+          creditApplied: false,
+        },
+      });
+
+      // Close the invite once the last seat is taken.
+      if (filled + 1 >= gl.capacity) {
+        await tx.autoscuolaGroupLessonInvite.updateMany({
+          where: { id: invite.id, status: "broadcasted" },
+          data: { status: "filled" },
+        });
+      }
+
+      return appointment;
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const, data: { accepted: true, appointmentId: result.id } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * Cancel a single group-lesson seat (student withdrawal or instructor removal).
+ * Shared source of truth for the payment treatment + seat re-broadcast.
+ * Authorization is the caller's responsibility — it must pass an
+ * already-resolved appointment that belongs to `companyId`.
+ *
+ * Payment behaviour mirrors a normal lesson (option A): an early cancellation
+ * (before `penaltyCutoffAt`) frees the seat with no charge; a late one — or a
+ * removal after the lesson has happened — stays "da pagare" and surfaces in the
+ * late-cancellations inbox via `cancellationKind` + `penaltyCutoffAt`.
+ */
+export async function cancelGroupLessonParticipantAppointment({
+  companyId,
+  appointmentId,
+  actorUserId,
+}: {
+  companyId: string;
+  appointmentId: string;
+  actorUserId: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const now = new Date();
+
+  const appt = await prisma.autoscuolaAppointment.findFirst({
+    where: {
+      id: appointmentId,
+      companyId,
+      type: "group_lesson",
+      status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      groupLessonId: true,
+      penaltyCutoffAt: true,
+    },
+  });
+  if (!appt || !appt.groupLessonId) {
+    return { success: false, message: "Partecipante non trovato." };
+  }
+
+  const cancelledBeforeCutoff =
+    appt.penaltyCutoffAt != null && now < appt.penaltyCutoffAt;
+
+  await prisma.autoscuolaAppointment.update({
+    where: { id: appt.id },
+    data: {
+      status: "cancelled",
+      cancelledAt: now,
+      cancelledByUserId: actorUserId,
+      cancellationKind: "manual_cancel",
+      ...(cancelledBeforeCutoff
+        ? {
+            paymentRequired: false,
+            paymentStatus: "not_required",
+            manualPaymentStatus: null,
+          }
+        : {}),
+    },
+  });
+
+  const gl = await prisma.autoscuolaGroupLesson.findFirst({
+    where: { id: appt.groupLessonId, companyId },
+    select: {
+      id: true,
+      startsAt: true,
+      status: true,
+      capacity: true,
+      instructor: { select: { userId: true } },
+      _count: {
+        select: {
+          appointments: { where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } } },
+        },
+      },
+    },
+  });
+
+  if (gl) {
+    const openSeats = gl.capacity - gl._count.appointments;
+    const isUpcoming = gl.status === "scheduled" && gl.startsAt > now;
+
+    // Free seat → re-broadcast an invite to the eligible students.
+    if (isUpcoming && openSeats > 0) {
+      const byHours = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const expiresAt = gl.startsAt < byHours ? gl.startsAt : byHours;
+      if (expiresAt > now) {
+        try {
+          await broadcastGroupLessonInvite({
+            companyId,
+            groupLessonId: gl.id,
+            expiresAt,
+          });
+        } catch (error) {
+          console.error("Group lesson re-broadcast error", error);
+        }
+      }
+    }
+
+    // A student withdrawing themselves notifies their instructor.
+    const studentWithdrew = actorUserId === appt.studentId;
+    if (studentWithdrew && gl.instructor?.userId) {
+      const dateLabel = gl.startsAt.toLocaleDateString("it-IT", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: AUTOSCUOLA_TIMEZONE,
+      });
+      const timeLabel = gl.startsAt.toLocaleTimeString("it-IT", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: AUTOSCUOLA_TIMEZONE,
+      });
+      const student = await prisma.user.findUnique({
+        where: { id: appt.studentId },
+        select: { name: true },
+      });
+      try {
+        await sendAutoscuolaPushToUsers({
+          companyId,
+          userIds: [gl.instructor.userId],
+          title: "Ritiro guida di gruppo",
+          body: `${student?.name ?? "Un allievo"} si è ritirato dalla guida di gruppo di ${dateLabel} alle ${timeLabel}.`,
+          data: {
+            kind: "appointment_cancelled",
+            appointmentId: appt.id,
+            startsAt: gl.startsAt.toISOString(),
+          },
+        });
+      } catch (error) {
+        console.error("Group lesson withdrawal push error", error);
+      }
+    }
+  }
+
+  await invalidateAgendaAndPaymentsCache(companyId);
+  return { success: true };
+}
+
+const withdrawFromGroupLessonSchema = z.object({
+  groupLessonId: z.string().uuid(),
+});
+
+/** Student withdraws themselves from a group lesson they are enrolled in. */
+export async function withdrawFromGroupLesson(
+  input: z.infer<typeof withdrawFromGroupLessonSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = withdrawFromGroupLessonSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const appt = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        groupLessonId: payload.groupLessonId,
+        studentId: membership.userId,
+        type: "group_lesson",
+        status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+      },
+      select: { id: true, startsAt: true },
+    });
+    if (!appt) return { success: false as const, message: "Iscrizione non trovata." };
+    if (appt.startsAt <= new Date()) {
+      return { success: false as const, message: "La guida è già iniziata." };
+    }
+
+    return await cancelGroupLessonParticipantAppointment({
+      companyId,
+      appointmentId: appt.id,
+      actorUserId: membership.userId,
+    });
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Group-lesson invites visible to a student (for the inbox + offline recovery). */
+export async function getGroupLessonInvites(
+  input: z.infer<typeof getGroupLessonInvitesSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = getGroupLessonInvitesSchema.parse(input);
+    const companyId = membership.companyId;
+    const now = new Date();
+    const limit = payload.limit ?? 5;
+
+    const member = await prisma.companyMember.findFirst({
+      where: { companyId, autoscuolaRole: "STUDENT", userId: payload.studentId },
+      select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+    });
+    if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
+
+    const [invites, appointments, service] = await Promise.all([
+      prisma.autoscuolaGroupLessonInvite.findMany({
+        where: {
+          companyId,
+          status: "broadcasted",
+          expiresAt: { gt: now },
+          groupLesson: { status: "scheduled", startsAt: { gt: now } },
+        },
+        include: {
+          groupLesson: {
+            select: {
+              id: true,
+              startsAt: true,
+              endsAt: true,
+              capacity: true,
+              notes: true,
+              instructor: { select: { name: true } },
+              vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+              appointments: {
+                where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+                select: { studentId: true },
+              },
+            },
+          },
+          responses: { where: { studentId: payload.studentId }, select: { id: true } },
+        },
+        orderBy: { sentAt: "desc" },
+        take: limit * 3,
+      }),
+      prisma.autoscuolaAppointment.findMany({
+        where: {
+          companyId,
+          studentId: payload.studentId,
+          status: { not: "cancelled" },
+          startsAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        },
+        select: { startsAt: true, endsAt: true },
+      }),
+      prisma.companyService.findFirst({
+        where: { companyId, serviceKey: "AUTOSCUOLE" },
+        select: { limits: true },
+      }),
+    ]);
+
+    const vehiclesEnabled =
+      (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+
+    // No weekly-availability gate: a group lesson is a fixed-time offer. Show it
+    // to any opted-in, license-compatible student who isn't already enrolled or
+    // busy at that time. Dedup to ONE invite per group lesson (latest first).
+    const seenGroupLessons = new Set<string>();
+    const visible = invites
+      .filter((inv) => !inv.responses.length)
+      .filter((inv) => {
+        const gl = inv.groupLesson;
+        if (!gl || !gl.endsAt) return false;
+        if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
+        if (gl.appointments.length >= gl.capacity) return false;
+        if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) return false;
+        if (hasAppointmentConflict(appointments, gl.startsAt, gl.endsAt)) return false;
+        if (seenGroupLessons.has(gl.id)) return false;
+        seenGroupLessons.add(gl.id);
+        return true;
+      })
+      .slice(0, limit)
+      .map((inv) => {
+        const gl = inv.groupLesson!;
+        return {
+          inviteId: inv.id,
+          groupLessonId: gl.id,
+          startsAt: gl.startsAt.toISOString(),
+          endsAt: gl.endsAt ? gl.endsAt.toISOString() : null,
+          capacity: gl.capacity,
+          filledSeats: gl.appointments.length,
+          openSeats: Math.max(0, gl.capacity - gl.appointments.length),
+          instructorName: gl.instructor?.name ?? null,
+          vehicleName: gl.vehicle?.name ?? null,
+          notes: gl.notes,
+          expiresAt: inv.expiresAt.toISOString(),
+        };
+      });
+
+    return { success: true as const, data: visible };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
 }
 
 // ── Out-of-availability detection & override approval ─────────────────

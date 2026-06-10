@@ -274,6 +274,7 @@ export function AutoscuoleResourcesPage({
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
   const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
+  const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -526,6 +527,7 @@ export function AutoscuoleResourcesPage({
       setVehiclesEnabled(res.data.vehiclesEnabled !== false);
       setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
       setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+      setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
 
       setAppBookingActors(
         APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -677,6 +679,7 @@ export function AutoscuoleResourcesPage({
       vehiclesEnabled,
       defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
       defaultTransmission: defaultTransmission as "manual" | "automatic",
+      groupLessonsEnabled,
       appBookingActors,
       instructorBookingMode,
     });
@@ -1558,6 +1561,8 @@ export function AutoscuoleResourcesPage({
             setAutoCheckinEnabled={setAutoCheckinEnabled}
             studentNotesEnabled={studentNotesEnabled}
             setStudentNotesEnabled={setStudentNotesEnabled}
+            groupLessonsEnabled={groupLessonsEnabled}
+            setGroupLessonsEnabled={setGroupLessonsEnabled}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}
             setEmptySlotNotificationEnabled={setEmptySlotNotificationEnabled}
             emptySlotNotificationTarget={emptySlotNotificationTarget}

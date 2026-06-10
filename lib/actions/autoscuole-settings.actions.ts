@@ -348,6 +348,10 @@ const autoscuolaSettingsPatchSchema = z
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
     defaultTransmission: z.enum(TRANSMISSIONS).optional(),
+    // Group lessons (Guide di gruppo): optional module. When on, students with
+    // groupLessonsOptIn can be enrolled into / invited to group driving lessons.
+    // Priced like a standard 60' lesson (no dedicated price setting).
+    groupLessonsEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
   })
@@ -414,6 +418,7 @@ const autoscuolaSettingsPatchSchema = z
       value.vehiclesEnabled !== undefined ||
       value.defaultLicenseCategory !== undefined ||
       value.defaultTransmission !== undefined ||
+      value.groupLessonsEnabled !== undefined ||
       value.quizEnabled !== undefined ||
       value.studentCancellationEnabled !== undefined,
     { message: "Nessuna impostazione da aggiornare." },
@@ -593,6 +598,7 @@ export type AutoscuolaSettingsData = {
   vehiclesEnabled: boolean;
   defaultLicenseCategory: string;
   defaultTransmission: string;
+  groupLessonsEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
 };
@@ -925,6 +931,7 @@ const resolveAutoscuolaSettingsData = async (
       typeof limits.defaultTransmission === "string"
         ? limits.defaultTransmission
         : "manual",
+    groupLessonsEnabled: limits.groupLessonsEnabled === true,
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
@@ -1250,6 +1257,8 @@ export async function updateAutoscuolaSettings(
     const nextDefaultTransmission =
       payload.defaultTransmission ??
       (typeof limits.defaultTransmission === "string" ? limits.defaultTransmission : "manual");
+    const nextGroupLessonsEnabled =
+      payload.groupLessonsEnabled ?? limits.groupLessonsEnabled === true;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
     const nextStudentCancellationEnabled = payload.studentCancellationEnabled ?? previousStudentCancellationEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1448,6 +1457,7 @@ export async function updateAutoscuolaSettings(
       vehiclesEnabled: nextVehiclesEnabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
+      groupLessonsEnabled: nextGroupLessonsEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
     };
@@ -1546,6 +1556,7 @@ export async function updateAutoscuolaSettings(
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
         voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
+        groupLessonsEnabled: nextGroupLessonsEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
       },

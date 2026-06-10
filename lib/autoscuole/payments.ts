@@ -598,6 +598,53 @@ export async function getAutoscuolaPaymentConfig({
   };
 }
 
+/**
+ * Price of a single group-lesson (Guide di gruppo) participant seat.
+ * A group lesson is priced like a standard 60' lesson but does NOT consume a
+ * lesson credit — each participant seat is billed as a standalone "da pagare"
+ * charge. No dedicated setting: it always inherits `lessonPrice60`.
+ */
+export async function getGroupLessonPrice({
+  prisma = defaultPrisma,
+  companyId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+}): Promise<number> {
+  const service = await prisma.companyService.findFirst({
+    where: { companyId, serviceKey: "AUTOSCUOLE" },
+    select: { limits: true },
+  });
+  const limits = (service?.limits ?? {}) as Record<string, unknown>;
+  return normalizePrice(limits.lessonPrice60, 50);
+}
+
+/**
+ * Penalty snapshot for a group-lesson seat. Group lessons are a flat manual
+ * "da pagare" (no Stripe auto-charge, no credits), but they still need
+ * `penaltyCutoffAt` + `penaltyAmount` so a withdrawal/removal can tell an
+ * early cancellation (free the seat) from a late one (stays "da pagare" and
+ * surfaces in the late-cancellations inbox, exactly like a normal lesson).
+ */
+export async function getGroupLessonPenaltySnapshot({
+  prisma = defaultPrisma,
+  companyId,
+  startsAt,
+  price,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  startsAt: Date;
+  price: number;
+}): Promise<{ penaltyCutoffAt: Date; penaltyAmount: Prisma.Decimal }> {
+  const config = await getAutoscuolaPaymentConfig({ prisma, companyId });
+  const penaltyAmount = toDecimal((price * config.penaltyPercent) / 100);
+  const penaltyCutoffAt = new Date(
+    startsAt.getTime() - config.penaltyCutoffHours * 60 * 60 * 1000,
+  );
+  return { penaltyCutoffAt, penaltyAmount };
+}
+
 export async function getOrCreateStudentPaymentProfile({
   prisma = defaultPrisma,
   companyId,

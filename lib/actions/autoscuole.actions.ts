@@ -9,7 +9,7 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
-import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus } from "@/lib/actions/autoscuole-availability.actions";
+import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   getBookingGovernanceForStudent,
@@ -26,7 +26,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
-import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
+import { LICENSE_CATEGORIES, TRANSMISSIONS, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
@@ -39,6 +39,8 @@ import {
   getAutoscuolaPaymentsOverview,
   getAutoscuolaPaymentConfig,
   getStudentLessonCredits,
+  getGroupLessonPrice,
+  getGroupLessonPenaltySnapshot,
   prepareAppointmentPaymentSnapshot,
   refundLessonCreditIfEligible,
   applyLessonCreditToExistingAppointment,
@@ -882,6 +884,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           instructorId: true,
           vehicleId: true,
           locationId: true,
+          groupLessonId: true,
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
@@ -962,19 +965,88 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     ]);
     const agendaVehiclesEnabled =
       (agendaLimits as Record<string, unknown>).vehiclesEnabled !== false;
+    const agendaGroupLessonsEnabled =
+      (agendaLimits as Record<string, unknown>).groupLessonsEnabled === true;
+
+    const mappedAppointments = appointments.map((appointment) => ({
+      ...appointment,
+      case: null,
+      student: mapCaseStudent(appointment.student),
+    }));
+
+    // Empty group lessons (0 active participants) have no appointment rows, so
+    // they'd be invisible in the agenda — and thus un-manageable / un-cancellable,
+    // leaving their student invites orphaned. Synthesize ONE placeholder row per
+    // empty, still-scheduled group lesson (id `gl-empty:<glId>`). Consumers
+    // (web `regularAppointments`, mobile `weeklyAgenda`/`timelineItems`) treat a
+    // `gl-empty:` row as 0 participants. Skip when filters exclude group lessons.
+    const wantsGroupLessons =
+      agendaGroupLessonsEnabled &&
+      (!normalizedType || normalizedType === "group_lesson") &&
+      (!normalizedStatus || normalizedStatus === "scheduled");
+    if (wantsGroupLessons) {
+      const emptyGroupLessons = await prisma.autoscuolaGroupLesson.findMany({
+        where: {
+          companyId,
+          status: "scheduled",
+          startsAt: { gte: from, lt: to },
+          ...(input.instructorId ? { instructorId: input.instructorId } : {}),
+          ...(input.vehicleId ? { vehicleId: input.vehicleId } : {}),
+          appointments: { none: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } } },
+        },
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          notes: true,
+          instructorId: true,
+          vehicleId: true,
+          instructor: { select: { id: true, name: true } },
+          vehicle: { select: { id: true, name: true } },
+        },
+        orderBy: { startsAt: "asc" },
+      });
+      for (const gl of emptyGroupLessons) {
+        mappedAppointments.push({
+          id: `gl-empty:${gl.id}`,
+          companyId,
+          studentId: "",
+          caseId: null,
+          slotId: null,
+          type: "group_lesson",
+          types: [],
+          rating: null,
+          notes: gl.notes,
+          status: "scheduled",
+          startsAt: gl.startsAt,
+          endsAt: gl.endsAt,
+          instructorId: gl.instructorId,
+          vehicleId: gl.vehicleId,
+          locationId: null,
+          groupLessonId: gl.id,
+          cancellationKind: null,
+          cancellationReason: null,
+          replacedByAppointmentId: null,
+          createdAt: gl.startsAt,
+          updatedAt: gl.startsAt,
+          case: null,
+          student: { id: `gl-empty:${gl.id}`, firstName: "Guida di gruppo", lastName: "", email: null, phone: null },
+          instructor: gl.instructor,
+          vehicle: gl.vehicle,
+          location: null,
+        } as (typeof mappedAppointments)[number]);
+      }
+    }
 
     return {
       success: true,
       data: {
-        appointments: appointments.map((appointment) => ({
-          ...appointment,
-          case: null,
-          student: mapCaseStudent(appointment.student),
-        })),
+        appointments: mappedAppointments,
         students,
         instructors,
         vehicles,
         vehiclesEnabled: agendaVehiclesEnabled,
+        groupLessonsEnabled: agendaGroupLessonsEnabled,
         instructorBlocks,
         holidays: holidays.map((h) => ({
           date: h.date.toISOString(),
@@ -984,7 +1056,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           from,
           to,
           generatedAt: new Date(),
-          count: appointments.length,
+          count: mappedAppointments.length,
         },
       },
     };
@@ -1183,6 +1255,7 @@ export async function getAutoscuolaStudents(search?: string) {
         studentPhase: m.studentPhase,
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
+        groupLessonsOptIn: m.groupLessonsOptIn ?? false,
       })),
     };
   } catch (error) {
@@ -1314,6 +1387,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       studentPhase: m.studentPhase,
       licenseCategory: m.licenseCategory ?? null,
       transmission: m.transmission ?? null,
+      groupLessonsOptIn: m.groupLessonsOptIn ?? false,
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -1590,6 +1664,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         studentPhase: studentMembership.studentPhase,
         licenseCategory: studentMembership.licenseCategory ?? null,
         transmission: studentMembership.transmission ?? null,
+        groupLessonsOptIn: studentMembership.groupLessonsOptIn ?? false,
         quizSeatGrantedAt: studentMembership.quizSeatGrantedAt
           ? studentMembership.quizSeatGrantedAt.toISOString()
           : null,
@@ -1898,6 +1973,7 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           instructorId: true,
           vehicleId: true,
           locationId: true,
+          groupLessonId: true,
           notes: true,
           cancellationKind: true,
           cancellationReason: true,
@@ -2852,6 +2928,23 @@ export async function cancelAutoscuolaAppointment(
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
+    }
+
+    // Group-lesson seats have their own cancellation semantics (penalty
+    // treatment + seat re-broadcast). A student may only withdraw their own seat.
+    if (appointment.type === "group_lesson") {
+      const isStaff =
+        membership.role === "admin" ||
+        isOwner(membership.autoscuolaRole) ||
+        isInstructor(membership.autoscuolaRole);
+      if (!isStaff && appointment.studentId !== membership.userId) {
+        return { success: false, message: "Operazione non consentita." };
+      }
+      return await cancelGroupLessonParticipantAppointment({
+        companyId: membership.companyId,
+        appointmentId: appointment.id,
+        actorUserId: membership.userId,
+      });
     }
 
     if (membership.role !== "admin" && isInstructor(membership.autoscuolaRole)) {
@@ -6051,6 +6144,826 @@ export async function cancelExamEvent(appointmentIds: string[]) {
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
     return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Group lessons (Guide di gruppo) — 1 instructor + 1 vehicle + up to N students.
+// Participants are AutoscuolaAppointment rows (type="group_lesson", groupLessonId
+// set), created as "da pagare" (no lesson credit consumed). The lesson container
+// exists independently of its participants (open seats + invite flow).
+// ---------------------------------------------------------------------------
+
+const GROUP_LESSON_ACTIVE_STATUSES = ["scheduled", "confirmed", "proposal", "checked_in"];
+
+const updateStudentGroupLessonOptInSchema = z.object({
+  studentId: z.string().uuid(),
+  optIn: z.boolean(),
+});
+
+export async function updateStudentGroupLessonOptIn(
+  input: z.infer<typeof updateStudentGroupLessonOptInSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    // Owner/admin OR any instructor may toggle a student's group-lesson eligibility.
+    if (
+      !canManageStudentCredits(membership) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = updateStudentGroupLessonOptInSchema.parse(input);
+
+    const updated = await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: { groupLessonsOptIn: payload.optIn },
+    });
+    if (!updated.count) {
+      return { success: false, message: "Allievo non valido per questa company." };
+    }
+
+    return {
+      success: true,
+      data: { groupLessonsOptIn: payload.optIn },
+      message: payload.optIn
+        ? "Allievo abilitato alle guide di gruppo."
+        : "Allievo disabilitato dalle guide di gruppo.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+type GroupLessonVehicleInfo = {
+  id: string;
+  licenseCategory: string | null;
+  transmission: string | null;
+} | null;
+
+// Validates that every pre-added/invited student is a real STUDENT of the company,
+// opted-in to group lessons, and (when the vehicles module is on) license-compatible
+// with the lesson's vehicle. Returns the offending message or null when all pass.
+async function validateGroupLessonStudents({
+  companyId,
+  studentIds,
+  vehicle,
+  vehiclesEnabled,
+}: {
+  companyId: string;
+  studentIds: string[];
+  vehicle: GroupLessonVehicleInfo;
+  vehiclesEnabled: boolean;
+}): Promise<string | null> {
+  if (!studentIds.length) return null;
+  const members = await prisma.companyMember.findMany({
+    where: { companyId, userId: { in: studentIds }, autoscuolaRole: "STUDENT" },
+    select: { userId: true, groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+  });
+  const byId = new Map(members.map((m) => [m.userId, m]));
+  const notFound = studentIds.filter((id) => !byId.has(id));
+  if (notFound.length) return `${notFound.length} allievi non trovati.`;
+
+  const notOptedIn = studentIds.filter((id) => !byId.get(id)?.groupLessonsOptIn);
+  if (notOptedIn.length) {
+    return `${notOptedIn.length} ${notOptedIn.length === 1 ? "allievo non è abilitato" : "allievi non sono abilitati"} alle guide di gruppo.`;
+  }
+
+  if (vehiclesEnabled && vehicle) {
+    const licenseMismatch = studentIds.filter((id) => {
+      const m = byId.get(id)!;
+      return !vehicleServesLicense(vehicle, m);
+    });
+    if (licenseMismatch.length) {
+      return `${licenseMismatch.length} ${licenseMismatch.length === 1 ? "allievo ha una patente" : "allievi hanno una patente"} non compatibile col veicolo della guida.`;
+    }
+  }
+  return null;
+}
+
+// Returns the message of the first overlap conflict (instructor / vehicle / any
+// student) in [startsAt, endsAt), or null when the slot is free for all of them.
+async function findGroupLessonOverlap({
+  companyId,
+  startsAt,
+  endsAt,
+  instructorId,
+  vehicleId,
+  studentIds,
+  excludeGroupLessonId,
+}: {
+  companyId: string;
+  startsAt: Date;
+  endsAt: Date;
+  instructorId: string | null;
+  vehicleId: string | null;
+  studentIds: string[];
+  excludeGroupLessonId?: string;
+}): Promise<string | null> {
+  const baseWhere = {
+    companyId,
+    status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+    startsAt: { lt: endsAt },
+    endsAt: { gt: startsAt },
+    ...(excludeGroupLessonId ? { groupLessonId: { not: excludeGroupLessonId } } : {}),
+  };
+
+  if (instructorId) {
+    const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+      where: { ...baseWhere, instructorId },
+      select: { id: true },
+    });
+    if (instrConflict) return "L'istruttore ha già un impegno in quell'orario.";
+    const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+      where: { companyId, instructorId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
+      select: { id: true },
+    });
+    if (blockConflict) return "L'istruttore ha uno slot bloccato in quell'orario.";
+  }
+  if (vehicleId) {
+    const vehicleConflict = await prisma.autoscuolaAppointment.findFirst({
+      where: { ...baseWhere, vehicleId },
+      select: { id: true },
+    });
+    if (vehicleConflict) return "Il veicolo è già impegnato in quell'orario.";
+  }
+  if (studentIds.length) {
+    const studentConflicts = await prisma.autoscuolaAppointment.findMany({
+      where: { ...baseWhere, studentId: { in: studentIds } },
+      select: { studentId: true },
+    });
+    if (studentConflicts.length) {
+      const count = new Set(studentConflicts.map((a) => a.studentId)).size;
+      return `${count} ${count === 1 ? "allievo ha" : "allievi hanno"} già un impegno in quell'orario.`;
+    }
+  }
+  return null;
+}
+
+const createGroupLessonSchema = z.object({
+  startsAt: z.string(),
+  endsAt: z.string(),
+  vehicleId: z.string().uuid().optional().nullable(),
+  instructorId: z.string().uuid().optional().nullable(),
+  capacity: z.number().int().min(1).max(3).optional(),
+  studentIds: z.array(z.string().uuid()).optional(),
+  notes: z.string().optional(),
+});
+
+export async function createGroupLesson(
+  input: z.infer<typeof createGroupLessonSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = createGroupLessonSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const limits = await getCachedCompanyServiceLimits(companyId);
+    if ((limits as Record<string, unknown>).groupLessonsEnabled !== true) {
+      return { success: false as const, message: "Il modulo Guide di gruppo non è attivo." };
+    }
+    const vehiclesEnabled = (limits as Record<string, unknown>).vehiclesEnabled !== false;
+
+    const startsAt = new Date(payload.startsAt);
+    const endsAt = new Date(payload.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) {
+      return { success: false as const, message: "Data non valida." };
+    }
+    if (endsAt <= startsAt) {
+      return { success: false as const, message: "Orario non valido." };
+    }
+
+    const capacity = payload.capacity ?? 3;
+    const studentIds = Array.from(new Set(payload.studentIds ?? []));
+    if (studentIds.length > capacity) {
+      return { success: false as const, message: "Troppi allievi per la capienza scelta." };
+    }
+
+    // Resolve instructor (auto-assign self for instructors who didn't pick one).
+    let instructorId: string | null = payload.instructorId ?? null;
+    if (!instructorId && isInstructor(membership.autoscuolaRole)) {
+      const self = await getOwnInstructorProfile(companyId, membership.userId);
+      instructorId = self?.id ?? null;
+    } else if (instructorId) {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { id: instructorId, companyId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Istruttore non trovato." };
+    }
+
+    // Resolve vehicle.
+    let vehicle: GroupLessonVehicleInfo = null;
+    if (payload.vehicleId) {
+      const v = await prisma.autoscuolaVehicle.findFirst({
+        where: { id: payload.vehicleId, companyId, status: "active" },
+        select: { id: true, licenseCategory: true, transmission: true },
+      });
+      if (!v) return { success: false as const, message: "Veicolo non trovato." };
+      vehicle = v;
+    }
+    const vehicleId = vehicle?.id ?? null;
+
+    const studentErr = await validateGroupLessonStudents({
+      companyId,
+      studentIds,
+      vehicle,
+      vehiclesEnabled,
+    });
+    if (studentErr) return { success: false as const, message: studentErr };
+
+    const overlapErr = await findGroupLessonOverlap({
+      companyId,
+      startsAt,
+      endsAt,
+      instructorId,
+      vehicleId,
+      studentIds,
+    });
+    if (overlapErr) return { success: false as const, message: overlapErr };
+
+    const price = await getGroupLessonPrice({ companyId });
+    const priceDecimal = new Prisma.Decimal(price.toFixed(2));
+    const { penaltyCutoffAt, penaltyAmount } = await getGroupLessonPenaltySnapshot({
+      companyId,
+      startsAt,
+      price,
+    });
+
+    const groupLesson = await prisma.$transaction(async (tx) => {
+      const gl = await tx.autoscuolaGroupLesson.create({
+        data: {
+          companyId,
+          instructorId,
+          vehicleId,
+          startsAt,
+          endsAt,
+          capacity,
+          status: "scheduled",
+          priceAmount: priceDecimal,
+          notes: payload.notes ?? null,
+          createdByUserId: membership.userId,
+        },
+      });
+      if (studentIds.length) {
+        await tx.autoscuolaAppointment.createMany({
+          data: studentIds.map((studentId) => ({
+            companyId,
+            studentId,
+            type: "group_lesson",
+            startsAt,
+            endsAt,
+            status: "scheduled",
+            instructorId,
+            vehicleId,
+            notes: payload.notes ?? null,
+            groupLessonId: gl.id,
+            paymentRequired: true,
+            paymentStatus: "pending",
+            manualPaymentStatus: "unpaid",
+            priceAmount: priceDecimal,
+            penaltyAmount,
+            penaltyCutoffAt,
+            creditApplied: false,
+          })),
+        });
+      }
+      return gl;
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return {
+      success: true as const,
+      data: { groupLessonId: groupLesson.id, participants: studentIds.length, capacity },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const addGroupLessonParticipantSchema = z.object({
+  groupLessonId: z.string().uuid(),
+  studentId: z.string().uuid(),
+});
+
+export async function addGroupLessonParticipant(
+  input: z.infer<typeof addGroupLessonParticipantSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = addGroupLessonParticipantSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const limits = await getCachedCompanyServiceLimits(companyId);
+    const vehiclesEnabled = (limits as Record<string, unknown>).vehiclesEnabled !== false;
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: payload.groupLessonId, companyId, status: "scheduled" },
+      select: {
+        id: true, startsAt: true, endsAt: true, capacity: true, instructorId: true,
+        priceAmount: true, notes: true,
+        vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
+        _count: { select: { appointments: { where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } } } } },
+      },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+    if (!gl.endsAt) return { success: false as const, message: "Guida di gruppo senza orario." };
+    if (gl._count.appointments >= gl.capacity) {
+      return { success: false as const, message: "Posti esauriti." };
+    }
+
+    const vehicle = gl.vehicle ?? null;
+    const studentErr = await validateGroupLessonStudents({
+      companyId,
+      studentIds: [payload.studentId],
+      vehicle,
+      vehiclesEnabled,
+    });
+    if (studentErr) return { success: false as const, message: studentErr };
+
+    const overlapErr = await findGroupLessonOverlap({
+      companyId,
+      startsAt: gl.startsAt,
+      endsAt: gl.endsAt,
+      instructorId: null,
+      vehicleId: null,
+      studentIds: [payload.studentId],
+    });
+    if (overlapErr) return { success: false as const, message: overlapErr };
+
+    // Guard against a duplicate participant.
+    const existing = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        groupLessonId: gl.id,
+        studentId: payload.studentId,
+        status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (existing) return { success: false as const, message: "Allievo già iscritto." };
+
+    const { penaltyCutoffAt, penaltyAmount } = await getGroupLessonPenaltySnapshot({
+      companyId,
+      startsAt: gl.startsAt,
+      price: Number(gl.priceAmount),
+    });
+
+    await prisma.autoscuolaAppointment.create({
+      data: {
+        companyId,
+        studentId: payload.studentId,
+        type: "group_lesson",
+        startsAt: gl.startsAt,
+        endsAt: gl.endsAt,
+        status: "scheduled",
+        instructorId: gl.instructorId,
+        vehicleId: vehicle?.id ?? null,
+        notes: gl.notes,
+        groupLessonId: gl.id,
+        paymentRequired: true,
+        paymentStatus: "pending",
+        manualPaymentStatus: "unpaid",
+        priceAmount: gl.priceAmount,
+        penaltyAmount,
+        penaltyCutoffAt,
+        creditApplied: false,
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function removeGroupLessonParticipant(input: {
+  groupLessonId: string;
+  studentId: string;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    const appt = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId: membership.companyId,
+        groupLessonId: input.groupLessonId,
+        studentId: input.studentId,
+        type: "group_lesson",
+        status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+      },
+      select: { id: true },
+    });
+    if (!appt) return { success: false as const, message: "Partecipante non trovato." };
+
+    // Shared cancellation: early = free seat & no charge, late/after-the-fact =
+    // stays "da pagare" and enters the late-cancellations inbox. Also frees the
+    // seat and re-broadcasts the invite when the lesson is still upcoming.
+    return await cancelGroupLessonParticipantAppointment({
+      companyId: membership.companyId,
+      appointmentId: appt.id,
+      actorUserId: membership.userId,
+    });
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function cancelGroupLesson(groupLessonId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: groupLessonId, companyId: membership.companyId },
+      select: { id: true },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    await prisma.$transaction([
+      prisma.autoscuolaAppointment.updateMany({
+        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        data: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledByUserId: membership.userId,
+          paymentRequired: false,
+          paymentStatus: "not_required",
+          manualPaymentStatus: null,
+        },
+      }),
+      prisma.autoscuolaGroupLessonInvite.updateMany({
+        where: { groupLessonId: gl.id, status: "broadcasted" },
+        data: { status: "cancelled" },
+      }),
+      prisma.autoscuolaGroupLesson.update({
+        where: { id: gl.id },
+        data: { status: "cancelled" },
+      }),
+    ]);
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function getGroupLessonsForAgenda(input?: {
+  from?: string | null;
+  to?: string | null;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+    const from = input?.from ? new Date(input.from) : null;
+    const to = input?.to ? new Date(input.to) : null;
+
+    const lessons = await prisma.autoscuolaGroupLesson.findMany({
+      where: {
+        companyId,
+        status: { not: "cancelled" },
+        ...(from || to
+          ? { startsAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } }
+          : {}),
+      },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        capacity: true,
+        status: true,
+        priceAmount: true,
+        notes: true,
+        instructorId: true,
+        instructor: { select: { id: true, name: true } },
+        vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
+        appointments: {
+          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          select: { id: true, studentId: true, student: { select: { name: true } } },
+        },
+      },
+      orderBy: { startsAt: "asc" },
+      take: 500,
+    });
+
+    return {
+      success: true as const,
+      data: lessons.map((l) => ({
+        id: l.id,
+        startsAt: l.startsAt.toISOString(),
+        endsAt: l.endsAt ? l.endsAt.toISOString() : null,
+        capacity: l.capacity,
+        status: l.status,
+        priceAmount: Number(l.priceAmount),
+        notes: l.notes,
+        instructorId: l.instructorId,
+        instructorName: l.instructor?.name ?? null,
+        vehicleId: l.vehicle?.id ?? null,
+        vehicleName: l.vehicle?.name ?? null,
+        licenseCategory: l.vehicle?.licenseCategory ?? null,
+        transmission: l.vehicle?.transmission ?? null,
+        filledSeats: l.appointments.length,
+        openSeats: Math.max(0, l.capacity - l.appointments.length),
+        participants: l.appointments.map((a) => ({
+          appointmentId: a.id,
+          studentId: a.studentId,
+          studentName: a.student?.name ?? null,
+        })),
+      })),
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// Single group lesson (for the web management dialog).
+export async function getGroupLesson(groupLessonId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const l = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: groupLessonId, companyId: membership.companyId },
+      select: {
+        id: true,
+        startsAt: true,
+        endsAt: true,
+        capacity: true,
+        status: true,
+        priceAmount: true,
+        notes: true,
+        instructorId: true,
+        instructor: { select: { id: true, name: true } },
+        vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
+        appointments: {
+          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          select: { id: true, studentId: true, student: { select: { name: true } } },
+        },
+      },
+    });
+    if (!l) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    // Students may only read a lesson they are enrolled in, and never see the
+    // other participants' identities — they get anonymous seats (count only).
+    const isStaff =
+      membership.role === "admin" ||
+      isOwner(membership.autoscuolaRole) ||
+      isInstructor(membership.autoscuolaRole);
+    if (!isStaff) {
+      const enrolled = l.appointments.some((a) => a.studentId === membership.userId);
+      if (!enrolled) {
+        return { success: false as const, message: "Guida di gruppo non trovata." };
+      }
+    }
+
+    return {
+      success: true as const,
+      data: {
+        id: l.id,
+        startsAt: l.startsAt.toISOString(),
+        endsAt: l.endsAt ? l.endsAt.toISOString() : null,
+        capacity: l.capacity,
+        status: l.status,
+        priceAmount: Number(l.priceAmount),
+        notes: l.notes,
+        instructorId: l.instructorId,
+        instructorName: l.instructor?.name ?? null,
+        vehicleId: l.vehicle?.id ?? null,
+        vehicleName: l.vehicle?.name ?? null,
+        licenseCategory: l.vehicle?.licenseCategory ?? null,
+        transmission: l.vehicle?.transmission ?? null,
+        filledSeats: l.appointments.length,
+        openSeats: Math.max(0, l.capacity - l.appointments.length),
+        participants: l.appointments.map((a) => {
+          const isSelf = a.studentId === membership.userId;
+          if (!isStaff && !isSelf) {
+            // Anonymous seat: keep the slot for the count, hide the identity.
+            return { appointmentId: "", studentId: "", studentName: null };
+          }
+          return {
+            appointmentId: a.id,
+            studentId: a.studentId,
+            studentName: isStaff ? a.student?.name ?? null : null,
+          };
+        }),
+      },
+    };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const updateGroupLessonSchema = z.object({
+  groupLessonId: z.string().uuid(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+  instructorId: z.string().uuid().nullable().optional(),
+  vehicleId: z.string().uuid().nullable().optional(),
+});
+
+// Edit a group lesson and CASCADE the change to every participant appointment
+// (move the whole group, or change instructor/vehicle for all). License + overlap
+// validated against the new values (excluding this lesson's own rows).
+export async function updateGroupLesson(
+  input: z.infer<typeof updateGroupLessonSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = updateGroupLessonSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: payload.groupLessonId, companyId, status: "scheduled" },
+      select: {
+        id: true, startsAt: true, endsAt: true,
+        instructorId: true, vehicleId: true,
+        appointments: {
+          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          select: { studentId: true },
+        },
+      },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    const startsAt = payload.startsAt ? new Date(payload.startsAt) : gl.startsAt;
+    const endsAt = payload.endsAt ? new Date(payload.endsAt) : gl.endsAt;
+    if (Number.isNaN(startsAt.getTime()) || !endsAt || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      return { success: false as const, message: "Orario non valido." };
+    }
+    const instructorId = payload.instructorId !== undefined ? payload.instructorId : gl.instructorId;
+    const vehicleId = payload.vehicleId !== undefined ? payload.vehicleId : gl.vehicleId;
+
+    // Validate instructor / vehicle (+ license of every participant vs the vehicle).
+    let vehicle: GroupLessonVehicleInfo = null;
+    if (vehicleId) {
+      const v = await prisma.autoscuolaVehicle.findFirst({
+        where: { id: vehicleId, companyId, status: "active" },
+        select: { id: true, licenseCategory: true, transmission: true },
+      });
+      if (!v) return { success: false as const, message: "Veicolo non trovato." };
+      vehicle = v;
+    }
+    if (instructorId) {
+      const instr = await prisma.autoscuolaInstructor.findFirst({
+        where: { id: instructorId, companyId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instr) return { success: false as const, message: "Istruttore non trovato." };
+    }
+
+    const studentIds = gl.appointments.map((a) => a.studentId);
+    const limits = await getCachedCompanyServiceLimits(companyId);
+    const vehiclesEnabled = (limits as Record<string, unknown>).vehiclesEnabled !== false;
+    if (vehiclesEnabled && vehicle && studentIds.length) {
+      const licenseErr = await validateGroupLessonStudents({ companyId, studentIds, vehicle, vehiclesEnabled });
+      if (licenseErr) return { success: false as const, message: licenseErr };
+    }
+
+    const overlapErr = await findGroupLessonOverlap({
+      companyId, startsAt, endsAt, instructorId, vehicleId, studentIds,
+      excludeGroupLessonId: gl.id,
+    });
+    if (overlapErr) return { success: false as const, message: overlapErr };
+
+    await prisma.$transaction([
+      prisma.autoscuolaGroupLesson.update({
+        where: { id: gl.id },
+        data: { startsAt, endsAt, instructorId, vehicleId },
+      }),
+      prisma.autoscuolaAppointment.updateMany({
+        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        data: { startsAt, endsAt, instructorId, vehicleId },
+      }),
+    ]);
+
+    await invalidateAgendaAndPaymentsCache(companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// Students who CAN be invited to / added to a given group lesson: opted-in,
+// not already enrolled, and (when vehicles module on) license-compatible.
+export async function listEligibleGroupLessonInvitees(groupLessonId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const companyId = membership.companyId;
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: groupLessonId, companyId },
+      select: {
+        id: true, startsAt: true, endsAt: true,
+        vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
+        appointments: {
+          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          select: { studentId: true },
+        },
+      },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    const limits = await getCachedCompanyServiceLimits(companyId);
+    const vehiclesEnabled = (limits as Record<string, unknown>).vehiclesEnabled !== false;
+    const vehicle = gl.vehicle ?? null;
+    const enrolled = new Set(gl.appointments.map((a) => a.studentId));
+
+    const members = await prisma.companyMember.findMany({
+      where: { companyId, autoscuolaRole: "STUDENT", groupLessonsOptIn: true },
+      select: {
+        userId: true,
+        licenseCategory: true,
+        transmission: true,
+        user: { select: { name: true } },
+      },
+      take: 1000,
+    });
+
+    const eligible = members
+      .filter((m) => !enrolled.has(m.userId))
+      .filter((m) => !(vehiclesEnabled && vehicle) || vehicleServesLicense(vehicle!, m))
+      .map((m) => ({ id: m.userId, name: m.user?.name ?? null }));
+
+    return { success: true as const, data: eligible };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// Lists opted-in STUDENT members of the company eligible to be PRE-ADDED to a
+// brand-new group lesson (used by the web create dialog, where no lesson row
+// exists yet). Returns license info so the dialog can re-filter client-side as
+// the vehicle changes (mirrors the mobile create flow).
+export async function listOptedInGroupLessonStudents() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const companyId = membership.companyId;
+
+    const members = await prisma.companyMember.findMany({
+      where: { companyId, autoscuolaRole: "STUDENT", groupLessonsOptIn: true },
+      select: {
+        userId: true,
+        licenseCategory: true,
+        transmission: true,
+        user: { select: { name: true } },
+      },
+      take: 1000,
+    });
+
+    const data = members.map((m) => ({
+      id: m.userId,
+      name: m.user?.name ?? null,
+      licenseCategory: m.licenseCategory ?? null,
+      transmission: m.transmission ?? null,
+    }));
+
+    return { success: true as const, data };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

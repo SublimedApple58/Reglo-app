@@ -3,6 +3,7 @@ import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 
 /**
  * Server-side notification aggregator.
@@ -185,6 +186,95 @@ export async function GET(request: Request) {
           },
           createdAt: offer.createdAt.toISOString(),
         });
+      }
+
+      // 6b. Active group-lesson invites (eligibility-filtered, inline like the
+      // other recovery blocks). A group lesson is a fixed-time offer → no weekly
+      // availability gate; eligible = opted-in + license-compatible + not
+      // enrolled/responded + seats open + no time conflict.
+      const glMember = await prisma.companyMember.findFirst({
+        where: { companyId, autoscuolaRole: "STUDENT", userId },
+        select: { groupLessonsOptIn: true, licenseCategory: true, transmission: true },
+      });
+      if (glMember?.groupLessonsOptIn) {
+        const nowDate = new Date();
+        const glService = await prisma.companyService.findFirst({
+          where: { companyId, serviceKey: "AUTOSCUOLE" },
+          select: { limits: true },
+        });
+        const glVehiclesEnabled =
+          (glService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+        const [glInvites, glStudentAppts] = await Promise.all([
+          prisma.autoscuolaGroupLessonInvite.findMany({
+            where: {
+              companyId,
+              status: "broadcasted",
+              expiresAt: { gt: nowDate },
+              groupLesson: { status: "scheduled", startsAt: { gt: nowDate } },
+            },
+            include: {
+              groupLesson: {
+                select: {
+                  id: true, startsAt: true, endsAt: true, capacity: true, notes: true,
+                  instructor: { select: { name: true } },
+                  vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+                  appointments: {
+                    where: { status: { in: ["scheduled", "confirmed", "proposal", "checked_in"] } },
+                    select: { studentId: true },
+                  },
+                },
+              },
+              responses: { where: { studentId: userId }, select: { id: true } },
+            },
+            orderBy: { sentAt: "desc" },
+            take: limit,
+          }),
+          prisma.autoscuolaAppointment.findMany({
+            where: {
+              companyId,
+              studentId: userId,
+              status: { not: "cancelled" },
+              startsAt: { gte: new Date(nowDate.getTime() - 24 * 60 * 60 * 1000) },
+            },
+            select: { startsAt: true, endsAt: true },
+          }),
+        ]);
+        const overlaps = (gs: Date, ge: Date) =>
+          glStudentAppts.some((a) => {
+            const as = a.startsAt.getTime();
+            const ae = (a.endsAt ?? new Date(a.startsAt.getTime() + 30 * 60000)).getTime();
+            return as < ge.getTime() && ae > gs.getTime();
+          });
+        const seenGroupLessons = new Set<string>();
+        for (const inv of glInvites) {
+          const gl = inv.groupLesson;
+          if (!gl || !gl.endsAt) continue;
+          if (inv.responses.length) continue;
+          if (gl.appointments.some((a) => a.studentId === userId)) continue;
+          if (gl.appointments.length >= gl.capacity) continue;
+          if (glVehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, glMember)) continue;
+          if (overlaps(gl.startsAt, gl.endsAt)) continue;
+          if (seenGroupLessons.has(gl.id)) continue;
+          seenGroupLessons.add(gl.id);
+          notifications.push({
+            id: `group_lesson_invite_${inv.id}`,
+            kind: "group_lesson_invite",
+            data: {
+              inviteId: inv.id,
+              groupLessonId: gl.id,
+              startsAt: gl.startsAt.toISOString(),
+              endsAt: gl.endsAt.toISOString(),
+              capacity: gl.capacity,
+              filledSeats: gl.appointments.length,
+              openSeats: Math.max(0, gl.capacity - gl.appointments.length),
+              instructorName: gl.instructor?.name ?? null,
+              vehicleName: gl.vehicle?.name ?? null,
+              notes: gl.notes,
+              expiresAt: inv.expiresAt.toISOString(),
+            },
+            createdAt: inv.sentAt.toISOString(),
+          });
+        }
       }
 
       // 7. Rescheduled appointments (student's lessons that were moved)

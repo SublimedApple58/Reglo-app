@@ -59,6 +59,8 @@ import {
   RescheduleAppointmentDialog,
   type RescheduleAppointmentDialogAppointment,
 } from "@/components/pages/Autoscuole/RescheduleAppointmentDialog";
+import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
+import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
 type ResourceOption = {
@@ -81,6 +83,7 @@ type AppointmentRow = {
   vehicle?: ResourceOption | null;
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
+  groupLessonId?: string | null;
   notes?: string | null;
 };
 
@@ -104,6 +107,7 @@ type AgendaBootstrapPayload = {
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
   vehiclesEnabled?: boolean;
+  groupLessonsEnabled?: boolean;
   holidays?: Array<{ date: string; label: string | null }>;
   instructorBlocks?: Array<Record<string, unknown>>;
   meta: {
@@ -131,6 +135,11 @@ const LESSON_TYPE_OPTIONS = [
   { value: "altro", label: "Altro" },
   { value: "esame", label: "Esame" },
 ] as const;
+// Human label for an appointment type (incl. the synthetic group_lesson type).
+const formatEventType = (type: string) =>
+  type === "group_lesson"
+    ? "Guida di gruppo"
+    : LESSON_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type;
 const TIME_OPTIONS = Array.from({ length: (DAY_END_HOUR - DAY_START_HOUR) * 4 }, (_, index) => {
   const total = DAY_START_HOUR * 60 + index * 15;
   const hours = Math.floor(total / 60);
@@ -262,10 +271,13 @@ export function AutoscuoleAgendaPage({
 } = {}) {
   const toast = useFeedbackToast();
   const [appointments, setAppointments] = React.useState<AppointmentRow[]>([]);
+  const [manageGroupLessonId, setManageGroupLessonId] = React.useState<string | null>(null);
+  const [createGroupLessonOpen, setCreateGroupLessonOpen] = React.useState(false);
   const [students, setStudents] = React.useState<StudentOption[]>([]);
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
+  const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -352,15 +364,31 @@ export function AutoscuoleAgendaPage({
   const { regularAppointments, examGroups } = React.useMemo(() => {
     const regular: AppointmentRow[] = [];
     const examMap = new Map<string, AppointmentRow[]>();
+    // Collapse group-lesson participant rows into ONE card per groupLessonId
+    // (mirrors the mobile agenda). Empty lessons arrive as a single synthetic
+    // `gl-empty:` row (0 participants).
+    const glMap = new Map<string, AppointmentRow[]>();
     for (const a of appointments) {
       if (a.type === "esame" && a.status !== "cancelled") {
         const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}`;
         const list = examMap.get(key) ?? [];
         list.push(a);
         examMap.set(key, list);
+      } else if (a.type === "group_lesson" && a.status !== "cancelled" && a.groupLessonId) {
+        const list = glMap.get(a.groupLessonId) ?? [];
+        list.push(a);
+        glMap.set(a.groupLessonId, list);
       } else {
         regular.push(a);
       }
+    }
+    for (const [, appts] of glMap) {
+      const rep = appts[0];
+      const filled = appts.filter((x) => !String(x.id).startsWith("gl-empty:")).length;
+      regular.push({
+        ...rep,
+        student: { ...rep.student, firstName: `Guida di gruppo · ${filled}/3`, lastName: "" },
+      });
     }
     const groups: ExamGroup[] = [];
     for (const [key, appts] of examMap) {
@@ -452,11 +480,15 @@ export function AutoscuoleAgendaPage({
       }
 
       if (!prefetch && requestId === bootstrapRequestRef.current) {
+        // Empty group lessons (0 participants) arrive as synthetic `gl-empty:`
+        // rows from the bootstrap action itself (shared with mobile); the
+        // `regularAppointments` memo collapses them into one card per lesson.
         setAppointments(payload.data.appointments ?? []);
         setStudents(payload.data.students ?? []);
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
         setVehiclesEnabled(payload.data.vehiclesEnabled !== false);
+        setGroupLessonsEnabled(payload.data.groupLessonsEnabled === true);
         setHolidays(payload.data.holidays ?? []);
         setInstructorBlocks((payload.data.instructorBlocks ?? []).map((b: Record<string, unknown>) => ({
           id: b.id as string,
@@ -957,6 +989,16 @@ export function AutoscuoleAgendaPage({
                   <Ban className="size-3.5 text-slate-500" />
                   Evento bloccante
                 </button>
+                {groupLessonsEnabled && (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => setCreateGroupLessonOpen(true)}
+                  >
+                    <Users className="size-3.5 text-teal-600" />
+                    Guida di gruppo
+                  </button>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -998,6 +1040,23 @@ export function AutoscuoleAgendaPage({
           onSuccess={() => {
             load({ silent: true });
           }}
+        />
+        <GroupLessonManageDialog
+          open={manageGroupLessonId !== null}
+          onOpenChange={(open) => { if (!open) setManageGroupLessonId(null); }}
+          groupLessonId={manageGroupLessonId}
+          instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
+          vehicles={vehicles.map((v) => ({ id: v.id, name: v.name }))}
+          vehiclesEnabled={vehiclesEnabled}
+          onChanged={() => { load({ silent: true }); }}
+        />
+        <GroupLessonCreateDialog
+          open={createGroupLessonOpen}
+          onOpenChange={setCreateGroupLessonOpen}
+          instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
+          vehiclesEnabled={vehiclesEnabled}
+          defaultDate={normalizeDay(dayFocus).toISOString().slice(0, 10)}
+          onCreated={() => { load({ silent: true }); }}
         />
           </>)}
         </div>
@@ -1079,26 +1138,33 @@ export function AutoscuoleAgendaPage({
                         const top = offsetMinutes * PIXELS_PER_MINUTE; const height = durationMinutes * PIXELS_PER_MINUTE;
                         const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                         const isExam = item.type === "esame";
+                        const isGroupLesson = item.type === "group_lesson";
                         const isCompact = height <= 56; const GAP_PX = 2;
                         const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
                         const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
                         const isPendingAction = pendingEventActionId === item.id;
                         const cardClassName = isExam
                           ? "border-violet-300/80 bg-violet-100/90"
-                          : statusMeta.className;
+                          : isGroupLesson
+                            ? "border-teal-300/80 bg-teal-100/90"
+                            : statusMeta.className;
                         return (
                           <DropdownMenu key={item.id}>
                             <DropdownMenuTrigger asChild>
                               <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
-                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam ? ` · ${item.type}` : ""}</div></>)}
+                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? "border-teal-200 bg-teal-200/60 text-teal-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? "Gruppo" : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? "text-teal-600" : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}</div></>)}
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2"><Badge variant="secondary">{statusMeta.label}</Badge>{!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
-                              <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>
-                              {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                              <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
+                              {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
+                              {isGroupLesson ? (
+                                <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
+                              ) : (<>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                              </>)}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         );
@@ -1125,7 +1191,7 @@ export function AutoscuoleAgendaPage({
                                   return (
                                     <div key={item.id} className={cn("rounded-lg border p-2.5 text-xs", meta.className)}>
                                       <div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground truncate">{item.student.firstName} {item.student.lastName}</span><Badge variant="secondary" className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80">{meta.shortLabel}</Badge></div>
-                                      <div className="text-muted-foreground mt-0.5">{item.type} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}</div>
+                                      <div className="text-muted-foreground mt-0.5">{formatEventType(item.type)} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}</div>
                                     </div>
                                   );
                                 })}
@@ -1452,11 +1518,14 @@ export function AutoscuoleAgendaPage({
                           const height = durMin * PIXELS_PER_MINUTE;
                           const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                           const isExamInstr = item.type === "esame";
+                          const isGroupLessonInstr = item.type === "group_lesson";
                           const isCompact = height <= 40;
                           const isPendingAction = pendingEventActionId === item.id;
                           const instrCardClass = isExamInstr
                             ? "border-violet-300/80 bg-violet-100/90"
-                            : statusMeta.className;
+                            : isGroupLessonInstr
+                              ? "border-teal-300/80 bg-teal-100/90"
+                              : statusMeta.className;
                           return (
                             <DropdownMenu key={item.id}>
                               <DropdownMenuTrigger asChild>
@@ -1464,12 +1533,12 @@ export function AutoscuoleAgendaPage({
                                   type="button"
                                   className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height }}
-                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${item.type} · ${formatTimeRange(start, end)}`}
+                                  title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className={cn("p-1", isCompact ? "p-0.5" : "")}>
-                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName} {item.student.lastName.charAt(0)}.</div>
-                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : "text-muted-foreground")}>{isExamInstr ? "Esame · " : ""}{formatTimeRange(start, end)}</div>
+                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? "text-teal-800" : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName}{isGroupLessonInstr ? "" : ` ${item.student.lastName.charAt(0)}.`}</div>
+                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? "text-teal-600" : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? "Gruppo · " : ""}{formatTimeRange(start, end)}</div>
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
@@ -1478,7 +1547,7 @@ export function AutoscuoleAgendaPage({
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                                   <div className="rounded-xl border border-border bg-white p-3">
                                     <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
-                                    <div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div>
+                                    <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
@@ -1486,20 +1555,30 @@ export function AutoscuoleAgendaPage({
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
-                                      <Badge variant="secondary">{statusMeta.label}</Badge>
-                                      {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
+                                      {isGroupLessonInstr ? (
+                                        <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge>
+                                      ) : (
+                                        <Badge variant="secondary">{statusMeta.label}</Badge>
+                                      )}
+                                      {!isGroupLessonInstr && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
                                     </div>
                                   </div>
                                 </div>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
-                                  {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
-                                  <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                  <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
-                                </div>
-                                {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                {!isGroupLessonInstr && (
+                                  <div className="mt-3 grid grid-cols-2 gap-2">
+                                    {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
+                                    {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
+                                    <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
+                                    <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
+                                  </div>
+                                )}
+                                {canRescheduleAppointment(item) && !isGroupLessonInstr ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
+                              {isGroupLessonInstr ? (
+                                <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
+                              ) : (<>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                                 <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                              </>)}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           );
@@ -1825,11 +1904,14 @@ export function AutoscuoleAgendaPage({
                       const height = durationMinutes * PIXELS_PER_MINUTE;
                       const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
                       const isExamDay = item.type === "esame";
+                      const isGroupLessonDay = item.type === "group_lesson";
                       const isCompact = height <= 56;
                       const isPendingAction = pendingEventActionId === item.id;
                       const dayCardClass = isExamDay
                         ? "border-violet-300/80 bg-violet-100/90"
-                        : statusMeta.className;
+                        : isGroupLessonDay
+                          ? "border-teal-300/80 bg-teal-100/90"
+                          : statusMeta.className;
 
                       return (
                         <DropdownMenu key={item.id}>
@@ -1856,20 +1938,20 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <>
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
+                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : isGroupLessonDay ? "text-teal-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
                                       {isExamDay && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}
                                     </div>
                                     <Badge
                                       variant="secondary"
-                                      className={cn("shrink-0 font-medium", isExamDay ? "border-violet-200 bg-violet-200/60 text-violet-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
+                                      className={cn("shrink-0 font-medium", isExamDay ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLessonDay ? "border-teal-200 bg-teal-200/60 text-teal-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
                                     >
-                                      {isExamDay ? "Esame" : statusMeta.shortLabel}
+                                      {isExamDay ? "Esame" : isGroupLessonDay ? "Gruppo" : statusMeta.shortLabel}
                                     </Badge>
                                   </div>
-                                  <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : "text-muted-foreground")}>
+                                  <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : isGroupLessonDay ? "text-teal-600" : "text-muted-foreground")}>
                                     {formatTimeRange(start, end)}
                                     {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
-                                    {!isExamDay ? ` · ${item.type}` : ""}
+                                    {!isExamDay && !isGroupLessonDay ? ` · ${item.type}` : ""}
                                   </div>
                                 </>
                               )}
@@ -1885,7 +1967,7 @@ export function AutoscuoleAgendaPage({
                               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                               <div className="rounded-xl border border-border bg-white p-3">
                                 <div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div>
-                                <div className="mt-1 text-xs text-muted-foreground">{item.type} · {formatTimeRange(start, end)}</div>
+                                <div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div>
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
@@ -1893,20 +1975,30 @@ export function AutoscuoleAgendaPage({
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
-                                  <Badge variant="secondary">{statusMeta.label}</Badge>
-                                  {!canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
+                                  {isGroupLessonDay ? (
+                                    <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge>
+                                  ) : (
+                                    <Badge variant="secondary">{statusMeta.label}</Badge>
+                                  )}
+                                  {!isGroupLessonDay && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
-                              {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
-                              <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                              <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
-                            </div>
-                            {canRescheduleAppointment(item) ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                            <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                            {!isGroupLessonDay && (
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
+                                {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
+                                <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
+                                <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
+                              </div>
+                            )}
+                            {canRescheduleAppointment(item) && !isGroupLessonDay ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenReschedule(item)}>Sposta</Button> : null}
+                              {isGroupLessonDay ? (
+                                <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
+                              ) : (<>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
+                              </>)}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       );

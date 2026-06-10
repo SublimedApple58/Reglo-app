@@ -23,6 +23,7 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 | `appointment_cancelled` | `AutoscuolaAppointment` where `status='cancelled'` and `cancellationReason != 'instructor_sick'` |
 | `holiday_declared` | `AutoscuolaHoliday` where `createdAt >= since` |
 | `waitlist` | `AutoscuolaWaitlistOffer` where `status='broadcasted'` |
+| `group_lesson_invite` | `getGroupLessonInvites()` (eligibility-filtered active invites) |
 | `appointment_rescheduled` | `AutoscuolaAppointment` where `rescheduledAt >= since` |
 | `availability_published` | `AutoscuolaInstructorPublishedWeek` where `publishedAt >= since` |
 | `weekly_absence` | `AutoscuolaStudentWeeklyAbsence` where `createdAt >= since` |
@@ -43,6 +44,7 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 | `swap` / `swap_offer` | Student | broadcasted swap offers |
 | `swap_accepted` / `confirmation` | Student | client-side only |
 | `slot_fill_offer` / `waitlist` | Student | broadcasted waitlist offers |
+| `group_lesson_invite` | Student | active group-lesson invites (taps → `home/group-lesson-invites` join screen) |
 | `sick_leave_cancelled` | Student + Instructor | cancellationReason='instructor_sick' |
 | `holiday_declared` | Student | AutoscuolaHoliday.createdAt |
 | `weekly_absence` | Instructor | AutoscuolaStudentWeeklyAbsence |

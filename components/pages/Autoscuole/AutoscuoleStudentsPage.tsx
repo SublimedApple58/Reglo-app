@@ -26,6 +26,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -50,6 +51,7 @@ import {
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
   setManualPaymentStatus,
+  updateStudentGroupLessonOptIn,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -145,6 +147,7 @@ type StudentRegister = {
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   licenseCategory?: string | null;
   transmission?: string | null;
+  groupLessonsOptIn?: boolean;
   quizSeatGrantedAt?: string | null;
   theoryExamAt?: string | null;
   activeCase: {
@@ -265,6 +268,8 @@ export function AutoscuoleStudentsPage({
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
   const [weeklyLimitActive, setWeeklyLimitActive] = React.useState(false);
+  const [groupLessonsEnabledGlobal, setGroupLessonsEnabledGlobal] = React.useState(false);
+  const [groupOptInSaving, setGroupOptInSaving] = React.useState(false);
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
   const [exemptSaving, setExemptSaving] = React.useState(false);
   const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
@@ -587,6 +592,7 @@ export function AutoscuoleStudentsPage({
       if (res.success && res.data) {
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
+        setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
       }
     });
     getAutoscuolaInstructors().then((res) => {
@@ -1411,6 +1417,46 @@ export function AutoscuoleStudentsPage({
                             </Button>
                           </div>
                         </div>
+                        {groupLessonsEnabledGlobal && (
+                          <div className="sm:col-span-2">
+                            <div
+                              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-white/70 px-3.5 py-2.5 cursor-pointer"
+                              onClick={async () => {
+                                if (groupOptInSaving) return;
+                                const next = !(register.groupLessonsOptIn ?? false);
+                                setGroupOptInSaving(true);
+                                try {
+                                  const res = await updateStudentGroupLessonOptIn({
+                                    studentId: register.student.id,
+                                    optIn: next,
+                                  });
+                                  if (res.success) {
+                                    setRegister((prev) =>
+                                      prev ? { ...prev, groupLessonsOptIn: next } : prev,
+                                    );
+                                    toast.success({ description: res.message ?? "Aggiornato." });
+                                  } else {
+                                    toast.error({ description: res.message ?? "Errore." });
+                                  }
+                                } catch {
+                                  toast.error({ description: "Errore aggiornamento." });
+                                } finally {
+                                  setGroupOptInSaving(false);
+                                }
+                              }}
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-sm font-medium text-foreground">Guide di gruppo</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {(register.groupLessonsOptIn ?? false)
+                                    ? "L'allievo può partecipare alle guide di gruppo."
+                                    : "L'allievo non può partecipare alle guide di gruppo."}
+                                </span>
+                              </div>
+                              <InlineToggle checked={register.groupLessonsOptIn ?? false} size="sm" />
+                            </div>
+                          </div>
+                        )}
                         <div>
                           <p className="text-[11px] text-muted-foreground">Fase percorso</p>
                           <div className="flex flex-wrap items-center gap-2">
