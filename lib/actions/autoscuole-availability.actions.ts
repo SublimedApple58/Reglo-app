@@ -1970,7 +1970,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       const rangeStart = toTimeZoneDate(dayParts, 0, 0);
       const rangeEnd = toTimeZoneDate(addDaysToDateParts(dayParts, 1), 0, 0);
       const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-      const [appointments, bookingGroupLessonBusy] = await Promise.all([
+      const [appointments, bookingInstructorBlocks, bookingGroupLessonBusy] = await Promise.all([
         prisma.autoscuolaAppointment.findMany({
           where: {
             companyId: membership.companyId,
@@ -1978,10 +1978,28 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             startsAt: { gte: appointmentScanStart, lt: rangeEnd },
           },
         }),
+        prisma.autoscuolaInstructorBlock.findMany({
+          where: {
+            companyId: membership.companyId,
+            instructorId: { in: activeInstructorIds },
+            endsAt: { gt: rangeStart },
+            startsAt: { lt: rangeEnd },
+          },
+          select: { instructorId: true, startsAt: true, endsAt: true },
+        }),
         fetchGroupLessonBusyRows(membership.companyId, rangeStart, rangeEnd),
       ]);
 
       const appointmentMaps = buildAppointmentMaps(appointments);
+      // Instructor blocks ("blocca slot") were missing from this booking-time
+      // check — the slot LIST excluded them, but the final placement here did
+      // not, so the engine could assign an instructor inside their own block
+      // (Robatto, 2026-06-12).
+      for (const block of bookingInstructorBlocks) {
+        const list = appointmentMaps.intervals.get(block.instructorId) ?? [];
+        list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
+        appointmentMaps.intervals.set(block.instructorId, list);
+      }
       // Empty group lessons have no appointment rows — block instructor/vehicle
       // via the containers so a single guide can never land on top of one.
       addGroupLessonBusyIntervals(appointmentMaps.intervals, bookingGroupLessonBusy);
