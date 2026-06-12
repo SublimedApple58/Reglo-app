@@ -981,10 +981,15 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     const agendaGroupLessonsEnabled =
       (agendaLimits as Record<string, unknown>).groupLessonsEnabled === true;
 
+    // Grid color flags (mandatoryLesson / examNextDay) — same annotation as
+    // getAutoscuolaAppointmentsFiltered; the mobile grid reads agenda data
+    // from THIS bootstrap, so they must be present here too.
+    const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
     const mappedAppointments = appointments.map((appointment) => ({
       ...appointment,
       case: null,
       student: mapCaseStudent(appointment.student),
+      ...(gridFlags.get(appointment.id) ?? {}),
     }));
 
     // Empty group lessons (0 active participants) have no appointment rows, so
@@ -1927,6 +1932,106 @@ export async function getAutoscuolaAppointments() {
   return getAutoscuolaAppointmentsFiltered();
 }
 
+/** Calendar day (YYYY-MM-DD) of a timestamp in the company timezone. */
+const romeDayKey = (d: Date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+
+/** The calendar day after a YYYY-MM-DD key (DST-safe: pure date math). */
+const nextDayKey = (key: string) => {
+  const [y, m, d] = key.split("-").map(Number);
+  const next = new Date(Date.UTC(y, m - 1, d + 1));
+  return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}-${String(next.getUTCDate()).padStart(2, "0")}`;
+};
+
+/**
+ * Per-appointment flags for the mobile agenda grid colors:
+ *   - `mandatoryLesson`: the guide is among the student's first
+ *     REQUIRED_LESSONS_COUNT (6) individual driving lessons (chronological,
+ *     non-cancelled, group lessons and exams excluded).
+ *   - `examNextDay`: the student has a driving exam the calendar day after
+ *     this lesson (from `AutoscuolaCase.drivingExamAt` OR an exam-type
+ *     appointment) — these guides are highlighted red in the grid.
+ * Returns a map keyed by appointment id; only non-exam rows are annotated.
+ */
+const buildAppointmentGridFlags = async (
+  companyId: string,
+  appointments: Array<{
+    id: string;
+    studentId: string;
+    type: string | null;
+    groupLessonId: string | null;
+    startsAt: Date;
+  }>,
+): Promise<Map<string, { mandatoryLesson: boolean; examNextDay: boolean }>> => {
+  const flags = new Map<string, { mandatoryLesson: boolean; examNextDay: boolean }>();
+  const guides = appointments.filter((a) => a.type !== "esame");
+  if (!guides.length) return flags;
+  const studentIds = [...new Set(guides.map((a) => a.studentId))];
+
+  const [allGuides, cases, examAppointments] = await Promise.all([
+    // All individual guides of the involved students, to rank each lesson in
+    // the student's chronological history (first 6 = mandatory).
+    prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: { in: studentIds },
+        type: { not: "esame" },
+        groupLessonId: null,
+        status: { not: "cancelled" },
+      },
+      select: { id: true, studentId: true, startsAt: true },
+      orderBy: { startsAt: "asc" },
+    }),
+    prisma.autoscuolaCase.findMany({
+      where: { companyId, studentId: { in: studentIds }, drivingExamAt: { not: null } },
+      select: { studentId: true, drivingExamAt: true },
+    }),
+    prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId,
+        studentId: { in: studentIds },
+        type: "esame",
+        status: { not: "cancelled" },
+      },
+      select: { studentId: true, startsAt: true },
+    }),
+  ]);
+
+  // First-6 set per student (ids — robust against equal timestamps).
+  const mandatoryIds = new Set<string>();
+  const perStudentCount = new Map<string, number>();
+  for (const g of allGuides) {
+    const n = perStudentCount.get(g.studentId) ?? 0;
+    if (n < REQUIRED_LESSONS_COUNT) mandatoryIds.add(g.id);
+    perStudentCount.set(g.studentId, n + 1);
+  }
+
+  // Exam day keys per student (case date + exam appointments).
+  const examDaysByStudent = new Map<string, Set<string>>();
+  const addExamDay = (studentId: string, when: Date | null) => {
+    if (!when) return;
+    const set = examDaysByStudent.get(studentId) ?? new Set<string>();
+    set.add(romeDayKey(when));
+    examDaysByStudent.set(studentId, set);
+  };
+  for (const c of cases) addExamDay(c.studentId, c.drivingExamAt);
+  for (const e of examAppointments) addExamDay(e.studentId, e.startsAt);
+
+  for (const a of guides) {
+    const examDays = examDaysByStudent.get(a.studentId);
+    flags.set(a.id, {
+      mandatoryLesson: mandatoryIds.has(a.id),
+      examNextDay: examDays ? examDays.has(nextDayKey(romeDayKey(a.startsAt))) : false,
+    });
+  }
+  return flags;
+};
+
 export async function getAutoscuolaAppointmentsFiltered(input?: {
   from?: string | Date | null;
   to?: string | Date | null;
@@ -2042,12 +2147,14 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
         ...(limit ? { take: limit } : {}),
       });
 
+      const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
       return {
         success: true,
         data: appointments.map((item) => ({
           ...item,
           case: null,
           student: mapCaseStudent(item.student),
+          ...(gridFlags.get(item.id) ?? {}),
         })),
       };
     }
@@ -2072,11 +2179,13 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
       ...(limit ? { take: limit } : {}),
     });
 
+    const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
     return {
       success: true,
       data: appointments.map((item) => ({
         ...item,
         student: mapCaseStudent(item.student),
+        ...(gridFlags.get(item.id) ?? {}),
       })),
     };
   } catch (error) {
