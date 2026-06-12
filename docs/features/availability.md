@@ -62,6 +62,13 @@ single guide on top of it (Robatto incident). Shared helper:
 `getDateAvailabilityMap`, `createBookingRequest`, `slot-matcher.findBestAutoscuolaSlot`.
 NOT applied to staff manual flows (they may deliberately overbook with their own warnings).
 
+`AutoscuolaInstructorBlock` rows are likewise merged into the busy intervals of all
+four sites. `createBookingRequest` was MISSING them until 2026-06-12 (the slot list
+excluded blocked times but the final booking-time placement did not, so a student
+booking could land inside a "blocca slot" — Robatto incident #2): now it fetches
+blocks in the same Promise.all wave and pushes them into `appointmentMaps.intervals`
+keyed by `instructorId`.
+
 ## Connected features
 - **Booking Engine** — slot-matcher reads all availability data; publication filter gates booking
 - **Group Lessons** — containers (even empty) are busy intervals for instructor+vehicle (see above)
