@@ -58,7 +58,10 @@ type Props = {
   onCreated: () => void;
 };
 
-const CAPACITY = 3;
+const CAPACITY_OPTIONS = [
+  { value: "3", label: "3 allievi" },
+  { value: "4", label: "4 allievi" },
+];
 
 const DURATIONS = [
   { value: "60", label: "1 ora" },
@@ -107,6 +110,8 @@ export function GroupLessonCreateDialog({
   const [day, setDay] = React.useState("");
   const [time, setTime] = React.useState("09:00");
   const [durationMin, setDurationMin] = React.useState("180");
+  const [capacityStr, setCapacityStr] = React.useState("3");
+  const CAPACITY = Number(capacityStr);
   const [instructorId, setInstructorId] = React.useState<string>("");
   const [vehicleId, setVehicleId] = React.useState<string>("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
@@ -119,6 +124,7 @@ export function GroupLessonCreateDialog({
     setDay(defaultDate || todayYMD());
     setTime("09:00");
     setDurationMin("180");
+    setCapacityStr("3");
     setInstructorId("");
     setVehicleId("");
     setSelectedIds([]);
@@ -216,6 +222,7 @@ export function GroupLessonCreateDialog({
         endsAt: end.toISOString(),
         instructorId: instructorId || undefined,
         vehicleId: vehiclesEnabled ? vehicleId || undefined : undefined,
+        capacity: CAPACITY,
         studentIds: selectedIds,
       });
       if (!res.success || !res.data) {
@@ -315,8 +322,30 @@ export function GroupLessonCreateDialog({
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Capienza</Label>
+                <Select
+                  value={capacityStr}
+                  onValueChange={(v) => {
+                    setCapacityStr(v);
+                    // Lowering 4 → 3 with 4 pre-selected students: trim the list.
+                    setSelectedIds((prev) => prev.slice(0, Number(v)));
+                  }}
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CAPACITY_OPTIONS.map((c) => (
+                      <SelectItem key={c.value} value={c.value} className="cursor-pointer">
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {vehiclesEnabled ? (
-                <div className="col-span-2 space-y-1">
+                <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Veicolo</Label>
                   <Select value={vehicleId} onValueChange={setVehicleId}>
                     <SelectTrigger className="cursor-pointer">

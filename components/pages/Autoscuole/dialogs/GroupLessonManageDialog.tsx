@@ -94,6 +94,7 @@ export function GroupLessonManageDialog({
   // Local edit state for the "Sposta / modifica" section.
   const [startLocal, setStartLocal] = React.useState("");
   const [durationMin, setDurationMin] = React.useState("180");
+  const [capacityStr, setCapacityStr] = React.useState("3");
   const [instructorId, setInstructorId] = React.useState<string>("");
   const [vehicleId, setVehicleId] = React.useState<string>("");
 
@@ -109,6 +110,7 @@ export function GroupLessonManageDialog({
         setLesson(res.data);
         setStartLocal(toLocalInput(res.data.startsAt));
         setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
+        setCapacityStr(String(res.data.capacity ?? 3));
         setInstructorId(res.data.instructorId ?? "");
         setVehicleId(res.data.vehicleId ?? "");
       }
@@ -165,6 +167,7 @@ export function GroupLessonManageDialog({
         endsAt: end.toISOString(),
         instructorId: instructorId || null,
         vehicleId: vehicleId || null,
+        capacity: Number(capacityStr),
       }),
       "Guida di gruppo aggiornata.",
     )) reload();
@@ -260,6 +263,16 @@ export function GroupLessonManageDialog({
                       {DURATIONS.map((d) => (
                         <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
                       ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Capienza</span>
+                  <Select value={capacityStr} onValueChange={setCapacityStr}>
+                    <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3" className="cursor-pointer" disabled={(lesson?.filledSeats ?? 0) > 3}>3 allievi</SelectItem>
+                      <SelectItem value="4" className="cursor-pointer">4 allievi</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -985,11 +985,32 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     // getAutoscuolaAppointmentsFiltered; the mobile grid reads agenda data
     // from THIS bootstrap, so they must be present here too.
     const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
+
+    // Group lesson capacity per row (configurable 3 or 4 since 2026-06-12):
+    // agenda consumers (mobile cards' seat dots) must show the REAL capacity,
+    // not a hardcoded 3.
+    const agendaGlIds = [
+      ...new Set(appointments.map((a) => a.groupLessonId).filter(Boolean) as string[]),
+    ];
+    const agendaGlCapacities = agendaGlIds.length
+      ? new Map(
+          (
+            await prisma.autoscuolaGroupLesson.findMany({
+              where: { id: { in: agendaGlIds } },
+              select: { id: true, capacity: true },
+            })
+          ).map((g) => [g.id, g.capacity]),
+        )
+      : new Map<string, number>();
+
     const mappedAppointments = appointments.map((appointment) => ({
       ...appointment,
       case: null,
       student: mapCaseStudent(appointment.student),
       ...(gridFlags.get(appointment.id) ?? {}),
+      groupLessonCapacity: appointment.groupLessonId
+        ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
+        : null,
     }));
 
     // Empty group lessons (0 active participants) have no appointment rows, so
@@ -1017,6 +1038,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           startsAt: true,
           endsAt: true,
           notes: true,
+          capacity: true,
           instructorId: true,
           vehicleId: true,
           instructor: { select: { id: true, name: true } },
@@ -1052,6 +1074,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           instructor: gl.instructor,
           vehicle: gl.vehicle,
           location: null,
+          groupLessonCapacity: gl.capacity,
         } as (typeof mappedAppointments)[number]);
       }
     }
@@ -6708,7 +6731,7 @@ const createGroupLessonSchema = z.object({
   endsAt: z.string(),
   vehicleId: z.string().uuid().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
-  capacity: z.number().int().min(1).max(3).optional(),
+  capacity: z.number().int().min(1).max(4).optional(),
   studentIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
 });
@@ -7188,6 +7211,8 @@ const updateGroupLessonSchema = z.object({
   endsAt: z.string().optional(),
   instructorId: z.string().uuid().nullable().optional(),
   vehicleId: z.string().uuid().nullable().optional(),
+  /** Max participants (3 or 4) — cannot drop below the current enrolled count. */
+  capacity: z.number().int().min(1).max(4).optional(),
   /** Instructor operational notes on the group lesson container (null clears). */
   notes: z.string().max(2000).nullable().optional(),
 });
@@ -7250,6 +7275,15 @@ export async function updateGroupLesson(
     }
 
     const studentIds = gl.appointments.map((a) => a.studentId);
+
+    // Capacity change: never below the current enrolled count.
+    if (payload.capacity !== undefined && payload.capacity < studentIds.length) {
+      return {
+        success: false as const,
+        message: `La capienza non può essere inferiore agli iscritti attuali (${studentIds.length}).`,
+      };
+    }
+
     const limits = await getCachedCompanyServiceLimits(companyId);
     const vehiclesEnabled = (limits as Record<string, unknown>).vehiclesEnabled !== false;
     if (vehiclesEnabled && vehicle && studentIds.length) {
@@ -7273,6 +7307,7 @@ export async function updateGroupLesson(
         where: { id: gl.id },
         data: {
           startsAt, endsAt, instructorId, vehicleId,
+          ...(payload.capacity !== undefined ? { capacity: payload.capacity } : {}),
           ...(notes !== undefined ? { notes } : {}),
         },
       }),
