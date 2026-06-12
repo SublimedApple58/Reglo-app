@@ -31,6 +31,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Payments**: captures payment snapshot on booking
 - → **Instructor Clusters**: respects cluster assignments, autonomous mode
 - → **Penalties**: booking governance enforces limits to prevent abuse
+- → **Group Lessons**: scheduled containers (even empty) are busy intervals for instructor+vehicle (`lib/autoscuole/group-lesson-busy.ts`, fix 2026-06-12)
 
 ### Payments & Credits
 - → **Appointments**: settlement/retry/penalty reads appointment data; refund on cancel
@@ -46,6 +47,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Notifications**: push to both students on offer/accept
 - → **Cache**: invalidates PAYMENTS
 - → **Mobile**: `SwapOffersScreen`, `NotificationOverlay`
+- → **Group Lessons**: group-lesson seats and exams are NOT swappable — guards in all 3 swap mutations + offers list filter (fix 2026-06-12)
 
 ### Holidays
 - → **Appointments**: bulk cancel with credit refunds

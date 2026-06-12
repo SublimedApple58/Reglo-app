@@ -69,3 +69,5 @@ Participant appointments are written **directly** (NOT via `prepareAppointmentPa
 
 ## Connected features
 - `vehicles.md` (license categories → invitee filtering), booking/slot-matcher (overlap), `notifications.md` (the `group_lesson_invite` kind), payments (the "da pagare" surfacing), mobile `group-lessons`.
+- `swaps.md` — **group-lesson seats are NOT swappable** (guards in create/respond/instructor swap + offers list filter, fix 2026-06-12 after the Robatto incident: a swap takeover bypassed the opt-in rules). The only ways in/out of a seat: pre-add, invite accept, withdraw, instructor removal.
+- `availability.md` — **containers (even with 0 seats) are busy intervals** for instructor+vehicle in the whole booking engine (`lib/autoscuole/group-lesson-busy.ts`, fix 2026-06-12: empty lessons were invisible and students could book single guides on top).

@@ -15,6 +15,10 @@ import {
   resolveVehicleForInstructor,
 } from "@/lib/autoscuole/fixed-vehicle";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import {
+  addGroupLessonBusyIntervals,
+  fetchGroupLessonBusyRows,
+} from "@/lib/autoscuole/group-lesson-busy";
 
 const SLOT_MINUTES = 30;
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -377,7 +381,7 @@ export async function findBestAutoscuolaSlot(
     toTimeZoneDate(preferredDateParts, 0, 0).getTime() - 60 * 60 * 1000,
   );
   const fullRangeEnd = toTimeZoneDate(addDaysToDateParts(preferredDateParts, maxDays + 1), 0, 0);
-  const [allAppointments, allInstructorBlocks] = await Promise.all([
+  const [allAppointments, allInstructorBlocks, allGroupLessonBusy] = await Promise.all([
     prisma.autoscuolaAppointment.findMany({
       where: {
         companyId: input.companyId,
@@ -400,6 +404,7 @@ export async function findBestAutoscuolaSlot(
         startsAt: { lt: fullRangeEnd },
       },
     }),
+    fetchGroupLessonBusyRows(input.companyId, fullRangeStart, fullRangeEnd),
   ]);
 
   for (let offset = 0; offset <= maxDays; offset += 1) {
@@ -421,6 +426,12 @@ export async function findBestAutoscuolaSlot(
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
       appointmentMaps.intervals.set(block.instructorId, list);
     }
+    // Group-lesson containers (incl. empty ones with no appointment rows)
+    // block their instructor and vehicle.
+    addGroupLessonBusyIntervals(
+      appointmentMaps.intervals,
+      allGroupLessonBusy.filter((gl) => gl.endsAt && gl.endsAt > rangeStart && gl.startsAt < rangeEnd),
+    );
     const studentIntervals = appointmentMaps.intervals.get(input.studentId);
 
     const window = {

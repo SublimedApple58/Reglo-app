@@ -30,6 +30,19 @@ Peer-to-peer appointment swaps between students. Instructor can also swap two st
 ## Credit handling
 On accept: `adjustStudentLessonCredits(swap_consume)` for taker, `adjustStudentLessonCredits(swap_refund)` for giver.
 
+## Non-swappable appointments (fix 2026-06-12)
+**Group-lesson seats and exams are NOT swappable.** Guarded in `createSwapOffer`
+(blocks offering), `respondSwapOffer` (defense-in-depth for stale offers),
+`instructorSwapAppointments` (both A and B), and `getSwapOffers` (where-clause
+filter `groupLessonId: null` + `type notIn [group_lesson, esame]`). Reason: a
+swap reassigns `studentId` directly and would bypass the group-lesson rules
+(opt-in, license, seat count, invite flow) — real incident at Autoscuola Robatto
+(2026-06-11): a non-opted-in student entered a group lesson by accepting a swap
+offer created by a participant on his seat. Freeing a group seat must go through
+"Ritira iscrizione" (`withdrawFromGroupLesson`), which re-broadcasts the invite
+to eligible students only. Mobile mirrors the rule: `AllievoHomeScreen.openLessonDetail`
+sets `canSwap: false` for `groupLessonId`/`group_lesson`/`esame`.
+
 ## Booking gate note
 `respondSwapOffer()` reassigns the appointment to the accepting student **without**
 checking the `bookingMinStartDate` gate ("Prenotazioni aperte dal"). A student can

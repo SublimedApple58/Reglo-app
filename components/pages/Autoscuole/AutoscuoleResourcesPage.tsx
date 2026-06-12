@@ -822,28 +822,15 @@ export function AutoscuoleResourcesPage({
 
   // ── Instructor availability handlers ──────────────────────────────────────
 
-  const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
-    const current = instructorWeeklyAvailability[instructor.id];
-    setAvailDialogTab("default");
-    setCalendarSelectedDate(null);
-    setCalendarMonth(new Date());
-    setRecurringOverride(false);
-    setAvailInstructor(instructor);
-    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-    setInstrDefaultRanges(
-      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
-    );
-    setInstrSelectedWeek(null);
-    setInstrDaySchedule([]);
-    // Load daily overrides for this instructor and group them by week
+  /** (Re)load the daily overrides of an instructor into `instrOverrides`,
+   * grouped by ISO week. Called on dialog open AND after a recurring save so
+   * the calendar dots reflect the just-saved state immediately. */
+  const loadInstrOverrides = (instructorId: string) => {
     getWeeklyAvailabilityOverrides({
       ownerType: "instructor",
-      ownerId: instructor.id,
+      ownerId: instructorId,
     }).then((res) => {
       if (res.success && res.data) {
-        // Group daily overrides by ISO week start (Monday)
         const byWeek = new Map<string, DayScheduleEntry[]>();
         for (const o of res.data) {
           const d = new Date(o.date);
@@ -868,6 +855,25 @@ export function AutoscuoleResourcesPage({
         );
       }
     });
+  };
+
+  const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
+    const current = instructorWeeklyAvailability[instructor.id];
+    setAvailDialogTab("default");
+    setCalendarSelectedDate(null);
+    setCalendarMonth(new Date());
+    setRecurringOverride(false);
+    setAvailInstructor(instructor);
+    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
+    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
+    setInstrDefaultRanges(
+      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
+    );
+    setInstrSelectedWeek(null);
+    setInstrDaySchedule([]);
+    // Load daily overrides for this instructor and group them by week
+    loadInstrOverrides(instructor.id);
   };
 
   const toggleInstrDay = (day: number) => {
@@ -1715,6 +1721,7 @@ export function AutoscuoleResourcesPage({
                       });
                       setSavingInstrAvailability(false);
                       if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                      loadInstrOverrides(availInstructor.id);
                     } else if (recurringOverride) {
                       // Recurring: apply to all future weeks for this day of week
                       setSavingInstrAvailability(true);
@@ -1726,6 +1733,9 @@ export function AutoscuoleResourcesPage({
                       });
                       setSavingInstrAvailability(false);
                       if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+                      // Refresh the calendar dots with the just-saved weeks —
+                      // without this the dialog showed no trace of the save.
+                      loadInstrOverrides(availInstructor.id);
                     } else {
                       const schedule: DayScheduleEntry[] = [{
                         dayOfWeek,

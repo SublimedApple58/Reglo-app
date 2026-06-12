@@ -209,6 +209,17 @@ export async function createSwapOffer(
     if (!appointment) {
       return { success: false, message: "Guida non trovata." };
     }
+    // Group-lesson seats are NOT swappable: a takeover would bypass the
+    // opt-in + license + seat-count rules of the group-lesson flow (real
+    // incident: a non-opted-in student entered a group lesson via swap).
+    // Freeing a seat goes through "Ritira iscrizione", which re-broadcasts
+    // the invite to eligible students only.
+    if (appointment.groupLessonId || appointment.type === "group_lesson") {
+      return { success: false, message: "I posti delle guide di gruppo non si possono scambiare." };
+    }
+    if (appointment.type === "esame") {
+      return { success: false, message: "Gli esami non si possono scambiare." };
+    }
     if (appointment.studentId !== membership.userId) {
       return { success: false, message: "Non sei il titolare di questa guida." };
     }
@@ -480,6 +491,10 @@ export async function getSwapOffers(
         appointment: {
           startsAt: { gt: now },
           status: { in: ["scheduled", "confirmed"] },
+          // Group-lesson seats and exams are not swappable — hide any stale
+          // offer created before the createSwapOffer guard existed.
+          groupLessonId: null,
+          type: { notIn: ["group_lesson", "esame"] },
         },
       },
       include: {
@@ -600,6 +615,15 @@ export async function respondSwapOffer(
 
     if (!offer) {
       return { success: false, message: "Offerta non trovata o scaduta." };
+    }
+
+    // Defense in depth: never let a swap move a group-lesson seat or an exam,
+    // even for offers created before this guard existed (see createSwapOffer).
+    if (
+      offer.appointment.groupLessonId ||
+      ["group_lesson", "esame"].includes(offer.appointment.type)
+    ) {
+      return { success: false, message: "Questa guida non è scambiabile." };
     }
 
     // Cluster validation: if accepting student is in a cluster, the offer must be from the same cluster
@@ -1001,6 +1025,14 @@ export async function instructorSwapAppointments(
 
     if (!apptA || !apptB) {
       return { success: false, message: "Una o entrambe le guide non trovate." };
+    }
+
+    // Group-lesson seats and exams are not swappable (the group flow has its
+    // own opt-in/seat rules; exams are personal). Same guard as createSwapOffer.
+    const notSwappable = (a: typeof apptA) =>
+      a.groupLessonId !== null || ["group_lesson", "esame"].includes(a.type);
+    if (notSwappable(apptA) || notSwappable(apptB)) {
+      return { success: false, message: "Le guide di gruppo e gli esami non si possono scambiare." };
     }
 
     // Both must be scheduled or confirmed

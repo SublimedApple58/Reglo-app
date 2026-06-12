@@ -56,6 +56,10 @@ import {
   computeAnchorAwareEntryPoints,
   computeFreeIntervalsInRange,
 } from "@/lib/autoscuole/slot-packing";
+import {
+  addGroupLessonBusyIntervals,
+  fetchGroupLessonBusyRows,
+} from "@/lib/autoscuole/group-lesson-busy";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -1231,16 +1235,14 @@ export async function setRecurringAvailabilityOverride(
       }
     }
 
-    // Determine how many weeks ahead from company settings
-    const service = await prisma.companyService.findFirst({
-      where: { companyId, serviceKey: "AUTOSCUOLE" },
-      select: { limits: true },
-    });
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
-    const availabilityWeeks = typeof limits.availabilityWeeks === "number"
-      ? limits.availabilityWeeks
-      : 4;
-    const weeks = payload.weeksAhead ?? availabilityWeeks;
+    // The UI presents this as "applica a tutti i [giorno] futuri", so cover a
+    // full year by default. The old default (company `availabilityWeeks`,
+    // typically 4) created a ROLLING GAP: the booking horizon advances every
+    // day, while the override coverage stayed frozen at save-time + 4 weeks —
+    // dates beyond it silently fell back to the (often stale) weekly base, and
+    // the school read it as "gli orari non si salvano" / "prenotazioni in
+    // orari non disponibili" (Robatto, 2026-06-12).
+    const weeks = payload.weeksAhead ?? 52;
 
     // Generate dates for the target dayOfWeek for the next N weeks
     const today = new Date();
@@ -1255,8 +1257,9 @@ export async function setRecurringAvailabilityOverride(
       dates.push(new Date(firstDate.getTime() + w * 7 * 24 * 60 * 60 * 1000));
     }
 
-    // Upsert override for each date
-    await Promise.all(
+    // Upsert override for each date (batched in one transaction — with 52
+    // weeks this is too many round-trips for a Promise.all of upserts).
+    await prisma.$transaction(
       dates.map((date) =>
         prisma.autoscuolaDailyAvailabilityOverride.upsert({
           where: {
@@ -1285,21 +1288,23 @@ export async function setRecurringAvailabilityOverride(
         ? { instructorId: payload.ownerId }
         : { vehicleId: payload.ownerId };
 
-    await Promise.all(
-      dates.map((date) => {
-        const nextDay = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-        return prisma.autoscuolaAppointment.updateMany({
-          where: {
-            companyId,
-            ...ownerField,
-            startsAt: { gte: date, lt: nextDay },
-            status: { in: ["scheduled", "confirmed", "checked_in"] },
-            availabilityOverrideApproved: true,
+    await prisma.autoscuolaAppointment.updateMany({
+      where: {
+        companyId,
+        ...ownerField,
+        status: { in: ["scheduled", "confirmed", "checked_in"] },
+        availabilityOverrideApproved: true,
+        OR: dates.map((date) => ({
+          startsAt: {
+            gte: date,
+            lt: new Date(date.getTime() + 24 * 60 * 60 * 1000),
           },
-          data: { availabilityOverrideApproved: false },
-        });
-      }),
-    );
+        })),
+      },
+      data: { availabilityOverrideApproved: false },
+    });
+
+    await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
     return { success: true as const, data: { count: dates.length } };
   } catch (error) {
@@ -1952,15 +1957,21 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       const rangeStart = toTimeZoneDate(dayParts, 0, 0);
       const rangeEnd = toTimeZoneDate(addDaysToDateParts(dayParts, 1), 0, 0);
       const appointmentScanStart = new Date(rangeStart.getTime() - 60 * 60 * 1000);
-      const appointments = await prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId: membership.companyId,
-          status: { notIn: ["cancelled"] },
-          startsAt: { gte: appointmentScanStart, lt: rangeEnd },
-        },
-      });
+      const [appointments, bookingGroupLessonBusy] = await Promise.all([
+        prisma.autoscuolaAppointment.findMany({
+          where: {
+            companyId: membership.companyId,
+            status: { notIn: ["cancelled"] },
+            startsAt: { gte: appointmentScanStart, lt: rangeEnd },
+          },
+        }),
+        fetchGroupLessonBusyRows(membership.companyId, rangeStart, rangeEnd),
+      ]);
 
       const appointmentMaps = buildAppointmentMaps(appointments);
+      // Empty group lessons have no appointment rows — block instructor/vehicle
+      // via the containers so a single guide can never land on top of one.
+      addGroupLessonBusyIntervals(appointmentMaps.intervals, bookingGroupLessonBusy);
       const studentIntervals = appointmentMaps.intervals.get(payload.studentId);
 
       let best: {
@@ -2804,6 +2815,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       vehicleResolver,
       appointments,
       instructorBlocks,
+      groupLessonBusy,
     ] = await Promise.all([
       enforceRequiredTypes
         ? getStudentLessonPolicyCoverage({
@@ -2841,6 +2853,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           startsAt: { lt: rangeEnd },
         },
       }),
+      fetchGroupLessonBusyRows(membership.companyId, rangeStart, rangeEnd),
     ]);
     const missingRequiredTypes = lessonCoverage?.missingRequiredTypes ?? [];
 
@@ -2869,6 +2882,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
       intervals.set(block.instructorId, list);
     }
+
+    // Group-lesson containers (even with 0 participants) block their
+    // instructor and vehicle — empty lessons have no appointment rows and
+    // would otherwise be invisible here.
+    addGroupLessonBusyIntervals(intervals, groupLessonBusy);
 
     const overlaps = (
       ownerIntervals: Array<{ start: number; end: number }> | undefined,
@@ -3254,7 +3272,7 @@ export async function getDateAvailabilityMap(
     const appointmentScanStart = new Date(
       rangeStart.getTime() - 60 * 60 * 1000,
     );
-    const [appointments, dateMapInstructorBlocks] = await Promise.all([
+    const [appointments, dateMapInstructorBlocks, dateMapGroupLessonBusy] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: {
           companyId: membership.companyId,
@@ -3270,6 +3288,7 @@ export async function getDateAvailabilityMap(
           startsAt: { lt: rangeEnd },
         },
       }),
+      fetchGroupLessonBusyRows(membership.companyId, rangeStart, rangeEnd),
     ]);
 
     // Build intervals map
@@ -3292,6 +3311,9 @@ export async function getDateAvailabilityMap(
       list.push({ start: block.startsAt.getTime(), end: block.endsAt.getTime() });
       intervals.set(block.instructorId, list);
     }
+    // Empty group lessons have no appointment rows — block instructor/vehicle
+    // via the containers.
+    addGroupLessonBusyIntervals(intervals, dateMapGroupLessonBusy);
 
     const overlaps = (
       ownerIntervals: Array<{ start: number; end: number }> | undefined,

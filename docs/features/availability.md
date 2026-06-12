@@ -12,7 +12,7 @@ Instructor and vehicle availability management: weekly schedules, daily override
 ## Key functions
 - Weekly: `setWeeklyAvailability()`, `deleteWeeklyAvailability()`
 - Daily: `setDailyAvailabilityOverride()`, `deleteDailyAvailabilityOverride()`, `getDailyAvailabilityOverrides()`
-- Recurring: `setRecurringAvailabilityOverride()` — same override for multiple weeks
+- Recurring: `setRecurringAvailabilityOverride()` — same override repeated weekly. **Default horizon = 52 weeks** (fix 2026-06-12: the old default, company `availabilityWeeks` ≈ 4, created a rolling gap — the booking horizon advances daily while coverage stayed frozen at save-time+4w, so dates beyond silently fell back to the stale weekly base; the UI says "applica a tutti i [giorno] futuri"). Upserts batched in one `$transaction`, single OR-of-ranges `updateMany` for the approved-flag reset, and now invalidates the AGENDA cache (was missing).
 - Publication: `publishInstructorWeek()`, `unpublishInstructorWeek()`, `getInstructorPublishedWeeks()`
 - Filter: `getPublicationModeFilter()` — returns closure `(instructorId, date) => boolean` for booking engine gating
 - Resolver: `buildAvailabilityResolver()` — checks slots against weekly + daily overrides
@@ -51,8 +51,20 @@ End-of-day residues smaller than `min(bookingSlotDurations)` are tolerated and n
 
 Unit tests: `tests/unit/autoscuole/slot-packing.test.ts`.
 
+## Group-lesson containers as busy intervals (fix 2026-06-12)
+Scheduled `AutoscuolaGroupLesson` containers block their instructor AND vehicle in
+all booking-engine busy-interval builders, **regardless of seat count**. Participant
+rows already block via normal appointments, but an EMPTY group lesson (0 seats,
+open invites) has no appointment rows and was invisible — students could book a
+single guide on top of it (Robatto incident). Shared helper:
+`lib/autoscuole/group-lesson-busy.ts` (`fetchGroupLessonBusyRows` +
+`addGroupLessonBusyIntervals`), merged in: `getAllAvailableSlots`,
+`getDateAvailabilityMap`, `createBookingRequest`, `slot-matcher.findBestAutoscuolaSlot`.
+NOT applied to staff manual flows (they may deliberately overbook with their own warnings).
+
 ## Connected features
 - **Booking Engine** — slot-matcher reads all availability data; publication filter gates booking
+- **Group Lessons** — containers (even empty) are busy intervals for instructor+vehicle (see above)
 - **Repositioning** — reposition uses slot-matcher
 - **Notifications** — `availability_published` push to assigned students
 - **Cache** — invalidates AGENDA segment
