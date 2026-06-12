@@ -7,20 +7,18 @@
 //   DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx ts-node scripts/backfill-instructor-invite-codes.ts
 // Run (prod):
 //   DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config npx ts-node scripts/backfill-instructor-invite-codes.ts
-// eslint-disable-next-line @typescript-eslint/no-require-imports -- one-shot ts-node script, CJS like the sibling backfills
-const { PrismaClient } = require("@prisma/client");
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const nodeCrypto = require("node:crypto");
+import { PrismaClient } from "@prisma/client";
+import nodeCrypto from "node:crypto";
 
 const prisma = new PrismaClient();
 
 // No 0/O/1/I — easy to read aloud and retype (same charset as the company backfill).
-const CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const INSTRUCTOR_CHARSET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function generateCode(): string {
-  const bytes: Buffer = nodeCrypto.randomBytes(6);
-  return Array.from(bytes as Uint8Array)
-    .map((b) => CHARSET[b % CHARSET.length])
+  const bytes = nodeCrypto.randomBytes(6);
+  return Array.from(bytes)
+    .map((b) => INSTRUCTOR_CHARSET[b % INSTRUCTOR_CHARSET.length])
     .join("");
 }
 
@@ -64,7 +62,3 @@ async function main() {
 main()
   .catch(console.error)
   .finally(() => prisma.$disconnect());
-
-// Make this file a TS module so its top-level names don't clash with the
-// sibling backfill script (both are plain CommonJS run via ts-node).
-export {};
