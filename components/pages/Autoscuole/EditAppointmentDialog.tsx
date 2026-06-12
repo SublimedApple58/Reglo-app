@@ -28,6 +28,7 @@ import {
 
 type StudentLite = { firstName: string; lastName: string };
 type InstructorOption = { id: string; name: string };
+type VehicleOption = { id: string; name: string };
 type LocationOption = {
   id: string;
   name: string;
@@ -43,6 +44,7 @@ export type EditAppointmentDialogAppointment = {
   notes?: string | null;
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
+  vehicle?: { id: string; name: string } | null;
   location?: { id: string; name: string } | null;
 };
 
@@ -88,6 +90,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   appointment: EditAppointmentDialogAppointment | null;
   instructors: InstructorOption[];
+  vehicles?: VehicleOption[];
+  vehiclesEnabled?: boolean;
   locations: LocationOption[];
   onSuccess?: () => void;
 };
@@ -97,6 +101,8 @@ export function EditAppointmentDialog({
   onOpenChange,
   appointment,
   instructors,
+  vehicles = [],
+  vehiclesEnabled = true,
   locations,
   onSuccess,
 }: Props) {
@@ -115,11 +121,13 @@ export function EditAppointmentDialog({
 
   const originalInstructorId = appointment?.instructor?.id ?? "";
   const originalLessonType = appointment?.type ?? "guida";
+  const originalVehicleId = appointment?.vehicle?.id ?? "";
   const originalLocationId = appointment?.location?.id ?? "";
   const originalNotes = appointment?.notes ?? "";
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
   const [lessonType, setLessonType] = React.useState(originalLessonType);
+  const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
   // Date/time staging — start from the appointment's current slot.
@@ -139,6 +147,7 @@ export function EditAppointmentDialog({
     const start = new Date(appointment.startsAt);
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonType(appointment.type ?? "guida");
+    setVehicleId(appointment.vehicle?.id ?? "");
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
     setNewDate(toDateStr(start));
@@ -173,9 +182,18 @@ export function EditAppointmentDialog({
     return effectiveStart.getTime() !== originalStart.getTime();
   }, [effectiveStart, originalStart]);
 
-  const isNewSlotInPast = effectiveStart
-    ? effectiveStart.getTime() < Date.now()
-    : false;
+  // Past/completed guides ARE editable (the titolare fixes records after the
+  // fact: wrong vehicle, wrong time, missing notes). The only forbidden move
+  // is dragging a FUTURE guide into the past by accident — a guide that
+  // already lives in the past can be moved freely between past slots.
+  const normalizedStatus = (appointment?.status ?? "").toLowerCase();
+  const isConcluded = ["completed", "no_show", "cancelled"].includes(normalizedStatus);
+  const originalInPast = originalStart ? originalStart.getTime() < Date.now() : false;
+
+  const isNewSlotInPast =
+    dateTimeChanged && !originalInPast && !isConcluded && effectiveStart
+      ? effectiveStart.getTime() < Date.now()
+      : false;
 
   const instructorChanged = instructorId !== originalInstructorId && instructorId !== "";
 
@@ -276,6 +294,7 @@ export function EditAppointmentDialog({
   const hasChanges =
     instructorId !== originalInstructorId ||
     lessonType !== originalLessonType ||
+    vehicleId !== originalVehicleId ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
     dateTimeChanged;
@@ -315,6 +334,11 @@ export function EditAppointmentDialog({
       }
       if (lessonType !== originalLessonType) {
         detailsPayload.lessonType = lessonType;
+        hasDetails = true;
+      }
+      if (vehicleId !== originalVehicleId) {
+        // Empty string from <Select> means "no vehicle" → null on the wire.
+        detailsPayload.vehicleId = vehicleId === "" ? null : vehicleId;
         hasDetails = true;
       }
       if (locationId !== originalLocationId) {
@@ -473,7 +497,7 @@ export function EditAppointmentDialog({
             <Select
               value={instructorId || undefined}
               onValueChange={(v) => setInstructorId(v)}
-              disabled={pending}
+              disabled={pending || isConcluded}
             >
               <SelectTrigger id="edit-instructor" className="h-10 cursor-pointer">
                 <SelectValue placeholder="Seleziona istruttore" />
@@ -486,10 +510,47 @@ export function EditAppointmentDialog({
                 ))}
               </SelectContent>
             </Select>
+            {isConcluded && (
+              <p className="text-[11px] text-muted-foreground">
+                L&apos;istruttore non si può cambiare su una guida già conclusa.
+              </p>
+            )}
           </div>
 
           {/* Combined availability badge (covers instructor swap AND/OR slot move) */}
           <AvailabilityBadge />
+
+          {/* Vehicle — company resource, editable also on past/completed guides
+              (the titolare fixes the record after the fact). */}
+          {vehiclesEnabled && vehicles.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="edit-vehicle"
+                className="text-xs font-medium text-slate-700"
+              >
+                Veicolo
+              </label>
+              <Select
+                value={vehicleId || "__none__"}
+                onValueChange={(v) => setVehicleId(v === "__none__" ? "" : v)}
+                disabled={pending}
+              >
+                <SelectTrigger id="edit-vehicle" className="h-10 cursor-pointer">
+                  <SelectValue placeholder="Da assegnare" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__none__" className="cursor-pointer">
+                    Da assegnare
+                  </SelectItem>
+                  {vehicles.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="cursor-pointer">
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Lesson type */}
           <div className="flex flex-col gap-2">

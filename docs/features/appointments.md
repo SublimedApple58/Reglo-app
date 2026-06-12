@@ -13,9 +13,9 @@ Full lesson/exam lifecycle: create, propose, confirm, check-in, complete, cancel
 - `createAutoscuolaAppointment()` — single lesson
 - `createAutoscuolaAppointmentBatch()` — batch (exams)
 - `cancelAutoscuolaAppointment()` — cancel with refund + reposition queue
-- `rescheduleAutoscuolaAppointment()` — reschedule with audit trail (`rescheduledAt`, `rescheduledFromStartsAt`)
+- `rescheduleAutoscuolaAppointment()` — reschedule with audit trail (`rescheduledAt`, `rescheduledFromStartsAt`). Owner/admin can also re-time PAST/concluded guides (checked_in/completed/no_show) and move them to other past slots ("record fix", 2026-06-12); a pure past→past fix sends NO student notification. Instructors keep the strict set (scheduled/confirmed/proposal, future only). Cancelled frozen for everyone.
 - `updateAutoscuolaAppointmentStatus()` — lifecycle transitions (proposal → scheduled → checked_in → completed)
-- `updateAutoscuolaAppointmentDetails()` — edit notes, rating, lesson types, location, instructor, and **vehicle** (`vehicleId`, null = unassign; validated company-owned + active)
+- `updateAutoscuolaAppointmentDetails()` — edit notes, rating, lesson types, location, instructor, and **vehicle** (`vehicleId`, null = unassign; validated company-owned + active). Web `EditAppointmentDialog` exposes the vehicle select (2026-06-12) and opens on past/completed guides too (gate `canRescheduleAppointment` = status ≠ cancelled); instructor change stays blocked on concluded guides (select disabled + BE guard)
 - `approveAvailabilityOverride()` — approve out-of-availability booking
 - `createExamEvent()`, `addExamStudent()`, `removeExamStudent()`, `cancelExamEvent()`
 - `getAutoscuolaAppointmentsFiltered()` — lista agenda (light/full); annota ogni guida con `mandatoryLesson` (prime 6 guide individuali non annullate dell'allievo, `REQUIRED_LESSONS_COUNT`) ed `examNextDay` (esame il giorno dopo, da `case.drivingExamAt` o appuntamento esame) via `buildAppointmentGridFlags` — usati dai colori della vista griglia mobile

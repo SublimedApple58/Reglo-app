@@ -3303,7 +3303,13 @@ export async function rescheduleAutoscuolaAppointment(
     }
 
     const currentStatus = normalizeStatus(appointment.status);
-    if (!RESCHEDULE_ALLOWED_STATUSES.has(currentStatus)) {
+    // Owner/admin can also re-time guides that already happened (checked_in /
+    // completed / no_show): it's a record fix, not a real move. Cancelled
+    // stays frozen for everyone; instructors keep the strict set.
+    const allowedStatuses = isOwnerOrAdminActor
+      ? new Set([...RESCHEDULE_ALLOWED_STATUSES, "checked_in", "completed", "no_show"])
+      : RESCHEDULE_ALLOWED_STATUSES;
+    if (!allowedStatuses.has(currentStatus)) {
       return {
         success: false,
         message:
@@ -3341,7 +3347,14 @@ export async function rescheduleAutoscuolaAppointment(
     if (Number.isNaN(newStart.getTime())) {
       return { success: false, message: "Orario di inizio non valido." };
     }
-    if (newStart.getTime() < Date.now()) {
+    // A guide that already lives in the past (or is concluded) may be re-timed
+    // to another past slot by owner/admin — record fix. What stays forbidden
+    // is dragging a FUTURE guide into the past.
+    const isRecordFix =
+      isOwnerOrAdminActor &&
+      (appointment.startsAt.getTime() < Date.now() ||
+        ["checked_in", "completed", "no_show"].includes(currentStatus));
+    if (newStart.getTime() < Date.now() && !isRecordFix) {
       return {
         success: false,
         message: "Non puoi spostare una guida nel passato.",
@@ -3618,7 +3631,7 @@ export async function rescheduleAutoscuolaAppointment(
         where: { id: appointment.id },
         select: { status: true, startsAt: true, endsAt: true },
       });
-      if (!current || !RESCHEDULE_ALLOWED_STATUSES.has(normalizeStatus(current.status))) {
+      if (!current || !allowedStatuses.has(normalizeStatus(current.status))) {
         throw new Error("APPOINTMENT_NOT_RESCHEDULABLE");
       }
 
@@ -3685,12 +3698,17 @@ export async function rescheduleAutoscuolaAppointment(
     await invalidateAgendaAndPaymentsCache(companyId);
 
     // Fire-and-forget notifications (errors logged inside the helper).
+    // Pure record fixes (past guide re-timed to another PAST slot) stay
+    // silent: pinging the student "la tua guida è stata spostata" about a
+    // lesson that already happened would only confuse them. Moving a past
+    // guide to a FUTURE slot still notifies.
+    const silentRecordFix = isRecordFix && newStart.getTime() < Date.now();
     const actorRole: "instructor" | "owner" | "admin" = isInstructorActor
       ? "instructor"
       : membership.role === "admin"
         ? "admin"
         : "owner";
-    await notifyAppointmentRescheduled({
+    if (!silentRecordFix) await notifyAppointmentRescheduled({
       companyId,
       actorUserId: membership.userId,
       actorRole,

@@ -124,7 +124,7 @@ const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
 // Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
-const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180"];
+const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180", "210", "240", "270", "300"];
 const PIXELS_PER_MINUTE = 1.6;
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
@@ -798,6 +798,9 @@ export function AutoscuoleAgendaPage({
       instructor: item.instructor
         ? { id: item.instructor.id, name: item.instructor.name }
         : null,
+      vehicle: item.vehicle
+        ? { id: item.vehicle.id, name: item.vehicle.name }
+        : null,
       location: item.location
         ? { id: item.location.id, name: item.location.name }
         : null,
@@ -1045,6 +1048,8 @@ export function AutoscuoleAgendaPage({
           }}
           appointment={editAppointmentTarget}
           instructors={instructors}
+          vehicles={vehicles.map((v) => ({ id: v.id, name: v.name }))}
+          vehiclesEnabled={vehiclesEnabled}
           locations={agendaLocations}
           onSuccess={() => {
             load({ silent: true });
@@ -3424,10 +3429,12 @@ function canCompleteStatus(appointment: AppointmentRow) {
 }
 
 function canRescheduleAppointment(appointment: AppointmentRow) {
+  // Gates the "Modifica" button. Past and completed guides ARE editable (the
+  // titolare fixes records after the fact: vehicle, type, notes, time); only
+  // cancelled ones are frozen. Field-level limits (e.g. no instructor change
+  // on concluded guides) live in EditAppointmentDialog + server actions.
   const status = (appointment.status ?? "").toLowerCase();
-  if (!["scheduled", "confirmed", "proposal"].includes(status)) return false;
-  const startTime = new Date(appointment.startsAt).getTime();
-  return startTime > Date.now();
+  return status !== "cancelled";
 }
 
 function formatTime(date: Date) {
