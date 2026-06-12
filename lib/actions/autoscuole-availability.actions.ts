@@ -1219,6 +1219,12 @@ const recurringOverrideSchema = z.object({
     endMinutes: z.number().int().min(0).max(1440),
   })), // empty = absent for the day
   weeksAhead: z.number().int().min(1).max(52).optional(),
+  // Anchor date ("YYYY-MM-DD"): first occurrence is the target dayOfWeek ON or
+  // AFTER this date. The web dialog passes the calendar day the user selected,
+  // so "ricorrente" starts from THAT day — not from the nearest occurrence to
+  // today (selecting Sat 20 must not also write Sat 13). Optional: mobile
+  // callers pick only a weekday, so they keep anchoring from today.
+  fromDate: z.string().optional(),
 });
 
 export async function setRecurringAvailabilityOverride(
@@ -1244,13 +1250,20 @@ export async function setRecurringAvailabilityOverride(
     // orari non disponibili" (Robatto, 2026-06-12).
     const weeks = payload.weeksAhead ?? 52;
 
-    // Generate dates for the target dayOfWeek for the next N weeks
+    // Generate dates for the target dayOfWeek for the next N weeks.
+    // Anchor = the selected calendar day when provided (clamped to today so a
+    // past selection can never write past dates), otherwise today.
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
-    const currentDay = today.getUTCDay();
+    let anchor = today;
+    if (payload.fromDate) {
+      const fd = new Date(`${payload.fromDate.slice(0, 10)}T00:00:00.000Z`);
+      if (!Number.isNaN(fd.getTime()) && fd.getTime() > today.getTime()) anchor = fd;
+    }
+    const currentDay = anchor.getUTCDay();
     let daysUntilTarget = payload.dayOfWeek - currentDay;
     if (daysUntilTarget < 0) daysUntilTarget += 7;
-    const firstDate = new Date(today.getTime() + daysUntilTarget * 24 * 60 * 60 * 1000);
+    const firstDate = new Date(anchor.getTime() + daysUntilTarget * 24 * 60 * 60 * 1000);
 
     const dates: Date[] = [];
     for (let w = 0; w < weeks; w++) {

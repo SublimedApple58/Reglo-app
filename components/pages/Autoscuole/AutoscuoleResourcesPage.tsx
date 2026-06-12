@@ -1681,7 +1681,7 @@ export function AutoscuoleResourcesPage({
                       <div className="flex flex-col gap-0.5">
                         <span className="text-sm font-medium">Disponibilità ricorrente</span>
                         <span className="text-xs text-muted-foreground">
-                          Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} futuri
+                          Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} dal {new Date(calendarSelectedDate).toLocaleDateString("it-IT", { day: "numeric", month: "short", timeZone: "UTC" })} in poi
                         </span>
                       </div>
                       <InlineToggle checked={recurringOverride} size="sm" />
@@ -1730,6 +1730,9 @@ export function AutoscuoleResourcesPage({
                         ownerId: availInstructor.id,
                         dayOfWeek,
                         ranges: calendarDayRanges,
+                        // Start from the selected day, not from the nearest
+                        // future occurrence of the weekday.
+                        fromDate: dateObj.toISOString().slice(0, 10),
                       });
                       setSavingInstrAvailability(false);
                       if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
