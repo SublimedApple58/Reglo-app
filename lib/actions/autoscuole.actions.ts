@@ -1951,8 +1951,10 @@ const nextDayKey = (key: string) => {
 /**
  * Per-appointment flags for the mobile agenda grid colors:
  *   - `mandatoryLesson`: the guide is among the student's first
- *     REQUIRED_LESSONS_COUNT (6) individual driving lessons (chronological,
- *     non-cancelled, group lessons and exams excluded).
+ *     REQUIRED_LESSONS_COUNT (6) individual 60-MINUTE driving lessons
+ *     (chronological, non-cancelled, group lessons and exams excluded).
+ *     Guides of other durations are not mandatory lessons at all: they don't
+ *     get the flag AND don't consume one of the 6 slots (criterio 2026-06-12).
  *   - `examNextDay`: the student has a driving exam the calendar day after
  *     this lesson (from `AutoscuolaCase.drivingExamAt` OR an exam-type
  *     appointment) — these guides are highlighted red in the grid.
@@ -1984,7 +1986,7 @@ const buildAppointmentGridFlags = async (
         groupLessonId: null,
         status: { not: "cancelled" },
       },
-      select: { id: true, studentId: true, startsAt: true },
+      select: { id: true, studentId: true, startsAt: true, endsAt: true },
       orderBy: { startsAt: "asc" },
     }),
     prisma.autoscuolaCase.findMany({
@@ -2003,9 +2005,13 @@ const buildAppointmentGridFlags = async (
   ]);
 
   // First-6 set per student (ids — robust against equal timestamps).
+  // Only EXACTLY-60-minute guides are eligible: shorter/longer guides are not
+  // mandatory lessons and don't consume one of the 6 slots either.
   const mandatoryIds = new Set<string>();
   const perStudentCount = new Map<string, number>();
+  const SIXTY_MIN_MS = 60 * 60 * 1000;
   for (const g of allGuides) {
+    if (!g.endsAt || g.endsAt.getTime() - g.startsAt.getTime() !== SIXTY_MIN_MS) continue;
     const n = perStudentCount.get(g.studentId) ?? 0;
     if (n < REQUIRED_LESSONS_COUNT) mandatoryIds.add(g.id);
     perStudentCount.set(g.studentId, n + 1);
