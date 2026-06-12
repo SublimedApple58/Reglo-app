@@ -566,6 +566,12 @@ model AutoscuolaInstructor {
   status         String   @default("active")
   autonomousMode Boolean  @default(false)
   settings       Json?    @db.Json
+  /// Per-instructor invite code (6 chars). A student registering with it joins
+  /// the school AND is assigned to this instructor — accepted only while the
+  /// instructor is active + autonomousMode. Shares the signup field with
+  /// Company.inviteCode (company-first lookup; cross-table uniqueness enforced
+  /// at generation time).
+  inviteCode     String?  @unique
   createdAt      DateTime @default(now()) @db.Timestamp(6)
   updatedAt      DateTime @updatedAt
 

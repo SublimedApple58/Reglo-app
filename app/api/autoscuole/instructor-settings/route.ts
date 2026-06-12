@@ -8,6 +8,7 @@ import {
   buildCompanyBookingDefaults,
   type InstructorSettings,
 } from "@/lib/autoscuole/instructor-clusters";
+import { ensureInstructorInviteCode } from "@/lib/autoscuole/invite-codes";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 export async function GET() {
@@ -40,6 +41,7 @@ export async function GET() {
           id: true,
           autonomousMode: true,
           settings: true,
+          inviteCode: true,
         },
       }),
     ]);
@@ -60,6 +62,10 @@ export async function GET() {
     }
 
     const settings = parseInstructorSettings(instructor.settings);
+
+    // Lazy safety net for rows created before the invite-code backfill.
+    const inviteCode =
+      instructor.inviteCode ?? (await ensureInstructorInviteCode(instructor.id));
 
     // Load published weeks from current Monday onwards
     const now = new Date();
@@ -123,6 +129,7 @@ export async function GET() {
         companyDefaults,
         students,
         assignedStudentIds,
+        inviteCode,
         instructorId: instructor.id,
         autonomousInstructors,
         publishedWeeks: publishedWeeks.map((pw) => ({

@@ -61,6 +61,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Recovery endpoint**: `app/api/autoscuole/notifications/route.ts` — queries DB fields per kind
 
 ### Instructor Clusters
+- → **Student Phase + Quiz Seats**: instructor invite code accettato da `student-register` (assegna `assignedInstructorId` alla registrazione; valido solo se active+autonomousMode)
 - → **Availability**: availabilityMode (default vs publication)
 - → **Booking Engine**: booking actors, weekly limits, slot durations, autonomous mode
 - → **Swaps**: cluster mode affects swap eligibility

@@ -46,17 +46,34 @@ export async function POST(request: Request) {
     const payload = await request.json();
     const parsed = studentRegisterSchema.parse(payload);
 
-    // Normalize school code
+    // Normalize the invite code (shared field: company OR instructor code)
     const schoolCode = parsed.schoolCode.trim().toUpperCase();
 
-    // Find company by invite code
-    const company = await prisma.company.findUnique({
+    // Company-first lookup. If no company matches, try the per-instructor
+    // invite code: the student joins the instructor's school AND is assigned
+    // to them. Instructor codes are accepted only while the instructor is
+    // active + autonomousMode (otherwise: same generic "invalid code" error).
+    let company = await prisma.company.findUnique({
       where: { inviteCode: schoolCode },
     });
+    let assignedInstructorId: string | null = null;
+
+    if (!company) {
+      const instructor = await prisma.autoscuolaInstructor.findUnique({
+        where: { inviteCode: schoolCode },
+        select: { id: true, companyId: true, status: true, autonomousMode: true },
+      });
+      if (instructor && instructor.status === "active" && instructor.autonomousMode) {
+        company = await prisma.company.findUnique({
+          where: { id: instructor.companyId },
+        });
+        assignedInstructorId = company ? instructor.id : null;
+      }
+    }
 
     if (!company) {
       return NextResponse.json(
-        { success: false, message: "Codice autoscuola non valido" },
+        { success: false, message: "Codice di invito non valido" },
         { status: 404 },
       );
     }
@@ -118,6 +135,9 @@ export async function POST(request: Request) {
           userId: user.id,
           role: "member",
           autoscuolaRole: "STUDENT",
+          // Signup via instructor invite code → student lands directly in
+          // that instructor's group.
+          assignedInstructorId,
           studentPhase: decision.studentPhase,
           quizSeatGrantedAt: decision.grantSeat ? new Date() : null,
           // We classify the phase explicitly here (auto-assigned by the

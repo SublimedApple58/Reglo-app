@@ -36,6 +36,8 @@ type InstructorDetail = {
   status: string;
   autonomousMode?: boolean;
   settings?: unknown;
+  /** Per-instructor invite code: students signing up with it land in this instructor's group. */
+  inviteCode?: string | null;
   _count?: { assignedStudents: number };
 };
 
@@ -280,6 +282,7 @@ export default function InstructorsTab({
               subtitle={(() => {
                 const parts: string[] = [];
                 if (instructor.autonomousMode) parts.push(`Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`);
+                if (instructor.autonomousMode && instructor.inviteCode) parts.push(`Codice ${instructor.inviteCode}`);
                 const s = (instructor.settings ?? {}) as Record<string, unknown>;
                 if (typeof s.workingHoursStart === "string" && typeof s.workingHoursEnd === "string") {
                   parts.push(`Orario lavoro: ${s.workingHoursStart}–${s.workingHoursEnd}`);
@@ -420,6 +423,25 @@ export default function InstructorsTab({
 
             {clusterAutonomous ? (
               <>
+                {/* ── Codice di invito istruttore ── */}
+                {clusterInstructor?.inviteCode ? (
+                  <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+                    <span className="text-sm text-muted-foreground">Codice istruttore:</span>
+                    <span className="text-base font-bold tracking-wider text-yellow-800">
+                      {clusterInstructor.inviteCode}
+                    </span>
+                    <button
+                      type="button"
+                      className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
+                      onClick={() => {
+                        navigator.clipboard.writeText(clusterInstructor.inviteCode ?? "");
+                      }}
+                    >
+                      Copia
+                    </button>
+                  </div>
+                ) : null}
+
                 <FieldGroup label="Durata guide">
                   <div className="flex flex-wrap gap-1.5">
                     {BOOKING_DURATION_OPTIONS.map((dur) => (

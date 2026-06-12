@@ -145,6 +145,12 @@ const updateAppointmentDetailsSchema = z.object({
   notes: z.string().nullable().optional(),
   locationId: z.string().uuid().nullable().optional(),
   /**
+   * Reassign the appointment to a different company vehicle (or null to
+   * unassign). Verified to belong to the company and be active. Vehicles are
+   * company resources, so no per-instructor ownership check.
+   */
+  vehicleId: z.string().uuid().nullable().optional(),
+  /**
    * New instructor for the appointment (cluster-level reassignment).
    * Verified against availability: no overlapping appointments, no manual
    * block-slot, no company holiday on that day. The vehicle stays attached
@@ -344,15 +350,6 @@ const getInstructorWindowOpenTimeLabel = (startsAt: Date) =>
     minute: "2-digit",
     timeZone: "Europe/Rome",
   });
-
-const isWithinInstructorDetailsWindow = (
-  appointment: { startsAt: Date },
-  now: Date,
-) => {
-  const dayEnd = new Date(appointment.startsAt);
-  dayEnd.setHours(23, 59, 59, 999);
-  return now <= dayEnd;
-};
 
 const normalizeText = (value: string | null | undefined) => (value ?? "").trim();
 const normalizeEmail = (value: string | null | undefined) =>
@@ -4072,18 +4069,13 @@ export async function updateAutoscuolaAppointmentDetails(
         return { success: false, message: "Guida non modificabile." };
       }
 
-      if (
-        ["completed", "no_show", "checked_in"].includes(appointmentStatus) &&
-        !isWithinInstructorDetailsWindow(appointment, new Date())
-      ) {
-        return {
-          success: false,
-          message: "Puoi modificare questa guida solo fino a fine giornata.",
-        };
-      }
+      // Tipo guida / valutazione / note (e luogo / veicolo) restano modificabili
+      // dall'istruttore proprietario anche sulle guide già concluse, senza limite
+      // di fine giornata: una valutazione o una nota si aggiungono a posteriori.
+      // Il cambio ISTRUTTORE resta comunque bloccato a valle per le guide concluse.
     }
 
-    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; instructorId?: string } = {};
+    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; vehicleId?: string | null; instructorId?: string } = {};
     const appointmentLessonType = normalizeLessonType(appointment.type);
     const appointmentEnd = computeAppointmentEnd({
       startsAt: appointment.startsAt,
@@ -4205,6 +4197,29 @@ export async function updateAutoscuolaAppointmentDetails(
           }
           updateData.locationId = payload.locationId;
         }
+      }
+    }
+
+    // Handle vehicle change. Vehicles are company resources, so we only verify
+    // the vehicle belongs to the company and is active (same check as booking).
+    // null = unassign ("Da assegnare").
+    if (payload.vehicleId !== undefined) {
+      if (payload.vehicleId === null) {
+        if (appointment.vehicleId !== null) {
+          updateData.vehicleId = null;
+        }
+      } else if (payload.vehicleId !== appointment.vehicleId) {
+        const newVehicle = await prisma.autoscuolaVehicle.findFirst({
+          where: { id: payload.vehicleId, companyId: membership.companyId, status: "active" },
+          select: { id: true },
+        });
+        if (!newVehicle) {
+          return {
+            success: false,
+            message: "Veicolo non valido per questa autoscuola.",
+          };
+        }
+        updateData.vehicleId = payload.vehicleId;
       }
     }
 
@@ -5561,6 +5576,14 @@ export async function getCompanyInviteCode() {
     // violations with a fresh code (Prisma error P2002).
     for (let attempt = 0; attempt < 5; attempt++) {
       const candidate = generateInviteCode();
+      // Signup codes share one input field with instructor invite codes
+      // (company-first lookup): never mint a company code that would shadow
+      // an existing instructor code.
+      const instructorClash = await prisma.autoscuolaInstructor.findUnique({
+        where: { inviteCode: candidate },
+        select: { id: true },
+      });
+      if (instructorClash) continue;
       try {
         // `updateMany` with `inviteCode: null` lets us write only if the row
         // is still without a code. If a concurrent request won the race the
@@ -7032,6 +7055,8 @@ const updateGroupLessonSchema = z.object({
   endsAt: z.string().optional(),
   instructorId: z.string().uuid().nullable().optional(),
   vehicleId: z.string().uuid().nullable().optional(),
+  /** Instructor operational notes on the group lesson container (null clears). */
+  notes: z.string().max(2000).nullable().optional(),
 });
 
 // Edit a group lesson and CASCADE the change to every participant appointment
@@ -7105,10 +7130,18 @@ export async function updateGroupLesson(
     });
     if (overlapErr) return { success: false as const, message: overlapErr };
 
+    // Notes live on the container only (participant appointments keep their own
+    // per-student notes); empty string clears them.
+    const notes =
+      payload.notes !== undefined ? payload.notes?.trim() || null : undefined;
+
     await prisma.$transaction([
       prisma.autoscuolaGroupLesson.update({
         where: { id: gl.id },
-        data: { startsAt, endsAt, instructorId, vehicleId },
+        data: {
+          startsAt, endsAt, instructorId, vehicleId,
+          ...(notes !== undefined ? { notes } : {}),
+        },
       }),
       prisma.autoscuolaAppointment.updateMany({
         where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },

@@ -44,7 +44,7 @@ Migrazioni:
 
 ## Decisione di fase alla registrazione
 
-`POST /api/mobile/auth/student-register` (dentro la transaction):
+`POST /api/mobile/auth/student-register` (dentro la transaction). Il campo `schoolCode` accetta sia il codice autoscuola sia il **codice istruttore** (lookup company-first; vedi `instructor-clusters.md`): in quel caso la membership nasce con `assignedInstructorId` valorizzato, ma le regole di fase sono identiche.
 
 ```
 seatsConsumed = COUNT(CompanyMember WHERE quizSeatGrantedAt != null)

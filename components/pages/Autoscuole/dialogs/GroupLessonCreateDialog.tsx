@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Megaphone, Plus, Users } from "lucide-react";
+import { Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
 
 import {
   Dialog,
@@ -67,6 +67,11 @@ const DURATIONS = [
   { value: "240", label: "4 ore" },
 ];
 
+// Accent/case-insensitive match so "Niccolo" finds "Niccolò" (schools can have
+// hundreds of opted-in students).
+const normalizeQuery = (s: string) =>
+  s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const todayYMD = () => {
   const d = new Date();
@@ -106,6 +111,7 @@ export function GroupLessonCreateDialog({
   const [vehicleId, setVehicleId] = React.useState<string>("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [openInvites, setOpenInvites] = React.useState(true);
+  const [studentQuery, setStudentQuery] = React.useState("");
 
   // Load reference data (opted-in students + vehicles with license info) on open.
   React.useEffect(() => {
@@ -117,6 +123,7 @@ export function GroupLessonCreateDialog({
     setVehicleId("");
     setSelectedIds([]);
     setOpenInvites(true);
+    setStudentQuery("");
     setSaving(false);
     let cancelled = false;
     setLoading(true);
@@ -168,6 +175,15 @@ export function GroupLessonCreateDialog({
       prev.filter((id) => eligibleStudents.some((st) => st.id === id)),
     );
   }, [eligibleStudents]);
+
+  // Live search over the eligible list (accent/case-insensitive).
+  const filteredStudents = React.useMemo(() => {
+    const q = normalizeQuery(studentQuery.trim());
+    if (!q) return eligibleStudents;
+    return eligibleStudents.filter((st) => normalizeQuery(st.name ?? "").includes(q));
+  }, [eligibleStudents, studentQuery]);
+
+  const showSearch = eligibleStudents.length > 6;
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {
@@ -339,37 +355,89 @@ export function GroupLessonCreateDialog({
                   {vehiclesEnabled ? " per questo veicolo" : ""}.
                 </p>
               ) : (
-                <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-2xl border border-border/60 bg-gray-50/50 p-2">
-                  {eligibleStudents.map((st) => {
-                    const checked = selectedIds.includes(st.id);
-                    const atCapacity = !checked && selectedIds.length >= CAPACITY;
-                    return (
-                      <label
-                        key={st.id}
-                        className={cn(
-                          "flex cursor-pointer items-center gap-2.5 rounded-xl border bg-white px-3 py-2 transition-colors",
-                          checked ? "border-teal-300 bg-teal-50/60" : "border-border/60",
-                          atCapacity && "cursor-not-allowed opacity-40",
-                        )}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          disabled={atCapacity}
-                          onCheckedChange={() => toggleStudent(st.id)}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                          {st.name ?? "Allievo"}
-                        </span>
-                        {st.licenseCategory ? (
-                          <span className="shrink-0 text-[11px] text-muted-foreground">
-                            {st.licenseCategory}
-                            {st.transmission ? ` · ${st.transmission}` : ""}
-                          </span>
-                        ) : null}
-                      </label>
-                    );
-                  })}
-                </div>
+                <>
+                  {/* Selected students stay visible as removable chips even when the
+                      search filter hides their row. */}
+                  {selectedIds.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedIds.map((id) => {
+                        const st = students.find((s) => s.id === id);
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => toggleStudent(id)}
+                            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-300 bg-teal-50 py-1 pl-3 pr-2 text-xs font-medium text-teal-800 transition-colors hover:bg-teal-100"
+                          >
+                            <span className="max-w-[160px] truncate">{st?.name ?? "Allievo"}</span>
+                            <X className="h-3 w-3 shrink-0 text-teal-600" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+
+                  {showSearch ? (
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        value={studentQuery}
+                        onChange={(e) => setStudentQuery(e.target.value)}
+                        placeholder={`Cerca tra ${eligibleStudents.length} allievi…`}
+                        className="pl-9 pr-9"
+                      />
+                      {studentQuery ? (
+                        <button
+                          type="button"
+                          onClick={() => setStudentQuery("")}
+                          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
+                          aria-label="Pulisci ricerca"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-2xl border border-border/60 bg-gray-50/50 p-2">
+                    {filteredStudents.length === 0 ? (
+                      <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+                        Nessun allievo trovato per &laquo;{studentQuery.trim()}&raquo;.
+                      </p>
+                    ) : (
+                      filteredStudents.map((st) => {
+                        const checked = selectedIds.includes(st.id);
+                        const atCapacity = !checked && selectedIds.length >= CAPACITY;
+                        return (
+                          <label
+                            key={st.id}
+                            className={cn(
+                              "flex cursor-pointer items-center gap-2.5 rounded-xl border bg-white px-3 py-2 transition-colors",
+                              checked ? "border-teal-300 bg-teal-50/60" : "border-border/60",
+                              atCapacity && "cursor-not-allowed opacity-40",
+                            )}
+                          >
+                            <Checkbox
+                              checked={checked}
+                              disabled={atCapacity}
+                              onCheckedChange={() => toggleStudent(st.id)}
+                            />
+                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+                              {st.name ?? "Allievo"}
+                            </span>
+                            {st.licenseCategory ? (
+                              <span className="shrink-0 text-[11px] text-muted-foreground">
+                                {st.licenseCategory}
+                                {st.transmission ? ` · ${st.transmission}` : ""}
+                              </span>
+                            ) : null}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
               )}
             </div>
 

@@ -15,7 +15,7 @@ Full lesson/exam lifecycle: create, propose, confirm, check-in, complete, cancel
 - `cancelAutoscuolaAppointment()` — cancel with refund + reposition queue
 - `rescheduleAutoscuolaAppointment()` — reschedule with audit trail (`rescheduledAt`, `rescheduledFromStartsAt`)
 - `updateAutoscuolaAppointmentStatus()` — lifecycle transitions (proposal → scheduled → checked_in → completed)
-- `updateAutoscuolaAppointmentDetails()` — edit notes, rating, lesson types
+- `updateAutoscuolaAppointmentDetails()` — edit notes, rating, lesson types, location, instructor, and **vehicle** (`vehicleId`, null = unassign; validated company-owned + active)
 - `approveAvailabilityOverride()` — approve out-of-availability booking
 - `createExamEvent()`, `addExamStudent()`, `removeExamStudent()`, `cancelExamEvent()`
 - `setExamPriorityOverride()` — manual exam priority toggle

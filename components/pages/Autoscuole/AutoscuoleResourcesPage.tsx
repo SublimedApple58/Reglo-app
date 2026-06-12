@@ -77,7 +77,7 @@ import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
-type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; _count?: { assignedStudents: number } };
+type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; inviteCode?: string | null; _count?: { assignedStudents: number } };
 type VehicleDetail = {
   id: string;
   name: string;

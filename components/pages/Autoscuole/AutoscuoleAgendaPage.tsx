@@ -123,6 +123,8 @@ const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
+// Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
+const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180"];
 const PIXELS_PER_MINUTE = 1.6;
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
@@ -2813,7 +2815,7 @@ export function AutoscuoleAgendaPage({
                       <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
+                          {EXAM_SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </FieldGroup>
