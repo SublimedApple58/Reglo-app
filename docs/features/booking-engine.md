@@ -21,6 +21,13 @@ Slot matching, booking governance, waitlist broadcasting, instructor booking sug
 - `getStudentBookingBlockStatus()` — check if student is blocked
 - `createBookingRequest()` — student booking desire → slot matching → offer
 
+## Slot proposal generation (packing-complete)
+Gli slot proposti all'allievo (`getAllAvailableSlots` + `getDateAvailabilityMap`) vengono da `lib/autoscuole/slot-packing.ts`:
+1. disponibilità istruttore − impegni (appuntamenti+blocchi) → intervalli liberi (`computeFreeIntervalsInRange`)
+2. `computeAnchorAwareEntryPoints` in **packing-complete mode** (`allowedDurations` = durate del cluster): uno start è ammesso solo se il residuo che lascia su ALMENO un lato dell'intervallo libero è riempibile ESATTAMENTE con combinazioni delle durate consentite. Se esistono start "perfetti" (entrambi i residui riempibili) vengono emessi solo quelli. Se non ne esistono: intervallo con lunghezza riempibile da ALTRE durate → nessuna proposta per questa durata (l'intervallo resta alle durate giuste; liveness garantita: almeno una durata ha sempre uno start perfetto); intervallo genuinamente irrecuperabile (lunghezza ∉ R) → fallback alle ancore semi-perfette (un lato flush, spreco confinato). Granularità 15' enforced (coerente col guard di conferma). Simulazione 500 sequenze miste 30/45/60 su finestra 240': spreco 0' in tutti i casi. Esempio: 14:15–18:15 con guide da 60' → 14:15, 15:15, 16:15, 17:15 (mai 15:30, che lascerebbe 15' orfani). `roundedHoursOnly` vincola in più i punti non-ancora alla cascata oraria dal range start.
+3. `buildCandidateStarts` (slot-matcher per `suggestInstructorBooking` + copia in `createBookingRequest` per i giorni alternativi) unisce la griglia legacy :00/:30 alla cascata ancorata all'inizio finestra (granularità 15') — lo scoring per adiacenza preferisce i candidati flush.
+Test: `tests/unit/autoscuole/slot-packing.test.ts`.
+
 ## Governance settings
 - `appBookingActors`: "students_only" | "instructors_only" | "both"
 - `instructorBookingMode`: "manual_full" | "manual_engine"

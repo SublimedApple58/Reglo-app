@@ -159,16 +159,23 @@ const buildCandidateStarts = (
   window: { startMinutes: number; endMinutes: number },
   durationMinutes: number,
 ) => {
-  const first = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
   const lastStart = window.endMinutes - durationMinutes;
-  if (lastStart < first) return [];
-  const candidates: Date[] = [];
-  for (let minutes = first; minutes <= lastStart; minutes += SLOT_MINUTES) {
-    candidates.push(
-      toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60),
-    );
+  if (lastStart < window.startMinutes) return [];
+  const minutesSet = new Set<number>();
+  // Legacy :00/:30 grid (kept — adjacency scoring may still pick these).
+  const firstGrid = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+  for (let m = firstGrid; m <= lastStart; m += SLOT_MINUTES) minutesSet.add(m);
+  // Window-anchored cascade + flush-to-end anchor: off-grid windows (e.g.
+  // 14:15–18:15) get packing-friendly candidates (14:15, 15:15, …) instead of
+  // only the midnight-aligned 14:30+. Restricted to the same 15-minute
+  // granularity the booking confirm enforces.
+  for (let m = window.startMinutes; m <= lastStart; m += durationMinutes) {
+    if (m % 15 === 0) minutesSet.add(m);
   }
-  return candidates;
+  if (lastStart % 15 === 0) minutesSet.add(lastStart);
+  return [...minutesSet]
+    .sort((a, b) => a - b)
+    .map((m) => toTimeZoneDate(dayParts, Math.floor(m / 60), m % 60));
 };
 
 const buildAppointmentMaps = (

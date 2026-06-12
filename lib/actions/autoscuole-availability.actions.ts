@@ -1864,16 +1864,22 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       dayParts: CalendarDateParts,
       window: { startMinutes: number; endMinutes: number },
     ) => {
-      const first = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
       const lastStart = window.endMinutes - payload.durationMinutes;
-      if (lastStart < first) return [];
-      const candidates: Date[] = [];
-      for (let minutes = first; minutes <= lastStart; minutes += SLOT_MINUTES) {
-        candidates.push(
-          toTimeZoneDate(dayParts, Math.floor(minutes / 60), minutes % 60),
-        );
+      if (lastStart < window.startMinutes) return [];
+      const minutesSet = new Set<number>();
+      // Legacy :00/:30 grid (kept for continuity).
+      const firstGrid = Math.ceil(window.startMinutes / SLOT_MINUTES) * SLOT_MINUTES;
+      for (let m = firstGrid; m <= lastStart; m += SLOT_MINUTES) minutesSet.add(m);
+      // Window-anchored cascade + flush-to-end anchor (same packing-friendly
+      // candidates as the slot matcher; 15-minute granularity like the
+      // booking confirm guard).
+      for (let m = window.startMinutes; m <= lastStart; m += payload.durationMinutes) {
+        if (m % 15 === 0) minutesSet.add(m);
       }
-      return candidates;
+      if (lastStart % 15 === 0) minutesSet.add(lastStart);
+      return [...minutesSet]
+        .sort((a, b) => a - b)
+        .map((m) => toTimeZoneDate(dayParts, Math.floor(m / 60), m % 60));
     };
 
     const findCandidateForDay = async (
@@ -2933,7 +2939,10 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
             interval,
             payload.durationMinutes,
             minCompanyDurationMinutes,
-            { slotGridMinutes, gridPhaseMinutes },
+            // Packing-complete: only starts whose residues are exactly
+            // fillable with the cluster's allowed durations (no stranded
+            // minutes — e.g. 14:15–18:15 with 60' lessons → 14:15, 15:15, …).
+            { slotGridMinutes, gridPhaseMinutes, allowedDurations },
           );
           for (const p of points) allowedEntryMinutes.add(p);
         }
@@ -3403,7 +3412,9 @@ export async function getDateAvailabilityMap(
                 interval,
                 defaultDuration,
                 minCompanyDurationMinutes,
-                { slotGridMinutes, gridPhaseMinutes },
+                // Same packing-complete rule as getAllAvailableSlots, so the
+                // date map never marks a day whose slots the list won't show.
+                { slotGridMinutes, gridPhaseMinutes, allowedDurations: clusterDurations },
               );
               for (const p of points) {
                 instructorPoints.add(p);

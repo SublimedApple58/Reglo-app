@@ -259,3 +259,114 @@ describe("computeAnchorAwareEntryPoints", () => {
     expect(points.map(fmt)).toEqual(["10:45", "12:00"]);
   });
 });
+
+// ── Packing-complete mode (allowedDurations) ─────────────────────────────────
+// A start is admissible iff at least one residue is EXACTLY fillable with the
+// allowed durations; when "perfect" starts (both residues fillable) exist,
+// only those are emitted. This is the fix for the real-world case of an
+// instructor available 14:15–18:15 with 60-min-only lessons: the legacy rule
+// proposed 15:30/16:00 (stranding 15 minutes), the packing-complete rule
+// proposes exactly 14:15, 15:15, 16:15, 17:15.
+describe("computeAnchorAwareEntryPoints — packing-complete (allowedDurations)", () => {
+  it("14:15–18:15 with 60-min lessons → only the perfect hour cascade", () => {
+    const interval: FreeInterval = { startMinutes: m(14, 15), endMinutes: m(18, 15) };
+    const points = computeAnchorAwareEntryPoints(interval, 60, 60, {
+      slotGridMinutes: 30,
+      gridPhaseMinutes: 0,
+      allowedDurations: [60],
+    });
+    expect(points.map(fmt)).toEqual(["14:15", "15:15", "16:15", "17:15"]);
+  });
+
+  it("mixed durations [30, 60] → every 30 minutes from the window start", () => {
+    const interval: FreeInterval = { startMinutes: m(14, 15), endMinutes: m(18, 15) };
+    const points = computeAnchorAwareEntryPoints(interval, 60, 30, {
+      slotGridMinutes: 30,
+      gridPhaseMinutes: 0,
+      allowedDurations: [30, 60],
+    });
+    expect(points.map(fmt)).toEqual([
+      "14:15", "14:45", "15:15", "15:45", "16:15", "16:45", "17:15",
+    ]);
+  });
+
+  it("45-min lessons: stranded-front starts are excluded", () => {
+    // 14:00–18:00, request 45, durations [45, 60].
+    // 14:15 would strand 15 unfillable minutes in front → must NOT appear.
+    const interval: FreeInterval = { startMinutes: m(14), endMinutes: m(18) };
+    const points = computeAnchorAwareEntryPoints(interval, 45, 45, {
+      slotGridMinutes: 30,
+      gridPhaseMinutes: 0,
+      allowedDurations: [45, 60],
+    });
+    expect(points.map(fmt)).not.toContain("14:15");
+    expect(points.map(fmt)).toContain("14:00");
+    expect(points.map(fmt)).toContain("14:45");
+    expect(points.map(fmt)).toContain("15:00");
+  });
+
+  it("unpackable interval falls back to half-packing anchors", () => {
+    // 75 free minutes with 60-min-only lessons: 15 minutes are lost whatever
+    // happens — offer both flush options (front anchor + back anchor).
+    const interval: FreeInterval = { startMinutes: m(14, 15), endMinutes: m(15, 30) };
+    const points = computeAnchorAwareEntryPoints(interval, 60, 60, {
+      slotGridMinutes: 30,
+      gridPhaseMinutes: 0,
+      allowedDurations: [60],
+    });
+    expect(points.map(fmt)).toEqual(["14:15", "14:30"]);
+  });
+
+  it("roundedHoursOnly keeps the hour cascade for non-anchor points", () => {
+    // Range started at 09:30 → phase 30. Free 09:30–13:30, request 60,
+    // durations [60]: perfect cascade 09:30, 10:30, 11:30, 12:30 — all on the
+    // hour cascade.
+    const interval: FreeInterval = { startMinutes: m(9, 30), endMinutes: m(13, 30) };
+    const points = computeAnchorAwareEntryPoints(interval, 60, 60, {
+      slotGridMinutes: 60,
+      gridPhaseMinutes: 30,
+      allowedDurations: [60],
+    });
+    expect(points.map(fmt)).toEqual(["09:30", "10:30", "11:30", "12:30"]);
+  });
+
+  it("recoverable interval: wrong duration gets nothing, right durations keep it perfect", () => {
+    // 75 free minutes with durations [30,45,60]: perfectly fillable by 45+30.
+    // A 60-min request must get NO starts here (booking 60 would strand 15'),
+    // while 45 and 30 keep their perfect entry points.
+    const interval: FreeInterval = { startMinutes: m(14, 15), endMinutes: m(15, 30) };
+    const opts = { slotGridMinutes: 30, gridPhaseMinutes: 0, allowedDurations: [30, 45, 60] };
+    expect(computeAnchorAwareEntryPoints(interval, 60, 30, opts)).toEqual([]);
+    expect(computeAnchorAwareEntryPoints(interval, 45, 30, opts).map(fmt)).toEqual(["14:15", "14:45"]);
+    expect(computeAnchorAwareEntryPoints(interval, 30, 30, opts).map(fmt)).toEqual(["14:15", "15:00"]);
+  });
+
+  it("spurious interval edges never produce un-bookable proposals (15-min granularity)", () => {
+    // Free interval ending at 15:05 (e.g. after a manually-created exam):
+    // the back anchor would be 14:35, which the booking confirm rejects
+    // (% 15 guard) — it must not be proposed.
+    const interval: FreeInterval = { startMinutes: m(14, 15), endMinutes: m(15, 5) };
+    const points = computeAnchorAwareEntryPoints(interval, 30, 30, {
+      slotGridMinutes: 30,
+      gridPhaseMinutes: 0,
+      allowedDurations: [30, 45, 60],
+    });
+    expect(points.map(fmt)).toEqual(["14:15"]);
+  });
+
+  it("free interval after an existing booking stays anchored to the busy edge", () => {
+    // Window 14:15–18:15, existing lesson 15:15–16:15 → free [14:15, 15:15)
+    // and [16:15, 18:15). Each free interval re-packs perfectly.
+    const free = computeFreeIntervalsInRange(m(14, 15), m(18, 15), [
+      { startMinutes: m(15, 15), endMinutes: m(16, 15) },
+    ]);
+    const all = free.flatMap((interval) =>
+      computeAnchorAwareEntryPoints(interval, 60, 60, {
+        slotGridMinutes: 30,
+        gridPhaseMinutes: 0,
+        allowedDurations: [60],
+      }),
+    );
+    expect(all.map(fmt)).toEqual(["14:15", "16:15", "17:15"]);
+  });
+});
