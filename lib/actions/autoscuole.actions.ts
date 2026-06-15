@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "crypto";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { Prisma } from "@prisma/client";
@@ -3266,17 +3267,24 @@ export async function permanentlyCancelAutoscuolaAppointment(
       actorUserId: membership.userId,
     });
 
-    await notifyStudentAppointmentCancelled({
-      companyId: membership.companyId,
-      actorUserId: membership.userId,
-      appointment: {
-        id: appointment.id,
-        studentId: appointment.studentId,
-        startsAt: appointment.startsAt,
-        instructorId: appointment.instructorId,
-      },
-      cancellationKind: "permanent_cancel",
-      actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+    // Notify the student OUTSIDE the request path. The cancel itself is already
+    // committed (the update above); push + email hit external providers and can
+    // be slow enough to trip the mobile client's 15s timeout → a false
+    // "Impossibile eliminare la guida" toast even though the delete succeeded.
+    // after() runs the notification once the response has been sent.
+    after(async () => {
+      await notifyStudentAppointmentCancelled({
+        companyId: membership.companyId,
+        actorUserId: membership.userId,
+        appointment: {
+          id: appointment.id,
+          studentId: appointment.studentId,
+          startsAt: appointment.startsAt,
+          instructorId: appointment.instructorId,
+        },
+        cancellationKind: "permanent_cancel",
+        actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+      });
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
