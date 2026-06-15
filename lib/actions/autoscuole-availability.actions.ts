@@ -4941,7 +4941,7 @@ export async function getGroupLessonInvites(
     // lesson the opted-in student can still join — not just lessons that happen
     // to carry a live invite row. An invite is just the push-notification nudge;
     // open seats stay joinable in-app until the lesson starts.
-    const [lessons, appointments, service] = await Promise.all([
+    const [lessons, appointments, service, declinedResponses] = await Promise.all([
       prisma.autoscuolaGroupLesson.findMany({
         where: { companyId, status: "scheduled", startsAt: { gt: now } },
         select: {
@@ -4973,14 +4973,23 @@ export async function getGroupLessonInvites(
         where: { companyId, serviceKey: "AUTOSCUOLE" },
         select: { limits: true },
       }),
+      // Lessons this student has explicitly declined ("Non mi interessa") — kept
+      // hidden so the decline sticks and the home count drops. Checked across ALL
+      // of the lesson's invites (invite rows churn as seats fill / re-broadcast).
+      prisma.autoscuolaGroupLessonInviteResponse.findMany({
+        where: { studentId: payload.studentId, status: "declined", invite: { companyId } },
+        select: { invite: { select: { groupLessonId: true } } },
+      }),
     ]);
 
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
+    const declinedLessonIds = new Set(declinedResponses.map((r) => r.invite.groupLessonId));
 
     const eligible = lessons
       .filter((gl) => {
         if (!gl.endsAt) return false;
+        if (declinedLessonIds.has(gl.id)) return false;
         if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
         if (gl.appointments.length >= gl.capacity) return false;
         if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) return false;
