@@ -4868,6 +4868,59 @@ export async function withdrawFromGroupLesson(
 }
 
 /** Group-lesson invites visible to a student (for the inbox + offline recovery). */
+/**
+ * Ensure a discovery-ready invite handle exists for a group lesson, WITHOUT
+ * sending any notification (unlike `broadcastGroupLessonInvite`). Used by the
+ * in-app student discovery list so the existing accept flow
+ * (`respondGroupLessonInvite`, keyed by inviteId) keeps working for every
+ * lesson surfaced — including partially-filled ones whose push-time invite has
+ * expired, been superseded, or never existed.
+ *
+ * Returns an inviteId that is `broadcasted`, not expired (valid until lesson
+ * start), and carries NO prior response from this student (so "Iscrivimi" never
+ * hits the "Hai già risposto" guard). If the latest live invite was already
+ * declined/answered by this student, it is superseded and a fresh handle issued.
+ */
+async function ensureDiscoverableGroupLessonInvite(
+  companyId: string,
+  groupLessonId: string,
+  studentId: string,
+  startsAt: Date,
+): Promise<string> {
+  const now = new Date();
+  const live = await prisma.autoscuolaGroupLessonInvite.findFirst({
+    where: { companyId, groupLessonId, status: "broadcasted" },
+    orderBy: { sentAt: "desc" },
+    select: { id: true, expiresAt: true },
+  });
+  if (live) {
+    const responded = await prisma.autoscuolaGroupLessonInviteResponse.findFirst({
+      where: { inviteId: live.id, studentId },
+      select: { id: true },
+    });
+    if (!responded) {
+      if (live.expiresAt <= now) {
+        await prisma.autoscuolaGroupLessonInvite.update({
+          where: { id: live.id },
+          data: { expiresAt: startsAt },
+        });
+      }
+      return live.id;
+    }
+    // This student already answered the live invite — supersede it so we can
+    // hand back a clean handle (other students simply re-fetch the new one).
+    await prisma.autoscuolaGroupLessonInvite.updateMany({
+      where: { groupLessonId, status: "broadcasted" },
+      data: { status: "superseded" },
+    });
+  }
+  const created = await prisma.autoscuolaGroupLessonInvite.create({
+    data: { companyId, groupLessonId, status: "broadcasted", sentAt: now, expiresAt: startsAt },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 export async function getGroupLessonInvites(
   input: z.infer<typeof getGroupLessonInvitesSchema>,
 ) {
@@ -4884,34 +4937,28 @@ export async function getGroupLessonInvites(
     });
     if (!member || !member.groupLessonsOptIn) return { success: true as const, data: [] };
 
-    const [invites, appointments, service] = await Promise.all([
-      prisma.autoscuolaGroupLessonInvite.findMany({
-        where: {
-          companyId,
-          status: "broadcasted",
-          expiresAt: { gt: now },
-          groupLesson: { status: "scheduled", startsAt: { gt: now } },
-        },
-        include: {
-          groupLesson: {
-            select: {
-              id: true,
-              startsAt: true,
-              endsAt: true,
-              capacity: true,
-              notes: true,
-              instructor: { select: { name: true } },
-              vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
-              appointments: {
-                where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
-                select: { studentId: true },
-              },
-            },
+    // Lesson-first discovery: surface EVERY scheduled, future, non-full group
+    // lesson the opted-in student can still join — not just lessons that happen
+    // to carry a live invite row. An invite is just the push-notification nudge;
+    // open seats stay joinable in-app until the lesson starts.
+    const [lessons, appointments, service] = await Promise.all([
+      prisma.autoscuolaGroupLesson.findMany({
+        where: { companyId, status: "scheduled", startsAt: { gt: now } },
+        select: {
+          id: true,
+          startsAt: true,
+          endsAt: true,
+          capacity: true,
+          notes: true,
+          instructor: { select: { name: true } },
+          vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+          appointments: {
+            where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+            select: { studentId: true },
           },
-          responses: { where: { studentId: payload.studentId }, select: { id: true } },
         },
-        orderBy: { sentAt: "desc" },
-        take: limit * 3,
+        orderBy: { startsAt: "asc" },
+        take: 200,
       }),
       prisma.autoscuolaAppointment.findMany({
         where: {
@@ -4931,40 +4978,40 @@ export async function getGroupLessonInvites(
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
 
-    // No weekly-availability gate: a group lesson is a fixed-time offer. Show it
-    // to any opted-in, license-compatible student who isn't already enrolled or
-    // busy at that time. Dedup to ONE invite per group lesson (latest first).
-    const seenGroupLessons = new Set<string>();
-    const visible = invites
-      .filter((inv) => !inv.responses.length)
-      .filter((inv) => {
-        const gl = inv.groupLesson;
-        if (!gl || !gl.endsAt) return false;
+    const eligible = lessons
+      .filter((gl) => {
+        if (!gl.endsAt) return false;
         if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
         if (gl.appointments.length >= gl.capacity) return false;
         if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) return false;
         if (hasAppointmentConflict(appointments, gl.startsAt, gl.endsAt)) return false;
-        if (seenGroupLessons.has(gl.id)) return false;
-        seenGroupLessons.add(gl.id);
         return true;
       })
-      .slice(0, limit)
-      .map((inv) => {
-        const gl = inv.groupLesson!;
+      .slice(0, limit);
+
+    const visible = await Promise.all(
+      eligible.map(async (gl) => {
+        const inviteId = await ensureDiscoverableGroupLessonInvite(
+          companyId,
+          gl.id,
+          payload.studentId,
+          gl.startsAt,
+        );
         return {
-          inviteId: inv.id,
+          inviteId,
           groupLessonId: gl.id,
           startsAt: gl.startsAt.toISOString(),
-          endsAt: gl.endsAt ? gl.endsAt.toISOString() : null,
+          endsAt: gl.endsAt!.toISOString(),
           capacity: gl.capacity,
           filledSeats: gl.appointments.length,
           openSeats: Math.max(0, gl.capacity - gl.appointments.length),
           instructorName: gl.instructor?.name ?? null,
           vehicleName: gl.vehicle?.name ?? null,
           notes: gl.notes,
-          expiresAt: inv.expiresAt.toISOString(),
+          expiresAt: gl.startsAt.toISOString(),
         };
-      });
+      }),
+    );
 
     return { success: true as const, data: visible };
   } catch (error) {
