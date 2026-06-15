@@ -2238,6 +2238,69 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         return { success: false, message: blockMsg };
       }
 
+      // Weekly booking limit enforcement — student self-serve path.
+      // The limit was previously enforced ONLY in createAutoscuolaAppointment
+      // (instructor/web create), so students could exceed it from the app
+      // (e.g. Robatto: 3 guide in una settimana con limite 2). Mirror the same
+      // logic here: effective limit (cluster → company), student exemption and
+      // exam-priority bypass, ISO week (Mon–Sun UTC) of the selected slot.
+      if (clusterBookingSettings.weeklyBookingLimitEnabled) {
+        const limitMember = await prisma.companyMember.findFirst({
+          where: { companyId: membership.companyId, userId: payload.studentId },
+          select: { weeklyBookingLimitExempt: true },
+        });
+        const isLimitExempt = limitMember?.weeklyBookingLimitExempt === true;
+
+        let examPriorityBypass = false;
+        if (preServiceLimits.examPriorityEnabled === true) {
+          const daysBeforeExam =
+            typeof preServiceLimits.examPriorityDaysBeforeExam === "number" &&
+            preServiceLimits.examPriorityDaysBeforeExam >= 1
+              ? preServiceLimits.examPriorityDaysBeforeExam
+              : 14;
+          const { hasExamPriority } = await import("@/lib/autoscuole/exam-priority");
+          examPriorityBypass = await hasExamPriority(
+            membership.companyId,
+            payload.studentId,
+            daysBeforeExam,
+          );
+        }
+
+        const effectiveWeeklyLimit =
+          typeof clusterBookingSettings.weeklyBookingLimit === "number" &&
+          clusterBookingSettings.weeklyBookingLimit >= 1
+            ? clusterBookingSettings.weeklyBookingLimit
+            : null;
+
+        if (!isLimitExempt && !examPriorityBypass && effectiveWeeklyLimit !== null) {
+          const slotDate = new Date(candidate.start);
+          const dayOfWeek = slotDate.getUTCDay();
+          const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+          const weekStart = new Date(slotDate);
+          weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+          weekStart.setUTCHours(0, 0, 0, 0);
+          const weekEnd = new Date(weekStart);
+          weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+
+          const weekCount = await prisma.autoscuolaAppointment.count({
+            where: {
+              companyId: membership.companyId,
+              studentId: payload.studentId,
+              status: { notIn: ["cancelled"] },
+              startsAt: { gte: weekStart, lt: weekEnd },
+            },
+          });
+
+          if (weekCount >= effectiveWeeklyLimit) {
+            return {
+              success: false,
+              message: `Hai raggiunto il limite massimo di ${effectiveWeeklyLimit} guide settimanali. Non puoi prenotare altre guide per questa settimana.`,
+              code: "WEEKLY_LIMIT_REACHED" as const,
+            };
+          }
+        }
+      }
+
       const appointmentId = randomUUID();
       const appointment = await prisma.$transaction(async (tx) => {
         const paymentSnapshot = await prepareAppointmentPaymentSnapshot({
