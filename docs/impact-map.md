@@ -119,6 +119,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 
+### Password Reset (mobile)
+- → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
+- → **Login**: condivide `buildMobileAuthPayload` (`lib/mobile-auth-payload.ts`) — se cambia la shape di `AuthPayload`, aggiorna login + confirm + mobile types insieme.
+- → **Communications**: invia il codice OTP via `sendDynamicEmail` (Resend) dentro `after()`.
+- → **Mobile**: `PasswordResetScreen` consuma le 3 route; auto-login via `SessionContext.applyAuthPayload`.
+
 ## Critical Call Chains
 
 ### Appointment Cancel

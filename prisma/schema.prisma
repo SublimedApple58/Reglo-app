@@ -67,6 +67,7 @@ model User {
   companyMembers                       CompanyMember[]
   companyInvites                       CompanyInvite[]                        @relation("CompanyInviteInvitedBy")
   mobileTokens                         MobileAccessToken[]
+  passwordResetCodes                   PasswordResetCode[]
   pushDevices                          MobilePushDevice[]
   autoscuolaInstructors                AutoscuolaInstructor[]
   autoscuolaCases                      AutoscuolaCase[]
@@ -148,6 +149,21 @@ model MobileAccessToken {
 
   @@index([userId])
   @@index([companyId])
+  @@index([expiresAt])
+}
+
+model PasswordResetCode {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @db.Uuid
+  codeHash   String
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @db.Timestamp(6)
+  consumedAt DateTime? @db.Timestamp(6)
+  createdAt  DateTime  @default(now()) @db.Timestamp(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@index([expiresAt])
 }
 

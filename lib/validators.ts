@@ -37,6 +37,28 @@ export const studentRegisterSchema = z
     path: ['confirmPassword'],
   });
 
+// Schemas for the mobile self-service password reset (OTP via email)
+export const passwordResetRequestSchema = z.object({
+  email: z.string().email('Invalid email address'),
+});
+
+export const passwordResetVerifySchema = z.object({
+  email: z.string().email('Invalid email address'),
+  code: z.string().length(6, 'Code must be exactly 6 digits'),
+});
+
+export const passwordResetConfirmSchema = z
+  .object({
+    email: z.string().email('Invalid email address'),
+    code: z.string().length(6, 'Code must be exactly 6 digits'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    confirmPassword: z.string().min(6, 'Confirm password must be at least 6 characters'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ['confirmPassword'],
+  });
+
 // Schema for updating the user profile
 export const updateProfileSchema = z.object({
   name: z.string().min(3, 'Name must be at leaast 3 characters'),

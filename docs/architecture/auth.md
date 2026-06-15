@@ -10,7 +10,9 @@
 ## Mobile auth
 - Long-lived `MobileAccessToken` (separate from NextAuth)
 - `lib/mobile-auth.ts` — token creation, validation
+- `lib/mobile-auth-payload.ts` — `buildMobileAuthPayload(user)` shared by login + reset confirm
 - JWT via `Authorization` header, company via `x-reglo-company-id` header
+- Password reset (mobile): OTP via email — see [password-reset.md](../features/password-reset.md)
 
 ## Admin auth
 - `lib/backoffice-auth.ts` — separate auth for backoffice
