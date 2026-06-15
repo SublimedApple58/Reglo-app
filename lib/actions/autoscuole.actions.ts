@@ -921,6 +921,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
             select: {
               id: true,
               name: true,
+              transmission: true,
             },
           },
           location: {
@@ -1042,7 +1043,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           instructorId: true,
           vehicleId: true,
           instructor: { select: { id: true, name: true } },
-          vehicle: { select: { id: true, name: true } },
+          vehicle: { select: { id: true, name: true, transmission: true } },
         },
         orderBy: { startsAt: "asc" },
       });

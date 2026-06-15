@@ -2520,6 +2520,18 @@ export function AutoscuoleAgendaPage({
               </div>
             </div>
             <div>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Veicolo</p>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-3">
+                  <div className="h-5 w-8 rounded border-2 border-blue-200 bg-blue-50" />
+                  <span className="text-xs text-foreground">Cambio automatico</span>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
+                Le guide con auto a cambio automatico usano questo colore al posto di quello della durata.
+              </p>
+            </div>
+            <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-3">
@@ -3459,6 +3471,13 @@ function buildLocalDateTime(day: string, time: string) {
 }
 
 function getScheduledDurationClass(appointment: AppointmentRow): string {
+  // Automatic-transmission guides get a dedicated colour that OVERRIDES the
+  // per-duration palette, so schools can spot them at a glance (requested by
+  // the autoscuole). Exam/group keep their own identity colour upstream, and
+  // the "Assente"/"Annullata" states still win in getStatusMeta.
+  if ((appointment.vehicle?.transmission ?? "").toLowerCase() === "automatic") {
+    return "border-blue-300/70 bg-blue-50/80";
+  }
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
