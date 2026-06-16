@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Send, StickyNote, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
@@ -29,6 +30,7 @@ import {
   removeGroupLessonParticipant,
   listEligibleGroupLessonInvitees,
   cancelGroupLesson,
+  updateAutoscuolaAppointmentDetails,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 
@@ -45,7 +47,7 @@ type GroupLessonDetail = {
   vehicleName: string | null;
   filledSeats: number;
   openSeats: number;
-  participants: { appointmentId: string; studentId: string; studentName: string | null }[];
+  participants: { appointmentId: string; studentId: string; studentName: string | null; notes: string | null }[];
 };
 
 type Props = {
@@ -91,6 +93,9 @@ export function GroupLessonManageDialog({
   const [busy, setBusy] = React.useState(false);
   const [eligible, setEligible] = React.useState<ResourceOption[]>([]);
   const [addId, setAddId] = React.useState<string>("");
+  // Per-student note editing: which seat appointment is open + its draft text.
+  const [noteEditing, setNoteEditing] = React.useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = React.useState("");
   // Local edit state for the "Sposta / modifica" section.
   const [startLocal, setStartLocal] = React.useState("");
   const [durationMin, setDurationMin] = React.useState("180");
@@ -147,6 +152,19 @@ export function GroupLessonManageDialog({
   const handleRemove = async (studentId: string) => {
     if (!groupLessonId) return;
     if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload();
+  };
+  const startEditNote = (appointmentId: string, current: string | null) => {
+    setNoteEditing(appointmentId);
+    setNoteDraft(current ?? "");
+  };
+  // Per-student note lives on the participant's seat appointment; reuse the
+  // standard appointment-details action (authorised for the owning instructor).
+  const handleSaveNote = async (appointmentId: string) => {
+    const next = noteDraft.trim();
+    if (await run(
+      () => updateAutoscuolaAppointmentDetails({ appointmentId, notes: next || null }),
+      "Nota salvata.",
+    )) { setNoteEditing(null); reload(); }
   };
   const handleAdd = async () => {
     if (!groupLessonId || !addId) return;
@@ -209,11 +227,42 @@ export function GroupLessonManageDialog({
               ) : (
                 <div className="space-y-1.5">
                   {lesson.participants.map((p) => (
-                    <div key={p.appointmentId} className="flex items-center justify-between rounded-xl border border-border/60 bg-white px-3 py-2">
-                      <span className="text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-rose-600 hover:bg-rose-50" disabled={busy} onClick={() => handleRemove(p.studentId)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    <div key={p.appointmentId} className="rounded-xl border border-border/60 bg-white px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-teal-700 hover:bg-teal-50" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)} title="Nota per l'allievo">
+                            <StickyNote className="h-4 w-4" />
+                          </Button>
+                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-rose-600 hover:bg-rose-50" disabled={busy} onClick={() => handleRemove(p.studentId)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      {noteEditing === p.appointmentId ? (
+                        <div className="mt-2 space-y-2">
+                          <Textarea
+                            value={noteDraft}
+                            onChange={(e) => setNoteDraft(e.target.value)}
+                            rows={3}
+                            maxLength={2000}
+                            placeholder="Nota per questo allievo (la vedrà nella sua app)"
+                            className="text-sm"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button type="button" variant="ghost" size="sm" className="cursor-pointer" disabled={busy} onClick={() => setNoteEditing(null)}>Annulla</Button>
+                            <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={() => handleSaveNote(p.appointmentId)}>
+                              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva nota
+                            </Button>
+                          </div>
+                        </div>
+                      ) : p.notes?.trim() ? (
+                        <p className="mt-1.5 whitespace-pre-wrap text-xs text-muted-foreground">{p.notes.trim()}</p>
+                      ) : (
+                        <button type="button" className="mt-1 cursor-pointer text-xs text-teal-700 hover:underline" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)}>
+                          + Aggiungi nota
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>

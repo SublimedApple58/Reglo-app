@@ -6586,6 +6586,17 @@ export async function cancelExamEvent(appointmentIds: string[]) {
 // ---------------------------------------------------------------------------
 
 const GROUP_LESSON_ACTIVE_STATUSES = ["scheduled", "confirmed", "proposal", "checked_in"];
+// "Enrolled" = a student who occupies/occupied a seat, including PAST lessons.
+// ACTIVE excludes "completed"/"no_show", so once a past group lesson is marked
+// attended its seats vanish from roster/count queries (the bug where managing a
+// past group lesson showed 0 participants). Use this for per-lesson roster,
+// filled-seat counts and the enrolled-set; keep ACTIVE for booking/eligibility
+// on still-scheduled lessons (where completed/no_show never occur anyway).
+const GROUP_LESSON_ENROLLED_STATUSES = [
+  ...GROUP_LESSON_ACTIVE_STATUSES,
+  "completed",
+  "no_show",
+];
 
 const updateStudentGroupLessonOptInSchema = z.object({
   studentId: z.string().uuid(),
@@ -6858,7 +6869,10 @@ export async function createGroupLesson(
             status: "scheduled",
             instructorId,
             vehicleId,
-            notes: payload.notes ?? null,
+            // Per-student note: starts empty. The instructor writes an
+            // individual note per participant (typically after the lesson) via
+            // updateAutoscuolaAppointmentDetails — NOT copied from the container.
+            notes: null,
             groupLessonId: gl.id,
             paymentRequired: true,
             paymentStatus: "pending",
@@ -6967,7 +6981,9 @@ export async function addGroupLessonParticipant(
         status: "scheduled",
         instructorId: gl.instructorId,
         vehicleId: vehicle?.id ?? null,
-        notes: gl.notes,
+        // Per-student note starts empty (see createGroupLesson) — the instructor
+        // adds an individual note per participant, not the container note.
+        notes: null,
         groupLessonId: gl.id,
         paymentRequired: true,
         paymentStatus: "pending",
@@ -7101,7 +7117,7 @@ export async function getGroupLessonsForAgenda(input?: {
         instructor: { select: { id: true, name: true } },
         vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
         appointments: {
-          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
           select: { id: true, studentId: true, student: { select: { name: true } } },
         },
       },
@@ -7157,8 +7173,13 @@ export async function getGroupLesson(groupLessonId: string) {
         instructor: { select: { id: true, name: true } },
         vehicle: { select: { id: true, name: true, licenseCategory: true, transmission: true } },
         appointments: {
-          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
-          select: { id: true, studentId: true, student: { select: { name: true } } },
+          where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
+          select: {
+            id: true,
+            studentId: true,
+            notes: true,
+            student: { select: { name: true } },
+          },
         },
       },
     });
@@ -7199,12 +7220,16 @@ export async function getGroupLesson(groupLessonId: string) {
           const isSelf = a.studentId === membership.userId;
           if (!isStaff && !isSelf) {
             // Anonymous seat: keep the slot for the count, hide the identity.
-            return { appointmentId: "", studentId: "", studentName: null };
+            return { appointmentId: "", studentId: "", studentName: null, notes: null };
           }
           return {
             appointmentId: a.id,
             studentId: a.studentId,
             studentName: isStaff ? a.student?.name ?? null : null,
+            // Per-student note lives on the seat appointment (edited via
+            // updateAutoscuolaAppointmentDetails). Surfaced to staff and to the
+            // student's own seat for the instructor roster UI.
+            notes: a.notes ?? null,
           };
         }),
       },
@@ -7346,7 +7371,7 @@ export async function listEligibleGroupLessonInvitees(groupLessonId: string) {
         id: true, startsAt: true, endsAt: true,
         vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
         appointments: {
-          where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
           select: { studentId: true },
         },
       },

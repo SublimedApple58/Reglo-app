@@ -16,6 +16,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cases & Deadlines**: appointments track lesson progress per case
 - → **Penalties**: late cancellation triggers penalty charge
 - → **Mobile**: types `AutoscuolaAppointmentWithRelations` used in 14 screens
+- → **Group Lessons (per-student notes, 2026-06-16)**: a group-lesson seat is an appointment, so `updateAutoscuolaAppointmentDetails({notes})` is the per-student note editor; the seat note reaches the student via the normal `getAppointments`/`latest-note` paths (mobile teal note card). See `features/group-lessons.md`.
 
 ### Availability
 - → **Booking Engine**: `getPublicationModeFilter()` gates student booking; slot-matcher reads weekly/daily/published data
