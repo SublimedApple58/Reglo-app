@@ -7061,7 +7061,15 @@ export async function cancelGroupLesson(groupLessonId: string) {
 
     await prisma.$transaction([
       prisma.autoscuolaAppointment.updateMany({
-        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        // Cancel EVERY non-finalised seat, not just the "active" ones: a seat that
+        // already rolled to `pending_review` (lesson time passed, not yet reviewed)
+        // must be cancelled too, otherwise it lingers as a non-cancelled row and
+        // the group lesson keeps re-appearing in the agenda ("non se ne va").
+        // Genuine history (completed / no_show) is left untouched.
+        where: {
+          groupLessonId: gl.id,
+          status: { notIn: ["cancelled", "completed", "no_show"] },
+        },
         data: {
           status: "cancelled",
           cancelledAt: new Date(),
