@@ -5122,6 +5122,7 @@ export async function getOutOfAvailabilityAppointments(
         status: true,
         instructorId: true,
         vehicleId: true,
+        groupLessonId: true,
         student: { select: { id: true, name: true } },
         instructor: { select: { id: true, name: true } },
         vehicle: { select: { id: true, name: true, plate: true } },
@@ -5165,6 +5166,7 @@ export async function getOutOfAvailabilityAppointments(
       endsAt: Date;
       type: string;
       status: string;
+      groupLessonId: string | null;
       studentName: string;
       instructorName: string | null;
       vehicleName: string | null;
@@ -5196,6 +5198,7 @@ export async function getOutOfAvailabilityAppointments(
           endsAt: end,
           type: apt.type,
           status: apt.status,
+          groupLessonId: apt.groupLessonId ?? null,
           studentName: apt.student?.name ?? "Senza nome",
           instructorName: apt.instructor?.name ?? null,
           vehicleName: apt.vehicle
