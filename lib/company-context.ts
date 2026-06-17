@@ -31,7 +31,11 @@ export const getActiveCompanyContext = cache(async function getActiveCompanyCont
     throw new Error("USER_NOT_AUTHENTICATED");
   }
 
-  const [user, memberships] = await prisma.$transaction([
+  // Two independent reads — no transactional guarantee needed. Running them in a
+  // single $transaction forced BEGIN/COMMIT + serial round-trips over the Neon
+  // serverless (WebSocket) driver; Promise.all issues both concurrently with no
+  // transaction overhead. This runs on EVERY authenticated request.
+  const [user, memberships] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: { activeCompanyId: true },

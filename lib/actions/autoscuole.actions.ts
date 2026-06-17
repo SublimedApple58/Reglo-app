@@ -986,24 +986,25 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     // Grid color flags (mandatoryLesson / examNextDay) — same annotation as
     // getAutoscuolaAppointmentsFiltered; the mobile grid reads agenda data
     // from THIS bootstrap, so they must be present here too.
-    const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
-
-    // Group lesson capacity per row (configurable 3 or 4 since 2026-06-12):
-    // agenda consumers (mobile cards' seat dots) must show the REAL capacity,
-    // not a hardcoded 3.
+    // Both derivations below depend ONLY on `appointments`, not on each other —
+    // run them in one parallel wave instead of two sequential awaits.
     const agendaGlIds = [
       ...new Set(appointments.map((a) => a.groupLessonId).filter(Boolean) as string[]),
     ];
-    const agendaGlCapacities = agendaGlIds.length
-      ? new Map(
-          (
-            await prisma.autoscuolaGroupLesson.findMany({
+    const [gridFlags, agendaGlCapacities] = await Promise.all([
+      buildAppointmentGridFlags(companyId, appointments),
+      // Group lesson capacity per row (configurable 3 or 4 since 2026-06-12):
+      // agenda consumers (mobile cards' seat dots) must show the REAL capacity,
+      // not a hardcoded 3.
+      agendaGlIds.length
+        ? prisma.autoscuolaGroupLesson
+            .findMany({
               where: { id: { in: agendaGlIds } },
               select: { id: true, capacity: true },
             })
-          ).map((g) => [g.id, g.capacity]),
-        )
-      : new Map<string, number>();
+            .then((rows) => new Map(rows.map((g) => [g.id, g.capacity])))
+        : Promise.resolve(new Map<string, number>()),
+    ]);
 
     const mappedAppointments = appointments.map((appointment) => ({
       ...appointment,

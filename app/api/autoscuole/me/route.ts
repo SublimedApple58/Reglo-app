@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
+import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 
@@ -14,31 +15,26 @@ export async function GET() {
       );
     }
 
-    // Per-student membership: phase + quiz seat status
-    const member = await prisma.companyMember.findFirst({
-      where: {
-        companyId: membership.companyId,
-        userId: membership.userId,
-        autoscuolaRole: "STUDENT",
-      },
-      select: {
-        studentPhase: true,
-        quizSeatGrantedAt: true,
-        licenseCategory: true,
-        transmission: true,
-      },
-    });
-
-    // Per-company configuration: which phases are active and whether
-    // auto-assign on signup is enabled.
-    const service = await prisma.companyService.findFirst({
-      where: {
-        companyId: membership.companyId,
-        serviceKey: "AUTOSCUOLE",
-      },
-      select: { limits: true },
-    });
-    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+    // `membership` already comes from getActiveCompanyContext (which selects every
+    // CompanyMember scalar), so the per-student fields below — studentPhase,
+    // quizSeatGrantedAt, licenseCategory, transmission — are already in hand. No
+    // need to re-query CompanyMember. The two remaining reads (service config +
+    // latest case) are independent → one parallel wave instead of two awaits.
+    const [limits, latestCase] = await Promise.all([
+      // Per-company configuration: which phases are active and whether
+      // auto-assign on signup is enabled. Read through the Redis SETTINGS cache
+      // (5min TTL) — same limits object slots/booking already share — instead of
+      // a raw companyService.findFirst on every /me call.
+      getCachedCompanyServiceLimits(membership.companyId),
+      prisma.autoscuolaCase.findFirst({
+        where: {
+          companyId: membership.companyId,
+          studentId: membership.userId,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { theoryExamAt: true, drivingExamAt: true },
+      }),
+    ]);
     const phasesEnabled: ("TEORIA" | "PRATICA")[] = Array.isArray(limits.phasesEnabled)
       ? limits.phasesEnabled.filter(
           (p): p is "TEORIA" | "PRATICA" => p === "TEORIA" || p === "PRATICA",
@@ -46,17 +42,8 @@ export async function GET() {
       : ["PRATICA"];
     const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
 
-    const latestCase = await prisma.autoscuolaCase.findFirst({
-      where: {
-        companyId: membership.companyId,
-        studentId: membership.userId,
-      },
-      orderBy: { createdAt: "desc" },
-      select: { theoryExamAt: true, drivingExamAt: true },
-    });
-
-    const phase = member?.studentPhase ?? "PRATICA";
-    const hasQuizAccess = Boolean(member?.quizSeatGrantedAt);
+    const phase = membership.studentPhase ?? "PRATICA";
+    const hasQuizAccess = Boolean(membership.quizSeatGrantedAt);
     const theoryExamAt = latestCase?.theoryExamAt ?? null;
     const drivingExamAt = latestCase?.drivingExamAt ?? null;
 
@@ -69,8 +56,8 @@ export async function GET() {
         autoAssignQuizOnSignup,
         theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
         drivingExamAt: drivingExamAt ? drivingExamAt.toISOString() : null,
-        licenseCategory: member?.licenseCategory ?? null,
-        transmission: member?.transmission ?? null,
+        licenseCategory: membership.licenseCategory ?? null,
+        transmission: membership.transmission ?? null,
       },
     });
   } catch (error) {

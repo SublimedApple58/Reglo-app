@@ -35,6 +35,44 @@ Cheap measurements:
 
 ---
 
+## 0.5. Backend — Region co-location (funzioni ↔ DB) — IL collo di bottiglia strutturale
+
+**Controlla questo PRIMA di ogni altra ottimizzazione.** Se le funzioni serverless
+girano in una region diversa da quella del DB, OGNI round-trip query paga la
+latenza inter-continentale (~90–110ms). Con 5–15 query sequenziali per richiesta
+= 0.5–1.5s di sola rete, su *ogni* endpoint. Nessuna ottimizzazione di query
+recupera questo: è un moltiplicatore su tutto.
+
+- **DB**: Neon è in `eu-central-1` (Francoforte) — vedi l'host nelle connection
+  string di `.env.prod`.
+- **Funzioni**: la region si legge dall'header di risposta `x-vercel-id`:
+  formato `<edge>::<compute>::<id>`. Il **secondo** segmento è dove gira la
+  funzione. `fra1::iad1::…` = funzione a Washington (USA) ⇒ MISMATCH.
+  `curl -sD - -o /dev/null https://app.reglo.it/api/mobile/app-config | grep -i x-vercel-id`
+- **Fix** (config-only, rischio ~0): ancorare le funzioni a Francoforte con
+  `vercel.json` `{ "regions": ["fra1"] }` (oppure dashboard → Settings →
+  Functions → *Function Region* → Frankfurt). Ha effetto al prossimo deploy.
+- **Verifica**: dopo il deploy, `x-vercel-id` deve mostrare `fra1::fra1::…`.
+
+> Trovato 2026-06-17: le funzioni di prod giravano in `iad1` (US East) col DB a
+> Francoforte — residuo della migrazione. Pinnate a `fra1` via `vercel.json`.
+> Una volta co-locate, ogni round-trip scende da ~100ms a ~1–5ms, quindi le
+> ottimizzazioni qui sotto (waterfall, over-fetch) contano molto meno: il grosso
+> del guadagno è questo.
+
+## 0.6. Backend — tassa di auth/context per-richiesta
+
+`getActiveCompanyContext` (`lib/company-context.ts`) gira su OGNI richiesta
+autenticata, prima di qualsiasi handler. È `React.cache`'d (una volta per
+richiesta) ma il costo fisso resta:
+- Le due read indipendenti (user + memberships) NON vanno in `$transaction`
+  (forzava BEGIN/COMMIT + round-trip serializzati sul driver Neon/WS) → usare
+  `Promise.all` (concorrenti, niente transazione). Fatto 2026-06-17.
+- `/api/autoscuole/me` ri-leggeva la `CompanyMember` già presente in
+  `context.membership` (il context seleziona tutti gli scalari) → rimosso il
+  re-query, le restanti read in `Promise.all`, limiti via cache SETTINGS. Pattern
+  riusabile: **ciò che il context ha già caricato non va ri-interrogato**.
+
 ## 1. Backend — DB indexing
 
 Add composite indexes that match a query's `where`/`orderBy` columns, in order.
