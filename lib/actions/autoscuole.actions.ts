@@ -7556,12 +7556,16 @@ export async function setManualPaymentStatus(
 
     const appointment = await prisma.autoscuolaAppointment.findFirst({
       where: { id: payload.appointmentId, companyId: membership.companyId },
-      select: { id: true, paymentRequired: true },
+      select: { id: true, paymentRequired: true, manualPaymentStatus: true },
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
     }
-    if (appointment.paymentRequired) {
+    // Block manual marking ONLY for true automatic (Stripe) payments — those have
+    // paymentRequired=true AND no manual status, and are settled in the Pagamenti
+    // section. Group lessons are "da pagare" manually (paymentRequired=true but
+    // manualPaymentStatus set), so they must be markable here.
+    if (appointment.paymentRequired && appointment.manualPaymentStatus == null) {
       return {
         success: false,
         message:
