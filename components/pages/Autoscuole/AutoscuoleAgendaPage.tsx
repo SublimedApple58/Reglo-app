@@ -49,7 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
-import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
+import { TRANSMISSION_LABELS, isMotoLicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import {
   OutOfAvailabilitySheet,
@@ -2523,12 +2523,16 @@ export function AutoscuoleAgendaPage({
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Veicolo</p>
               <div className="space-y-1.5">
                 <div className="flex items-center gap-3">
+                  <div className="h-5 w-8 rounded border-2 border-orange-300 bg-orange-100" />
+                  <span className="text-xs text-foreground">Patente moto</span>
+                </div>
+                <div className="flex items-center gap-3">
                   <div className="h-5 w-8 rounded border-2 border-blue-200 bg-blue-50" />
                   <span className="text-xs text-foreground">Cambio automatico</span>
                 </div>
               </div>
               <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
-                Le guide con auto a cambio automatico usano questo colore al posto di quello della durata.
+                Le guide con un veicolo per la patente moto (AM, A1, A2, A) o con cambio automatico usano questo colore al posto di quello della durata.
               </p>
             </div>
             <div>
@@ -3471,6 +3475,13 @@ function buildLocalDateTime(day: string, time: string) {
 }
 
 function getScheduledDurationClass(appointment: AppointmentRow): string {
+  // Moto guides (vehicle assigned to a motorcycle license: AM/A1/A2/A) get a
+  // dedicated colour that OVERRIDES the per-duration palette. Keyed off the
+  // vehicle only — guides without a vehicle skip this check. Wins over the
+  // automatic colour so a moto stays a moto even on an automatic scooter.
+  if (isMotoLicenseCategory(appointment.vehicle?.licenseCategory)) {
+    return "border-orange-300/70 bg-orange-100/70";
+  }
   // Automatic-transmission guides get a dedicated colour that OVERRIDES the
   // per-duration palette, so schools can spot them at a glance (requested by
   // the autoscuole). Exam/group keep their own identity colour upstream, and

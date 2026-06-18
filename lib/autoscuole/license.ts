@@ -44,6 +44,20 @@ export function isTransmission(value: unknown): value is Transmission {
 }
 
 /**
+ * Motorcycle license categories — every category except the car license "B".
+ * Used to give moto guides a dedicated colour in the agenda (keyed off the
+ * assigned vehicle's category, exactly like the automatic-transmission colour).
+ */
+export const MOTO_LICENSE_CATEGORIES = ["AM", "A1", "A2", "A"] as const;
+
+export function isMotoLicenseCategory(value: unknown): boolean {
+  return (
+    typeof value === "string" &&
+    (MOTO_LICENSE_CATEGORIES as readonly string[]).includes(value)
+  );
+}
+
+/**
  * True when a vehicle's (category, transmission) serves a student's pursued
  * license. Null/absent on either side is treated permissively (no constraint)
  * so incomplete data never blocks a booking; in practice both are always set.

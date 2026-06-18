@@ -924,6 +924,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
               id: true,
               name: true,
               transmission: true,
+              licenseCategory: true,
             },
           },
           location: {
