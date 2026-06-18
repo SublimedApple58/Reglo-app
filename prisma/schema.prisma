@@ -404,6 +404,13 @@ model AutoscuolaAppointment {
   /// When set, this appointment is one participant seat of a group lesson
   /// (Guide di gruppo). type = "group_lesson". Null for normal lessons/exams.
   groupLessonId                String?   @db.Uuid
+  /// How this appointment was created — the CHANNEL/category, not a specific user:
+  /// student_self | swap | slot_fill | staff_instructor | staff_owner | voice |
+  /// group_lesson | exam. Null on legacy rows created before this field existed.
+  /// See lib/autoscuole/booking-source.ts. Used for ops/reporting (e.g. "who
+  /// booked the over-limit guide"). slot_fill/group_lesson/exam intentionally
+  /// bypass the weekly booking limit.
+  bookingSource                String?
   createdAt                    DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                    DateTime  @updatedAt
 

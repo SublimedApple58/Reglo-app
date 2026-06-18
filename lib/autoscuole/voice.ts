@@ -3,6 +3,7 @@ import { prisma as defaultPrisma } from "@/db/prisma";
 import { getTwilioClient } from "@/lib/twilio";
 import { TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
+import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -732,6 +733,7 @@ export async function createVoiceAppointment({
     data: {
       companyId,
       studentId,
+      bookingSource: BOOKING_SOURCE.voice,
       type: "urbano",
       startsAt,
       endsAt,

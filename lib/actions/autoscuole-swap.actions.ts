@@ -14,7 +14,13 @@ import {
 } from "@/lib/autoscuole/cache";
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
-import { isStudentInManualFullCluster } from "@/lib/autoscuole/instructor-clusters";
+import {
+  isStudentInManualFullCluster,
+  resolveEffectiveBookingSettings,
+  buildCompanyBookingDefaults,
+} from "@/lib/autoscuole/instructor-clusters";
+import { hasExamPriority } from "@/lib/autoscuole/exam-priority";
+import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 
 const AUTOSCUOLA_TIMEZONE = "Europe/Rome";
@@ -635,6 +641,7 @@ export async function respondSwapOffer(
           assignedInstructor: { select: { autonomousMode: true } },
           licenseCategory: true,
           transmission: true,
+          weeklyBookingLimitExempt: true,
         },
       });
       if (acceptingMember?.assignedInstructorId && acceptingMember.assignedInstructor?.autonomousMode) {
@@ -663,6 +670,68 @@ export async function respondSwapOffer(
           success: false,
           message: "Questo scambio usa un veicolo non compatibile con la tua patente.",
         };
+      }
+
+      // Weekly booking limit: accepting a swap reassigns the slot to this student,
+      // i.e. +1 lesson in the slot's ISO week. Like any booking it must respect
+      // the student's weekly cap — a hard block (students have no "proceed anyway").
+      // Exemptions match the booking flow: per-member exempt + exam priority. The
+      // swapped appointment is always a normal guida (group/exam are non-swappable),
+      // so no type carve-out is needed. slot_fill etc. don't go through swaps.
+      {
+        const svc = await prisma.companyService.findFirst({
+          where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+          select: { limits: true },
+        });
+        const limits = (svc?.limits ?? {}) as Record<string, unknown>;
+        const effective = await resolveEffectiveBookingSettings(
+          membership.companyId,
+          payload.studentId,
+          buildCompanyBookingDefaults(limits),
+        );
+        if (
+          effective.weeklyBookingLimitEnabled &&
+          acceptingMember?.weeklyBookingLimitExempt !== true
+        ) {
+          let bypass = false;
+          if (limits.examPriorityEnabled === true) {
+            const daysBeforeExam =
+              typeof limits.examPriorityDaysBeforeExam === "number" &&
+              limits.examPriorityDaysBeforeExam >= 1
+                ? limits.examPriorityDaysBeforeExam
+                : 14;
+            bypass = await hasExamPriority(
+              membership.companyId,
+              payload.studentId,
+              daysBeforeExam,
+            );
+          }
+          if (!bypass) {
+            const startsAt = offer.appointment.startsAt;
+            const dayOfWeek = startsAt.getUTCDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const weekStart = new Date(startsAt);
+            weekStart.setUTCDate(weekStart.getUTCDate() + mondayOffset);
+            weekStart.setUTCHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setUTCDate(weekEnd.getUTCDate() + 7);
+            const weekCount = await prisma.autoscuolaAppointment.count({
+              where: {
+                companyId: membership.companyId,
+                studentId: payload.studentId,
+                status: { notIn: ["cancelled"] },
+                startsAt: { gte: weekStart, lt: weekEnd },
+                id: { not: offer.appointmentId },
+              },
+            });
+            if (weekCount + 1 > effective.weeklyBookingLimit) {
+              return {
+                success: false,
+                message: `Hai già ${weekCount} guide in questa settimana: accettando questo scambio supereresti il limite di ${effective.weeklyBookingLimit} guide settimanali.`,
+              };
+            }
+          }
+        }
       }
     }
 
@@ -716,6 +785,7 @@ export async function respondSwapOffer(
         data: {
           studentId: payload.studentId,
           caseId: newStudentCase?.id ?? null,
+          bookingSource: BOOKING_SOURCE.swap,
         },
       });
 

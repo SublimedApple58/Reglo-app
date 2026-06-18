@@ -10,6 +10,7 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { notifyAutoscuolaCaseStatusChange } from "@/lib/autoscuole/communications";
+import { BOOKING_SOURCE, staffBookingSource } from "@/lib/autoscuole/booking-source";
 import { broadcastWaitlistOffer, buildAvailabilityResolver, getStudentBookingBlockStatus, cancelGroupLessonParticipantAppointment } from "@/lib/actions/autoscuole-availability.actions";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
@@ -2652,6 +2653,7 @@ export async function createAutoscuolaAppointment(
             id: appointmentId,
             companyId,
             studentId: payload.studentId,
+            bookingSource: staffBookingSource(isInstructorActor),
             caseId: payload.caseId || null,
             type: resolvedTypes[0],
             types: resolvedTypes,
@@ -3026,6 +3028,7 @@ export async function createAutoscuolaAppointmentBatch(
             id: entryIds[i],
             companyId,
             studentId: payload.studentId,
+            bookingSource: staffBookingSource(isInstructorActor),
             type: resolvedTypes[0],
             types: resolvedTypes,
             startsAt: entry.startsAt,
@@ -6402,6 +6405,7 @@ export async function createExamEvent(
           data: {
             companyId,
             studentId,
+            bookingSource: BOOKING_SOURCE.exam,
             type: "esame",
             startsAt,
             endsAt,
@@ -6452,6 +6456,7 @@ export async function addExamStudent(
       data: {
         companyId,
         studentId: payload.studentId,
+        bookingSource: BOOKING_SOURCE.exam,
         type: "esame",
         startsAt: new Date(payload.startsAt),
         endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
@@ -6864,6 +6869,7 @@ export async function createGroupLesson(
           data: studentIds.map((studentId) => ({
             companyId,
             studentId,
+            bookingSource: BOOKING_SOURCE.groupLesson,
             type: "group_lesson",
             startsAt,
             endsAt,
@@ -6976,6 +6982,7 @@ export async function addGroupLessonParticipant(
       data: {
         companyId,
         studentId: payload.studentId,
+        bookingSource: BOOKING_SOURCE.groupLesson,
         type: "group_lesson",
         startsAt: gl.startsAt,
         endsAt: gl.endsAt,

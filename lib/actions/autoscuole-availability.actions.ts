@@ -8,6 +8,7 @@ import { sendDynamicEmail } from "@/email";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { sendAutoscuolaWhatsApp } from "@/lib/autoscuole/whatsapp";
+import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 import { sendAutoscuolaPushToUsers } from "@/lib/autoscuole/push";
 import {
   prepareAppointmentPaymentSnapshot,
@@ -2406,6 +2407,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             id: appointmentId,
             companyId: membership.companyId,
             studentId: payload.studentId,
+            bookingSource: BOOKING_SOURCE.studentSelf,
             type: candidate.resolvedLessonType,
             startsAt: candidate.start,
             endsAt: candidate.end,
@@ -3958,6 +3960,7 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           id: appointmentId,
           companyId: membership.companyId,
           studentId: payload.studentId,
+          bookingSource: BOOKING_SOURCE.slotFill,
           type:
             enforceRequiredTypes && compatibleRequiredTypes.length === 1
               ? compatibleRequiredTypes[0]
@@ -4719,6 +4722,7 @@ export async function respondGroupLessonInvite(
         data: {
           companyId,
           studentId: payload.studentId,
+          bookingSource: BOOKING_SOURCE.groupLesson,
           type: "group_lesson",
           startsAt: gl.startsAt,
           endsAt: gl.endsAt,

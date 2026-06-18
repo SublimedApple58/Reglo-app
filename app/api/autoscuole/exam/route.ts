@@ -9,6 +9,7 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
+import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 
 const createExamSchema = z.object({
   studentIds: z.array(z.string().uuid()).min(1),
@@ -161,6 +162,7 @@ export async function POST(request: Request) {
             data: {
               companyId,
               studentId,
+              bookingSource: BOOKING_SOURCE.exam,
               type: "esame",
               startsAt,
               endsAt: endsAt ?? undefined,
