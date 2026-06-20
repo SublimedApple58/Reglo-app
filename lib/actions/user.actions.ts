@@ -10,6 +10,7 @@ import { auth, signIn, signOut } from '@/auth';
 import { isRedirectError } from 'next/dist/client/components/redirect-error';
 import { hash } from '../encrypt';
 import { prisma } from '@/db/prisma';
+import { syncInstructorName } from '../sync-instructor-name';
 import { formatError } from '../utils';
 import { z } from 'zod';
 import { PAGE_SIZE } from '../constants';
@@ -163,6 +164,10 @@ export async function updateProfile(user: { name: string; email: string }) {
         name: user.name,
       },
     });
+
+    // Keep the denormalized instructor name (used in all instructor
+    // lists/selectors) in sync with the account name.
+    await syncInstructorName(currentUser.id, user.name);
 
     return {
       success: true,

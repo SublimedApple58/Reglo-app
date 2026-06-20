@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { parseBearerToken, getMobileToken } from "@/lib/mobile-auth";
+import { syncInstructorName } from "@/lib/sync-instructor-name";
 import { formatError } from "@/lib/utils";
 
 const updateProfileSchema = z.object({
@@ -42,6 +43,10 @@ export async function PATCH(request: Request) {
         phone: true,
       },
     });
+
+    // Keep the denormalized instructor name (used in all instructor
+    // lists/selectors) in sync with the account name.
+    await syncInstructorName(mobileToken.userId, name);
 
     return NextResponse.json({ success: true, data: user });
   } catch (error) {
