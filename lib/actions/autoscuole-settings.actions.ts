@@ -11,6 +11,10 @@ import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect"
 import { isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
+  parseFollowCarRulesFromLimits,
+  type FollowCarRules,
+} from "@/lib/autoscuole/follow-car";
+import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
@@ -348,6 +352,12 @@ const autoscuolaSettingsPatchSchema = z
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
     defaultTransmission: z.enum(TRANSMISSIONS).optional(),
+    // "Auto al seguito" opt-in per license category: a moto guida for an enabled
+    // category additionally reserves a follow car. Keys are filtered to moto
+    // categories at read time (parseFollowCarRulesFromLimits).
+    followCarRules: z
+      .record(z.string(), z.object({ enabled: z.boolean() }))
+      .optional(),
     // Group lessons (Guide di gruppo): optional module. When on, students with
     // groupLessonsOptIn can be enrolled into / invited to group driving lessons.
     // Priced like a standard 60' lesson (no dedicated price setting).
@@ -418,6 +428,7 @@ const autoscuolaSettingsPatchSchema = z
       value.vehiclesEnabled !== undefined ||
       value.defaultLicenseCategory !== undefined ||
       value.defaultTransmission !== undefined ||
+      value.followCarRules !== undefined ||
       value.groupLessonsEnabled !== undefined ||
       value.quizEnabled !== undefined ||
       value.studentCancellationEnabled !== undefined,
@@ -598,6 +609,7 @@ export type AutoscuolaSettingsData = {
   vehiclesEnabled: boolean;
   defaultLicenseCategory: string;
   defaultTransmission: string;
+  followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
@@ -931,6 +943,7 @@ const resolveAutoscuolaSettingsData = async (
       typeof limits.defaultTransmission === "string"
         ? limits.defaultTransmission
         : "manual",
+    followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
@@ -1257,6 +1270,11 @@ export async function updateAutoscuolaSettings(
     const nextDefaultTransmission =
       payload.defaultTransmission ??
       (typeof limits.defaultTransmission === "string" ? limits.defaultTransmission : "manual");
+    const nextFollowCarRules =
+      payload.followCarRules ??
+      (limits.followCarRules && typeof limits.followCarRules === "object"
+        ? limits.followCarRules
+        : {});
     const nextGroupLessonsEnabled =
       payload.groupLessonsEnabled ?? limits.groupLessonsEnabled === true;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
@@ -1457,6 +1475,7 @@ export async function updateAutoscuolaSettings(
       vehiclesEnabled: nextVehiclesEnabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
+      followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
