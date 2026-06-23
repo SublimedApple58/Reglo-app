@@ -1,0 +1,12 @@
+{
+  "name": "playwright-skill",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser automation skill runtime (Playwright) with universal executor and helpers.",
+  "scripts": {
+    "setup": "npm install && npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
