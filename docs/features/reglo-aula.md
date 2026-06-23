@@ -160,6 +160,8 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 - **Join pubblico**: `joinCode` breve effimero con TTL Redis + rate-limit sul join (anti-spam).
 - **Lingua pagina studente**: italiano (default app).
 - **Contenuto slide template**: da definire in seguito; non blocca l'architettura.
+- **Editor slide**: a blocchi tipizzati (`heading`/`text`/`bullets`/`image`/`quizRef`) con rail slide (aggiungi/riordina/elimina), riordino/eliminazione blocchi e upload immagini su R2 (anteprima via URL firmato). La **modalità presentazione full-screen** resta da fare.
+- **QR proiettore**: render reale via `qrcode.react` (SVG scansionabile dell'URL studente `/{locale}/aula-live/{code}`).
 
 ## Connected Features
 
