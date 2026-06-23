@@ -287,6 +287,9 @@ export function AutoscuoleResourcesPage({
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
   const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
+  const [followCarRules, setFollowCarRules] = React.useState<
+    Record<string, { enabled: boolean }>
+  >({});
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
@@ -543,6 +546,9 @@ export function AutoscuoleResourcesPage({
       setVehiclesEnabled(res.data.vehiclesEnabled !== false);
       setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
       setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+      setFollowCarRules(
+        (res.data.followCarRules as Record<string, { enabled: boolean }>) ?? {},
+      );
       setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
 
       setAppBookingActors(
@@ -695,6 +701,7 @@ export function AutoscuoleResourcesPage({
       vehiclesEnabled,
       defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
       defaultTransmission: defaultTransmission as "manual" | "automatic",
+      followCarRules,
       groupLessonsEnabled,
       appBookingActors,
       instructorBookingMode,
@@ -1651,6 +1658,8 @@ export function AutoscuoleResourcesPage({
             setDefaultLicenseCategory={setDefaultLicenseCategory}
             defaultTransmission={defaultTransmission}
             setDefaultTransmission={setDefaultTransmission}
+            followCarRules={followCarRules}
+            setFollowCarRules={setFollowCarRules}
             openCreateVehicle={openCreateVehicle}
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
