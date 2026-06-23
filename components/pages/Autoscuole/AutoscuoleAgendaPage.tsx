@@ -107,6 +107,7 @@ type AgendaBootstrapPayload = {
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
   vehiclesEnabled?: boolean;
+  followCarRules?: Record<string, { enabled: boolean }>;
   groupLessonsEnabled?: boolean;
   holidays?: Array<{ date: string; label: string | null }>;
   instructorBlocks?: Array<Record<string, unknown>>;
@@ -279,6 +280,9 @@ export function AutoscuoleAgendaPage({
   const [instructors, setInstructors] = React.useState<ResourceOption[]>([]);
   const [vehicles, setVehicles] = React.useState<ResourceOption[]>([]);
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
+  const [followCarRules, setFollowCarRules] = React.useState<
+    Record<string, { enabled: boolean }>
+  >({});
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -318,6 +322,7 @@ export function AutoscuoleAgendaPage({
     time: "09:00",
     instructorId: "",
     vehicleId: "",
+    followVehicleId: "",
     locationId: "",
     duration: "30",
   });
@@ -490,6 +495,9 @@ export function AutoscuoleAgendaPage({
         setInstructors(payload.data.instructors ?? []);
         setVehicles(payload.data.vehicles ?? []);
         setVehiclesEnabled(payload.data.vehiclesEnabled !== false);
+        setFollowCarRules(
+          (payload.data.followCarRules as Record<string, { enabled: boolean }>) ?? {},
+        );
         setGroupLessonsEnabled(payload.data.groupLessonsEnabled === true);
         setHolidays(payload.data.holidays ?? []);
         setInstructorBlocks((payload.data.instructorBlocks ?? []).map((b: Record<string, unknown>) => ({
@@ -652,8 +660,18 @@ export function AutoscuoleAgendaPage({
   }, [appointments, search, rangeStart, rangeEnd]);
 
   const handleCreate = async () => {
+    const selectedVehicle = vehicles.find((v) => v.id === form.vehicleId);
+    const needFollowCar =
+      vehiclesEnabled &&
+      !!selectedVehicle &&
+      isMotoLicenseCategory(selectedVehicle.licenseCategory) &&
+      followCarRules[selectedVehicle.licenseCategory ?? ""]?.enabled === true;
     if (!form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)) {
       toast.info({ description: "Completa tutti i campi richiesti." });
+      return;
+    }
+    if (needFollowCar && !form.followVehicleId) {
+      toast.info({ description: "Seleziona l'auto al seguito per la guida moto." });
       return;
     }
     const startDate = buildLocalDateTime(form.day, form.time);
@@ -671,6 +689,7 @@ export function AutoscuoleAgendaPage({
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
+      followVehicleId: needFollowCar ? form.followVehicleId : null,
       locationId: form.locationId || null,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
@@ -706,6 +725,7 @@ export function AutoscuoleAgendaPage({
       time: "09:00",
       instructorId: "",
       vehicleId: "",
+      followVehicleId: "",
       locationId: defaultLocationId,
       duration: "30",
     });
@@ -2326,6 +2346,37 @@ export function AutoscuoleAgendaPage({
                           </Select>
                         </FieldGroup>
                       )}
+                      {(() => {
+                        const sv = vehicles.find((v) => v.id === form.vehicleId);
+                        const need =
+                          vehiclesEnabled &&
+                          sv &&
+                          isMotoLicenseCategory(sv.licenseCategory) &&
+                          followCarRules[sv.licenseCategory ?? ""]?.enabled === true;
+                        if (!need) return null;
+                        const carOptions = vehicles.filter(
+                          (v) => v.licenseCategory === "B" && v.id !== form.vehicleId,
+                        );
+                        return (
+                          <FieldGroup label="Auto al seguito" required>
+                            <Select
+                              value={form.followVehicleId}
+                              onValueChange={(value) =>
+                                setForm((prev) => ({ ...prev, followVehicleId: value }))
+                              }
+                            >
+                              <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
+                              <SelectContent>
+                                {carOptions.map((vehicle) => (
+                                  <SelectItem key={vehicle.id} value={vehicle.id}>
+                                    {vehicle.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </FieldGroup>
+                        );
+                      })()}
                     </div>
                     {agendaLocations.length > 0 && (
                       <FieldGroup
@@ -2376,6 +2427,9 @@ export function AutoscuoleAgendaPage({
                       } />
                       <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
                       {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
+                      {vehiclesEnabled && form.followVehicleId ? (
+                        <SummaryRow label="Auto al seguito" value={vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"} />
+                      ) : null}
                       <SummaryRow
                         label="Luogo"
                         value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}

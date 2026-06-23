@@ -29,6 +29,7 @@ import {
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, vehicleServesLicense } from "@/lib/autoscuole/license";
+import { parseFollowCarRulesFromLimits } from "@/lib/autoscuole/follow-car";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
@@ -996,6 +997,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       (agendaLimits as Record<string, unknown>).vehiclesEnabled !== false;
     const agendaGroupLessonsEnabled =
       (agendaLimits as Record<string, unknown>).groupLessonsEnabled === true;
+    const agendaFollowCarRules = parseFollowCarRulesFromLimits(
+      agendaLimits as Record<string, unknown>,
+    );
 
     // Grid color flags (mandatoryLesson / examNextDay) — same annotation as
     // getAutoscuolaAppointmentsFiltered; the mobile grid reads agenda data
@@ -1105,6 +1109,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         vehicles,
         vehiclesEnabled: agendaVehiclesEnabled,
         groupLessonsEnabled: agendaGroupLessonsEnabled,
+        followCarRules: agendaFollowCarRules,
         instructorBlocks,
         holidays: holidays.map((h) => ({
           date: h.date.toISOString(),
