@@ -91,6 +91,8 @@ const createAppointmentSchema = z.object({
   status: z.string().optional(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
+  // Follow car (auto al seguito) for moto lessons, when the school requires it.
+  followVehicleId: z.string().uuid().optional().nullable(),
   locationId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -2573,11 +2575,22 @@ export async function createAutoscuolaAppointment(
     const scanEnd = new Date(slotEnd);
     scanEnd.setDate(scanEnd.getDate() + 1);
 
-    const conflictOr: Array<Record<string, string>> = [
+    // A lesson may reserve more than one vehicle (moto + follow car). Catch a
+    // conflict on ANY reserved vehicle, whether the other appointment uses it as
+    // its primary `vehicleId` or as a secondary (follow) row in the join.
+    const reservedVehicleIds = [payload.vehicleId, payload.followVehicleId].filter(
+      (id): id is string => Boolean(id),
+    );
+    const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
-    if (payload.vehicleId) {
-      conflictOr.push({ vehicleId: payload.vehicleId });
+    for (const vehicleId of reservedVehicleIds) {
+      conflictOr.push({ vehicleId });
+    }
+    if (reservedVehicleIds.length) {
+      conflictOr.push({
+        appointmentVehicles: { some: { vehicleId: { in: reservedVehicleIds } } },
+      });
     }
     const conflicts = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -2674,6 +2687,19 @@ export async function createAutoscuolaAppointment(
           invoiceStatus: paymentSnapshot.invoiceStatus,
           creditApplied: paymentSnapshot.creditApplied,
           manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
+          // Reserve every vehicle this lesson uses (primary + follow car).
+          ...(payload.vehicleId
+            ? {
+                appointmentVehicles: {
+                  create: [
+                    { vehicleId: payload.vehicleId, role: "primary" },
+                    ...(payload.followVehicleId
+                      ? [{ vehicleId: payload.followVehicleId, role: "follow" }]
+                      : []),
+                  ],
+                },
+              }
+            : {}),
         },
       });
     });
@@ -2913,11 +2939,15 @@ export async function createAutoscuolaAppointmentBatch(
     const scanEnd = new Date(Math.max(...allEnds));
     scanEnd.setDate(scanEnd.getDate() + 1);
 
-    const batchConflictOr: Array<Record<string, string>> = [
+    const batchConflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
     if (payload.vehicleId) {
       batchConflictOr.push({ vehicleId: payload.vehicleId });
+      // Also catch appointments using this vehicle as a follow car (join row).
+      batchConflictOr.push({
+        appointmentVehicles: { some: { vehicleId: payload.vehicleId } },
+      });
     }
     const existingAppointments = await prisma.autoscuolaAppointment.findMany({
       where: {
