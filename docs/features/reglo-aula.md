@@ -22,7 +22,7 @@ Feature **strettamente integrata in Reglo** (non è un prodotto a parte): vive d
 | Superficie | Path | Auth | Note |
 |------------|------|------|------|
 | **Console docente** (proiettore) | `app/[locale]/aula/...` | owner / instructor | Lista lezioni, editor slide, modalità presentazione full-screen, controllo quiz live |
-| **Join studente** (da QR) | `app/aula-live/[code]/...` | **pubblica, no login** | Pagina leggera: inserisci nome → rispondi |
+| **Join studente** (da QR) | `app/[locale]/aula-live/[code]/...` | **pubblica, no login** | Pagina leggera: inserisci nome → rispondi. Pubblica via `publicRoutes` (`lib/constants`); sotto `[locale]` perché il root layout con `<html>/<body>` è in `app/[locale]/layout.tsx` |
 
 ## Data Model
 
@@ -131,7 +131,8 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | `app/[locale]/aula/page.tsx` | Lista lezioni (docente) |
 | `app/[locale]/aula/[lessonId]/page.tsx` | Editor pacchetto slide / dettaglio lezione |
 | `app/[locale]/aula/live/[code]/page.tsx` | Console docente full-screen (slide + controllo quiz + QR) |
-| `app/aula-live/[code]/page.tsx` | Join studente (pubblica, no auth) |
+| `app/[locale]/aula-live/[code]/page.tsx` | Join studente (pubblica via `publicRoutes`, no auth) |
+| `middleware.ts` + `lib/constants.ts` | `/aula-live/[^/]+` in `publicRoutes` (no auth, sì i18n) |
 | `components/pages/Aula/*` | Editor slide, console proiettore, player studente |
 | `components/Layout/AppSidebar.tsx` | Link "Aula" in sidebar |
 | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` | Toggle `aulaEnabled` per company |

@@ -59,6 +59,9 @@ export const publicRoutes = [
   '/sign-up',
   '/unauthorized',
   '/not-found',
+  // Reglo Aula: pagina pubblica del quiz live (join studente da QR, no auth).
+  // `[^/]+` = il joinCode della sessione.
+  '/aula-live/[^/]+',
 ];
 
 export const PAGE_SIZE = 20;

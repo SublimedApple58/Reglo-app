@@ -33,7 +33,10 @@ export function AulaLiveConsole({ code }: { code: string }) {
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    setJoinUrl(`${window.location.origin}/aula-live/${code}`);
+    // La console gira sotto /{locale}/aula/live/{code}: riusa lo stesso locale
+    // per il link studente /{locale}/aula-live/{code} (pagina pubblica).
+    const locale = window.location.pathname.split("/")[1] || "it";
+    setJoinUrl(`${window.location.origin}/${locale}/aula-live/${code}`);
   }, [code]);
 
   const poll = useCallback(async () => {

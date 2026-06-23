@@ -59,7 +59,7 @@ Leggere `docs/design-system.md` prima. Componenti in `components/pages/Aula/*`.
 - `app/[locale]/aula/page.tsx` — lista lezioni (template + fork), bottone "Personalizza" (fork).
 - `app/[locale]/aula/[lessonId]/page.tsx` — editor pacchetto slide (blocchi base + upload immagini), riordino, anteprima.
 - `app/[locale]/aula/live/[code]/page.tsx` — console docente full-screen: slide (vista proiettore lato-client), bottone "Avvia quiz", controllo domanda (apri/stop/next/end), QR di join, conteggio partecipanti, schermata reveal giusto/sbagliato. Proiettore: in `QUESTION_OPEN` mostra **solo QR**.
-- `app/aula-live/[code]/page.tsx` — join studente pubblico: nome → risposta V/F (con immagine se presente) → attesa reveal → giusto/sbagliato.
+- `app/[locale]/aula-live/[code]/page.tsx` — join studente pubblico: nome → risposta V/F (con immagine se presente) → attesa reveal → giusto/sbagliato. Pubblica via `publicRoutes` in `lib/constants` (sotto `[locale]` perché html/body sono nel layout locale).
 - `components/Layout/AppSidebar.tsx` — link "Aula" (visibile se `aulaEnabled`).
 
 ## Step 7 — Seed contenuti template + flag
