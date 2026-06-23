@@ -72,6 +72,7 @@
     "pdfjs-dist": "^4.4.168",
     "preact": "^10.28.1",
     "prisma": "^6.11.1",
+    "qrcode.react": "^4.2.0",
     "query-string": "^9.1.1",
     "radix-ui": "^1.4.2",
     "react": "^19.0.0",

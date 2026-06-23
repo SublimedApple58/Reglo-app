@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useTransition } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import {
   endAulaLiveSession,
   openNextAulaQuestion,
@@ -66,9 +67,17 @@ export function AulaLiveConsole({ code }: { code: string }) {
       {showQrOnly && (
         <div className="flex flex-col items-center gap-4">
           <p className="text-xl">Inquadra il QR per partecipare</p>
-          {/* TODO: rendere come QR code reale (libreria qrcode) */}
-          <div className="flex h-56 w-56 items-center justify-center rounded-xl border-4 border-dashed text-center text-sm text-neutral-500">
-            QR → {joinUrl}
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-neutral-200">
+            {joinUrl ? (
+              <QRCodeSVG
+                value={joinUrl}
+                size={256}
+                level="M"
+                marginSize={2}
+              />
+            ) : (
+              <div className="h-64 w-64 animate-pulse rounded-lg bg-neutral-100" />
+            )}
           </div>
           <p className="font-mono text-lg">{joinUrl}</p>
           {snap && (
