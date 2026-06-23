@@ -1,47 +1,62 @@
 # Vehicles (Veicoli) — backend & web
 
 ## What it does
-Company-level vehicles that, when the **vehicles module** is on (`limits.vehiclesEnabled`), participate in slot matching exactly like instructors: they constrain bookable slots, get auto-assigned to bookings, and block double-booking. A vehicle can optionally be set as the **fixed vehicle of one instructor** (1:1): bookings made with that instructor automatically use it.
+Company-level vehicles that, when the **vehicles module** is on (`limits.vehiclesEnabled`), participate in slot matching exactly like instructors: they constrain bookable slots, get auto-assigned to bookings, and block double-booking.
+
+Since the **2026-06-23 redesign** the instructor↔vehicle relation is **many-to-many** with three usage modes, and a lesson may reserve **more than one vehicle** (moto + follow car). See [[project_vehicles_redesign]].
+
+## Usage model (the three modes)
+"Who can use vehicle V", 3-level precedence:
+1. **Exclusive** — V reserved to one instructor (`assignedInstructorId`), hidden from everyone else. An instructor may own **several** exclusive vehicles (e.g. their car + their moto).
+2. **Pool** — V has an explicit `AutoscuolaVehiclePoolMember` list → only those instructors.
+3. **Open** — no exclusive owner and no pool rows → **all** instructors (the default, = pre-redesign behaviour for unassigned vehicles).
+
+Vehicle resolution is **per license category**: if an instructor owns an exclusive vehicle that serves the student's category it is **forced** (no pool dilution — bit-for-bit the old "fixed vehicle" behaviour); otherwise the instructor draws from pool/open vehicles of that category (the "Mario usually does cars, occasionally moto" case).
 
 ## Data model (`prisma/schema.prisma`)
-- `AutoscuolaVehicle`: `id, companyId, name, plate?, status("active"|"inactive")`, plus fixed-vehicle fields:
-  - `assignedInstructorId String?` — FK → `AutoscuolaInstructor` (`@relation("InstructorFixedVehicle")`, `onDelete: SetNull`). `@@unique([assignedInstructorId])` enforces **1:1** (an instructor has at most one fixed vehicle; multiple NULLs allowed). Inverse: `AutoscuolaInstructor.fixedVehicle`.
-  - `followsInstructorAvailability Boolean @default(true)` — when true the vehicle is available whenever its instructor is (its own weekly availability is ignored); when false the vehicle's own availability is intersected.
-- `AutoscuolaAppointment.vehicleId String?` (nullable; non-null in practice when the module is on).
-- Availability: one shared model `AutoscuolaWeeklyAvailability` (`ownerType:"vehicle"`) + `AutoscuolaDailyAvailabilityOverride`. ⚠️ The action `createAvailabilitySlots` (misleading name) **upserts WeeklyAvailability**, it does not create discrete slots.
-- Migration: `20260609120000_add_vehicle_fixed_instructor`.
+- `AutoscuolaVehicle`: `id, companyId, name, plate?, status("active"|"inactive"|"maintenance")`, plus:
+  - `assignedInstructorId String?` — the **exclusive owner** (FK → `AutoscuolaInstructor`, `@relation("InstructorExclusiveVehicles")`, `onDelete: SetNull`). **No `@@unique`** anymore (an instructor may own several). Inverse: `AutoscuolaInstructor.exclusiveVehicles`.
+  - `followsInstructorAvailability Boolean @default(true)` — only meaningful for an exclusive vehicle (it follows its owner); pool/open vehicles always use their own availability.
+- `AutoscuolaVehiclePoolMember (vehicleId, instructorId)` — N:N shared pool. Empty + no exclusive owner = open.
+- `AutoscuolaInstructorPreferredVehicle (instructorId, licenseCategory, vehicleId)` — optional tie-break when several compatible vehicles are free.
+- `AutoscuolaAppointmentVehicle (appointmentId, vehicleId, role "primary"|"follow")` — multi-vehicle lessons. `AutoscuolaAppointment.vehicleId` is kept as the **primary** (source of truth for existing reads); `role="follow"` is the additional follow car.
+- `CompanyService.limits.followCarRules` — per-moto-category opt-in `{ A: {enabled}, ... }` for "auto al seguito".
+- Migrations: `20260609120000_add_vehicle_fixed_instructor`, `20260609140000_add_license_category`, `20260623142838_vehicles_m2m_pool_followcar` (drops the unique, adds the 3 tables; non-destructive, backward-compatible by no-op).
 
-## Fixed-vehicle logic (shared helper)
-`lib/autoscuole/fixed-vehicle.ts` (pure, unit-tested in `tests/unit/autoscuole/fixed-vehicle.test.ts`):
-- `buildFixedVehicleMaps(vehicles)` → `{ fixedByInstructor, reservedVehicleIds }`.
-- `resolveVehicleForInstructor({...})` — if the instructor has a fixed vehicle: force it (skip its availability check when `followsInstructorAvailability`, **always** check overlap); otherwise best-fit from the pool **excluding reserved vehicles**.
-- `pickBestInstructorVehiclePair({...})` — instructor & vehicle are chosen as a **pair** (a fixed vehicle is bound to its instructor), not independently.
+## Vehicle resolution (shared helper)
+`lib/autoscuole/vehicle-resolution.ts` (pure, unit-tested in `tests/unit/autoscuole/vehicle-resolution.test.ts` — 16 cases incl. backward compat) — **replaces** the old `fixed-vehicle.ts`:
+- `buildVehicleResolutionMaps({vehicles, poolMembers, preferred})` → exclusive/pool/preferred maps.
+- `resolveVehiclesForInstructor({...})` → `{ primary, follow? }`. Per-category exclusive-forced/pool-fallback; preferred tie-break then packing score; resolves a second category-B vehicle when `requireFollowCar`.
+- `pickBestInstructorVehicleSet({...})` → `{ instructorId, vehicleId, followVehicleId, score }`.
+- `lib/autoscuole/follow-car.ts` — `parseFollowCarRulesFromLimits`, `requiresFollowCar`, `isFollowCarVehicle`, `FOLLOW_CAR_CATEGORY="B"`.
 
-This helper is applied at **all matcher sites** — keep them in sync:
+Applied at **all matcher sites** (keep in sync) — each also loads pool members + preferred + followCarRules, and busy-interval builders read both `vehicleId` AND the `AutoscuolaAppointmentVehicle` join:
 - `lib/autoscuole/slot-matcher.ts` (`findBestAutoscuolaSlot`)
-- `lib/actions/autoscuole-availability.actions.ts`: `createBookingRequest`, `getAllAvailableSlots`, `getDateAvailabilityMap`
-Each loads vehicles with `select { id, assignedInstructorId, followsInstructorAvailability }` and builds the maps once.
+- `lib/actions/autoscuole-availability.actions.ts`: `createBookingRequest` (writes primary+follow join rows + both vehicle slots), `getAllAvailableSlots`, `getDateAvailabilityMap`
+- Conflict-check in `createAutoscuolaAppointment` / batch (`autoscuole.actions.ts`): the OR covers primary + follow and queries the join (catches a car used as a follow car elsewhere).
+
+Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded from matching like inactive (but keep their assignment and do NOT cancel appointments).
 
 ## Server actions (`lib/actions/autoscuole.actions.ts`)
-- `getAutoscuolaVehicles()` / `listAutoscuolaVehiclesReadOnly()` — return the full rows (new fields flow automatically into `getAgendaData().vehicles`).
-- `createAutoscuolaVehicle({name, plate?})`.
-- `updateAutoscuolaVehicle({vehicleId, name?, plate?, status?, assignedInstructorId?, followsInstructorAvailability?})`:
-  - Role guard: OWNER/admin can assign any instructor; a plain INSTRUCTOR may only assign **to their own** instructor profile / edit their own fixed vehicle.
-  - 1:1 is a single "fixed vehicle" slot per instructor: assigning a vehicle to an instructor who already has one **auto-reassigns** (releases the previous vehicle in a transaction) instead of erroring. `@@unique` is the DB safety net.
-  - Deactivating a vehicle (`status:"inactive"`) clears `assignedInstructorId` and operationally cancels its future appointments.
-- `deactivateAutoscuolaVehicle(id)` — same clear-on-deactivate.
-- `updateAutoscuolaInstructor` — when an instructor becomes inactive, its fixed vehicle is released (`assignedInstructorId = null`).
-- Reserved vehicles stay **manually selectable** (quick-book / web agenda) for anyone; double-booking is still blocked by `validateAppointmentOverlap`.
+- `getAutoscuolaVehicles()` — flattens pool membership into `poolInstructorIds` for the client.
+- `createAutoscuolaVehicle({name, plate?, assignedInstructorId?, poolInstructorIds?, ...})`.
+- `updateAutoscuolaVehicle({vehicleId, ..., assignedInstructorId?, poolInstructorIds?, status?})`:
+  - No more 1:1 auto-reassign. `poolInstructorIds` diffs the pool in a transaction (owner-only; a plain INSTRUCTOR manages only their own exclusivity).
+  - `status:"inactive"` clears the exclusive owner + cancels future appointments; `status:"maintenance"` keeps assignment + appointments.
+- `setInstructorPreferredVehicle({instructorId, licenseCategory, vehicleId|null})` — owner or self.
+- `getAutoscuolaAgendaBootstrapAction` returns `followCarRules` for the agenda.
 
 ## API routes (`app/api/autoscuole/`)
-- `vehicles/route.ts` (GET/POST), `vehicles/[id]/route.ts` (PATCH spreads payload → new fields pass through; DELETE = deactivate). Mobile manages assignment entirely through `updateVehicle` (owner picker / instructor self-toggle), both in the Veicoli section.
+- `vehicles/route.ts` (GET/POST), `vehicles/[id]/route.ts` (PATCH spreads payload → `poolInstructorIds`/`status` pass through; DELETE = deactivate).
 
 ## Web UI
-- `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` — the **vehicle edit dialog** is the canonical assignment surface: an "Istruttore assegnato" `Select` (instructors reserved to others are disabled, "· su <vehicle>") + an InlineToggle "Disponibilità: segue l'istruttore / usa orari propri". `VehicleDetail` carries the two new fields; `handleSaveEditVehicle` sends them.
-- `tabs/VehiclesTab.tsx` / `tabs/InstructorsTab.tsx` — list cards (assignment done from the edit dialog).
+- `AutoscuoleResourcesPage.tsx` — vehicle edit dialog: **"Modalità di utilizzo"** segmented (Aperto/Pool/Esclusivo; pool = instructor `ToggleChip` multiselect, exclusive = `Select`), exclusive-only follows-availability toggle, **Attivo/Manutenzione** status segment. `VehicleDetail` carries `poolInstructorIds`.
+- `tabs/VehiclesTab.tsx` — card badges (usage mode + maintenance) + the **"Auto al seguito (moto)"** settings card (per-category toggles → `followCarRules` via `updateAutoscuolaSettings`).
+- `AutoscuoleAgendaPage.tsx` — when a moto vehicle is picked for a manual booking and the rule is on, a required **"Auto al seguito"** Select appears; `followVehicleId` is sent on create.
 
 ## Behaviour notes
-- Assignment changes are **not retroactive** — only new bookings use the new rule; existing appointments keep their `vehicleId`.
+- Assignment changes are **not retroactive** — only new bookings use the new rule; existing appointments keep their vehicles.
+- Follow-car edge cases still pending: swap excludes follow-car lessons; `freeSlotLicenseKeysTomorrow` follow-car awareness; agenda/EditAppointmentDialog follow-car **display/edit**.
 - No `trigger:deploy` is required by this feature.
 
 ## License categories (B / AM / A1 / A2 / A + transmission)
