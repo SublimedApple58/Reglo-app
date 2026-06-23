@@ -82,6 +82,12 @@ export type ServiceLimits = {
    * Only relevant when `'TEORIA'` is in `phasesEnabled`. Default false.
    */
   autoAssignQuizOnSignup?: boolean;
+  /**
+   * Reglo Aula — lezioni di teoria in aula (slide + quiz live).
+   * Quando true la company vede il modulo Aula. Default false.
+   * Vedi docs/features/reglo-aula.md.
+   */
+  aulaEnabled?: boolean;
 };
 
 export type CompanyServiceInfo = {

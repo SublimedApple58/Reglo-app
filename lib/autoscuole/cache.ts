@@ -6,6 +6,7 @@ const PAYMENTS_SEGMENT = "payments";
 const STRIPE_SEGMENT = "stripe";
 const FIC_SEGMENT = "fic";
 const QUIZ_SEGMENT = "quiz";
+const AULA_SEGMENT = "aula";
 const CACHE_NAMESPACE = "autoscuole:v1";
 
 const SETTINGS_SEGMENT = "settings";
@@ -16,6 +17,7 @@ export const AUTOSCUOLE_CACHE_SEGMENTS = {
   STRIPE: STRIPE_SEGMENT,
   FIC: FIC_SEGMENT,
   QUIZ: QUIZ_SEGMENT,
+  AULA: AULA_SEGMENT,
   SETTINGS: SETTINGS_SEGMENT,
 } as const;
 

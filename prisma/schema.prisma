@@ -1257,3 +1257,28 @@ model QuizStudentQuestionStat {
   @@unique([companyId, studentId, questionId])
   @@index([companyId, studentId])
 }
+
+// ── Reglo Aula ────────────────────────────────────────────────────────────────
+// Lezioni di teoria in aula. Unica tabella: solo metadati + puntatore al pacchetto
+// slide (.rppt) su R2. Il contenuto slide vive su R2, il quiz live tutto in Redis
+// (effimero, 0 storico). Vedi docs/features/reglo-aula.md.
+// companyId null = template globale Reglo; valorizzato = fork per autoscuola.
+// chapterId/sourceLessonId sono FK logiche (scalari, nessuna relation Prisma) per
+// mantenere la migrazione minima e non toccare QuizChapter.
+model AulaLesson {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String?  @db.Uuid
+  chapterId      String?  @db.Uuid
+  title          String
+  description    String?
+  order          Int      @default(0)
+  isTemplate     Boolean  @default(false)
+  sourceLessonId String?  @db.Uuid
+  packageR2Key   String
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([chapterId])
+  @@index([isTemplate])
+}

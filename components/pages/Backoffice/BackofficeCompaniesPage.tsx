@@ -160,6 +160,7 @@ function AutoscuolaDrawerContent({
       ? Math.max(0, Math.floor(limits.quizSeats))
       : 0;
   const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
+  const aulaEnabled = Boolean(limits.aulaEnabled);
 
   const [quizSeatsUsed, setQuizSeatsUsed] = useState<number | null>(null);
   useEffect(() => {
@@ -694,6 +695,20 @@ function AutoscuolaDrawerContent({
             />
           </label>
         </div>
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Reglo Aula</p>
+            <p className="text-xs text-muted-foreground">
+              Lezioni di teoria in aula: slide + quiz live (QR). Vedi docs/features/reglo-aula.md.
+            </p>
+          </div>
+          <Checkbox
+            checked={aulaEnabled}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, aulaEnabled: Boolean(checked) }))
+            }
+          />
+        </label>
       </section>
 
       {/* ── Quiz Teoria — Gestione licenze (visibile solo se TEORIA è attiva) ── */}
