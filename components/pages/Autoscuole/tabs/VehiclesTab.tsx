@@ -25,6 +25,7 @@ type VehicleDetail = {
   plate: string | null;
   status: string;
   assignedInstructorId: string | null;
+  poolInstructorIds: string[];
   followsInstructorAvailability: boolean;
   licenseCategory: string;
   transmission: string;
@@ -121,11 +122,29 @@ function VehiclesTabContent({
                       {vehicle.plate}
                     </span>
                   ) : null}
-                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                  <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                     {vehicle.licenseCategory} ·{" "}
                     {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ??
                       vehicle.transmission}
                   </span>
+                  {vehicle.assignedInstructorId ? (
+                    <span className="rounded-full bg-pink-50 px-1.5 py-0.5 text-[10px] font-medium text-pink-700">
+                      Esclusivo
+                    </span>
+                  ) : vehicle.poolInstructorIds.length ? (
+                    <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                      Pool · {vehicle.poolInstructorIds.length}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      Aperto
+                    </span>
+                  )}
+                  {vehicle.status === "maintenance" ? (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      Manutenzione
+                    </span>
+                  ) : null}
                 </span>
               }
               inactive={vehicle.status === "inactive"}
