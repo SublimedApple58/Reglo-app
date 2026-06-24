@@ -21,6 +21,14 @@ export default defineConfig({
     trace: "retain-on-failure",
     video: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Pass Vercel "Protection Bypass for Automation" so e2e can reach a protected
+    // staging/preview deployment. Secret comes from env (never committed).
+    extraHTTPHeaders: process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+      ? {
+          "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+          "x-vercel-set-bypass-cookie": "true",
+        }
+      : {},
   },
   projects: [
     // Logs in once and persists storageState for the authenticated specs.
