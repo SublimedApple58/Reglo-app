@@ -7,6 +7,7 @@
     "dev:e2e": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next dev -p 3000",
     "seed:e2e:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-e2e.ts",
     "seed:e2e:logo:dev": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-e2e-logo.ts",
+    "ship:staging": "bash scripts/ship-to-staging.sh",
     "build": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next build",
     "build:prod": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config next build",
     "start": "concurrently \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config next start\" \"DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config npx trigger.dev@4.4.0 dev\"",
