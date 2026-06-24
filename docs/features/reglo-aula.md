@@ -133,7 +133,7 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | `app/[locale]/aula/live/[code]/page.tsx` | Console docente full-screen (slide + controllo quiz + QR) |
 | `app/[locale]/aula-live/[code]/page.tsx` | Join studente (pubblica via `publicRoutes`, no auth) |
 | `middleware.ts` + `lib/constants.ts` | `/aula-live/[^/]+` in `publicRoutes` (no auth, sì i18n) |
-| `components/pages/Aula/*` | Editor slide, console proiettore, player studente |
+| `components/pages/Aula/*` | Editor slide, console proiettore, player studente, presentazione full-screen (`AulaSlideShow.tsx`) |
 | `components/Layout/AppSidebar.tsx` | Link "Aula" in sidebar |
 | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` | Toggle `aulaEnabled` per company |
 
@@ -145,6 +145,8 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | `forkAulaLessonTemplate` | action | copia il pacchetto `.rppt` su R2 + nuova riga `AulaLesson` company |
 | `saveAulaPackage` | action | l'editor riscrive il pacchetto slide su R2 (load → edit → save) |
 | `uploadAulaImage` | action | upload immagine slide su R2, ritorna `r2Key` |
+| `resolveAulaImageUrl` | action | URL firmato di un'immagine slide (anteprima editor + presentazione) |
+| `resolveAulaQuizRefs` | action | risolve i blocchi `quizRef` (testo + immagine + risposta) per la presentazione; read-only su `QuizQuestion` |
 | `createAulaLiveSession` | action | genera `joinCode` + `questionIds` (da capitolo, selezione docente) → scrive sessione in Redis |
 | `openAulaQuestion` / `revealAulaQuestion` / `nextAulaQuestion` / `endAulaLiveSession` | action | transizioni di stato → scrittura Redis |
 | `POST /api/aula/live/[code]/join` | route | partecipante anonimo, ritorna `participantId` |
@@ -160,8 +162,10 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 - **Join pubblico**: `joinCode` breve effimero con TTL Redis + rate-limit sul join (anti-spam).
 - **Lingua pagina studente**: italiano (default app).
 - **Contenuto slide template**: da definire in seguito; non blocca l'architettura.
-- **Editor slide**: a blocchi tipizzati (`heading`/`text`/`bullets`/`image`/`quizRef`) con rail slide (aggiungi/riordina/elimina), riordino/eliminazione blocchi e upload immagini su R2 (anteprima via URL firmato). La **modalità presentazione full-screen** resta da fare.
-- **QR proiettore**: render reale via `qrcode.react` (SVG scansionabile dell'URL studente `/{locale}/aula-live/{code}`).
+- **Editor slide**: a blocchi tipizzati (`heading`/`text`/`bullets`/`image`/`quizRef`) con rail slide (aggiungi/riordina/elimina), riordino/eliminazione blocchi e upload immagini su R2 (anteprima via URL firmato).
+- **Modalità presentazione full-screen**: overlay proiettore (`AulaSlideShow.tsx`) avviato dal pulsante "Presenta" nell'editor. Renderizza una slide alla volta in tipografia grande; naviga da tastiera (← → Spazio PagSu/Giù Home Fine) o con i comandi a schermo, Esc esce. Usa la **Fullscreen API** (l'apertura parte da un click → user gesture); uscire dal fullscreen chiude la presentazione. Immagini slide e domande `quizRef` (testo + immagine + risposta corretta) risolte on-mount via `resolveAulaImageUrl` / `resolveAulaQuizRefs`. Funziona anche su lezioni template (sola lettura).
+- **QR proiettore**: render reale via `qrcode.react` (SVG scansionabile dell'URL studente `/{locale}/aula-live/{code}`). La base URL viene da `NEXT_PUBLIC_SERVER_URL` (in prod il dominio reale), **non** da `window.location.origin` — così il QR è raggiungibile dai telefoni. In dev punta a `localhost:3000`; per testare da telefono imposta `NEXT_PUBLIC_SERVER_URL` su IP LAN (`http://192.168.x.x:3000`) o su un tunnel (cloudflared/ngrok).
+- **Upload immagini slide**: l'editor **ridimensiona/comprime lato client** (canvas → JPEG, lato lungo ≤1600px, qualità ~0.85) prima dell'upload, perché i Server Actions hanno un limite di body (alzato a `4mb` in `next.config.ts` come rete di sicurezza). Gli errori di upload vengono sempre mostrati in UI (try/catch attorno alla action), niente più fallimenti silenziosi.
 
 ## Connected Features
 

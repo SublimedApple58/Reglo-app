@@ -9,6 +9,7 @@ import {
   uploadAulaImage,
 } from "@/lib/actions/aula.actions";
 import type { SlideBlock, SlidePackage } from "@/lib/aula/slides";
+import { AulaSlideShow } from "@/components/pages/Aula/AulaSlideShow";
 
 type Lesson = {
   id: string;
@@ -26,17 +27,49 @@ const BLOCK_LABELS: Record<SlideBlock["type"], string> = {
   quizRef: "Domanda quiz",
 };
 
-/** Legge un File come base64 puro (senza prefisso data:) lato browser. */
-function fileToBase64(file: File): Promise<string> {
+/** Legge un File come data URL lato browser. */
+function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
+    reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Ridimensiona/comprime un'immagine lato client (canvas → JPEG) prima dell'upload.
+ * I Server Actions hanno un limite di body (~MB): una foto reale lo supererebbe.
+ * Riducendo a `maxDim` px il lato lungo il payload resta piccolo — ed è comunque
+ * più che sufficiente per la proiezione in aula.
+ */
+async function downscaleImage(
+  file: File,
+  maxDim = 1600,
+  quality = 0.85,
+): Promise<{ base64: string; ext: string; contentType: string }> {
+  const dataUrl = await fileToDataUrl(file);
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("File immagine non valido"));
+    image.src = dataUrl;
+  });
+  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * scale));
+  const h = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas non disponibile nel browser");
+  ctx.drawImage(img, 0, 0, w, h);
+  const out = canvas.toDataURL("image/jpeg", quality);
+  return {
+    base64: out.slice(out.indexOf(",") + 1),
+    ext: "jpg",
+    contentType: "image/jpeg",
+  };
 }
 
 /** Sposta l'elemento `from` di `dir` posizioni in un array (clone). */
@@ -66,6 +99,7 @@ export function AulaLessonEditor({
   const [pending, startTransition] = useTransition();
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [presenting, setPresenting] = useState(false);
   // Cache r2Key → URL firmato per l'anteprima immagini.
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
 
@@ -159,16 +193,27 @@ export function AulaLessonEditor({
 
   const handleImageUpload = (bi: number, file: File) => {
     startTransition(async () => {
-      const base64 = await fileToBase64(file);
-      const ext = file.name.split(".").pop() || "png";
-      const res = await uploadAulaImage({ base64, ext, contentType: file.type || "image/png" });
-      if (res.success && res.data) {
-        const r2Key = res.data.r2Key;
-        const url = await resolveAulaImageUrl(r2Key);
-        if (url) setImageUrls((prev) => ({ ...prev, [r2Key]: url }));
-        updateBlock(bi, { type: "image", r2Key });
-      } else {
-        setMessage(res.message ?? "Upload immagine fallito");
+      try {
+        const { base64, ext, contentType } = await downscaleImage(file);
+        // Guardia: resta ben sotto il bodySizeLimit del server action.
+        const approxBytes = Math.ceil((base64.length * 3) / 4);
+        if (approxBytes > 3.5 * 1024 * 1024) {
+          setMessage("Immagine troppo grande anche dopo la compressione. Usane una più leggera.");
+          return;
+        }
+        const res = await uploadAulaImage({ base64, ext, contentType });
+        if (res.success && res.data) {
+          const r2Key = res.data.r2Key;
+          const url = await resolveAulaImageUrl(r2Key);
+          if (url) setImageUrls((prev) => ({ ...prev, [r2Key]: url }));
+          updateBlock(bi, { type: "image", r2Key });
+        } else {
+          setMessage(res.message ?? "Upload immagine fallito");
+        }
+      } catch (err) {
+        // Qualsiasi errore (file non valido, rigetto del server action, ecc.)
+        // viene mostrato invece di fallire in silenzio.
+        setMessage(err instanceof Error ? err.message : "Upload immagine fallito");
       }
     });
   };
@@ -213,6 +258,13 @@ export function AulaLessonEditor({
             </button>
           )}
           <button
+            className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
+            disabled={slideCount === 0}
+            onClick={() => setPresenting(true)}
+          >
+            Presenta
+          </button>
+          <button
             className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
             disabled={pending}
             onClick={handleStartQuiz}
@@ -221,6 +273,15 @@ export function AulaLessonEditor({
           </button>
         </div>
       </div>
+
+      {presenting && (
+        <AulaSlideShow
+          pkg={pkg}
+          initialImageUrls={imageUrls}
+          startIndex={active}
+          onClose={() => setPresenting(false)}
+        />
+      )}
 
       {!editable && (
         <p className="text-amber-600">

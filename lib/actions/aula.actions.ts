@@ -307,3 +307,42 @@ export async function resolveAulaImageUrl(imageKey: string | null) {
   if (!imageKey) return null;
   return getSignedAssetUrl(imageKey);
 }
+
+/**
+ * Risolve i blocchi `quizRef` per la modalità presentazione: testo domanda,
+ * immagine firmata e risposta corretta. Read-only sulla banca globale.
+ */
+export async function resolveAulaQuizRefs(ids: string[]) {
+  try {
+    await requireAulaTeacher();
+    const unique = [
+      ...new Set(ids.filter((id) => z.string().uuid().safeParse(id).success)),
+    ];
+    if (unique.length === 0) {
+      return {
+        success: true,
+        data: [] as {
+          id: string;
+          text: string;
+          imageUrl: string | null;
+          correctAnswer: boolean;
+        }[],
+      };
+    }
+    const questions = await prisma.quizQuestion.findMany({
+      where: { id: { in: unique } },
+      select: { id: true, questionText: true, imageKey: true, correctAnswer: true },
+    });
+    const data = await Promise.all(
+      questions.map(async (q) => ({
+        id: q.id,
+        text: q.questionText,
+        imageUrl: q.imageKey ? await getSignedAssetUrl(q.imageKey) : null,
+        correctAnswer: q.correctAnswer,
+      })),
+    );
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
