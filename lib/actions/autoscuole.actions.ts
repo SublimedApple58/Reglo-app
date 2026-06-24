@@ -30,6 +30,10 @@ import {
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { parseFollowCarRulesFromLimits } from "@/lib/autoscuole/follow-car";
+import {
+  reconcileAppointmentVehicles,
+  resolveVehicleOwnerOnUpdate,
+} from "@/lib/autoscuole/appointment-vehicles";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
@@ -4634,30 +4638,6 @@ async function loadLocationSummary(id: string) {
   });
 }
 
-/**
- * Reconcile the AutoscuolaAppointmentVehicle join rows for an appointment so
- * they match the desired primary + follow vehicles. The invariant is kept:
- * `appointment.vehicleId` is always the role="primary" row, and an optional
- * role="follow" row is the auto al seguito. Idempotent — wipes and rewrites the
- * rows. A follow car without a primary is impossible (cleared).
- */
-async function reconcileAppointmentVehicles(
-  tx: Prisma.TransactionClient,
-  appointmentId: string,
-  primaryVehicleId: string | null,
-  followVehicleId: string | null,
-) {
-  await tx.autoscuolaAppointmentVehicle.deleteMany({ where: { appointmentId } });
-  if (!primaryVehicleId) return;
-  await tx.autoscuolaAppointmentVehicle.create({
-    data: { appointmentId, vehicleId: primaryVehicleId, role: "primary" },
-  });
-  if (followVehicleId && followVehicleId !== primaryVehicleId) {
-    await tx.autoscuolaAppointmentVehicle.create({
-      data: { appointmentId, vehicleId: followVehicleId, role: "follow" },
-    });
-  }
-}
 
 /**
  * Result of verifyInstructorAvailability(): either the instructor is available
@@ -5391,17 +5371,18 @@ export async function updateAutoscuolaVehicle(
     // temporary stop: it is excluded from matching but KEEPS its assignment/pool
     // and does NOT cancel existing appointments.
     const nextStatus = payload.status ?? existing.status;
-    const clearAssignmentForInactive = nextStatus === "inactive";
+    // Rule #4 (maintenance vs inactive): inactive releases the exclusive owner;
+    // maintenance keeps it. `undefined` = leave the column untouched.
+    const nextOwner = resolveVehicleOwnerOnUpdate({
+      nextStatus,
+      payloadAssignedInstructorId: payload.assignedInstructorId,
+    });
 
     const updateData = {
       name: payload.name,
       plate: payload.plate ?? undefined,
       status: payload.status,
-      ...(clearAssignmentForInactive
-        ? { assignedInstructorId: null }
-        : payload.assignedInstructorId !== undefined
-          ? { assignedInstructorId: payload.assignedInstructorId }
-          : {}),
+      ...(nextOwner !== undefined ? { assignedInstructorId: nextOwner } : {}),
       ...(payload.followsInstructorAvailability !== undefined
         ? { followsInstructorAvailability: payload.followsInstructorAvailability }
         : {}),

@@ -16,10 +16,9 @@ import {
   resolveEffectiveSettingsForInstructor,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
-import { isMotoLicenseCategory } from "@/lib/autoscuole/license";
 import {
   parseFollowCarRulesFromLimits,
-  FOLLOW_CAR_CATEGORY,
+  bookableLicenseKeysAtSlot,
   type FollowCarRules,
 } from "@/lib/autoscuole/follow-car";
 
@@ -1242,30 +1241,19 @@ const freeSlotLicenseKeysTomorrow = async ({
       continue;
     }
 
-    // Vehicles enabled: record the license key of every free vehicle at this slot.
-    // First gather the free vehicles, then apply the follow-car rule: a moto
-    // whose category requires an auto al seguito is only truly bookable when a
-    // free category-B car also exists at this slot (the lesson reserves both).
-    const freeVehicleIds: string[] = [];
+    // Vehicles enabled: record the license key of every free vehicle at this slot,
+    // applying the follow-car rule via the shared helper (a moto needing an auto
+    // al seguito is only bookable when a free category-B car also exists here).
+    const freeVehicles: Array<{ category: string | null; licenseKey: string }> = [];
     for (const id of vehicleIds) {
       if (!isAvailable(resolveVehicle(id), tomorrowDow, minutes, candidateEndMin)) continue;
       if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
-      freeVehicleIds.push(id);
+      const licenseKey = vehicleKeyById.get(id);
+      if (!licenseKey) continue;
+      freeVehicles.push({ category: vehicleCategoryById.get(id) ?? null, licenseKey });
     }
-    const hasFreeFollowCar = freeVehicleIds.some(
-      (id) => vehicleCategoryById.get(id) === FOLLOW_CAR_CATEGORY,
-    );
-    for (const id of freeVehicleIds) {
-      const category = vehicleCategoryById.get(id) ?? "";
-      if (
-        isMotoLicenseCategory(category) &&
-        followCarRules[category as keyof FollowCarRules]?.enabled === true &&
-        !hasFreeFollowCar
-      ) {
-        continue;
-      }
-      const key = vehicleKeyById.get(id);
-      if (key) collectedKeys.add(key);
+    for (const key of bookableLicenseKeysAtSlot({ freeVehicles, followCarRules })) {
+      collectedKeys.add(key);
     }
   }
 

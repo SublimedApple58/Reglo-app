@@ -2,6 +2,7 @@ import {
   parseFollowCarRulesFromLimits,
   requiresFollowCar,
   isFollowCarVehicle,
+  bookableLicenseKeysAtSlot,
   FOLLOW_CAR_CATEGORY,
   type FollowCarRules,
 } from "@/lib/autoscuole/follow-car";
@@ -122,5 +123,63 @@ describe("isFollowCarVehicle", () => {
   it("is false when the category is missing", () => {
     expect(isFollowCarVehicle({ licenseCategory: null })).toBe(false);
     expect(isFollowCarVehicle({})).toBe(false);
+  });
+});
+
+describe("bookableLicenseKeysAtSlot", () => {
+  const motoRuleOn: FollowCarRules = { A: { enabled: true } };
+
+  it("emits a moto key WITHOUT the rule, even if no car is free", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [{ category: "A", licenseKey: "A|manual" }],
+      followCarRules: {},
+    });
+    expect([...keys]).toEqual(["A|manual"]);
+  });
+
+  it("DROPS a moto key when its category needs a follow car and no free B exists", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [{ category: "A", licenseKey: "A|manual" }],
+      followCarRules: motoRuleOn,
+    });
+    expect(keys.size).toBe(0);
+  });
+
+  it("KEEPS the moto key when a free category-B car is also present", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [
+        { category: "A", licenseKey: "A|manual" },
+        { category: "B", licenseKey: "B|manual" },
+      ],
+      followCarRules: motoRuleOn,
+    });
+    expect(keys).toEqual(new Set(["A|manual", "B|manual"]));
+  });
+
+  it("always emits car (B) keys regardless of the rule", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [{ category: "B", licenseKey: "B|automatic" }],
+      followCarRules: motoRuleOn,
+    });
+    expect([...keys]).toEqual(["B|automatic"]);
+  });
+
+  it("does not gate a moto category whose rule is OFF", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [{ category: "A1", licenseKey: "A1|manual" }],
+      followCarRules: { A: { enabled: true }, A1: { enabled: false } },
+    });
+    expect([...keys]).toEqual(["A1|manual"]);
+  });
+
+  it("deduplicates identical license keys", () => {
+    const keys = bookableLicenseKeysAtSlot({
+      freeVehicles: [
+        { category: "B", licenseKey: "B|manual" },
+        { category: "B", licenseKey: "B|manual" },
+      ],
+      followCarRules: {},
+    });
+    expect(keys.size).toBe(1);
   });
 });

@@ -15,6 +15,10 @@ import {
 import { getAutoscuolaSettingsForCompany } from "@/lib/actions/autoscuole-settings.actions";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
 import {
+  appointmentSwapBlockReason,
+  SWAP_BLOCK_MESSAGES,
+} from "@/lib/autoscuole/swap-rules";
+import {
   isStudentInManualFullCluster,
   resolveEffectiveBookingSettings,
   buildCompanyBookingDefaults,
@@ -216,26 +220,19 @@ export async function createSwapOffer(
     if (!appointment) {
       return { success: false, message: "Guida non trovata." };
     }
-    // Lessons with an auto al seguito (moto + follow car) reserve two vehicles;
-    // they are NOT swappable in phase 1 — a takeover would need to re-resolve
-    // and re-reserve the follow car for the new student, which the swap engine
-    // doesn't handle yet.
-    if (appointment.appointmentVehicles.length > 0) {
-      return {
-        success: false,
-        message: "Le guide con auto al seguito non si possono scambiare.",
-      };
-    }
-    // Group-lesson seats are NOT swappable: a takeover would bypass the
-    // opt-in + license + seat-count rules of the group-lesson flow (real
-    // incident: a non-opted-in student entered a group lesson via swap).
-    // Freeing a seat goes through "Ritira iscrizione", which re-broadcasts
-    // the invite to eligible students only.
-    if (appointment.groupLessonId || appointment.type === "group_lesson") {
-      return { success: false, message: "I posti delle guide di gruppo non si possono scambiare." };
-    }
-    if (appointment.type === "esame") {
-      return { success: false, message: "Gli esami non si possono scambiare." };
+    // Non-swappable kinds (shared rule, see swap-rules.ts):
+    // - group-lesson seats bypass the group flow's opt-in/license/seat rules
+    //   (real incident: a non-opted-in student entered a group lesson via swap);
+    //   freeing a seat goes through "Ritira iscrizione" instead.
+    // - exams are personal.
+    // - auto al seguito reserves two vehicles (phase-1 decision #5).
+    const blockReason = appointmentSwapBlockReason({
+      type: appointment.type,
+      groupLessonId: appointment.groupLessonId,
+      hasFollowCar: appointment.appointmentVehicles.length > 0,
+    });
+    if (blockReason) {
+      return { success: false, message: SWAP_BLOCK_MESSAGES[blockReason] };
     }
     if (appointment.studentId !== membership.userId) {
       return { success: false, message: "Non sei il titolare di questa guida." };
@@ -1110,20 +1107,21 @@ export async function instructorSwapAppointments(
       return { success: false, message: "Una o entrambe le guide non trovate." };
     }
 
-    // Group-lesson seats and exams are not swappable (the group flow has its
-    // own opt-in/seat rules; exams are personal). Same guard as createSwapOffer.
-    const notSwappable = (a: typeof apptA) =>
-      a.groupLessonId !== null || ["group_lesson", "esame"].includes(a.type);
-    if (notSwappable(apptA) || notSwappable(apptB)) {
-      return { success: false, message: "Le guide di gruppo e gli esami non si possono scambiare." };
-    }
-    // Lessons with an auto al seguito reserve two vehicles — not swappable in
-    // phase 1 (same rule as createSwapOffer).
-    if (apptA.appointmentVehicles.length > 0 || apptB.appointmentVehicles.length > 0) {
-      return {
-        success: false,
-        message: "Le guide con auto al seguito non si possono scambiare.",
-      };
+    // Non-swappable kinds (shared rule, see swap-rules.ts): group-lesson seats,
+    // exams, and lessons with an auto al seguito. Same guard as createSwapOffer.
+    const blockReason =
+      appointmentSwapBlockReason({
+        type: apptA.type,
+        groupLessonId: apptA.groupLessonId,
+        hasFollowCar: apptA.appointmentVehicles.length > 0,
+      }) ??
+      appointmentSwapBlockReason({
+        type: apptB.type,
+        groupLessonId: apptB.groupLessonId,
+        hasFollowCar: apptB.appointmentVehicles.length > 0,
+      });
+    if (blockReason) {
+      return { success: false, message: SWAP_BLOCK_MESSAGES[blockReason] };
     }
 
     // Both must be scheduled or confirmed

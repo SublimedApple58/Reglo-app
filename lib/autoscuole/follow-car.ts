@@ -68,3 +68,27 @@ export const requiresFollowCar = (
 export const isFollowCarVehicle = (vehicle: {
   licenseCategory?: string | null;
 }): boolean => vehicle.licenseCategory === FOLLOW_CAR_CATEGORY;
+
+/**
+ * Given the vehicles that are FREE at a single slot, return the set of bookable
+ * license keys, applying the follow-car rule: a moto whose category requires an
+ * auto al seguito is only truly bookable when a free category-B car ALSO exists
+ * at that slot (the lesson reserves both). Cars and moto that don't need a follow
+ * car are emitted unconditionally. Used by the empty-slot notification scan.
+ */
+export const bookableLicenseKeysAtSlot = (args: {
+  freeVehicles: Array<{ category: string | null | undefined; licenseKey: string }>;
+  followCarRules: FollowCarRules;
+}): Set<string> => {
+  const hasFreeFollowCar = args.freeVehicles.some(
+    (v) => v.category === FOLLOW_CAR_CATEGORY,
+  );
+  const keys = new Set<string>();
+  for (const v of args.freeVehicles) {
+    if (requiresFollowCar(args.followCarRules, v.category) && !hasFreeFollowCar) {
+      continue;
+    }
+    keys.add(v.licenseKey);
+  }
+  return keys;
+};
