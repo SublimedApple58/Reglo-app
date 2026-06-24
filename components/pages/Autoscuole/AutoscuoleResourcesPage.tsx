@@ -1956,6 +1956,8 @@ export function AutoscuoleResourcesPage({
                     <button
                       key={mode}
                       type="button"
+                      data-testid={`vehicle-mode-${mode}`}
+                      data-active={editVehicleMode === mode}
                       onClick={() => setEditVehicleMode(mode)}
                       className={cn(
                         "flex-1 cursor-pointer rounded-lg py-2 text-[13px] transition-all duration-150",
@@ -2013,7 +2015,7 @@ export function AutoscuoleResourcesPage({
                         setEditVehicleInstructorId(v === "none" ? "" : v)
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger data-testid="vehicle-exclusive-instructor">
                         <SelectValue placeholder="Scegli istruttore" />
                       </SelectTrigger>
                       <SelectContent>
@@ -2123,7 +2125,7 @@ export function AutoscuoleResourcesPage({
               <Button variant="outline" onClick={() => setEditVehicle(null)} disabled={savingEditVehicle}>
                 Annulla
               </Button>
-              <Button onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
+              <Button data-testid="vehicle-save" onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
                 {savingEditVehicle ? "Salvataggio..." : "Salva"}
               </Button>
             </DialogFooter>

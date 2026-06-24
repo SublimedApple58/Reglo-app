@@ -118,6 +118,7 @@ function VehiclesTabContent({
           return (
             <ResourceCard
               key={vehicle.id}
+              testId="vehicle-card"
               name={vehicle.name}
               subtitle={
                 <span className="flex items-center gap-1.5">

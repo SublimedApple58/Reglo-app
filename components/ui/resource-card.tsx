@@ -18,6 +18,7 @@ export function ResourceCard({
   totalLabel,
   emptyLabel = "Nessuno slot oggi.",
   className,
+  testId,
 }: {
   name: string;
   subtitle?: React.ReactNode;
@@ -29,9 +30,12 @@ export function ResourceCard({
   totalLabel?: string;
   emptyLabel?: string;
   className?: string;
+  /** Optional test hook (e.g. e2e). Rendered as data-testid on the card root. */
+  testId?: string;
 }) {
   return (
     <div
+      data-testid={testId}
       className={cn(
         "rounded-xl border border-border bg-white shadow-card transition-shadow hover:shadow-card-primary",
         inactive && "opacity-55",
