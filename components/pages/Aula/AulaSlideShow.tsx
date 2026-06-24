@@ -41,6 +41,7 @@ export function AulaSlideShow({
     initialImageUrls ?? {},
   );
   const [quizRefs, setQuizRefs] = useState<Record<string, QuizRefView>>({});
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Risolve le URL firmate delle immagini slide non ancora in cache.
@@ -142,19 +143,23 @@ export function AulaSlideShow({
     return () => window.removeEventListener("keydown", onKey);
   }, [go, onClose, slides.length]);
 
-  // Entra in fullscreen all'apertura; uscire dal fullscreen chiude la presentazione.
+  // Prova a entrare in fullscreen all'apertura (comodo sul proiettore), ma NON
+  // legare la chiusura all'uscita dal fullscreen: l'overlay è già `fixed inset-0`
+  // e copre tutto. Si chiude solo con "Esci" o Escape. Più robusto dal vivo.
   useEffect(() => {
-    const el = containerRef.current;
-    el?.requestFullscreen?.().catch(() => {});
-    const onFsChange = () => {
-      if (!document.fullscreenElement) onClose();
-    };
+    containerRef.current?.requestFullscreen?.().catch(() => {});
+    const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFsChange);
     return () => {
       document.removeEventListener("fullscreenchange", onFsChange);
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     };
-  }, [onClose]);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else containerRef.current?.requestFullscreen?.().catch(() => {});
+  };
 
   const slide = slides[index];
 
@@ -163,33 +168,53 @@ export function AulaSlideShow({
       ref={containerRef}
       className="fixed inset-0 z-50 flex flex-col bg-neutral-950 text-white"
     >
-      {/* Contenuto slide */}
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden p-12">
-        {/* Zone di click per navigare (lasciano scoperto il centro per i comandi) */}
+      {/* Contenuto slide — centrato, ma scrollabile se eccede l'altezza */}
+      <div className="relative flex-1 overflow-y-auto">
+        {/* Zone di click per navigare (laterali, lasciano scoperto il centro) */}
         <button
           aria-label="Slide precedente"
-          className="absolute inset-y-0 left-0 w-1/3 cursor-w-resize focus:outline-none"
+          className="absolute inset-y-0 left-0 z-10 w-1/4 cursor-w-resize focus:outline-none"
           onClick={() => go(-1)}
         />
         <button
           aria-label="Slide successiva"
-          className="absolute inset-y-0 right-0 w-1/3 cursor-e-resize focus:outline-none"
+          className="absolute inset-y-0 right-0 z-10 w-1/4 cursor-e-resize focus:outline-none"
           onClick={() => go(1)}
         />
 
-        <div className="pointer-events-none mx-auto w-full max-w-5xl space-y-8 text-center">
-          {!slide || slide.length === 0 ? (
-            <p className="text-3xl text-neutral-500">Slide vuota</p>
-          ) : (
-            slide.map((block, bi) => (
-              <SlideBlockView
-                key={bi}
-                block={block}
-                imageUrls={imageUrls}
-                quizRefs={quizRefs}
-              />
-            ))
-          )}
+        <div className="flex min-h-full items-center justify-center p-12">
+          <div className="mx-auto w-full max-w-5xl space-y-8 text-center">
+            {!slide || slide.length === 0 ? (
+              <p className="text-3xl text-neutral-500">Slide vuota</p>
+            ) : (
+              groupConsecutiveImages(slide).map((group, gi) =>
+                group.kind === "images" ? (
+                  // Immagini consecutive: affiancate (responsive), non impilate.
+                  <div
+                    key={`${index}-${gi}`}
+                    className="flex flex-wrap items-stretch justify-center gap-6"
+                  >
+                    {group.blocks.map((b, j) => (
+                      <PresImage
+                        key={j}
+                        block={b}
+                        imageUrls={imageUrls}
+                        count={group.blocks.length}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  // key con l'indice slide → il blocco si rimonta cambiando slide
+                  // (azzera lo stato "Vedi soluzione" dei quizRef).
+                  <SlideBlockView
+                    key={`${index}-${gi}`}
+                    block={group.block}
+                    quizRefs={quizRefs}
+                  />
+                ),
+              )
+            )}
+          </div>
         </div>
       </div>
 
@@ -214,6 +239,13 @@ export function AulaSlideShow({
             Successiva →
           </button>
           <button
+            className="rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10"
+            onClick={toggleFullscreen}
+            title={isFullscreen ? "Esci da schermo intero" : "Schermo intero"}
+          >
+            {isFullscreen ? "⤢" : "⛶"}
+          </button>
+          <button
             className="rounded-md bg-pink-500 px-3 py-1.5 text-sm font-medium hover:bg-pink-600"
             onClick={onClose}
           >
@@ -225,14 +257,72 @@ export function AulaSlideShow({
   );
 }
 
+type SlideBlock = Slide[number];
+
+/** Raggruppa blocchi immagine consecutivi (per affiancarli a schermo). */
+function groupConsecutiveImages(
+  blocks: SlideBlock[],
+): ({ kind: "images"; blocks: SlideBlock[] } | { kind: "block"; block: SlideBlock })[] {
+  const groups: (
+    | { kind: "images"; blocks: SlideBlock[] }
+    | { kind: "block"; block: SlideBlock }
+  )[] = [];
+  for (const b of blocks) {
+    const last = groups[groups.length - 1];
+    if (b.type === "image" && last && last.kind === "images") {
+      last.blocks.push(b);
+    } else if (b.type === "image") {
+      groups.push({ kind: "images", blocks: [b] });
+    } else {
+      groups.push({ kind: "block", block: b });
+    }
+  }
+  return groups;
+}
+
+/** Singola immagine da proiettore; la larghezza si adatta a quante ce ne sono. */
+function PresImage({
+  block,
+  imageUrls,
+  count,
+}: {
+  block: SlideBlock;
+  imageUrls: Record<string, string>;
+  count: number;
+}) {
+  if (block.type !== "image") return null;
+  const url = imageUrls[block.r2Key];
+  // 1 immagine → piena; 2 → ~metà ciascuna; 3+ → ~terzo (con wrap).
+  const figW =
+    count === 1 ? "w-full" : count === 2 ? "w-[48%] min-w-[280px]" : "w-[31%] min-w-[240px]";
+  const imgH = count === 1 ? "max-h-[62vh]" : "max-h-[56vh]";
+  return (
+    <figure className={`flex flex-col items-center gap-2 ${figW}`}>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt={block.caption ?? ""}
+          className={`${imgH} max-w-full rounded-lg object-contain`}
+        />
+      ) : (
+        <div className="flex h-56 w-full items-center justify-center rounded-lg bg-white/5 text-lg text-neutral-500">
+          Caricamento immagine…
+        </div>
+      )}
+      {block.caption && (
+        <figcaption className="text-lg text-neutral-400">{block.caption}</figcaption>
+      )}
+    </figure>
+  );
+}
+
 /** Render read-only di un singolo blocco in tipografia da proiettore. */
 function SlideBlockView({
   block,
-  imageUrls,
   quizRefs,
 }: {
-  block: Slide[number];
-  imageUrls: Record<string, string>;
+  block: SlideBlock;
   quizRefs: Record<string, QuizRefView>;
 }) {
   if (block.type === "heading") {
@@ -257,33 +347,28 @@ function SlideBlockView({
       </ul>
     );
   }
-  if (block.type === "image") {
-    const url = imageUrls[block.r2Key];
-    return (
-      <figure className="space-y-3">
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={url}
-            alt={block.caption ?? ""}
-            className="mx-auto max-h-[60vh] rounded-lg object-contain"
-          />
-        ) : (
-          <div className="mx-auto flex h-64 w-full max-w-xl items-center justify-center rounded-lg bg-white/5 text-xl text-neutral-500">
-            Caricamento immagine…
-          </div>
-        )}
-        {block.caption && (
-          <figcaption className="text-xl text-neutral-400">{block.caption}</figcaption>
-        )}
-      </figure>
-    );
-  }
+  // image → gestita da PresImage (raggruppamento/affiancamento) nel render padre.
+  if (block.type === "image") return null;
   // quizRef
   const q = quizRefs[block.questionId];
   if (!q) {
     return <p className="text-2xl text-neutral-500">Caricamento domanda…</p>;
   }
+  return <PresQuizRef q={q} />;
+}
+
+/**
+ * Domanda in presentazione: prima si mostra senza soluzione (Vero/Falso neutri),
+ * poi "Vedi soluzione" evidenzia la risposta corretta. Lo stato si azzera al
+ * cambio slide perché il blocco è montato con una key che include l'indice.
+ */
+function PresQuizRef({ q }: { q: QuizRefView }) {
+  const [revealed, setRevealed] = useState(false);
+  const optionClass = (isThisOne: boolean) =>
+    "rounded-md px-6 py-2 " +
+    (revealed && isThisOne
+      ? "bg-green-500/20 text-green-300 ring-1 ring-green-400"
+      : "bg-white/5 text-neutral-300");
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {q.imageUrl && (
@@ -296,27 +381,21 @@ function SlideBlockView({
       )}
       <p className="text-3xl leading-relaxed">{q.text}</p>
       <div className="flex justify-center gap-4 text-2xl">
-        <span
-          className={
-            "rounded-md px-4 py-2 " +
-            (q.correctAnswer
-              ? "bg-green-500/20 text-green-300 ring-1 ring-green-400"
-              : "bg-white/5 text-neutral-400")
-          }
-        >
-          Vero
-        </span>
-        <span
-          className={
-            "rounded-md px-4 py-2 " +
-            (!q.correctAnswer
-              ? "bg-green-500/20 text-green-300 ring-1 ring-green-400"
-              : "bg-white/5 text-neutral-400")
-          }
-        >
-          Falso
-        </span>
+        <span className={optionClass(q.correctAnswer)}>Vero</span>
+        <span className={optionClass(!q.correctAnswer)}>Falso</span>
       </div>
+      {revealed ? (
+        <p className="text-xl text-neutral-400">
+          Risposta corretta: {q.correctAnswer ? "Vero" : "Falso"}
+        </p>
+      ) : (
+        <button
+          className="rounded-md bg-pink-500 px-6 py-2 text-lg font-medium text-white hover:bg-pink-600"
+          onClick={() => setRevealed(true)}
+        >
+          Vedi soluzione
+        </button>
+      )}
     </div>
   );
 }

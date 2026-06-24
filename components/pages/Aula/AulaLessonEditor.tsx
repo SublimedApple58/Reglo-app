@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation";
 import {
   createAulaLiveSession,
+  listAulaChapterQuestions,
+  listAulaChapters,
   resolveAulaImageUrl,
+  resolveAulaQuizRefs,
   saveAulaPackage,
   uploadAulaImage,
 } from "@/lib/actions/aula.actions";
@@ -102,6 +105,14 @@ export function AulaLessonEditor({
   const [presenting, setPresenting] = useState(false);
   // Cache r2Key → URL firmato per l'anteprima immagini.
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
+  // Selettore quizRef: capitoli, domande per capitolo, testo delle domande scelte.
+  const [chapters, setChapters] = useState<
+    { id: string; chapterNumber: number; description: string }[]
+  >([]);
+  const [questionsByChapter, setQuestionsByChapter] = useState<
+    Record<string, { id: string; text: string }[]>
+  >({});
+  const [quizTexts, setQuizTexts] = useState<Record<string, string>>({});
 
   const editable = !lesson.isTemplate && lesson.companyId !== null;
   const slides = pkg.slides;
@@ -132,6 +143,56 @@ export function AulaLessonEditor({
       cancelled = true;
     };
   }, [slides, imageUrls]);
+
+  // Carica l'elenco capitoli una volta sola (per il selettore quizRef).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await listAulaChapters();
+      if (!cancelled && res.success && res.data) setChapters(res.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Risolve il testo delle domande referenziate dai quizRef (per mostrarle scelte).
+  useEffect(() => {
+    const ids = new Set<string>();
+    for (const slide of slides) {
+      for (const block of slide) {
+        if (block.type === "quizRef" && block.questionId && !quizTexts[block.questionId]) {
+          ids.add(block.questionId);
+        }
+      }
+    }
+    if (ids.size === 0) return;
+    let cancelled = false;
+    (async () => {
+      const res = await resolveAulaQuizRefs([...ids]);
+      if (cancelled || !res.success || !res.data) return;
+      setQuizTexts((prev) => {
+        const next = { ...prev };
+        for (const q of res.data) next[q.id] = q.text;
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [slides, quizTexts]);
+
+  // Carica (e mette in cache) le domande di un capitolo, on demand.
+  const ensureChapterQuestions = useCallback(
+    async (chapterId: string) => {
+      if (questionsByChapter[chapterId]) return;
+      const res = await listAulaChapterQuestions(chapterId);
+      if (res.success && res.data) {
+        setQuestionsByChapter((prev) => ({ ...prev, [chapterId]: res.data }));
+      }
+    },
+    [questionsByChapter],
+  );
 
   const updatePackage = useCallback((next: SlidePackage) => {
     setPkg(next);
@@ -230,9 +291,9 @@ export function AulaLessonEditor({
     });
   };
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = (mode: "LIVE" | "EXAM") => {
     startTransition(async () => {
-      const res = await createAulaLiveSession({ lessonId: lesson.id, count: 5 });
+      const res = await createAulaLiveSession({ lessonId: lesson.id, count: 5, mode });
       if (res.success && res.data) {
         router.push(`live/${res.data.code}`);
       } else {
@@ -267,9 +328,18 @@ export function AulaLessonEditor({
           <button
             className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
             disabled={pending}
-            onClick={handleStartQuiz}
+            onClick={() => handleStartQuiz("LIVE")}
+            title="Una domanda alla volta, a ritmo del docente"
           >
-            Avvia quiz
+            Quiz live
+          </button>
+          <button
+            className="rounded-md border border-pink-500 px-4 py-2 text-pink-600 disabled:opacity-50"
+            disabled={pending}
+            onClick={() => handleStartQuiz("EXAM")}
+            title="Tutte le domande insieme, correzione finale a schermo"
+          >
+            Quiz completo
           </button>
         </div>
       </div>
@@ -365,6 +435,11 @@ export function AulaLessonEditor({
                       block={block}
                       readOnly={!editable}
                       imageUrl={block.type === "image" ? imageUrls[block.r2Key] : undefined}
+                      chapters={chapters}
+                      questionsByChapter={questionsByChapter}
+                      ensureChapterQuestions={ensureChapterQuestions}
+                      quizText={block.type === "quizRef" ? quizTexts[block.questionId] : undefined}
+                      defaultChapterId={lesson.chapterId}
                       onChange={(b) => updateBlock(bi, b)}
                       onUpload={(file) => handleImageUpload(bi, file)}
                     />
@@ -389,17 +464,30 @@ export function AulaLessonEditor({
   );
 }
 
+type Chapter = { id: string; chapterNumber: number; description: string };
+type Question = { id: string; text: string };
+
 /** Editor di un singolo blocco, in base al tipo. */
 function BlockEditor({
   block,
   readOnly,
   imageUrl,
+  chapters,
+  questionsByChapter,
+  ensureChapterQuestions,
+  quizText,
+  defaultChapterId,
   onChange,
   onUpload,
 }: {
   block: SlideBlock;
   readOnly: boolean;
   imageUrl?: string;
+  chapters: Chapter[];
+  questionsByChapter: Record<string, Question[]>;
+  ensureChapterQuestions: (chapterId: string) => void | Promise<void>;
+  quizText?: string;
+  defaultChapterId: string | null;
   onChange: (b: SlideBlock) => void;
   onUpload: (file: File) => void;
 }) {
@@ -470,7 +558,7 @@ function BlockEditor({
       <div className="space-y-2">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={block.caption ?? ""} className="max-h-64 rounded-md border" />
+          <img src={imageUrl} alt={block.caption ?? ""} className="max-h-64 max-w-full rounded-md border" />
         ) : block.r2Key ? (
           <div className="flex h-32 items-center justify-center rounded-md border bg-neutral-50 text-sm text-neutral-400">
             Caricamento anteprima…
@@ -505,12 +593,123 @@ function BlockEditor({
   }
   // quizRef
   return (
-    <input
-      className="w-full rounded-md border px-3 py-2 font-mono text-sm disabled:bg-neutral-50"
-      value={block.questionId}
+    <QuizRefPicker
+      questionId={block.questionId}
+      quizText={quizText}
+      chapters={chapters}
+      questionsByChapter={questionsByChapter}
+      ensureChapterQuestions={ensureChapterQuestions}
+      defaultChapterId={defaultChapterId}
       readOnly={readOnly}
-      placeholder="ID domanda quiz (UUID)"
-      onChange={(e) => onChange({ type: "quizRef", questionId: e.target.value })}
+      onChange={(questionId) => onChange({ type: "quizRef", questionId })}
     />
+  );
+}
+
+/**
+ * Selettore di una domanda del quiz: capitolo → domanda (dropdown).
+ * Evita di incollare l'UUID a mano. Mostra la domanda attualmente scelta.
+ */
+function QuizRefPicker({
+  questionId,
+  quizText,
+  chapters,
+  questionsByChapter,
+  ensureChapterQuestions,
+  defaultChapterId,
+  readOnly,
+  onChange,
+}: {
+  questionId: string;
+  quizText?: string;
+  chapters: Chapter[];
+  questionsByChapter: Record<string, Question[]>;
+  ensureChapterQuestions: (chapterId: string) => void | Promise<void>;
+  defaultChapterId: string | null;
+  readOnly: boolean;
+  onChange: (questionId: string) => void;
+}) {
+  const [chapterId, setChapterId] = useState<string>(defaultChapterId ?? "");
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    if (chapterId) void ensureChapterQuestions(chapterId);
+  }, [chapterId, ensureChapterQuestions]);
+
+  const questions = chapterId ? (questionsByChapter[chapterId] ?? null) : null;
+  const filtered = useMemo(() => {
+    if (!questions) return [];
+    const f = filter.trim().toLowerCase();
+    const list = f
+      ? questions.filter((q) => q.text.toLowerCase().includes(f))
+      : questions;
+    return list.slice(0, 200);
+  }, [questions, filter]);
+
+  if (readOnly) {
+    return (
+      <p className="rounded-md border bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
+        {quizText ?? "Domanda quiz"}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {questionId && (
+        <p className="rounded-md bg-pink-50 px-3 py-2 text-sm text-neutral-700">
+          <span className="font-medium">Selezionata:</span>{" "}
+          {quizText ?? "caricamento…"}
+        </p>
+      )}
+      <select
+        className="w-full rounded-md border px-3 py-2 text-sm"
+        value={chapterId}
+        onChange={(e) => {
+          setChapterId(e.target.value);
+          setFilter("");
+        }}
+      >
+        <option value="">— Scegli un capitolo —</option>
+        {chapters.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.chapterNumber}. {c.description}
+          </option>
+        ))}
+      </select>
+
+      {chapterId && (
+        <>
+          <input
+            className="w-full rounded-md border px-3 py-1.5 text-sm"
+            placeholder="Filtra domande…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+          {!questions ? (
+            <p className="text-sm text-neutral-400">Caricamento domande…</p>
+          ) : (
+            <select
+              className="w-full rounded-md border px-3 py-2 text-sm"
+              value={questionId}
+              onChange={(e) => onChange(e.target.value)}
+              size={6}
+            >
+              <option value="">— Scegli una domanda —</option>
+              {filtered.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.text}
+                </option>
+              ))}
+            </select>
+          )}
+          {questions && filtered.length === 200 && (
+            <p className="text-xs text-neutral-400">
+              Mostrate le prime 200 — affina il filtro per trovarne altre.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
