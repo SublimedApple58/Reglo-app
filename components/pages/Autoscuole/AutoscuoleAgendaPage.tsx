@@ -81,6 +81,7 @@ type AppointmentRow = {
   student: StudentOption;
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
+  followVehicle?: ResourceOption | null;
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
   groupLessonId?: string | null;
@@ -821,6 +822,9 @@ export function AutoscuoleAgendaPage({
       vehicle: item.vehicle
         ? { id: item.vehicle.id, name: item.vehicle.name }
         : null,
+      followVehicle: item.followVehicle
+        ? { id: item.followVehicle.id, name: item.followVehicle.name }
+        : null,
       location: item.location
         ? { id: item.location.id, name: item.location.name }
         : null,
@@ -1068,8 +1072,13 @@ export function AutoscuoleAgendaPage({
           }}
           appointment={editAppointmentTarget}
           instructors={instructors}
-          vehicles={vehicles.map((v) => ({ id: v.id, name: v.name }))}
+          vehicles={vehicles.map((v) => ({
+            id: v.id,
+            name: v.name,
+            licenseCategory: v.licenseCategory,
+          }))}
           vehiclesEnabled={vehiclesEnabled}
+          followCarRules={followCarRules}
           locations={agendaLocations}
           onSuccess={() => {
             load({ silent: true });
@@ -1190,7 +1199,7 @@ export function AutoscuoleAgendaPage({
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLesson ? (
@@ -1585,7 +1594,7 @@ export function AutoscuoleAgendaPage({
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}
+                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
@@ -2005,7 +2014,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}
+                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">

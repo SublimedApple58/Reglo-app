@@ -156,6 +156,13 @@ const updateAppointmentDetailsSchema = z.object({
    */
   vehicleId: z.string().uuid().nullable().optional(),
   /**
+   * Follow car (auto al seguito) for a moto lesson — the second reserved
+   * vehicle. null clears it. Reconciled into the AutoscuolaAppointmentVehicle
+   * join (role="follow") alongside the primary. Must differ from the primary
+   * and belong to the company.
+   */
+  followVehicleId: z.string().uuid().nullable().optional(),
+  /**
    * New instructor for the appointment (cluster-level reassignment).
    * Verified against availability: no overlapping appointments, no manual
    * block-slot, no company holiday on that day. The vehicle stays attached
@@ -940,6 +947,22 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
               licenseCategory: true,
             },
           },
+          // Follow car (auto al seguito) — the role="follow" join row, if any.
+          // Mapped below into `followVehicle` for agenda detail rendering.
+          appointmentVehicles: {
+            where: { role: "follow" },
+            select: {
+              vehicle: {
+                select: {
+                  id: true,
+                  name: true,
+                  transmission: true,
+                  licenseCategory: true,
+                },
+              },
+            },
+            take: 1,
+          },
           location: {
             select: {
               id: true,
@@ -1024,15 +1047,24 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         : Promise.resolve(new Map<string, number>()),
     ]);
 
-    const mappedAppointments = appointments.map((appointment) => ({
-      ...appointment,
-      case: null,
-      student: mapCaseStudent(appointment.student),
-      ...(gridFlags.get(appointment.id) ?? {}),
-      groupLessonCapacity: appointment.groupLessonId
-        ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
-        : null,
-    }));
+    const mappedAppointments = appointments.map((appointment) => {
+      const { appointmentVehicles, ...rest } = appointment;
+      // Auto al seguito: the follow join's vehicle (null when single-vehicle).
+      // Ternary (not `?? null`) so the type stays nullable under the project's
+      // non-strict index access, matching the gl-empty placeholder below.
+      const followVehicle =
+        appointmentVehicles.length > 0 ? appointmentVehicles[0].vehicle : null;
+      return {
+        ...rest,
+        case: null,
+        student: mapCaseStudent(appointment.student),
+        followVehicle,
+        ...(gridFlags.get(appointment.id) ?? {}),
+        groupLessonCapacity: appointment.groupLessonId
+          ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
+          : null,
+      };
+    });
 
     // Empty group lessons (0 active participants) have no appointment rows, so
     // they'd be invisible in the agenda — and thus un-manageable / un-cancellable,
@@ -1094,6 +1126,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           student: { id: `gl-empty:${gl.id}`, firstName: "Guida di gruppo", lastName: "", email: null, phone: null },
           instructor: gl.instructor,
           vehicle: gl.vehicle,
+          followVehicle: null,
           location: null,
           groupLessonCapacity: gl.capacity,
         } as (typeof mappedAppointments)[number]);
@@ -4438,6 +4471,33 @@ export async function updateAutoscuolaAppointmentDetails(
       }
     }
 
+    // Handle follow car (auto al seguito) change. Validate it belongs to the
+    // company and is active; the reconcile step below keeps it consistent with
+    // the primary (a follow without a primary is impossible). Like the primary,
+    // vehicles are company resources so there's no per-instructor ownership.
+    let followVehicleChanged = false;
+    let desiredFollowVehicleId: string | null = null;
+    if (payload.followVehicleId !== undefined) {
+      if (payload.followVehicleId !== null) {
+        const followVehicle = await prisma.autoscuolaVehicle.findFirst({
+          where: {
+            id: payload.followVehicleId,
+            companyId: membership.companyId,
+            status: "active",
+          },
+          select: { id: true },
+        });
+        if (!followVehicle) {
+          return {
+            success: false,
+            message: "Auto al seguito non valida per questa autoscuola.",
+          };
+        }
+      }
+      desiredFollowVehicleId = payload.followVehicleId;
+      followVehicleChanged = true;
+    }
+
     // Handle instructor change (cluster-level single-lesson reassignment).
     // Allowed for owner/admin and for the current instructor "passing" the
     // lesson to a colleague. The student's assignedInstructorId is NOT
@@ -4481,13 +4541,48 @@ export async function updateAutoscuolaAppointmentDetails(
       updateData.instructorId = payload.instructorId;
     }
 
-    if (!Object.keys(updateData).length) {
+    // Whether the reserved vehicles (primary and/or follow car) need the join
+    // table reconciled. The primary lives both on `appointment.vehicleId` and
+    // as the role="primary" join row; the follow car is the role="follow" row.
+    const primaryChanged = updateData.vehicleId !== undefined;
+    const vehiclesNeedSync = primaryChanged || followVehicleChanged;
+
+    if (!Object.keys(updateData).length && !vehiclesNeedSync) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
 
-    const updated = await prisma.autoscuolaAppointment.update({
-      where: { id: payload.appointmentId, companyId: membership.companyId },
-      data: updateData,
+    // Resolve the FINAL primary + follow so reconcile (which wipes and rewrites
+    // the rows) preserves whichever side the user didn't touch.
+    const finalPrimaryVehicleId = primaryChanged
+      ? updateData.vehicleId ?? null
+      : appointment.vehicleId;
+    let finalFollowVehicleId = desiredFollowVehicleId;
+    if (vehiclesNeedSync && !followVehicleChanged) {
+      const existingFollow = await prisma.autoscuolaAppointmentVehicle.findFirst({
+        where: { appointmentId: appointment.id, role: "follow" },
+        select: { vehicleId: true },
+      });
+      finalFollowVehicleId = existingFollow?.vehicleId ?? null;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = Object.keys(updateData).length
+        ? await tx.autoscuolaAppointment.update({
+            where: { id: payload.appointmentId, companyId: membership.companyId },
+            data: updateData,
+          })
+        : await tx.autoscuolaAppointment.findUniqueOrThrow({
+            where: { id: payload.appointmentId },
+          });
+      if (vehiclesNeedSync) {
+        await reconcileAppointmentVehicles(
+          tx,
+          appointment.id,
+          finalPrimaryVehicleId,
+          finalFollowVehicleId,
+        );
+      }
+      return row;
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -4537,6 +4632,31 @@ async function loadLocationSummary(id: string) {
     where: { id },
     select: { id: true, name: true, isDefault: true },
   });
+}
+
+/**
+ * Reconcile the AutoscuolaAppointmentVehicle join rows for an appointment so
+ * they match the desired primary + follow vehicles. The invariant is kept:
+ * `appointment.vehicleId` is always the role="primary" row, and an optional
+ * role="follow" row is the auto al seguito. Idempotent — wipes and rewrites the
+ * rows. A follow car without a primary is impossible (cleared).
+ */
+async function reconcileAppointmentVehicles(
+  tx: Prisma.TransactionClient,
+  appointmentId: string,
+  primaryVehicleId: string | null,
+  followVehicleId: string | null,
+) {
+  await tx.autoscuolaAppointmentVehicle.deleteMany({ where: { appointmentId } });
+  if (!primaryVehicleId) return;
+  await tx.autoscuolaAppointmentVehicle.create({
+    data: { appointmentId, vehicleId: primaryVehicleId, role: "primary" },
+  });
+  if (followVehicleId && followVehicleId !== primaryVehicleId) {
+    await tx.autoscuolaAppointmentVehicle.create({
+      data: { appointmentId, vehicleId: followVehicleId, role: "follow" },
+    });
+  }
 }
 
 /**

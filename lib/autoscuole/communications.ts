@@ -16,6 +16,12 @@ import {
   resolveEffectiveSettingsForInstructor,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
+import { isMotoLicenseCategory } from "@/lib/autoscuole/license";
+import {
+  parseFollowCarRulesFromLimits,
+  FOLLOW_CAR_CATEGORY,
+  type FollowCarRules,
+} from "@/lib/autoscuole/follow-car";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -1048,6 +1054,7 @@ const freeSlotLicenseKeysTomorrow = async ({
   prisma,
   companyId,
   vehiclesEnabled,
+  followCarRules,
   tomorrowParts,
   tomorrowDow,
   rangeStart,
@@ -1057,6 +1064,7 @@ const freeSlotLicenseKeysTomorrow = async ({
   prisma: PrismaClientLike;
   companyId: string;
   vehiclesEnabled: boolean;
+  followCarRules: FollowCarRules;
   tomorrowParts: EmptySlotDateParts;
   tomorrowDow: number;
   rangeStart: Date;
@@ -1083,6 +1091,11 @@ const freeSlotLicenseKeysTomorrow = async ({
   const vehicleKeyById = new Map<string, string>(
     (activeVehicles as Array<{ id: string; licenseCategory: string | null; transmission: string | null }>).map(
       (v) => [v.id, licenseKey(v.licenseCategory, v.transmission)],
+    ),
+  );
+  const vehicleCategoryById = new Map<string, string>(
+    (activeVehicles as Array<{ id: string; licenseCategory: string | null }>).map(
+      (v) => [v.id, v.licenseCategory ?? ""],
     ),
   );
   console.log(`[empty-slot] hasFree: instructors=${instructorIds.length}, vehicles=${vehicleIds.length}`);
@@ -1147,12 +1160,19 @@ const freeSlotLicenseKeysTomorrow = async ({
       status: { notIn: ["cancelled"] },
       startsAt: { gte: appointmentScanStart, lt: rangeEnd },
     },
+    include: { appointmentVehicles: { select: { vehicleId: true } } },
   });
 
   console.log(`[empty-slot] hasFree: instrDefaults=${(instructorDefaults as unknown[]).length}, vehDefaults=${(vehicleDefaults as unknown[]).length}, appointments=${appointments.length}`);
 
   const intervals = new Map<string, Array<{ start: number; end: number }>>();
-  for (const appt of appointments as Array<{ startsAt: Date; endsAt: Date | null; instructorId: string | null; vehicleId: string | null }>) {
+  for (const appt of appointments as Array<{
+    startsAt: Date;
+    endsAt: Date | null;
+    instructorId: string | null;
+    vehicleId: string | null;
+    appointmentVehicles: Array<{ vehicleId: string }>;
+  }>) {
     const start = appt.startsAt.getTime();
     const end = appt.endsAt?.getTime() ?? start + EMPTY_SLOT_MINUTES * 60 * 1000;
     const addInterval = (ownerId: string) => {
@@ -1162,6 +1182,9 @@ const freeSlotLicenseKeysTomorrow = async ({
     };
     if (appt.instructorId) addInterval(appt.instructorId);
     if (appt.vehicleId) addInterval(appt.vehicleId);
+    // Also reserve every vehicle on the join (primary + follow car) so a car
+    // used as an auto al seguito is correctly seen as busy.
+    for (const av of appt.appointmentVehicles) addInterval(av.vehicleId);
   }
 
   const overlaps = (
@@ -1220,9 +1243,27 @@ const freeSlotLicenseKeysTomorrow = async ({
     }
 
     // Vehicles enabled: record the license key of every free vehicle at this slot.
+    // First gather the free vehicles, then apply the follow-car rule: a moto
+    // whose category requires an auto al seguito is only truly bookable when a
+    // free category-B car also exists at this slot (the lesson reserves both).
+    const freeVehicleIds: string[] = [];
     for (const id of vehicleIds) {
       if (!isAvailable(resolveVehicle(id), tomorrowDow, minutes, candidateEndMin)) continue;
       if (overlaps(intervals.get(id), startMs, endDate.getTime())) continue;
+      freeVehicleIds.push(id);
+    }
+    const hasFreeFollowCar = freeVehicleIds.some(
+      (id) => vehicleCategoryById.get(id) === FOLLOW_CAR_CATEGORY,
+    );
+    for (const id of freeVehicleIds) {
+      const category = vehicleCategoryById.get(id) ?? "";
+      if (
+        isMotoLicenseCategory(category) &&
+        followCarRules[category as keyof FollowCarRules]?.enabled === true &&
+        !hasFreeFollowCar
+      ) {
+        continue;
+      }
       const key = vehicleKeyById.get(id);
       if (key) collectedKeys.add(key);
     }
@@ -1345,6 +1386,7 @@ export const processEmptySlotNotifications = async ({
       prisma,
       companyId,
       vehiclesEnabled,
+      followCarRules: parseFollowCarRulesFromLimits(limits),
       tomorrowParts,
       tomorrowDow,
       rangeStart,
