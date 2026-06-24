@@ -29,7 +29,9 @@ import {
   getSession,
   openQuestion,
   revealQuestion,
+  setReviewQuestion,
   setStatus,
+  startExam,
 } from "@/lib/aula/live-state";
 
 /**
@@ -177,6 +179,8 @@ const createSessionSchema = z.object({
   chapterId: z.string().uuid().optional(),
   count: z.number().int().min(1).max(30).default(5),
   questionIds: z.array(z.string().uuid()).max(30).optional(),
+  // LIVE: una domanda alla volta (default). EXAM: tutte insieme, correzione finale.
+  mode: z.enum(["LIVE", "EXAM"]).default("LIVE"),
 });
 
 /** Estrae N domande casuali da un capitolo (o usa quelle passate dal docente). */
@@ -224,10 +228,11 @@ export async function createAulaLiveSession(
       code,
       lessonId: lesson.id,
       teacherId: membership.userId,
+      mode: parsed.mode,
       questionIds,
       now: Date.now(),
     });
-    return { success: true, data: { code, questionIds } };
+    return { success: true, data: { code, questionIds, mode: parsed.mode } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -271,6 +276,55 @@ export async function openNextAulaQuestion(code: string) {
   }
 }
 
+/** EXAM: avvia lo svolgimento (apre tutte le domande contemporaneamente). */
+export async function startAulaExam(code: string) {
+  try {
+    const session = await requireSessionTeacher(code);
+    if (session.mode !== "EXAM") throw new Error("NOT_EXAM_MODE");
+    const state = await startExam(code);
+    return { success: true, data: state };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** EXAM: avvia la correzione a schermo dalla prima domanda. */
+export async function startAulaExamReview(code: string) {
+  try {
+    const session = await requireSessionTeacher(code);
+    if (session.mode !== "EXAM") throw new Error("NOT_EXAM_MODE");
+    const first = session.questionIds[0];
+    if (!first) {
+      const state = await endSession(code);
+      return { success: true, data: { state, finished: true } };
+    }
+    const state = await setReviewQuestion(code, first);
+    return { success: true, data: { state, finished: false } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** EXAM: passa alla prossima domanda in correzione (o termina → classifica). */
+export async function nextAulaExamReview(code: string) {
+  try {
+    const session = await requireSessionTeacher(code);
+    if (session.mode !== "EXAM") throw new Error("NOT_EXAM_MODE");
+    const currentIndex = session.currentQuestionId
+      ? session.questionIds.indexOf(session.currentQuestionId)
+      : -1;
+    const nextId = session.questionIds[currentIndex + 1];
+    if (!nextId) {
+      const state = await endSession(code);
+      return { success: true, data: { state, finished: true } };
+    }
+    const state = await setReviewQuestion(code, nextId);
+    return { success: true, data: { state, finished: false } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 export async function revealAulaQuestion(code: string) {
   try {
     await requireSessionTeacher(code);
@@ -306,6 +360,39 @@ export async function endAulaLiveSession(code: string) {
 export async function resolveAulaImageUrl(imageKey: string | null) {
   if (!imageKey) return null;
   return getSignedAssetUrl(imageKey);
+}
+
+/** Elenco capitoli del quiz (per il selettore domande nell'editor slide). */
+export async function listAulaChapters() {
+  try {
+    await requireAulaTeacher();
+    const chapters = await prisma.quizChapter.findMany({
+      orderBy: { chapterNumber: "asc" },
+      select: { id: true, chapterNumber: true, description: true },
+    });
+    return { success: true, data: chapters };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** Domande di un capitolo (per il selettore quizRef nell'editor slide). */
+export async function listAulaChapterQuestions(chapterId: string) {
+  try {
+    await requireAulaTeacher();
+    const parsed = z.string().uuid().parse(chapterId);
+    const questions = await prisma.quizQuestion.findMany({
+      where: { chapterId: parsed },
+      orderBy: { externalId: "asc" },
+      select: { id: true, questionText: true },
+    });
+    return {
+      success: true,
+      data: questions.map((q) => ({ id: q.id, text: q.questionText })),
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
 }
 
 /**

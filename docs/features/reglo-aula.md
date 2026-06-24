@@ -61,9 +61,16 @@ aula:live:{joinCode}:answers:{questionId} → hash { participantId → answer(bo
 
 - **QuizQuestion** / **QuizChapter** (Postgres) + **immagini quiz su R2** (`quiz/images/{NNN}.gif`) — banca domande globale del Quiz Teoria (7.165 domande V/F, 25 capitoli). Aula la **legge** per popolare il quiz live e mostrare le immagini; non la modifica. È un **asset aziendale già centralizzato**, non duplicato.
 
+### Due modalità di quiz (`mode` in Redis: `LIVE` | `EXAM`)
+
+Il docente sceglie la modalità all'avvio (pulsanti **"Quiz live"** / **"Quiz completo"** nell'editor):
+
+- **LIVE** (Kahoot): una domanda alla volta, a ritmo del docente, reveal per domanda. Stati: `LOBBY → QUESTION_OPEN → QUESTION_REVEALED → … → ENDED`.
+- **EXAM** (verifica): **tutte le domande insieme** sul telefono, lo studente risponde in autonomia (può cambiare risposta finché non si termina). Al **"Termina & correggi"** si correggono in massa: il **proiettore mostra la classifica per studente** (nome + punteggio), e ogni studente vede sul telefono il proprio punteggio + correzione domanda per domanda. Stati: `LOBBY → IN_PROGRESS → ENDED`. Durante `IN_PROGRESS` il proiettore mostra **solo QR + avanzamento** (`X/Y hanno completato`), nessuna domanda a schermo (anti-copiatura).
+
 ### Stati del quiz live (macchina a stati in Redis, campo `status`)
 
-`LOBBY` (QR sul proiettore, studenti entrano / standby tra una domanda e l'altra) · `QUESTION_OPEN` (domanda aperta: testo+bottoni sul telefono, solo QR sul proiettore) · `QUESTION_REVEALED` (risposta + chi giusto/sbagliato sul proiettore) · `ENDED`. Nessun timer: la domanda resta aperta finché il docente non stoppa. *(Non è un enum Prisma: è un valore di stato in Redis.)*
+`LOBBY` (QR sul proiettore, studenti entrano / standby) · `QUESTION_OPEN` (LIVE: domanda aperta, testo+bottoni sul telefono, solo QR sul proiettore) · `QUESTION_REVEALED` (LIVE: risposta + chi giusto/sbagliato sul proiettore) · `IN_PROGRESS` (EXAM: tutte le domande aperte sul telefono) · `ENDED`. Nessun timer. *(Non è un enum Prisma: è un valore di stato in Redis.)*
 
 ### Blocchi slide (contenuto del pacchetto `.rppt`)
 
@@ -147,8 +154,9 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | `uploadAulaImage` | action | upload immagine slide su R2, ritorna `r2Key` |
 | `resolveAulaImageUrl` | action | URL firmato di un'immagine slide (anteprima editor + presentazione) |
 | `resolveAulaQuizRefs` | action | risolve i blocchi `quizRef` (testo + immagine + risposta) per la presentazione; read-only su `QuizQuestion` |
-| `createAulaLiveSession` | action | genera `joinCode` + `questionIds` (da capitolo, selezione docente) → scrive sessione in Redis |
-| `openAulaQuestion` / `revealAulaQuestion` / `nextAulaQuestion` / `endAulaLiveSession` | action | transizioni di stato → scrittura Redis |
+| `createAulaLiveSession` | action | genera `joinCode` + `questionIds` (da capitolo, selezione docente) + `mode` (`LIVE`/`EXAM`) → scrive sessione in Redis |
+| `openAulaQuestion` / `revealAulaQuestion` / `nextAulaQuestion` / `endAulaLiveSession` | action | LIVE: transizioni di stato → scrittura Redis |
+| `startAulaExam` | action | EXAM: `LOBBY → IN_PROGRESS` (apre tutte le domande) |
 | `POST /api/aula/live/[code]/join` | route | partecipante anonimo, ritorna `participantId` |
 | `GET /api/aula/live/[code]/state` | route | stato live in polling |
 | `POST /api/aula/live/[code]/answer` | route | risposta partecipante (idempotente per `[participantId, questionId]`) |
@@ -163,9 +171,17 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 - **Lingua pagina studente**: italiano (default app).
 - **Contenuto slide template**: da definire in seguito; non blocca l'architettura.
 - **Editor slide**: a blocchi tipizzati (`heading`/`text`/`bullets`/`image`/`quizRef`) con rail slide (aggiungi/riordina/elimina), riordino/eliminazione blocchi e upload immagini su R2 (anteprima via URL firmato).
-- **Modalità presentazione full-screen**: overlay proiettore (`AulaSlideShow.tsx`) avviato dal pulsante "Presenta" nell'editor. Renderizza una slide alla volta in tipografia grande; naviga da tastiera (← → Spazio PagSu/Giù Home Fine) o con i comandi a schermo, Esc esce. Usa la **Fullscreen API** (l'apertura parte da un click → user gesture); uscire dal fullscreen chiude la presentazione. Immagini slide e domande `quizRef` (testo + immagine + risposta corretta) risolte on-mount via `resolveAulaImageUrl` / `resolveAulaQuizRefs`. Funziona anche su lezioni template (sola lettura).
+- **Modalità presentazione full-screen**: overlay proiettore (`AulaSlideShow.tsx`) avviato dal pulsante "Presenta" nell'editor. Renderizza una slide alla volta in tipografia grande; naviga da tastiera (← → Spazio PagSu/Giù Home Fine) o con i comandi a schermo, Esc esce. L'overlay è `fixed inset-0` (copre tutto) con un **toggle schermo intero** esplicito (Fullscreen API); NON si chiude all'uscita dal fullscreen (robusto sul proiettore) — solo "Esci"/Escape chiudono. Immagini slide e domande `quizRef` (testo + immagine + risposta corretta) risolte on-mount via `resolveAulaImageUrl` / `resolveAulaQuizRefs`. **Immagini multiple** sulla stessa slide vengono **affiancate** (riga responsive, non impilate). I blocchi **`quizRef` si mostrano prima senza soluzione**: un pulsante **"Vedi soluzione"** evidenzia Vero/Falso (reset automatico al cambio slide). Funziona anche su lezioni template (sola lettura).
 - **QR proiettore**: render reale via `qrcode.react` (SVG scansionabile dell'URL studente `/{locale}/aula-live/{code}`). La base URL viene da `NEXT_PUBLIC_SERVER_URL` (in prod il dominio reale), **non** da `window.location.origin` — così il QR è raggiungibile dai telefoni. In dev punta a `localhost:3000`; per testare da telefono imposta `NEXT_PUBLIC_SERVER_URL` su IP LAN (`http://192.168.x.x:3000`) o su un tunnel (cloudflared/ngrok).
 - **Upload immagini slide**: l'editor **ridimensiona/comprime lato client** (canvas → JPEG, lato lungo ≤1600px, qualità ~0.85) prima dell'upload, perché i Server Actions hanno un limite di body (alzato a `4mb` in `next.config.ts` come rete di sicurezza). Gli errori di upload vengono sempre mostrati in UI (try/catch attorno alla action), niente più fallimenti silenziosi.
+
+## Roadmap (fase 2 — non ancora implementato)
+
+- **Esportazione in PowerPoint (`.pptx`)**: scaricare una lezione come presentazione PowerPoint a partire dal pacchetto `.rppt`. Mappatura blocchi → slide PPTX: `heading` → titolo, `text` → corpo, `bullets` → elenco puntato, `image` → immagine (scaricata da R2 e incorporata nel file), `quizRef` → slide con testo domanda + immagine + risposta corretta. Implementazione lato server con una libreria di generazione `.pptx` (es. `pptxgenjs`), esposta come download dalla console docente. Le immagini vanno **incorporate** nel file (non link firmati a scadenza).
+- **Importazione da PowerPoint (`.pptx`)**: creare/aggiornare una lezione caricando un `.pptx`. Parsing del file (Open XML) → estrazione di titoli, testo, elenchi e immagini per slide → costruzione di un pacchetto `.rppt` (immagini caricate su R2 come asset). Mappatura best-effort: il testo grande della slide → `heading`, i restanti paragrafi → `text`/`bullets`, le immagini → blocchi `image`. I `quizRef` non sono inferibili da un PPT generico → restano da agganciare a mano nell'editor. Da valutare: upload del `.pptx` via route/presigned (file grandi → oltre il limite dei server action).
+- **Teoria scritta ricca** nelle lezioni template (oltre allo scaffold automatico).
+- **Storico quiz / classifica persistente** (oggi il live è effimero su Redis, 0 storico — scelta MVP).
+- **Upload immagini direct-to-R2 (presigned)** se in futuro servono originali ad alta risoluzione (oggi: downscale lato client).
 
 ## Connected Features
 

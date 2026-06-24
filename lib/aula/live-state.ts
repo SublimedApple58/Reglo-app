@@ -18,12 +18,23 @@ export type AulaLiveStatus =
   | "LOBBY"
   | "QUESTION_OPEN"
   | "QUESTION_REVEALED"
+  | "IN_PROGRESS"
+  | "REVIEWING"
   | "ENDED";
+
+/**
+ * Due modalità di quiz:
+ * - LIVE: una domanda alla volta, a ritmo del docente, reveal per domanda (Kahoot).
+ * - EXAM: tutte le domande insieme, lo studente risponde in autonomia; al
+ *   "Termina quiz" si correggono in massa (classifica a schermo).
+ */
+export type AulaLiveMode = "LIVE" | "EXAM";
 
 export type AulaLiveState = {
   code: string;
   lessonId: string;
   teacherId: string;
+  mode: AulaLiveMode;
   status: AulaLiveStatus;
   questionIds: string[];
   currentQuestionId: string | null;
@@ -64,6 +75,7 @@ export async function createSession(input: {
   code: string;
   lessonId: string;
   teacherId: string;
+  mode: AulaLiveMode;
   questionIds: string[];
   now: number;
 }): Promise<AulaLiveState> {
@@ -72,6 +84,7 @@ export async function createSession(input: {
     code: input.code,
     lessonId: input.lessonId,
     teacherId: input.teacherId,
+    mode: input.mode,
     status: "LOBBY",
     questionIds: input.questionIds,
     currentQuestionId: null,
@@ -109,6 +122,14 @@ export const revealQuestion = (code: string) =>
 
 export const endSession = (code: string) =>
   patchSession(code, { status: "ENDED", currentQuestionId: null });
+
+/** EXAM: apre tutte le domande contemporaneamente (svolgimento autonomo). */
+export const startExam = (code: string) =>
+  patchSession(code, { status: "IN_PROGRESS" });
+
+/** EXAM: correzione a schermo, una domanda alla volta (il docente la spiega). */
+export const setReviewQuestion = (code: string, questionId: string) =>
+  patchSession(code, { status: "REVIEWING", currentQuestionId: questionId });
 
 // ── Partecipanti ────────────────────────────────────────────────────────────
 
@@ -189,4 +210,17 @@ export async function getAnswers(
     out[participantId] = val === "1" || val === "true";
   }
   return out;
+}
+
+/** EXAM: tutte le risposte di tutte le domande, indicizzate per domanda. */
+export async function getAllAnswers(
+  code: string,
+  questionIds: string[],
+): Promise<Record<string, Record<string, boolean>>> {
+  const entries = await Promise.all(
+    questionIds.map(
+      async (qId) => [qId, await getAnswers(code, qId)] as const,
+    ),
+  );
+  return Object.fromEntries(entries);
 }
