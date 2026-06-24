@@ -56,7 +56,11 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
 
 ## Behaviour notes
 - Assignment changes are **not retroactive** — only new bookings use the new rule; existing appointments keep their vehicles.
-- Follow-car edge cases still pending: swap excludes follow-car lessons; `freeSlotLicenseKeysTomorrow` follow-car awareness; agenda/EditAppointmentDialog follow-car **display/edit**.
+- Follow-car is now wired end-to-end:
+  - **Display**: agenda detail cards (`AutoscuoleAgendaPage`) + mobile instructor agenda show "Auto al seguito". The bootstrap maps the `role="follow"` join into `followVehicle`.
+  - **Edit**: `EditAppointmentDialog` edits the follow car on existing lessons; `updateAutoscuolaAppointmentDetails` accepts `followVehicleId` and reconciles the join rows transactionally (helper `reconcileAppointmentVehicles`, which also fixed a latent stale-join bug when changing the primary).
+  - **Empty-slot notifications** (`freeSlotLicenseKeysTomorrow`): a moto whose category requires a follow car is only "free" when a category-B car is also free at the slot; follow cars are reserved as busy (reads the `appointmentVehicles` join).
+  - **Swaps** (`createSwapOffer` + `instructorSwapAppointments`): lessons with an auto al seguito are blocked from swapping (phase-1 decision #5).
 - No `trigger:deploy` is required by this feature.
 
 ## License categories (B / AM / A1 / A2 / A + transmission)
