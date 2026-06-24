@@ -37,7 +37,11 @@ export function AulaLiveConsole({ code }: { code: string }) {
     // La console gira sotto /{locale}/aula/live/{code}: riusa lo stesso locale
     // per il link studente /{locale}/aula-live/{code} (pagina pubblica).
     const locale = window.location.pathname.split("/")[1] || "it";
-    setJoinUrl(`${window.location.origin}/${locale}/aula-live/${code}`);
+    // Il QR deve puntare all'URL pubblico raggiungibile dai telefoni, non a
+    // window.location.origin (che in dev è localhost). In prod NEXT_PUBLIC_SERVER_URL
+    // è il dominio reale; in dev impostalo su IP LAN o tunnel per testare da telefono.
+    const origin = process.env.NEXT_PUBLIC_SERVER_URL || window.location.origin;
+    setJoinUrl(`${origin}/${locale}/aula-live/${code}`);
   }, [code]);
 
   const poll = useCallback(async () => {
