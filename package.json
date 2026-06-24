@@ -32,6 +32,7 @@
     "db:dev:query": "DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config node scripts/db-query.mjs",
     "db:prod:query": "DOTENV_CONFIG_PATH=.env.prod NODE_OPTIONS=--require=dotenv/config node scripts/db-query.mjs",
     "db:staging:query": "DOTENV_CONFIG_PATH=.env.staging NODE_OPTIONS=--require=dotenv/config node scripts/db-query.mjs",
+    "seed:e2e:staging": "DOTENV_CONFIG_PATH=.env.staging NODE_OPTIONS=--require=dotenv/config npx ts-node --compiler-options '{\"module\":\"commonjs\"}' scripts/seed-e2e.ts",
     "email": "cp .env ./node_modules/react-email && email dev --dir email --port 3001"
   },
   "dependencies": {
