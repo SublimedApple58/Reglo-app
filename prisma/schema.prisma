@@ -429,6 +429,7 @@ model AutoscuolaAppointment {
   messageLogs           AutoscuolaMessageLog[]
   voiceCalls            AutoscuolaVoiceCall[]
   swapOffers            AutoscuolaSwapOffer[]
+  appointmentVehicles   AutoscuolaAppointmentVehicle[]
 
   @@index([companyId])
   @@index([studentId])
@@ -605,7 +606,14 @@ model AutoscuolaInstructor {
   assignedStudents CompanyMember[]                     @relation("InstructorAssignedStudents")
   weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
   publishedWeeks   AutoscuolaInstructorPublishedWeek[]
-  fixedVehicle     AutoscuolaVehicle?                  @relation("InstructorFixedVehicle")
+  // Vehicles EXCLUSIVELY owned by this instructor (1:N now; no @@unique). A
+  // vehicle exclusive to an instructor is hidden from every other instructor's
+  // pool. An instructor may own several (e.g. their car + their moto).
+  exclusiveVehicles      AutoscuolaVehicle[]                   @relation("InstructorExclusiveVehicles")
+  // Shared-pool memberships: vehicles this instructor may draw from (N:N).
+  vehiclePoolMemberships AutoscuolaVehiclePoolMember[]
+  // Preferred vehicle per license category (tie-break when several compatible).
+  preferredVehicles      AutoscuolaInstructorPreferredVehicle[]
   groupLessons     AutoscuolaGroupLesson[]
 
   @@unique([companyId, userId])
@@ -637,7 +645,13 @@ model AutoscuolaVehicle {
   companyId                     String   @db.Uuid
   name                          String
   plate                         String?
+  /// active | inactive | maintenance. "maintenance" (fermo temporaneo) is
+  /// excluded from matching like inactive, but KEEPS its assignment/pool and
+  /// does not cancel existing appointments.
   status                        String   @default("active")
+  /// EXCLUSIVE owner of this vehicle (was the 1:1 "fixed" instructor). When set,
+  /// the vehicle is reserved to this instructor and hidden from others' pool.
+  /// No longer unique: an instructor may own several exclusive vehicles.
   assignedInstructorId          String?  @db.Uuid
   followsInstructorAvailability Boolean  @default(true)
   /// License category this vehicle serves: B | AM | A1 | A2 | A (see lib/autoscuole/license.ts).
@@ -647,14 +661,60 @@ model AutoscuolaVehicle {
   createdAt                     DateTime @default(now()) @db.Timestamp(6)
   updatedAt                     DateTime @updatedAt
 
-  company            Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointments       AutoscuolaAppointment[]
-  groupLessons       AutoscuolaGroupLesson[]
-  assignedInstructor AutoscuolaInstructor?   @relation("InstructorFixedVehicle", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  company             Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments        AutoscuolaAppointment[]
+  groupLessons        AutoscuolaGroupLesson[]
+  assignedInstructor  AutoscuolaInstructor?                 @relation("InstructorExclusiveVehicles", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  poolMembers         AutoscuolaVehiclePoolMember[]
+  preferredByInstructors AutoscuolaInstructorPreferredVehicle[]
+  appointmentVehicles AutoscuolaAppointmentVehicle[]
 
-  @@unique([assignedInstructorId])
   @@index([companyId])
   @@index([companyId, assignedInstructorId])
+}
+
+/// Shared-pool membership (D2/D3): "instructor X may draw from vehicle V".
+/// OPTIONAL — a vehicle with no rows here and no exclusive owner is open to ALL
+/// instructors (today's default behavior). An explicit list restricts to it.
+model AutoscuolaVehiclePoolMember {
+  vehicleId    String @db.Uuid
+  instructorId String @db.Uuid
+
+  vehicle    AutoscuolaVehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@id([vehicleId, instructorId])
+  @@index([instructorId])
+}
+
+/// Optional tie-break: when an instructor has several compatible vehicles for a
+/// category, prefer this one. No row = no preference (fall back to packing score).
+model AutoscuolaInstructorPreferredVehicle {
+  instructorId    String @db.Uuid
+  licenseCategory String // B | AM | A1 | A2 | A
+  vehicleId       String @db.Uuid
+
+  instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  vehicle    AutoscuolaVehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@id([instructorId, licenseCategory])
+  @@index([vehicleId])
+}
+
+/// Vehicles reserved by an appointment. Supports multi-vehicle lessons (moto +
+/// "auto al seguito"). The `role="primary"` row always mirrors
+/// AutoscuolaAppointment.vehicleId (kept as source of truth for existing reads);
+/// `role="follow"` is the additional follow car.
+model AutoscuolaAppointmentVehicle {
+  appointmentId String @db.Uuid
+  vehicleId     String @db.Uuid
+  role          String @default("primary") // primary | follow
+
+  appointment AutoscuolaAppointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  vehicle     AutoscuolaVehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@id([appointmentId, vehicleId])
+  @@index([vehicleId])
 }
 
 model AutoscuolaWeeklyAvailability {

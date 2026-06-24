@@ -84,10 +84,23 @@ type VehicleDetail = {
   plate: string | null;
   status: string;
   assignedInstructorId: string | null;
+  poolInstructorIds: string[];
   followsInstructorAvailability: boolean;
   licenseCategory: string;
   transmission: string;
 };
+
+type VehicleUsageMode = "open" | "pool" | "exclusive";
+
+const vehicleUsageMode = (vehicle: {
+  assignedInstructorId: string | null;
+  poolInstructorIds: string[];
+}): VehicleUsageMode =>
+  vehicle.assignedInstructorId
+    ? "exclusive"
+    : vehicle.poolInstructorIds.length
+      ? "pool"
+      : "open";
 type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
 type AvailabilitySlot = {
   id: string;
@@ -274,6 +287,9 @@ export function AutoscuoleResourcesPage({
   const [vehiclesEnabled, setVehiclesEnabled] = React.useState(true);
   const [defaultLicenseCategory, setDefaultLicenseCategory] = React.useState<string>("B");
   const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
+  const [followCarRules, setFollowCarRules] = React.useState<
+    Record<string, { enabled: boolean }>
+  >({});
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
@@ -366,6 +382,8 @@ export function AutoscuoleResourcesPage({
   const [editVehicleName, setEditVehicleName] = React.useState("");
   const [editVehiclePlate, setEditVehiclePlate] = React.useState("");
   const [editVehicleInstructorId, setEditVehicleInstructorId] = React.useState<string>("");
+  const [editVehicleMode, setEditVehicleMode] = React.useState<VehicleUsageMode>("open");
+  const [editVehiclePoolIds, setEditVehiclePoolIds] = React.useState<string[]>([]);
   const [editVehicleFollowsAvailability, setEditVehicleFollowsAvailability] =
     React.useState(true);
   const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
@@ -415,6 +433,7 @@ export function AutoscuoleResourcesPage({
           plate: item.plate ?? null,
           status: item.status,
           assignedInstructorId: item.assignedInstructorId ?? null,
+          poolInstructorIds: item.poolInstructorIds ?? [],
           followsInstructorAvailability: item.followsInstructorAvailability ?? true,
           licenseCategory: item.licenseCategory ?? "B",
           transmission: item.transmission ?? "manual",
@@ -527,6 +546,9 @@ export function AutoscuoleResourcesPage({
       setVehiclesEnabled(res.data.vehiclesEnabled !== false);
       setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
       setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+      setFollowCarRules(
+        (res.data.followCarRules as Record<string, { enabled: boolean }>) ?? {},
+      );
       setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
 
       setAppBookingActors(
@@ -679,6 +701,7 @@ export function AutoscuoleResourcesPage({
       vehiclesEnabled,
       defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
       defaultTransmission: defaultTransmission as "manual" | "automatic",
+      followCarRules,
       groupLessonsEnabled,
       appBookingActors,
       instructorBookingMode,
@@ -1116,6 +1139,7 @@ export function AutoscuoleResourcesPage({
         plate: res.data!.plate ?? null,
         status: res.data!.status,
         assignedInstructorId: res.data!.assignedInstructorId ?? null,
+        poolInstructorIds: [],
         followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
         licenseCategory: res.data!.licenseCategory ?? "B",
         transmission: res.data!.transmission ?? "manual",
@@ -1130,6 +1154,8 @@ export function AutoscuoleResourcesPage({
     setEditVehicleName(vehicle.name);
     setEditVehiclePlate(vehicle.plate ?? "");
     setEditVehicleInstructorId(vehicle.assignedInstructorId ?? "");
+    setEditVehicleMode(vehicleUsageMode(vehicle));
+    setEditVehiclePoolIds(vehicle.poolInstructorIds ?? []);
     setEditVehicleFollowsAvailability(vehicle.followsInstructorAvailability);
     setEditVehicleCategory(vehicle.licenseCategory ?? "B");
     setEditVehicleTransmission(vehicle.transmission ?? "manual");
@@ -1142,13 +1168,28 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: "Inserisci il nome del veicolo." });
       return;
     }
+    // Usage mode → payload: exclusive binds one instructor; pool sets the list;
+    // open clears both.
+    const exclusiveId =
+      editVehicleMode === "exclusive" ? editVehicleInstructorId || null : null;
+    const poolIds = editVehicleMode === "pool" ? editVehiclePoolIds : [];
+    if (editVehicleMode === "exclusive" && !exclusiveId) {
+      toast.error({ description: "Scegli l'istruttore esclusivo." });
+      return;
+    }
+    if (editVehicleMode === "pool" && poolIds.length === 0) {
+      toast.error({ description: "Seleziona almeno un istruttore nel pool." });
+      return;
+    }
     setSavingEditVehicle(true);
     const res = await updateAutoscuolaVehicle({
       vehicleId: editVehicle.id,
       name,
       plate: editVehiclePlate.trim() || null,
-      assignedInstructorId: editVehicleInstructorId || null,
-      followsInstructorAvailability: editVehicleFollowsAvailability,
+      assignedInstructorId: exclusiveId,
+      poolInstructorIds: poolIds,
+      followsInstructorAvailability:
+        editVehicleMode === "exclusive" ? editVehicleFollowsAvailability : false,
       licenseCategory: editVehicleCategory as "B" | "AM" | "A1" | "A2" | "A",
       transmission: editVehicleTransmission as "manual" | "automatic",
     });
@@ -1166,6 +1207,7 @@ export function AutoscuoleResourcesPage({
               plate: res.data!.plate ?? null,
               status: res.data!.status,
               assignedInstructorId: res.data!.assignedInstructorId ?? null,
+              poolInstructorIds: poolIds,
               followsInstructorAvailability:
                 res.data!.followsInstructorAvailability ?? true,
               licenseCategory: res.data!.licenseCategory ?? "B",
@@ -1176,6 +1218,25 @@ export function AutoscuoleResourcesPage({
     );
     setEditVehicle(null);
     toast.success({ description: "Veicolo aggiornato." });
+  };
+
+  const handleSetVehicleMaintenance = async (toMaintenance: boolean) => {
+    if (!editVehicle) return;
+    setSavingEditVehicle(true);
+    const res = await updateAutoscuolaVehicle({
+      vehicleId: editVehicle.id,
+      status: toMaintenance ? "maintenance" : "active",
+    });
+    setSavingEditVehicle(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare lo stato." });
+      return;
+    }
+    const nextStatus = res.data.status;
+    setEditVehicle((prev) => (prev ? { ...prev, status: nextStatus } : prev));
+    setVehicles((prev) =>
+      prev.map((v) => (v.id === editVehicle.id ? { ...v, status: nextStatus } : v)),
+    );
   };
 
   const handleDeactivateVehicle = async () => {
@@ -1597,6 +1658,8 @@ export function AutoscuoleResourcesPage({
             setDefaultLicenseCategory={setDefaultLicenseCategory}
             defaultTransmission={defaultTransmission}
             setDefaultTransmission={setDefaultTransmission}
+            followCarRules={followCarRules}
+            setFollowCarRules={setFollowCarRules}
             openCreateVehicle={openCreateVehicle}
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
@@ -1880,41 +1943,101 @@ export function AutoscuoleResourcesPage({
                 </FieldGroup>
               </div>
 
-              {/* ── Veicolo fisso (assegnazione istruttore) ── */}
-              <FieldGroup label="Istruttore assegnato">
-                <Select
-                  value={editVehicleInstructorId || "none"}
-                  onValueChange={(v) => setEditVehicleInstructorId(v === "none" ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Nessuno" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nessuno</SelectItem>
-                    {instructors
-                      .filter((ins) => ins.status !== "inactive")
-                      .map((ins) => {
-                        const takenByOther = vehicles.find(
-                          (v) =>
-                            v.assignedInstructorId === ins.id &&
-                            v.id !== editVehicle?.id,
-                        );
-                        return (
-                          <SelectItem key={ins.id} value={ins.id}>
-                            {ins.name}
-                            {takenByOther ? ` · ora su ${takenByOther.name}` : ""}
-                          </SelectItem>
-                        );
-                      })}
-                  </SelectContent>
-                </Select>
-                <span className="text-xs text-muted-foreground">
-                  Le guide prenotate con questo istruttore useranno automaticamente
-                  questo veicolo.
-                </span>
+              {/* ── Modalità di utilizzo (Aperto / Pool / Esclusivo) ── */}
+              <FieldGroup label="Modalità di utilizzo">
+                <div className="flex gap-1 rounded-xl border border-border bg-muted/60 p-1">
+                  {(
+                    [
+                      ["open", "Aperto"],
+                      ["pool", "Pool"],
+                      ["exclusive", "Esclusivo"],
+                    ] as Array<[VehicleUsageMode, string]>
+                  ).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      data-testid={`vehicle-mode-${mode}`}
+                      data-active={editVehicleMode === mode}
+                      onClick={() => setEditVehicleMode(mode)}
+                      className={cn(
+                        "flex-1 cursor-pointer rounded-lg py-2 text-[13px] transition-all duration-150",
+                        editVehicleMode === mode
+                          ? "bg-white font-semibold text-foreground shadow-sm"
+                          : "font-medium text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {editVehicleMode === "open" && (
+                  <span className="text-xs text-muted-foreground">
+                    Tutti gli istruttori possono usarlo. È l&apos;impostazione predefinita.
+                  </span>
+                )}
+
+                {editVehicleMode === "pool" && (
+                  <div className="space-y-2">
+                    <span className="text-xs text-muted-foreground">
+                      Solo gli istruttori selezionati possono usare questo veicolo.
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {instructors
+                        .filter((ins) => ins.status !== "inactive")
+                        .map((ins) => {
+                          const active = editVehiclePoolIds.includes(ins.id);
+                          return (
+                            <ToggleChip
+                              key={ins.id}
+                              active={active}
+                              onClick={() =>
+                                setEditVehiclePoolIds((prev) =>
+                                  active
+                                    ? prev.filter((id) => id !== ins.id)
+                                    : [...prev, ins.id],
+                                )
+                              }
+                            >
+                              {ins.name}
+                            </ToggleChip>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+
+                {editVehicleMode === "exclusive" && (
+                  <div className="space-y-2">
+                    <Select
+                      value={editVehicleInstructorId || "none"}
+                      onValueChange={(v) =>
+                        setEditVehicleInstructorId(v === "none" ? "" : v)
+                      }
+                    >
+                      <SelectTrigger data-testid="vehicle-exclusive-instructor">
+                        <SelectValue placeholder="Scegli istruttore" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Scegli istruttore</SelectItem>
+                        {instructors
+                          .filter((ins) => ins.status !== "inactive")
+                          .map((ins) => (
+                            <SelectItem key={ins.id} value={ins.id}>
+                              {ins.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">
+                      Riservato a un istruttore, nascosto agli altri. Un istruttore
+                      può avere più mezzi esclusivi (es. la sua auto e la sua moto).
+                    </span>
+                  </div>
+                )}
               </FieldGroup>
 
-              {editVehicleInstructorId ? (
+              {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
                 <div
                   className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
                   onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
@@ -1933,9 +2056,50 @@ export function AutoscuoleResourcesPage({
                 </div>
               ) : null}
 
+              {/* ── Stato: Attivo / Manutenzione ── */}
+              {editVehicle && editVehicle.status !== "inactive" && (
+                <FieldGroup label="Stato">
+                  <div className="flex gap-2">
+                    {(
+                      [
+                        ["active", "Attivo"],
+                        ["maintenance", "Manutenzione"],
+                      ] as Array<[string, string]>
+                    ).map(([value, label]) => {
+                      const active = (editVehicle.status ?? "active") === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          disabled={savingEditVehicle}
+                          onClick={() =>
+                            handleSetVehicleMaintenance(value === "maintenance")
+                          }
+                          className={cn(
+                            "cursor-pointer rounded-full border px-4 py-2 text-[13px] font-medium transition-colors duration-150 disabled:opacity-50",
+                            active && value === "active" &&
+                              "border-foreground bg-foreground text-white",
+                            active && value === "maintenance" &&
+                              "border-amber-300 bg-amber-100 text-amber-800",
+                            !active && "border-border bg-white text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {editVehicle.status === "maintenance" && (
+                    <span className="text-xs text-muted-foreground">
+                      Escluso dalle nuove prenotazioni; gli appuntamenti già fissati restano.
+                    </span>
+                  )}
+                </FieldGroup>
+              )}
+
               {editVehicle && (
                 <div className="pt-1">
-                  {editVehicle.status === "active" ? (
+                  {editVehicle.status !== "inactive" ? (
                     <button
                       type="button"
                       onClick={handleDeactivateVehicle}
@@ -1961,7 +2125,7 @@ export function AutoscuoleResourcesPage({
               <Button variant="outline" onClick={() => setEditVehicle(null)} disabled={savingEditVehicle}>
                 Annulla
               </Button>
-              <Button onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
+              <Button data-testid="vehicle-save" onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
                 {savingEditVehicle ? "Salvataggio..." : "Salva"}
               </Button>
             </DialogFooter>

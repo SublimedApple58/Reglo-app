@@ -13,6 +13,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Communications**: case status change triggers notifications
 - → **Booking Engine**: booking request creates appointments via slot matcher
+- → **Vehicles (M:N + auto al seguito, 2026-06-24)**: an appointment reserves **N vehicles** via the `AutoscuolaAppointmentVehicle` join (`role=primary|follow`); `vehicleId` stays = the primary. A moto lesson may add a follow car. Any busy-interval builder / conflict-check must read the join, not just `vehicleId` (`slot-matcher`, `autoscuole-availability.actions`, `createAutoscuolaAppointment`, `communications.freeSlotLicenseKeysTomorrow`). `updateAutoscuolaAppointmentDetails({vehicleId, followVehicleId})` reconciles the join. Swaps exclude follow-car lessons. See `features/vehicles.md`.
 - → **Cases & Deadlines**: appointments track lesson progress per case
 - → **Penalties**: late cancellation triggers penalty charge
 - → **Mobile**: types `AutoscuolaAppointmentWithRelations` used in 14 screens

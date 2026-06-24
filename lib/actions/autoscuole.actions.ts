@@ -29,6 +29,11 @@ import {
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, vehicleServesLicense } from "@/lib/autoscuole/license";
+import { parseFollowCarRulesFromLimits } from "@/lib/autoscuole/follow-car";
+import {
+  reconcileAppointmentVehicles,
+  resolveVehicleOwnerOnUpdate,
+} from "@/lib/autoscuole/appointment-vehicles";
 import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { parseInstructorSettings } from "@/lib/autoscuole/instructor-clusters";
 import { generateInviteCode } from "@/lib/company/invite-code";
@@ -91,6 +96,8 @@ const createAppointmentSchema = z.object({
   status: z.string().optional(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
+  // Follow car (auto al seguito) for moto lessons, when the school requires it.
+  followVehicleId: z.string().uuid().optional().nullable(),
   locationId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -153,6 +160,13 @@ const updateAppointmentDetailsSchema = z.object({
    */
   vehicleId: z.string().uuid().nullable().optional(),
   /**
+   * Follow car (auto al seguito) for a moto lesson — the second reserved
+   * vehicle. null clears it. Reconciled into the AutoscuolaAppointmentVehicle
+   * join (role="follow") alongside the primary. Must differ from the primary
+   * and belong to the company.
+   */
+  followVehicleId: z.string().uuid().nullable().optional(),
+  /**
    * New instructor for the appointment (cluster-level reassignment).
    * Verified against availability: no overlapping appointments, no manual
    * block-slot, no company holiday on that day. The vehicle stays attached
@@ -181,6 +195,11 @@ const createVehicleSchema = z.object({
   plate: z.string().optional(),
   licenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
   transmission: z.enum(TRANSMISSIONS).optional(),
+  // Usage mode at creation (optional). Exclusive owner, or an explicit shared
+  // pool; omitting both leaves the vehicle "open to all" (the default).
+  assignedInstructorId: z.string().uuid().nullable().optional(),
+  poolInstructorIds: z.array(z.string().uuid()).optional(),
+  followsInstructorAvailability: z.boolean().optional(),
 });
 
 const instructorSettingsSchema = z.object({
@@ -223,10 +242,14 @@ const updateVehicleSchema = z.object({
   vehicleId: z.string().uuid(),
   name: z.string().min(1).optional(),
   plate: z.string().optional().nullable(),
+  // active | inactive | maintenance.
   status: z.string().optional(),
-  // Fixed-vehicle assignment: null clears it, a uuid binds the vehicle to that
-  // instructor (1:1). Omitting the key leaves the current assignment untouched.
+  // Exclusive owner: null clears it, a uuid reserves the vehicle to that
+  // instructor (an instructor may own several). Omitting leaves it untouched.
   assignedInstructorId: z.string().uuid().nullable().optional(),
+  // Explicit shared pool (the instructors allowed to draw from this vehicle).
+  // [] clears the pool (→ open to all); omitting leaves it untouched.
+  poolInstructorIds: z.array(z.string().uuid()).optional(),
   followsInstructorAvailability: z.boolean().optional(),
   // License category + transmission this vehicle serves (Vehicles module).
   licenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
@@ -719,6 +742,7 @@ const listAutoscuolaVehiclesReadOnly = async (companyId: string) =>
   prisma.autoscuolaVehicle.findMany({
     where: { companyId },
     orderBy: { name: "asc" },
+    include: { poolMembers: { select: { instructorId: true } } },
   });
 
 const mapCaseStudent = (student: UserSnapshot) => {
@@ -927,6 +951,22 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
               licenseCategory: true,
             },
           },
+          // Follow car (auto al seguito) — the role="follow" join row, if any.
+          // Mapped below into `followVehicle` for agenda detail rendering.
+          appointmentVehicles: {
+            where: { role: "follow" },
+            select: {
+              vehicle: {
+                select: {
+                  id: true,
+                  name: true,
+                  transmission: true,
+                  licenseCategory: true,
+                },
+              },
+            },
+            take: 1,
+          },
           location: {
             select: {
               id: true,
@@ -984,6 +1024,9 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       (agendaLimits as Record<string, unknown>).vehiclesEnabled !== false;
     const agendaGroupLessonsEnabled =
       (agendaLimits as Record<string, unknown>).groupLessonsEnabled === true;
+    const agendaFollowCarRules = parseFollowCarRulesFromLimits(
+      agendaLimits as Record<string, unknown>,
+    );
 
     // Grid color flags (mandatoryLesson / examNextDay) — same annotation as
     // getAutoscuolaAppointmentsFiltered; the mobile grid reads agenda data
@@ -1008,15 +1051,24 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         : Promise.resolve(new Map<string, number>()),
     ]);
 
-    const mappedAppointments = appointments.map((appointment) => ({
-      ...appointment,
-      case: null,
-      student: mapCaseStudent(appointment.student),
-      ...(gridFlags.get(appointment.id) ?? {}),
-      groupLessonCapacity: appointment.groupLessonId
-        ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
-        : null,
-    }));
+    const mappedAppointments = appointments.map((appointment) => {
+      const { appointmentVehicles, ...rest } = appointment;
+      // Auto al seguito: the follow join's vehicle (null when single-vehicle).
+      // Ternary (not `?? null`) so the type stays nullable under the project's
+      // non-strict index access, matching the gl-empty placeholder below.
+      const followVehicle =
+        appointmentVehicles.length > 0 ? appointmentVehicles[0].vehicle : null;
+      return {
+        ...rest,
+        case: null,
+        student: mapCaseStudent(appointment.student),
+        followVehicle,
+        ...(gridFlags.get(appointment.id) ?? {}),
+        groupLessonCapacity: appointment.groupLessonId
+          ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
+          : null,
+      };
+    });
 
     // Empty group lessons (0 active participants) have no appointment rows, so
     // they'd be invisible in the agenda — and thus un-manageable / un-cancellable,
@@ -1078,6 +1130,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           student: { id: `gl-empty:${gl.id}`, firstName: "Guida di gruppo", lastName: "", email: null, phone: null },
           instructor: gl.instructor,
           vehicle: gl.vehicle,
+          followVehicle: null,
           location: null,
           groupLessonCapacity: gl.capacity,
         } as (typeof mappedAppointments)[number]);
@@ -1093,6 +1146,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         vehicles,
         vehiclesEnabled: agendaVehiclesEnabled,
         groupLessonsEnabled: agendaGroupLessonsEnabled,
+        followCarRules: agendaFollowCarRules,
         instructorBlocks,
         holidays: holidays.map((h) => ({
           date: h.date.toISOString(),
@@ -2573,11 +2627,22 @@ export async function createAutoscuolaAppointment(
     const scanEnd = new Date(slotEnd);
     scanEnd.setDate(scanEnd.getDate() + 1);
 
-    const conflictOr: Array<Record<string, string>> = [
+    // A lesson may reserve more than one vehicle (moto + follow car). Catch a
+    // conflict on ANY reserved vehicle, whether the other appointment uses it as
+    // its primary `vehicleId` or as a secondary (follow) row in the join.
+    const reservedVehicleIds = [payload.vehicleId, payload.followVehicleId].filter(
+      (id): id is string => Boolean(id),
+    );
+    const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
-    if (payload.vehicleId) {
-      conflictOr.push({ vehicleId: payload.vehicleId });
+    for (const vehicleId of reservedVehicleIds) {
+      conflictOr.push({ vehicleId });
+    }
+    if (reservedVehicleIds.length) {
+      conflictOr.push({
+        appointmentVehicles: { some: { vehicleId: { in: reservedVehicleIds } } },
+      });
     }
     const conflicts = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -2674,6 +2739,19 @@ export async function createAutoscuolaAppointment(
           invoiceStatus: paymentSnapshot.invoiceStatus,
           creditApplied: paymentSnapshot.creditApplied,
           manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
+          // Reserve every vehicle this lesson uses (primary + follow car).
+          ...(payload.vehicleId
+            ? {
+                appointmentVehicles: {
+                  create: [
+                    { vehicleId: payload.vehicleId, role: "primary" },
+                    ...(payload.followVehicleId
+                      ? [{ vehicleId: payload.followVehicleId, role: "follow" }]
+                      : []),
+                  ],
+                },
+              }
+            : {}),
         },
       });
     });
@@ -2913,11 +2991,15 @@ export async function createAutoscuolaAppointmentBatch(
     const scanEnd = new Date(Math.max(...allEnds));
     scanEnd.setDate(scanEnd.getDate() + 1);
 
-    const batchConflictOr: Array<Record<string, string>> = [
+    const batchConflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
     if (payload.vehicleId) {
       batchConflictOr.push({ vehicleId: payload.vehicleId });
+      // Also catch appointments using this vehicle as a follow car (join row).
+      batchConflictOr.push({
+        appointmentVehicles: { some: { vehicleId: payload.vehicleId } },
+      });
     }
     const existingAppointments = await prisma.autoscuolaAppointment.findMany({
       where: {
@@ -4393,6 +4475,33 @@ export async function updateAutoscuolaAppointmentDetails(
       }
     }
 
+    // Handle follow car (auto al seguito) change. Validate it belongs to the
+    // company and is active; the reconcile step below keeps it consistent with
+    // the primary (a follow without a primary is impossible). Like the primary,
+    // vehicles are company resources so there's no per-instructor ownership.
+    let followVehicleChanged = false;
+    let desiredFollowVehicleId: string | null = null;
+    if (payload.followVehicleId !== undefined) {
+      if (payload.followVehicleId !== null) {
+        const followVehicle = await prisma.autoscuolaVehicle.findFirst({
+          where: {
+            id: payload.followVehicleId,
+            companyId: membership.companyId,
+            status: "active",
+          },
+          select: { id: true },
+        });
+        if (!followVehicle) {
+          return {
+            success: false,
+            message: "Auto al seguito non valida per questa autoscuola.",
+          };
+        }
+      }
+      desiredFollowVehicleId = payload.followVehicleId;
+      followVehicleChanged = true;
+    }
+
     // Handle instructor change (cluster-level single-lesson reassignment).
     // Allowed for owner/admin and for the current instructor "passing" the
     // lesson to a colleague. The student's assignedInstructorId is NOT
@@ -4436,13 +4545,48 @@ export async function updateAutoscuolaAppointmentDetails(
       updateData.instructorId = payload.instructorId;
     }
 
-    if (!Object.keys(updateData).length) {
+    // Whether the reserved vehicles (primary and/or follow car) need the join
+    // table reconciled. The primary lives both on `appointment.vehicleId` and
+    // as the role="primary" join row; the follow car is the role="follow" row.
+    const primaryChanged = updateData.vehicleId !== undefined;
+    const vehiclesNeedSync = primaryChanged || followVehicleChanged;
+
+    if (!Object.keys(updateData).length && !vehiclesNeedSync) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
 
-    const updated = await prisma.autoscuolaAppointment.update({
-      where: { id: payload.appointmentId, companyId: membership.companyId },
-      data: updateData,
+    // Resolve the FINAL primary + follow so reconcile (which wipes and rewrites
+    // the rows) preserves whichever side the user didn't touch.
+    const finalPrimaryVehicleId = primaryChanged
+      ? updateData.vehicleId ?? null
+      : appointment.vehicleId;
+    let finalFollowVehicleId = desiredFollowVehicleId;
+    if (vehiclesNeedSync && !followVehicleChanged) {
+      const existingFollow = await prisma.autoscuolaAppointmentVehicle.findFirst({
+        where: { appointmentId: appointment.id, role: "follow" },
+        select: { vehicleId: true },
+      });
+      finalFollowVehicleId = existingFollow?.vehicleId ?? null;
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = Object.keys(updateData).length
+        ? await tx.autoscuolaAppointment.update({
+            where: { id: payload.appointmentId, companyId: membership.companyId },
+            data: updateData,
+          })
+        : await tx.autoscuolaAppointment.findUniqueOrThrow({
+            where: { id: payload.appointmentId },
+          });
+      if (vehiclesNeedSync) {
+        await reconcileAppointmentVehicles(
+          tx,
+          appointment.id,
+          finalPrimaryVehicleId,
+          finalFollowVehicleId,
+        );
+      }
+      return row;
     });
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -4493,6 +4637,7 @@ async function loadLocationSummary(id: string) {
     select: { id: true, name: true, isDefault: true },
   });
 }
+
 
 /**
  * Result of verifyInstructorAvailability(): either the instructor is available
@@ -4850,7 +4995,92 @@ export async function getAutoscuolaVehicles() {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     const vehicles = await listAutoscuolaVehiclesReadOnly(membership.companyId);
 
-    return { success: true, data: vehicles };
+    // Flatten pool membership into a plain id list for the client contract.
+    const data = vehicles.map(({ poolMembers, ...vehicle }) => ({
+      ...vehicle,
+      poolInstructorIds: poolMembers.map((member) => member.instructorId),
+    }));
+
+    return { success: true, data };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+const setPreferredVehicleSchema = z.object({
+  instructorId: z.string().uuid(),
+  licenseCategory: z.enum(LICENSE_CATEGORIES),
+  // null clears the preference for this (instructor, category).
+  vehicleId: z.string().uuid().nullable(),
+});
+
+/**
+ * Set (or clear) the preferred vehicle an instructor uses for a license
+ * category — the tie-break when several compatible vehicles are free. Owners set
+ * it for anyone; a plain instructor only for themselves.
+ */
+export async function setInstructorPreferredVehicle(
+  input: z.infer<typeof setPreferredVehicleSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    ensureAutoscuolaRole(membership, ["OWNER", "INSTRUCTOR"]);
+    const payload = setPreferredVehicleSchema.parse(input);
+    const companyId = membership.companyId;
+
+    const isOwnerActor =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerActor) {
+      const own = await getOwnInstructorProfile(companyId, membership.userId);
+      if (!own || own.id !== payload.instructorId) {
+        return { success: false, message: "Puoi impostare solo le tue preferenze." };
+      }
+    }
+
+    const instructor = await prisma.autoscuolaInstructor.findFirst({
+      where: { id: payload.instructorId, companyId },
+      select: { id: true },
+    });
+    if (!instructor) {
+      return { success: false, message: "Istruttore non valido." };
+    }
+
+    if (payload.vehicleId === null) {
+      await prisma.autoscuolaInstructorPreferredVehicle.deleteMany({
+        where: {
+          instructorId: payload.instructorId,
+          licenseCategory: payload.licenseCategory,
+        },
+      });
+    } else {
+      const vehicle = await prisma.autoscuolaVehicle.findFirst({
+        where: { id: payload.vehicleId, companyId },
+        select: { id: true },
+      });
+      if (!vehicle) {
+        return { success: false, message: "Veicolo non valido." };
+      }
+      await prisma.autoscuolaInstructorPreferredVehicle.upsert({
+        where: {
+          instructorId_licenseCategory: {
+            instructorId: payload.instructorId,
+            licenseCategory: payload.licenseCategory,
+          },
+        },
+        create: {
+          instructorId: payload.instructorId,
+          licenseCategory: payload.licenseCategory,
+          vehicleId: payload.vehicleId,
+        },
+        update: { vehicleId: payload.vehicleId },
+      });
+    }
+
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA],
+    });
+    return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -4864,6 +5094,18 @@ export async function createAutoscuolaVehicle(
     const companyId = membership.companyId;
     const payload = createVehicleSchema.parse(input);
 
+    const desiredPool = payload.poolInstructorIds
+      ? Array.from(new Set(payload.poolInstructorIds))
+      : null;
+    if (desiredPool && desiredPool.length) {
+      const validCount = await prisma.autoscuolaInstructor.count({
+        where: { companyId, id: { in: desiredPool } },
+      });
+      if (validCount !== desiredPool.length) {
+        return { success: false, message: "Pool istruttori non valido." };
+      }
+    }
+
     const vehicle = await prisma.autoscuolaVehicle.create({
       data: {
         companyId,
@@ -4871,6 +5113,19 @@ export async function createAutoscuolaVehicle(
         plate: payload.plate || null,
         ...(payload.licenseCategory ? { licenseCategory: payload.licenseCategory } : {}),
         ...(payload.transmission ? { transmission: payload.transmission } : {}),
+        ...(payload.assignedInstructorId
+          ? { assignedInstructorId: payload.assignedInstructorId }
+          : {}),
+        ...(payload.followsInstructorAvailability !== undefined
+          ? { followsInstructorAvailability: payload.followsInstructorAvailability }
+          : {}),
+        ...(desiredPool && desiredPool.length
+          ? {
+              poolMembers: {
+                create: desiredPool.map((instructorId) => ({ instructorId })),
+              },
+            }
+          : {}),
       },
     });
 
@@ -5044,8 +5299,17 @@ export async function updateAutoscuolaVehicle(
     const isOwnerActor =
       membership.role === "admin" || isOwner(membership.autoscuolaRole);
 
-    // Self-service guard: a plain instructor can only manage the fixed-vehicle
-    // assignment for THEIR OWN instructor profile.
+    // Pool management is owner-only: a plain instructor manages only their own
+    // exclusive assignment, not who else may draw from a shared vehicle.
+    if (payload.poolInstructorIds !== undefined && !isOwnerActor) {
+      return {
+        success: false,
+        message: "Solo il titolare può gestire il pool del veicolo.",
+      };
+    }
+
+    // Self-service guard: a plain instructor can only set the EXCLUSIVE owner to
+    // their own profile, and only touch a vehicle that is (or becomes) theirs.
     if (touchesAssignment && !isOwnerActor) {
       const ownInstructor = await getOwnInstructorProfile(
         membership.companyId,
@@ -5064,20 +5328,18 @@ export async function updateAutoscuolaVehicle(
           message: "Puoi assegnare il veicolo solo a te stesso.",
         };
       }
-      // Clearing or tweaking the flag is only allowed on one's own fixed vehicle
-      // (or while simultaneously assigning it to oneself).
       const targetsOwn =
         existing.assignedInstructorId === ownInstructor.id ||
         payload.assignedInstructorId === ownInstructor.id;
       if (!targetsOwn) {
         return {
           success: false,
-          message: "Puoi modificare solo il tuo veicolo fisso.",
+          message: "Puoi modificare solo il tuo veicolo esclusivo.",
         };
       }
     }
 
-    // Validate the target instructor when binding the vehicle to one.
+    // Validate the exclusive-owner instructor when binding the vehicle to one.
     if (payload.assignedInstructorId) {
       const targetInstructor = await prisma.autoscuolaInstructor.findFirst({
         where: {
@@ -5092,19 +5354,35 @@ export async function updateAutoscuolaVehicle(
       }
     }
 
-    // A vehicle being deactivated is unassigned automatically.
+    // Validate the shared-pool instructors all belong to this company.
+    const desiredPool = payload.poolInstructorIds
+      ? Array.from(new Set(payload.poolInstructorIds))
+      : null;
+    if (desiredPool && desiredPool.length) {
+      const validCount = await prisma.autoscuolaInstructor.count({
+        where: { companyId: membership.companyId, id: { in: desiredPool } },
+      });
+      if (validCount !== desiredPool.length) {
+        return { success: false, message: "Pool istruttori non valido." };
+      }
+    }
+
+    // Deactivating ("inactive") releases the exclusive owner. "maintenance" is a
+    // temporary stop: it is excluded from matching but KEEPS its assignment/pool
+    // and does NOT cancel existing appointments.
     const nextStatus = payload.status ?? existing.status;
-    const clearAssignmentForInactive = nextStatus === "inactive";
+    // Rule #4 (maintenance vs inactive): inactive releases the exclusive owner;
+    // maintenance keeps it. `undefined` = leave the column untouched.
+    const nextOwner = resolveVehicleOwnerOnUpdate({
+      nextStatus,
+      payloadAssignedInstructorId: payload.assignedInstructorId,
+    });
 
     const updateData = {
       name: payload.name,
       plate: payload.plate ?? undefined,
       status: payload.status,
-      ...(clearAssignmentForInactive
-        ? { assignedInstructorId: null }
-        : payload.assignedInstructorId !== undefined
-          ? { assignedInstructorId: payload.assignedInstructorId }
-          : {}),
+      ...(nextOwner !== undefined ? { assignedInstructorId: nextOwner } : {}),
       ...(payload.followsInstructorAvailability !== undefined
         ? { followsInstructorAvailability: payload.followsInstructorAvailability }
         : {}),
@@ -5116,33 +5394,30 @@ export async function updateAutoscuolaVehicle(
         : {}),
     };
 
-    // 1:1 is a single "fixed vehicle" slot per instructor: assigning a new
-    // vehicle to an instructor who already has one transparently reassigns it
-    // (releases the previous vehicle) instead of failing.
-    const reassignInstructorId =
-      !clearAssignmentForInactive && payload.assignedInstructorId
-        ? payload.assignedInstructorId
-        : null;
-
-    const updated = reassignInstructorId
-      ? await prisma.$transaction(async (tx) => {
-          await tx.autoscuolaVehicle.updateMany({
-            where: {
-              companyId: membership.companyId,
-              assignedInstructorId: reassignInstructorId,
-              id: { not: existing.id },
-            },
-            data: { assignedInstructorId: null },
-          });
-          return tx.autoscuolaVehicle.update({
-            where: { id: existing.id },
-            data: updateData,
-          });
-        })
-      : await prisma.autoscuolaVehicle.update({
-          where: { id: existing.id },
-          data: updateData,
+    // No more 1:1 reassign: an instructor may own several exclusive vehicles.
+    // When a pool list is provided, replace the vehicle's pool membership in the
+    // same transaction.
+    const updated = await prisma.$transaction(async (tx) => {
+      const vehicle = await tx.autoscuolaVehicle.update({
+        where: { id: existing.id },
+        data: updateData,
+      });
+      if (desiredPool !== null) {
+        await tx.autoscuolaVehiclePoolMember.deleteMany({
+          where: { vehicleId: existing.id },
         });
+        if (desiredPool.length) {
+          await tx.autoscuolaVehiclePoolMember.createMany({
+            data: desiredPool.map((instructorId) => ({
+              vehicleId: existing.id,
+              instructorId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+      }
+      return vehicle;
+    });
 
     const shouldCancelImpacted =
       existing.status !== "inactive" && updated.status === "inactive";

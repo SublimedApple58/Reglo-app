@@ -22,11 +22,17 @@ import {
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { findBestAutoscuolaSlot } from "@/lib/autoscuole/slot-matcher";
 import {
-  buildFixedVehicleMaps,
-  pickBestInstructorVehiclePair,
-  resolveVehicleForInstructor,
-} from "@/lib/autoscuole/fixed-vehicle";
+  buildVehicleResolutionMaps,
+  pickBestInstructorVehicleSet,
+  resolveVehiclesForInstructor,
+} from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import {
+  FOLLOW_CAR_CATEGORY,
+  isFollowCarVehicle,
+  parseFollowCarRulesFromLimits,
+  requiresFollowCar,
+} from "@/lib/autoscuole/follow-car";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   buildAutoscuoleCacheKey,
@@ -589,6 +595,17 @@ const buildMatchesLicenseCategory = (
     const vehicle = byId.get(vehicleId);
     if (!vehicle) return false;
     return vehicleServesLicense(vehicle, student ?? {});
+  };
+};
+
+const buildMatchesFollowCar = (
+  activeVehicles: Array<{ id: string; licenseCategory?: string | null }>,
+) => {
+  const byId = new Map(activeVehicles.map((v) => [v.id, v]));
+  return (vehicleId: string) => {
+    const vehicle = byId.get(vehicleId);
+    if (!vehicle) return false;
+    return isFollowCarVehicle(vehicle);
   };
 };
 
@@ -1652,7 +1669,14 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const effectiveInstructorId = clusterBookingSettings.isLockedToInstructor && clusterBookingSettings.assignedInstructorId
       ? clusterBookingSettings.assignedInstructorId
       : payload.instructorId;
-    const [activeInstructors, activeVehicles, studentAvailabilityRaw, studentLicense] = await Promise.all([
+    const [
+      activeInstructors,
+      activeVehicles,
+      vehiclePoolMembers,
+      instructorPreferredVehicles,
+      studentAvailabilityRaw,
+      studentLicense,
+    ] = await Promise.all([
       prisma.autoscuolaInstructor.findMany({
         where: {
           companyId: membership.companyId,
@@ -1662,7 +1686,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         select: { id: true },
       }),
       prisma.autoscuolaVehicle.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        where: { companyId: membership.companyId, status: "active" },
         select: {
           id: true,
           assignedInstructorId: true,
@@ -1670,6 +1694,14 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           licenseCategory: true,
           transmission: true,
         },
+      }),
+      prisma.autoscuolaVehiclePoolMember.findMany({
+        where: { vehicle: { companyId: membership.companyId } },
+        select: { vehicleId: true, instructorId: true },
+      }),
+      prisma.autoscuolaInstructorPreferredVehicle.findMany({
+        where: { instructor: { companyId: membership.companyId } },
+        select: { instructorId: true, licenseCategory: true, vehicleId: true },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
         where: {
@@ -1732,8 +1764,16 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
     const vehiclesEnabled = preServiceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((item) => item.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
-    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const vehicleResolutionMaps = buildVehicleResolutionMaps({
+      vehicles: activeVehicles,
+      poolMembers: vehiclePoolMembers,
+      preferred: instructorPreferredVehicles,
+    });
     const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, studentLicense);
+    const followCarRules = parseFollowCarRulesFromLimits(preServiceLimits);
+    const requireFollowCar =
+      vehiclesEnabled && requiresFollowCar(followCarRules, studentLicense?.licenseCategory ?? null);
+    const matchesFollowCar = buildMatchesFollowCar(activeVehicles);
 
     const resolverRangeStart = preferredDate;
     const resolverRangeEnd = toTimeZoneDate(
@@ -1777,6 +1817,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         studentId: string;
         startsAt: Date;
         endsAt: Date | null;
+        appointmentVehicles?: Array<{ vehicleId: string }>;
       }>,
     ) => {
       const starts = new Map<string, Set<number>>();
@@ -1805,6 +1846,12 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         }
         if (appointment.vehicleId) {
           add(appointment.vehicleId, start, end);
+        }
+        // Follow car (and any secondary vehicle) reserved by the appointment.
+        for (const link of appointment.appointmentVehicles ?? []) {
+          if (link.vehicleId !== appointment.vehicleId) {
+            add(link.vehicleId, start, end);
+          }
         }
       }
 
@@ -1978,6 +2025,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             status: { notIn: ["cancelled"] },
             startsAt: { gte: appointmentScanStart, lt: rangeEnd },
           },
+          include: { appointmentVehicles: { select: { vehicleId: true } } },
         }),
         prisma.autoscuolaInstructorBlock.findMany({
           where: {
@@ -2011,6 +2059,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         end: Date;
         instructorId: string;
         vehicleId: string | null;
+        followVehicleId: string | null;
         score: number;
         compatibleRequiredTypes: string[];
         resolvedLessonType: string;
@@ -2093,17 +2142,18 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           continue;
         }
 
-        // Couple instructor↔vehicle: a fixed vehicle is bound to its instructor
-        // and reserved vehicles are excluded from other instructors' pool.
+        // Couple instructor↔vehicle: exclusive vehicles are bound to their
+        // instructor and hidden from others' pool; a moto may also need a follow car.
         const endTime = endDate.getTime();
-        const pair = pickBestInstructorVehiclePair({
+        const pair = pickBestInstructorVehicleSet({
           availableInstructors,
           vehiclesEnabled,
-          resolveVehicle: (instructorId) =>
-            resolveVehicleForInstructor({
+          resolveVehicles: (instructorId) =>
+            resolveVehiclesForInstructor({
               instructorId,
+              studentCategory: studentLicense?.licenseCategory ?? null,
               activeVehicleIds,
-              maps: fixedVehicleMaps,
+              maps: vehicleResolutionMaps,
               isVehicleAvailable: (vehicleId) =>
                 isOwnerAvailable(
                   vehicleAvailabilityResolver.resolve(vehicleId, startDate),
@@ -2117,6 +2167,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
                 (appointmentMaps.ends.get(vehicleId)?.has(startMs) ? 1 : 0) +
                 (appointmentMaps.starts.get(vehicleId)?.has(endTime) ? 1 : 0),
               matchesLicenseCategory,
+              requireFollowCar,
+              matchesFollowCar,
+              followCarCategory: FOLLOW_CAR_CATEGORY,
             }),
         });
         if (!pair) {
@@ -2135,6 +2188,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             end: endDate,
             instructorId: pair.instructorId,
             vehicleId: pair.vehicleId,
+            followVehicleId: pair.followVehicleId,
             score,
             compatibleRequiredTypes,
             resolvedLessonType:
@@ -2385,6 +2439,29 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
           });
         }
 
+        // Follow car (auto al seguito): reserve its slot too.
+        if (candidate.followVehicleId) {
+          await tx.autoscuolaAvailabilitySlot.upsert({
+            where: {
+              companyId_ownerType_ownerId_startsAt: {
+                companyId: membership.companyId,
+                ownerType: "vehicle",
+                ownerId: candidate.followVehicleId,
+                startsAt: candidate.start,
+              },
+            },
+            update: { endsAt: candidate.end, status: "booked" },
+            create: {
+              companyId: membership.companyId,
+              ownerType: "vehicle",
+              ownerId: candidate.followVehicleId,
+              startsAt: candidate.start,
+              endsAt: candidate.end,
+              status: "booked",
+            },
+          });
+        }
+
         const existingOnSlot = await tx.autoscuolaAppointment.findFirst({
           where: {
             companyId: membership.companyId,
@@ -2424,6 +2501,19 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
             paidAmount: paymentSnapshot.paidAmount,
             invoiceStatus: paymentSnapshot.invoiceStatus,
             creditApplied: paymentSnapshot.creditApplied,
+            // Reserve every vehicle this lesson uses (primary + follow car).
+            ...(candidate.vehicleId
+              ? {
+                  appointmentVehicles: {
+                    create: [
+                      { vehicleId: candidate.vehicleId, role: "primary" },
+                      ...(candidate.followVehicleId
+                        ? [{ vehicleId: candidate.followVehicleId, role: "follow" }]
+                        : []),
+                    ],
+                  },
+                }
+              : {}),
           },
         });
       });
@@ -2819,6 +2909,8 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const [
       activeInstructors,
       activeVehicles,
+      vehiclePoolMembers,
+      instructorPreferredVehicles,
       student,
       studentAvailabilityRaw,
     ] = await Promise.all([
@@ -2831,7 +2923,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         select: { id: true },
       }),
       prisma.autoscuolaVehicle.findMany({
-        where: { companyId: membership.companyId, status: { not: "inactive" } },
+        where: { companyId: membership.companyId, status: "active" },
         select: {
           id: true,
           assignedInstructorId: true,
@@ -2839,6 +2931,14 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           licenseCategory: true,
           transmission: true,
         },
+      }),
+      prisma.autoscuolaVehiclePoolMember.findMany({
+        where: { vehicle: { companyId: membership.companyId } },
+        select: { vehicleId: true, instructorId: true },
+      }),
+      prisma.autoscuolaInstructorPreferredVehicle.findMany({
+        where: { instructor: { companyId: membership.companyId } },
+        select: { instructorId: true, licenseCategory: true, vehicleId: true },
       }),
       ensureStudentMembership(membership.companyId, payload.studentId),
       needStudentAvailability
@@ -2887,8 +2987,16 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
     const activeInstructorIds = allInstructorIds.filter((id) => pubFilter(id, dateStart));
 
     const activeVehicleIds = vehiclesEnabledForSlots ? activeVehicles.map((v) => v.id) : [];
-    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const vehicleResolutionMaps = buildVehicleResolutionMaps({
+      vehicles: activeVehicles,
+      poolMembers: vehiclePoolMembers,
+      preferred: instructorPreferredVehicles,
+    });
     const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
+    const followCarRules = parseFollowCarRulesFromLimits(serviceLimits);
+    const requireFollowCar =
+      vehiclesEnabledForSlots && requiresFollowCar(followCarRules, student?.licenseCategory ?? null);
+    const matchesFollowCar = buildMatchesFollowCar(activeVehicles);
     if (!activeInstructorIds.length) {
       return { success: true, data: [] };
     }
@@ -2940,6 +3048,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
           status: { notIn: ["cancelled"] },
           startsAt: { gte: appointmentScanStart, lt: rangeEnd },
         },
+        include: { appointmentVehicles: { select: { vehicleId: true } } },
       }),
       prisma.autoscuolaInstructorBlock.findMany({
         where: {
@@ -2969,6 +3078,9 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
       addInterval(appt.studentId);
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
+      for (const link of appt.appointmentVehicles ?? []) {
+        if (link.vehicleId !== appt.vehicleId) addInterval(link.vehicleId);
+      }
     }
 
     // Instructor blocks (sick leave, etc.) were fetched in the parallel wave
@@ -3120,16 +3232,18 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         if (!availableInstructors.length) continue;
 
         // A slot exists only if some instructor can be paired with a vehicle
-        // (its fixed one, or a non-reserved pool vehicle).
+        // (an exclusive one, or a pool/open vehicle) — plus a follow car when
+        // the school requires one for the student's category.
         const endTime = endDate.getTime();
-        const pair = pickBestInstructorVehiclePair({
+        const pair = pickBestInstructorVehicleSet({
           availableInstructors,
           vehiclesEnabled: vehiclesEnabledForSlots,
-          resolveVehicle: (instructorId) =>
-            resolveVehicleForInstructor({
+          resolveVehicles: (instructorId) =>
+            resolveVehiclesForInstructor({
               instructorId,
+              studentCategory: student?.licenseCategory ?? null,
               activeVehicleIds,
-              maps: fixedVehicleMaps,
+              maps: vehicleResolutionMaps,
               isVehicleAvailable: (vehicleId) =>
                 isOwnerAvailable(
                   vehicleResolver.resolve(vehicleId, startDate),
@@ -3141,6 +3255,9 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
                 overlaps(intervals.get(vehicleId), startMs, endTime),
               scoreVehicle: () => 0,
               matchesLicenseCategory,
+              requireFollowCar,
+              matchesFollowCar,
+              followCarCategory: FOLLOW_CAR_CATEGORY,
             }),
         });
         if (!pair) continue;
@@ -3236,8 +3353,14 @@ export async function getDateAvailabilityMap(
       : null;
 
     // Fetch resources in parallel
-    const [activeInstructors, activeVehicles, student, studentAvailabilityRaw] =
-      await Promise.all([
+    const [
+      activeInstructors,
+      activeVehicles,
+      vehiclePoolMembers,
+      instructorPreferredVehicles,
+      student,
+      studentAvailabilityRaw,
+    ] = await Promise.all([
         prisma.autoscuolaInstructor.findMany({
           where: {
             companyId: membership.companyId,
@@ -3249,7 +3372,7 @@ export async function getDateAvailabilityMap(
         prisma.autoscuolaVehicle.findMany({
           where: {
             companyId: membership.companyId,
-            status: { not: "inactive" },
+            status: "active",
           },
           select: {
             id: true,
@@ -3258,6 +3381,14 @@ export async function getDateAvailabilityMap(
             licenseCategory: true,
             transmission: true,
           },
+        }),
+        prisma.autoscuolaVehiclePoolMember.findMany({
+          where: { vehicle: { companyId: membership.companyId } },
+          select: { vehicleId: true, instructorId: true },
+        }),
+        prisma.autoscuolaInstructorPreferredVehicle.findMany({
+          where: { instructor: { companyId: membership.companyId } },
+          select: { instructorId: true, licenseCategory: true, vehicleId: true },
         }),
         ensureStudentMembership(membership.companyId, payload.studentId),
         needStudentAvailability
@@ -3299,8 +3430,16 @@ export async function getDateAvailabilityMap(
     const vehiclesEnabled = serviceLimits.vehiclesEnabled !== false;
     const activeInstructorIds = activeInstructors.map((i) => i.id);
     const activeVehicleIds = vehiclesEnabled ? activeVehicles.map((v) => v.id) : [];
-    const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+    const vehicleResolutionMaps = buildVehicleResolutionMaps({
+      vehicles: activeVehicles,
+      poolMembers: vehiclePoolMembers,
+      preferred: instructorPreferredVehicles,
+    });
     const matchesLicenseCategory = buildMatchesLicenseCategory(activeVehicles, student);
+    const followCarRules = parseFollowCarRulesFromLimits(serviceLimits);
+    const requireFollowCar =
+      vehiclesEnabled && requiresFollowCar(followCarRules, student?.licenseCategory ?? null);
+    const matchesFollowCar = buildMatchesFollowCar(activeVehicles);
 
     const result: Record<string, boolean> = {};
     const instructorsByDate: Record<string, string[]> = {};
@@ -3375,6 +3514,7 @@ export async function getDateAvailabilityMap(
           status: { notIn: ["cancelled"] },
           startsAt: { gte: appointmentScanStart, lt: rangeEnd },
         },
+        include: { appointmentVehicles: { select: { vehicleId: true } } },
       }),
       prisma.autoscuolaInstructorBlock.findMany({
         where: {
@@ -3401,6 +3541,9 @@ export async function getDateAvailabilityMap(
       addInterval(appt.studentId);
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
+      for (const link of appt.appointmentVehicles ?? []) {
+        if (link.vehicleId !== appt.vehicleId) addInterval(link.vehicleId);
+      }
     }
     for (const block of dateMapInstructorBlocks) {
       const list = intervals.get(block.instructorId) ?? [];
@@ -3583,15 +3726,17 @@ export async function getDateAvailabilityMap(
           if (!slotInstructors.length) continue;
 
           // Each instructor counts only if it can also be paired with a vehicle
-          // (its fixed one, or a non-reserved pool vehicle).
+          // (an exclusive one, or a pool/open vehicle) — plus a follow car when
+          // the school requires one for the student's category.
           const endTime = endDate.getTime();
           const pairableInstructors = vehiclesEnabled
             ? slotInstructors.filter(
                 (instructorId) =>
-                  resolveVehicleForInstructor({
+                  resolveVehiclesForInstructor({
                     instructorId,
+                    studentCategory: student?.licenseCategory ?? null,
                     activeVehicleIds,
-                    maps: fixedVehicleMaps,
+                    maps: vehicleResolutionMaps,
                     isVehicleAvailable: (vehicleId) =>
                       isOwnerAvail(
                         vehicleResolver.resolve(vehicleId, startDate),
@@ -3603,6 +3748,9 @@ export async function getDateAvailabilityMap(
                       overlaps(intervals.get(vehicleId), startMs, endTime),
                     scoreVehicle: () => 0,
                     matchesLicenseCategory,
+                    requireFollowCar,
+                    matchesFollowCar,
+                    followCarCategory: FOLLOW_CAR_CATEGORY,
                   }) !== null,
               )
             : slotInstructors;
