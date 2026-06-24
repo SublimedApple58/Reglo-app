@@ -39,5 +39,6 @@
 | Cache system | [cache.md](architecture/cache.md) |
 | Background Jobs | [background-jobs.md](architecture/background-jobs.md) |
 | Auth & RBAC | [auth.md](architecture/auth.md) |
+| Environments (dev/staging/prod) + `APP_ENV` send kill-switch | [environments.md](architecture/environments.md) |
 | API Routes | [api-routes.md](architecture/api-routes.md) |
 | **Performance Playbook** — diagnose & fix slow screens (DB indexing, Redis cache, call schema/batching, per-request overhead, mobile skeletons, TanStack Query, dev-mode) | [performance-playbook.md](architecture/performance-playbook.md) |
