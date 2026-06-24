@@ -8,6 +8,9 @@ export const jestSharedConfig: Config = {
   setupFiles: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/$1",
+    // `server-only` is a Next.js build-time guard (throws if imported in a client
+    // bundle); under jest it must be a no-op so server modules can be unit-tested.
+    "^server-only$": "<rootDir>/tests/helpers/empty-module.ts",
   },
   transform: {
     "^.+\\.(ts|tsx)$": [

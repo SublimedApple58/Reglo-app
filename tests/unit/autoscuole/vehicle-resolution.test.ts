@@ -190,6 +190,76 @@ describe("resolveVehiclesForInstructor — follow car (auto al seguito)", () => 
   });
 });
 
+describe("resolveVehiclesForInstructor — additional edge cases", () => {
+  it("grants a pooled vehicle to an instructor IN the pool (positive case)", () => {
+    const maps = buildVehicleResolutionMaps({
+      vehicles: [vehicle("v1"), vehicle("v2"), vehicle("v3")],
+      poolMembers: [{ vehicleId: "v2", instructorId: "i1" }],
+    });
+    // i1 is in v2's pool and v2 scores highest → i1 gets v2.
+    const res = resolveVehiclesForInstructor(
+      baseArgs({ instructorId: "i1", maps, scoreVehicle: (id) => (id === "v2" ? 9 : 0) }),
+    );
+    expect(res?.primary.id).toBe("v2");
+  });
+
+  it("forces the instructor's exclusive vehicle over a higher-scoring open one (no pool dilution)", () => {
+    const maps = buildVehicleResolutionMaps({
+      vehicles: [vehicle("excl", "i1", true, "B"), vehicle("open", null, true, "B")],
+    });
+    const res = resolveVehiclesForInstructor(
+      baseArgs({
+        maps,
+        activeVehicleIds: ["excl", "open"],
+        // both serve B; the open car scores much higher but must be ignored.
+        scoreVehicle: (id) => (id === "open" ? 99 : 0),
+      }),
+    );
+    expect(res?.primary.id).toBe("excl");
+  });
+
+  it("does NOT apply a preferred vehicle bound to a different category", () => {
+    const maps = buildVehicleResolutionMaps({
+      vehicles: [vehicle("v1", null, true, "A"), vehicle("v2", null, true, "A")],
+      preferred: [{ instructorId: "i1", licenseCategory: "B", vehicleId: "v2" }],
+    });
+    // Student category is A; the preferred (for B) must not override packing score.
+    const res = resolveVehiclesForInstructor(
+      baseArgs({
+        maps,
+        studentCategory: "A",
+        activeVehicleIds: ["v1", "v2"],
+        scoreVehicle: (id) => (id === "v1" ? 9 : 0),
+      }),
+    );
+    expect(res?.primary.id).toBe("v1");
+  });
+
+  it("picks an alternative free follow car when the first category-B car overlaps", () => {
+    const maps = buildVehicleResolutionMaps({
+      vehicles: [
+        vehicle("moto", "i1", true, "A"),
+        vehicle("car1", null, true, "B"),
+        vehicle("car2", null, true, "B"),
+      ],
+    });
+    const res = resolveVehiclesForInstructor({
+      instructorId: "i1",
+      studentCategory: "A",
+      activeVehicleIds: ["moto", "car1", "car2"],
+      maps,
+      isVehicleAvailable: allAvailable,
+      hasOverlap: (id) => id === "car1", // car1 busy → must fall back to car2
+      scoreVehicle: flatScore,
+      matchesLicenseCategory: (id) => id === "moto",
+      matchesFollowCar: (id) => id === "car1" || id === "car2",
+      requireFollowCar: true,
+    });
+    expect(res?.primary.id).toBe("moto");
+    expect(res?.follow?.id).toBe("car2");
+  });
+});
+
 describe("pickBestInstructorVehicleSet", () => {
   it("returns the best instructor with null vehicles when vehicles are disabled", () => {
     const pick = pickBestInstructorVehicleSet({
@@ -227,5 +297,26 @@ describe("pickBestInstructorVehicleSet", () => {
       followVehicleId: "car",
       score: 6,
     });
+  });
+
+  it("keeps the FIRST instructor on a score tie (strict >)", () => {
+    const pick = pickBestInstructorVehicleSet({
+      availableInstructors: [
+        { id: "i1", score: 2 },
+        { id: "i2", score: 2 },
+      ],
+      vehiclesEnabled: false,
+      resolveVehicles: () => null,
+    });
+    expect(pick?.instructorId).toBe("i1");
+  });
+
+  it("returns null when no instructor can be served", () => {
+    const pick = pickBestInstructorVehicleSet({
+      availableInstructors: [{ id: "i1", score: 5 }],
+      vehiclesEnabled: true,
+      resolveVehicles: () => null,
+    });
+    expect(pick).toBeNull();
   });
 });
