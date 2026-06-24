@@ -1,0 +1,66 @@
+name: Staging Smoke
+
+# Runs the data-agnostic staging smoke (login + dashboard/agenda + vehicles
+# redesign UI) against staging.reglo.it after every push to `staging`
+# (i.e. every `pnpm ship:staging`). Also runnable manually.
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      E2E_BASE_URL: https://staging.reglo.it
+      # Lets the test reach the protection-gated staging deployment.
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: staging
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      # Wait for the Vercel staging deployment of this commit to be live before
+      # smoking it (the deploy builds in parallel with this workflow).
+      - name: Wait for staging deployment
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 40); do
+            dep=$(gh api "repos/${{ github.repository }}/deployments?sha=${{ github.sha }}" --jq '.[0].id' 2>/dev/null || echo "")
+            if [ -n "$dep" ] && [ "$dep" != "null" ]; then
+              st=$(gh api "repos/${{ github.repository }}/deployments/$dep/statuses" --jq '.[0].state' 2>/dev/null || echo "")
+              echo "deployment $dep status: $st"
+              [ "$st" = "success" ] && exit 0
+              if [ "$st" = "failure" ] || [ "$st" = "error" ]; then
+                echo "::error::staging deployment failed"; exit 1
+              fi
+            fi
+            sleep 15
+          done
+          echo "::warning::deployment non confermato entro il timeout — procedo (il test ha i suoi retry)"
+
+      - name: Run staging smoke
+        run: pnpm exec playwright test --project=chromium-auth tests/e2e/staging-smoke.auth.spec.ts
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-staging
+          path: |
+            playwright-report
+            test-results
+          if-no-files-found: ignore
