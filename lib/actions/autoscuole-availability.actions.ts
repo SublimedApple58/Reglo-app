@@ -27,6 +27,7 @@ import {
   resolveVehiclesForInstructor,
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { assignMotoForStudent, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import {
   FOLLOW_CAR_CATEGORY,
   isFollowCarVehicle,
@@ -4769,10 +4770,14 @@ export async function respondGroupLessonInvite(
             endsAt: true,
             capacity: true,
             status: true,
+            kind: true,
             instructorId: true,
             priceAmount: true,
             notes: true,
             vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
+            fleetVehicles: {
+              select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
+            },
           },
         },
       },
@@ -4822,7 +4827,19 @@ export async function respondGroupLessonInvite(
     });
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
-    if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
+    const isMoto = gl.kind === "moto";
+    const motoFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
+    if (isMoto) {
+      // Eligible iff a compatible fleet moto is still free (re-checked in the tx).
+      const free = assignMotoForStudent({
+        fleet: motoFleet,
+        takenVehicleIds: [],
+        student: member,
+      });
+      if (!free) {
+        return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
+      }
+    } else if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
       return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
     }
 
@@ -4850,11 +4867,28 @@ export async function respondGroupLessonInvite(
       // Serialize concurrent accepts on this lesson so the seat count is exact.
       await tx.$queryRaw`SELECT id FROM "AutoscuolaGroupLesson" WHERE id = ${gl.id}::uuid FOR UPDATE`;
 
-      const filled = await tx.autoscuolaAppointment.count({
+      const activeSeats = await tx.autoscuolaAppointment.findMany({
         where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        select: { vehicleId: true },
       });
-      if (filled >= gl.capacity) {
+      if (activeSeats.length >= gl.capacity) {
         throw new Error("Posti esauriti.");
+      }
+
+      // Moto group: auto-assign a still-free fleet moto matching the student.
+      let assignedVehicleId: string | null = gl.vehicle?.id ?? null;
+      if (isMoto) {
+        const taken = activeSeats
+          .map((s) => s.vehicleId)
+          .filter((v): v is string => Boolean(v));
+        assignedVehicleId = assignMotoForStudent({
+          fleet: motoFleet,
+          takenVehicleIds: taken,
+          student: member,
+        });
+        if (!assignedVehicleId) {
+          throw new Error("Nessuna moto compatibile disponibile nella flotta.");
+        }
       }
 
       await tx.autoscuolaGroupLessonInviteResponse.create({
@@ -4876,7 +4910,9 @@ export async function respondGroupLessonInvite(
           endsAt: gl.endsAt,
           status: "scheduled",
           instructorId: gl.instructorId,
-          vehicleId: gl.vehicle?.id ?? null,
+          vehicleId: assignedVehicleId,
+          // Moto group participants carry their assigned moto as primary; the
+          // shared follow car is reserved on the group container only.
           notes: gl.notes,
           groupLessonId: gl.id,
           paymentRequired: true,
@@ -4886,11 +4922,14 @@ export async function respondGroupLessonInvite(
           penaltyAmount,
           penaltyCutoffAt,
           creditApplied: false,
+          ...(isMoto && assignedVehicleId
+            ? { appointmentVehicles: { create: [{ vehicleId: assignedVehicleId, role: "primary" }] } }
+            : {}),
         },
       });
 
       // Close the invite once the last seat is taken.
-      if (filled + 1 >= gl.capacity) {
+      if (activeSeats.length + 1 >= gl.capacity) {
         await tx.autoscuolaGroupLessonInvite.updateMany({
           where: { id: invite.id, status: "broadcasted" },
           data: { status: "filled" },
