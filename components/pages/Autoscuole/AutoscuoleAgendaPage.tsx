@@ -1098,6 +1098,7 @@ export function AutoscuoleAgendaPage({
           onOpenChange={setCreateGroupLessonOpen}
           instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
           vehiclesEnabled={vehiclesEnabled}
+          followCarRules={followCarRules}
           defaultDate={normalizeDay(dayFocus).toISOString().slice(0, 10)}
           onCreated={() => { load({ silent: true }); }}
         />

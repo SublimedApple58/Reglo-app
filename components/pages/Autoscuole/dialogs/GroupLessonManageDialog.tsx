@@ -41,13 +41,24 @@ type GroupLessonDetail = {
   startsAt: string;
   endsAt: string | null;
   capacity: number;
+  kind?: string;
   instructorId: string | null;
   instructorName: string | null;
   vehicleId: string | null;
   vehicleName: string | null;
+  followVehicleId?: string | null;
+  followVehicleName?: string | null;
+  fleet?: { id: string; name: string; licenseCategory: string | null; transmission: string | null }[];
   filledSeats: number;
   openSeats: number;
-  participants: { appointmentId: string; studentId: string; studentName: string | null; notes: string | null }[];
+  participants: {
+    appointmentId: string;
+    studentId: string;
+    studentName: string | null;
+    notes: string | null;
+    vehicleName?: string | null;
+    licenseCategory?: string | null;
+  }[];
 };
 
 type Props = {
@@ -174,6 +185,7 @@ export function GroupLessonManageDialog({
     if (!groupLessonId) return;
     await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
   };
+  const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
     if (!groupLessonId || !startLocal) return;
     const start = new Date(startLocal);
@@ -184,8 +196,9 @@ export function GroupLessonManageDialog({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         instructorId: instructorId || null,
-        vehicleId: vehicleId || null,
-        capacity: Number(capacityStr),
+        // Moto group: keep the fleet (capacity is tied to it) and don't cascade a
+        // single vehicle onto participants — each keeps its assigned moto.
+        ...(isMoto ? {} : { vehicleId: vehicleId || null, capacity: Number(capacityStr) }),
       }),
       "Guida di gruppo aggiornata.",
     )) reload();
@@ -229,7 +242,15 @@ export function GroupLessonManageDialog({
                   {lesson.participants.map((p) => (
                     <div key={p.appointmentId} className="rounded-xl border border-border/60 bg-white px-3 py-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
+                          {isMoto && p.vehicleName ? (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {p.vehicleName}
+                              {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
+                            </span>
+                          ) : null}
+                        </span>
                         <div className="flex items-center gap-1">
                           <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-teal-700 hover:bg-teal-50" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)} title="Nota per l'allievo">
                             <StickyNote className="h-4 w-4" />
@@ -315,16 +336,18 @@ export function GroupLessonManageDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Capienza</span>
-                  <Select value={capacityStr} onValueChange={setCapacityStr}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="3" className="cursor-pointer" disabled={(lesson?.filledSeats ?? 0) > 3}>3 allievi</SelectItem>
-                      <SelectItem value="4" className="cursor-pointer">4 allievi</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {!isMoto ? (
+                  <div className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">Capienza</span>
+                    <Select value={capacityStr} onValueChange={setCapacityStr}>
+                      <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3" className="cursor-pointer" disabled={(lesson?.filledSeats ?? 0) > 3}>3 allievi</SelectItem>
+                        <SelectItem value="4" className="cursor-pointer">4 allievi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
                 <div className="space-y-1">
                   <span className="text-[11px] text-muted-foreground">Istruttore</span>
                   <Select value={instructorId} onValueChange={setInstructorId}>
@@ -336,7 +359,7 @@ export function GroupLessonManageDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                {vehiclesEnabled ? (
+                {vehiclesEnabled && !isMoto ? (
                   <div className="space-y-1">
                     <span className="text-[11px] text-muted-foreground">Veicolo</span>
                     <Select value={vehicleId} onValueChange={setVehicleId}>
@@ -350,6 +373,26 @@ export function GroupLessonManageDialog({
                   </div>
                 ) : null}
               </div>
+
+              {/* Moto group: fleet + shared follow car (read-only summary). */}
+              {isMoto ? (
+                <div className="space-y-1 rounded-xl border border-border/50 bg-white px-3 py-2 text-xs">
+                  <div className="text-muted-foreground">
+                    Flotta:{" "}
+                    <span className="font-medium text-foreground/85">
+                      {lesson.fleet && lesson.fleet.length
+                        ? lesson.fleet.map((v) => v.name).join(", ")
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    Auto al seguito:{" "}
+                    <span className="font-medium text-foreground/85">
+                      {lesson.followVehicleName ?? "Nessuna"}
+                    </span>
+                  </div>
+                </div>
+              ) : null}
               <Button type="button" size="sm" className="w-full cursor-pointer" disabled={busy} onClick={handleSaveEdit}>
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva modifiche
               </Button>
