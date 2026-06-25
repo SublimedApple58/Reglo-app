@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma as defaultPrisma } from "@/db/prisma";
 import { getProviderConfig } from "@/lib/integrations/oauth";
 import { decryptSecret, encryptSecret } from "@/lib/integrations/secrets";
+import { externalSendsDisabled } from "@/lib/app-env";
 
 type PrismaClientLike = typeof defaultPrisma | Prisma.TransactionClient;
 
@@ -173,6 +174,15 @@ export async function getFicConnection({
   companyId: string;
   requireEntity?: boolean;
 }): Promise<FicConnection | FicConnectionWithEntity> {
+  // Staging (or kill switch): behave as "FIC not connected" so no real invoices
+  // are issued. Callers already handle this gracefully (isFicNotReadyError →
+  // complete on the Stripe receipt). The message must match that matcher.
+  if (externalSendsDisabled()) {
+    throw new Error(
+      "Fatture in Cloud non connesso (staging: external sends disabled).",
+    );
+  }
+
   const connection = await prisma.integrationConnection.findUnique({
     where: {
       companyId_provider: {

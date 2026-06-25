@@ -1,4 +1,5 @@
 import { prisma as defaultPrisma } from "@/db/prisma";
+import { externalSendsDisabled } from "@/lib/app-env";
 
 type PrismaClientLike = typeof defaultPrisma;
 
@@ -63,6 +64,22 @@ export async function sendAutoscuolaPushToUsers({
   body,
   data,
 }: SendAutoscuolaPushOptions) {
+  // Staging (or kill switch): never push to the real devices behind the copied DB.
+  if (externalSendsDisabled()) {
+    console.info("[app-env] external sends disabled — skipping push", {
+      companyId,
+      recipients: userIds.length,
+      title,
+    });
+    return {
+      sent: 0,
+      failed: 0,
+      skipped: userIds.length,
+      invalidated: 0,
+      errorCodes: [],
+      errorMessages: [],
+    } satisfies AutoscuolaPushSendResult;
+  }
   if (!userIds.length) {
     return {
       sent: 0,

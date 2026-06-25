@@ -33,7 +33,7 @@ After schema changes: `npx prisma generate`
 - Short imperative commit messages, single-change scope
 - UI: Radix UI + Tailwind CSS 4 + CVA. Colors: 70% neutrals, 20% pink (`#EC4899`), 10% yellow (`#FACC15`)
 - Icons: `@tabler/icons-react` and `lucide-react`
-- Env: `.env.dev` and `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`
+- Env: `.env.dev`, `.env.staging`, `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`. Staging = isolated DB + `APP_ENV=staging` (external sends no-op). See `docs/architecture/environments.md`.
 - Run `pnpm lint` before PRs
 
 ## Documentation

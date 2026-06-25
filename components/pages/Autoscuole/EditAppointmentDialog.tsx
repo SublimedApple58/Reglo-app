@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { isMotoLicenseCategory } from "@/lib/autoscuole/license";
 import {
   rescheduleAutoscuolaAppointment,
   updateAutoscuolaAppointmentDetails,
@@ -28,7 +29,7 @@ import {
 
 type StudentLite = { firstName: string; lastName: string };
 type InstructorOption = { id: string; name: string };
-type VehicleOption = { id: string; name: string };
+type VehicleOption = { id: string; name: string; licenseCategory?: string | null };
 type LocationOption = {
   id: string;
   name: string;
@@ -45,6 +46,7 @@ export type EditAppointmentDialogAppointment = {
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
   vehicle?: { id: string; name: string } | null;
+  followVehicle?: { id: string; name: string } | null;
   location?: { id: string; name: string } | null;
 };
 
@@ -92,6 +94,7 @@ type Props = {
   instructors: InstructorOption[];
   vehicles?: VehicleOption[];
   vehiclesEnabled?: boolean;
+  followCarRules?: Record<string, { enabled: boolean }>;
   locations: LocationOption[];
   onSuccess?: () => void;
 };
@@ -103,6 +106,7 @@ export function EditAppointmentDialog({
   instructors,
   vehicles = [],
   vehiclesEnabled = true,
+  followCarRules = {},
   locations,
   onSuccess,
 }: Props) {
@@ -122,12 +126,14 @@ export function EditAppointmentDialog({
   const originalInstructorId = appointment?.instructor?.id ?? "";
   const originalLessonType = appointment?.type ?? "guida";
   const originalVehicleId = appointment?.vehicle?.id ?? "";
+  const originalFollowVehicleId = appointment?.followVehicle?.id ?? "";
   const originalLocationId = appointment?.location?.id ?? "";
   const originalNotes = appointment?.notes ?? "";
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
   const [lessonType, setLessonType] = React.useState(originalLessonType);
   const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
+  const [followVehicleId, setFollowVehicleId] = React.useState(originalFollowVehicleId);
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
   // Date/time staging — start from the appointment's current slot.
@@ -148,6 +154,7 @@ export function EditAppointmentDialog({
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonType(appointment.type ?? "guida");
     setVehicleId(appointment.vehicle?.id ?? "");
+    setFollowVehicleId(appointment.followVehicle?.id ?? "");
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
     setNewDate(toDateStr(start));
@@ -291,16 +298,36 @@ export function EditAppointmentDialog({
       availability.status === "unavailable" ||
       availability.status === "error");
 
+  // Follow car (auto al seguito): only relevant when the selected primary
+  // vehicle is a moto AND the company enabled the rule for that category.
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
+  const needsFollowCar =
+    vehiclesEnabled &&
+    !!selectedVehicle &&
+    isMotoLicenseCategory(selectedVehicle.licenseCategory) &&
+    followCarRules[selectedVehicle.licenseCategory ?? ""]?.enabled === true;
+  const followCarOptions = vehicles.filter(
+    (v) => v.licenseCategory === "B" && v.id !== vehicleId,
+  );
+  // When the primary isn't a follow-car moto, the follow car is implicitly
+  // cleared (a follow without a moto primary makes no sense).
+  const effectiveFollowVehicleId = needsFollowCar ? followVehicleId : "";
+
   const hasChanges =
     instructorId !== originalInstructorId ||
     lessonType !== originalLessonType ||
     vehicleId !== originalVehicleId ||
+    effectiveFollowVehicleId !== originalFollowVehicleId ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
     dateTimeChanged;
 
   const canSubmit =
-    hasChanges && !pending && !isAvailabilityBlockingSave && !isNewSlotInPast;
+    hasChanges &&
+    !pending &&
+    !isAvailabilityBlockingSave &&
+    !isNewSlotInPast &&
+    !(needsFollowCar && !followVehicleId);
 
   const handleSubmit = async () => {
     if (!canSubmit || !effectiveStart || !effectiveEnd) return;
@@ -339,6 +366,13 @@ export function EditAppointmentDialog({
       if (vehicleId !== originalVehicleId) {
         // Empty string from <Select> means "no vehicle" → null on the wire.
         detailsPayload.vehicleId = vehicleId === "" ? null : vehicleId;
+        hasDetails = true;
+      }
+      if (effectiveFollowVehicleId !== originalFollowVehicleId) {
+        // Auto al seguito — null clears it (incl. when the primary stopped
+        // being a follow-car moto).
+        detailsPayload.followVehicleId =
+          effectiveFollowVehicleId === "" ? null : effectiveFollowVehicleId;
         hasDetails = true;
       }
       if (locationId !== originalLocationId) {
@@ -549,6 +583,43 @@ export function EditAppointmentDialog({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Follow car (auto al seguito) — shown only for a moto primary whose
+              category has the rule enabled. Required when shown. */}
+          {needsFollowCar && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="edit-follow-vehicle"
+                className="text-xs font-medium text-slate-700"
+              >
+                Auto al seguito
+              </label>
+              <Select
+                value={followVehicleId || "__none__"}
+                onValueChange={(v) => setFollowVehicleId(v === "__none__" ? "" : v)}
+                disabled={pending}
+              >
+                <SelectTrigger id="edit-follow-vehicle" className="h-10 cursor-pointer">
+                  <SelectValue placeholder="Seleziona auto al seguito" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__none__" className="cursor-pointer">
+                    Nessuna
+                  </SelectItem>
+                  {followCarOptions.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="cursor-pointer">
+                      {v.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!followVehicleId && (
+                <p className="text-[11px] text-amber-600">
+                  Questa guida moto richiede un&apos;auto al seguito.
+                </p>
+              )}
             </div>
           )}
 

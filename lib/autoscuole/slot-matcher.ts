@@ -10,11 +10,17 @@ import {
 } from "@/lib/autoscuole/lesson-policy";
 import { buildAvailabilityResolver, getPublicationModeFilter } from "@/lib/actions/autoscuole-availability.actions";
 import {
-  buildFixedVehicleMaps,
-  pickBestInstructorVehiclePair,
-  resolveVehicleForInstructor,
-} from "@/lib/autoscuole/fixed-vehicle";
+  buildVehicleResolutionMaps,
+  pickBestInstructorVehicleSet,
+  resolveVehiclesForInstructor,
+} from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import {
+  FOLLOW_CAR_CATEGORY,
+  isFollowCarVehicle,
+  parseFollowCarRulesFromLimits,
+  requiresFollowCar,
+} from "@/lib/autoscuole/follow-car";
 import {
   addGroupLessonBusyIntervals,
   fetchGroupLessonBusyRows,
@@ -189,6 +195,7 @@ const buildAppointmentMaps = (
     studentId: string;
     startsAt: Date;
     endsAt: Date | null;
+    appointmentVehicles?: Array<{ vehicleId: string }>;
   }>,
 ) => {
   const starts = new Map<string, Set<number>>();
@@ -213,6 +220,11 @@ const buildAppointmentMaps = (
     add(appointment.studentId, start, end);
     if (appointment.instructorId) add(appointment.instructorId, start, end);
     if (appointment.vehicleId) add(appointment.vehicleId, start, end);
+    // Multi-vehicle lessons (e.g. moto + follow car) reserve every vehicle in
+    // the join, not just the primary `vehicleId`.
+    for (const link of appointment.appointmentVehicles ?? []) {
+      if (link.vehicleId !== appointment.vehicleId) add(link.vehicleId, start, end);
+    }
   }
 
   return { starts, ends, intervals };
@@ -234,6 +246,7 @@ export type AutoscuolaSlotMatchResult = {
   end: Date;
   instructorId: string;
   vehicleId: string | null;
+  followVehicleId: string | null;
   resolvedLessonType: string;
   compatibleRequiredTypes: string[];
   missingRequiredTypes: string[];
@@ -258,6 +271,8 @@ export async function findBestAutoscuolaSlot(
   const [
     activeInstructors,
     activeVehicles,
+    vehiclePoolMembers,
+    instructorPreferredVehicles,
     studentAvailability,
     autoscuolaService,
     studentMember,
@@ -271,7 +286,7 @@ export async function findBestAutoscuolaSlot(
         select: { id: true },
       }),
       prisma.autoscuolaVehicle.findMany({
-        where: { companyId: input.companyId, status: { not: "inactive" } },
+        where: { companyId: input.companyId, status: "active" },
         select: {
           id: true,
           assignedInstructorId: true,
@@ -279,6 +294,14 @@ export async function findBestAutoscuolaSlot(
           licenseCategory: true,
           transmission: true,
         },
+      }),
+      prisma.autoscuolaVehiclePoolMember.findMany({
+        where: { vehicle: { companyId: input.companyId } },
+        select: { vehicleId: true, instructorId: true },
+      }),
+      prisma.autoscuolaInstructorPreferredVehicle.findMany({
+        where: { instructor: { companyId: input.companyId } },
+        select: { instructorId: true, licenseCategory: true, vehicleId: true },
       }),
       prisma.autoscuolaWeeklyAvailability.findFirst({
         where: {
@@ -341,7 +364,11 @@ export async function findBestAutoscuolaSlot(
 
   const activeInstructorIds = activeInstructors.map((item) => item.id);
   const activeVehicleIds = smVehiclesEnabled ? activeVehicles.map((item) => item.id) : [];
-  const fixedVehicleMaps = buildFixedVehicleMaps(activeVehicles);
+  const vehicleResolutionMaps = buildVehicleResolutionMaps({
+    vehicles: activeVehicles,
+    poolMembers: vehiclePoolMembers,
+    preferred: instructorPreferredVehicles,
+  });
 
   // License-category matching (only meaningful when vehicles are enabled): a
   // vehicle is eligible only if it serves the student's pursued license.
@@ -354,6 +381,17 @@ export async function findBestAutoscuolaSlot(
     const vehicle = vehicleById.get(vehicleId);
     if (!vehicle) return false;
     return vehicleServesLicense(vehicle, studentLicense);
+  };
+
+  // Follow car (auto al seguito): when the school enabled the rule for the
+  // student's pursued category, a booking must additionally reserve a car.
+  const followCarRules = parseFollowCarRulesFromLimits(limits);
+  const requireFollowCar =
+    smVehiclesEnabled && requiresFollowCar(followCarRules, studentLicense.licenseCategory);
+  const matchesFollowCar = (vehicleId: string) => {
+    const vehicle = vehicleById.get(vehicleId);
+    if (!vehicle) return false;
+    return isFollowCarVehicle(vehicle);
   };
 
   // Build date-aware availability resolvers that account for per-week overrides
@@ -394,6 +432,7 @@ export async function findBestAutoscuolaSlot(
         studentId: true,
         startsAt: true,
         endsAt: true,
+        appointmentVehicles: { select: { vehicleId: true } },
       },
     }),
     prisma.autoscuolaInstructorBlock.findMany({
@@ -527,18 +566,22 @@ export async function findBestAutoscuolaSlot(
       const hasVehicleOverlapAt = (vehicleId: string) =>
         overlaps(appointmentMaps.intervals.get(vehicleId), startMs, endMs);
 
-      const pair = pickBestInstructorVehiclePair({
+      const pair = pickBestInstructorVehicleSet({
         availableInstructors,
         vehiclesEnabled: smVehiclesEnabled,
-        resolveVehicle: (instructorId) =>
-          resolveVehicleForInstructor({
+        resolveVehicles: (instructorId) =>
+          resolveVehiclesForInstructor({
             instructorId,
+            studentCategory: studentLicense.licenseCategory,
             activeVehicleIds,
-            maps: fixedVehicleMaps,
+            maps: vehicleResolutionMaps,
             isVehicleAvailable: isVehicleAvailableAt,
             hasOverlap: hasVehicleOverlapAt,
             scoreVehicle: scoreVehicleAt,
             matchesLicenseCategory,
+            requireFollowCar,
+            matchesFollowCar,
+            followCarCategory: FOLLOW_CAR_CATEGORY,
           }),
       });
       if (!pair) continue;
@@ -552,6 +595,7 @@ export async function findBestAutoscuolaSlot(
           end: endDate,
           instructorId: pair.instructorId,
           vehicleId: pair.vehicleId,
+          followVehicleId: pair.followVehicleId,
           compatibleRequiredTypes,
           missingRequiredTypes,
           resolvedLessonType:

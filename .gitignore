@@ -47,3 +47,8 @@ next-env.d.ts
 
 # Playwright screenshots (local only)
 .playwright-screenshots/
+
+# Playwright auth state (e2e)
+/tests/e2e/.auth
+/blob-report
+/playwright/.cache
