@@ -30,6 +30,8 @@ describe("autoscuole payment config parsing", () => {
 
     expect(config).toEqual({
       enabled: false,
+      lessonCreditFlowEnabled: false,
+      lessonCreditsRequired: true,
       lessonPrice30: 25,
       lessonPrice60: 50,
       penaltyCutoffHours: 24,
@@ -65,6 +67,8 @@ describe("autoscuole payment config parsing", () => {
 
     expect(config).toEqual({
       enabled: true,
+      lessonCreditFlowEnabled: false,
+      lessonCreditsRequired: true,
       lessonPrice30: 30,
       lessonPrice60: 60,
       penaltyCutoffHours: 12,

@@ -122,6 +122,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 
+### Reglo Aula
+- → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.
+- → **R2 storage**: pacchetti slide `.rppt` (`aula/templates/`, `aula/{companyId}/`) + immagini slide; stesso bucket del quiz. **Le slide non stanno nel DB.**
+- → **Redis**: tutto il quiz live (sessione/partecipanti/risposte) è effimero su Redis — **nessuna tabella Postgres** per il live (0 storico MVP). Unica tabella DB: `AulaLesson` (puntatori).
+- → **Settings / Backoffice**: flag `aulaEnabled` in `CompanyService.limits` (stesso pattern di `quizEnabled`).
+- → **Cache**: segmento `AULA`, invalidato su modifica lezioni/pacchetto slide.
+- → **Auth & RBAC**: console docente gated owner/instructor; join studente (`/aula-live/[code]`) **pubblico, no auth**.
+- → **Student Phase (TEORIA)**: contesto concettuale (lezioni di teoria), ma il live è anonimo → legame volutamente lasco.
+- **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays. Aula è un catalogo a sé (niente crediti/refund/swap/slot). Presenze ↔ agenda è estensione futura fuori scope.
+
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
 - → **Login**: condivide `buildMobileAuthPayload` (`lib/mobile-auth-payload.ts`) — se cambia la shape di `AuthPayload`, aggiorna login + confirm + mobile types insieme.

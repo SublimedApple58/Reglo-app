@@ -1,3 +1,5 @@
+import { externalSendsDisabled } from "@/lib/app-env";
+
 export const normalizeWhatsapp = (value: string) => {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
@@ -11,6 +13,10 @@ export const sendAutoscuolaWhatsApp = async ({
   to: string;
   body: string;
 }) => {
+  if (externalSendsDisabled()) {
+    console.info("[app-env] external sends disabled — skipping WhatsApp", { to });
+    return;
+  }
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_WHATSAPP_FROM;

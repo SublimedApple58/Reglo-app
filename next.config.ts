@@ -48,6 +48,14 @@ if (r2EndpointPattern) {
 
 const nextConfig: NextConfig = {
   devIndicators: false,
+  experimental: {
+    // Le immagini slide di Reglo Aula passano per una server action come base64;
+    // il default di 1MB è troppo basso per le foto. Rete di sicurezza: l'editor
+    // ridimensiona comunque lato client prima dell'upload.
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
+  },
   webpack: (config) => {
     config.module.rules.push({
       test: /\.pdf$/,

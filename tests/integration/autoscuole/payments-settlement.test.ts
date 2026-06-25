@@ -94,7 +94,7 @@ describe("autoscuole payment settlement flows", () => {
     });
   });
 
-  it("marks invoice as pending_fic when FIC is not connected", async () => {
+  it("completes invoice as issued_stripe when FIC is not connected", async () => {
     const appointment = {
       ...buildAppointment({
         status: "completed",
@@ -133,11 +133,15 @@ describe("autoscuole payment settlement flows", () => {
       now: new Date("2026-02-24T12:00:00.000Z"),
     });
 
-    expect(result).toEqual({ issued: 0 });
+    // FIC not connected: instead of leaving the appointment in pending_fic limbo,
+    // settlement completes the flow on the Stripe receipt (issued_stripe) since
+    // the payment is already collected.
+    expect(result).toEqual({ issued: 1 });
     expect(update).toHaveBeenCalledWith({
       where: { id: appointment.id },
       data: {
-        invoiceStatus: "pending_fic",
+        invoiceStatus: "issued_stripe",
+        paymentStatus: "paid",
       },
     });
   });
