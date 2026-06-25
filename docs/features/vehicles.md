@@ -83,3 +83,6 @@ Second brick of the Vehicles module. Each vehicle serves **one** license categor
 
 ## Connected features
 - `availability.md` (the "follows instructor" rule), booking/slot-matcher, mobile `vehicles` (owner + instructor self-assign, category picker) / `quick-book`.
+
+## Group MOTO lessons reuse the follow car at the GROUP level (2026-06-25)
+Besides per-appointment follow cars, a **group moto lesson** (`AutoscuolaGroupLesson.kind="moto"`) reserves a **fleet of motos** (`AutoscuolaGroupLessonVehicle`) + **one shared follow car** (`AutoscuolaGroupLesson.followVehicleId`) at the **container level** — the follow car is NOT replicated on each participant's `appointmentVehicles` (that would self-conflict between siblings). `lib/autoscuole/group-lesson-busy.ts` marks the fleet + follow car busy; `findGroupLessonOverlap` checks them. Per-participant moto auto-assignment lives in `lib/autoscuole/group-moto.ts`. See `features/group-lessons.md`.
