@@ -599,22 +599,22 @@ model AutoscuolaInstructor {
   createdAt      DateTime @default(now()) @db.Timestamp(6)
   updatedAt      DateTime @updatedAt
 
-  company          Company                             @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user             User?                               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  appointments     AutoscuolaAppointment[]
-  blocks           AutoscuolaInstructorBlock[]
-  assignedStudents CompanyMember[]                     @relation("InstructorAssignedStudents")
-  weeklyAbsences   AutoscuolaStudentWeeklyAbsence[]
-  publishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  company                Company                                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user                   User?                                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments           AutoscuolaAppointment[]
+  blocks                 AutoscuolaInstructorBlock[]
+  assignedStudents       CompanyMember[]                        @relation("InstructorAssignedStudents")
+  weeklyAbsences         AutoscuolaStudentWeeklyAbsence[]
+  publishedWeeks         AutoscuolaInstructorPublishedWeek[]
   // Vehicles EXCLUSIVELY owned by this instructor (1:N now; no @@unique). A
   // vehicle exclusive to an instructor is hidden from every other instructor's
   // pool. An instructor may own several (e.g. their car + their moto).
-  exclusiveVehicles      AutoscuolaVehicle[]                   @relation("InstructorExclusiveVehicles")
+  exclusiveVehicles      AutoscuolaVehicle[]                    @relation("InstructorExclusiveVehicles")
   // Shared-pool memberships: vehicles this instructor may draw from (N:N).
   vehiclePoolMemberships AutoscuolaVehiclePoolMember[]
   // Preferred vehicle per license category (tie-break when several compatible).
   preferredVehicles      AutoscuolaInstructorPreferredVehicle[]
-  groupLessons     AutoscuolaGroupLesson[]
+  groupLessons           AutoscuolaGroupLesson[]
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -661,13 +661,15 @@ model AutoscuolaVehicle {
   createdAt                     DateTime @default(now()) @db.Timestamp(6)
   updatedAt                     DateTime @updatedAt
 
-  company             Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  appointments        AutoscuolaAppointment[]
-  groupLessons        AutoscuolaGroupLesson[]
-  assignedInstructor  AutoscuolaInstructor?                 @relation("InstructorExclusiveVehicles", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
-  poolMembers         AutoscuolaVehiclePoolMember[]
+  company                Company                                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  appointments           AutoscuolaAppointment[]
+  groupLessons           AutoscuolaGroupLesson[]                @relation("GroupLessonVehicle")
+  groupLessonsAsFollow   AutoscuolaGroupLesson[]                @relation("GroupLessonFollowVehicle")
+  groupLessonFleets      AutoscuolaGroupLessonVehicle[]
+  assignedInstructor     AutoscuolaInstructor?                  @relation("InstructorExclusiveVehicles", fields: [assignedInstructorId], references: [id], onDelete: SetNull)
+  poolMembers            AutoscuolaVehiclePoolMember[]
   preferredByInstructors AutoscuolaInstructorPreferredVehicle[]
-  appointmentVehicles AutoscuolaAppointmentVehicle[]
+  appointmentVehicles    AutoscuolaAppointmentVehicle[]
 
   @@index([companyId])
   @@index([companyId, assignedInstructorId])
@@ -907,8 +909,17 @@ model AutoscuolaSwapResponse {
 model AutoscuolaGroupLesson {
   id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId       String    @db.Uuid
+  /// "standard" (one shared vehicle, single category — original behaviour) |
+  /// "moto" (a fleet of motorcycles, one assigned per participant, mixed
+  /// categories, plus ONE shared follow car). See lib/autoscuole/group-moto.ts.
+  kind            String    @default("standard")
   instructorId    String?   @db.Uuid
+  /// Shared vehicle for kind="standard". Null for kind="moto" (each participant
+  /// gets a moto from `fleetVehicles` instead).
   vehicleId       String?   @db.Uuid
+  /// Shared follow car ("auto al seguito", category B) for kind="moto". Reserved
+  /// at the GROUP level only — never replicated onto participant join rows.
+  followVehicleId String?   @db.Uuid
   startsAt        DateTime  @db.Timestamp(6)
   endsAt          DateTime? @db.Timestamp(6)
   capacity        Int       @default(3)
@@ -919,16 +930,34 @@ model AutoscuolaGroupLesson {
   createdAt       DateTime  @default(now()) @db.Timestamp(6)
   updatedAt       DateTime  @updatedAt
 
-  company      Company                       @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  instructor   AutoscuolaInstructor?         @relation(fields: [instructorId], references: [id], onDelete: SetNull)
-  vehicle      AutoscuolaVehicle?            @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  createdBy    User?                         @relation("GroupLessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
-  appointments AutoscuolaAppointment[]
-  invites      AutoscuolaGroupLessonInvite[]
+  company       Company                        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  instructor    AutoscuolaInstructor?          @relation(fields: [instructorId], references: [id], onDelete: SetNull)
+  vehicle       AutoscuolaVehicle?             @relation("GroupLessonVehicle", fields: [vehicleId], references: [id], onDelete: SetNull)
+  followVehicle AutoscuolaVehicle?             @relation("GroupLessonFollowVehicle", fields: [followVehicleId], references: [id], onDelete: SetNull)
+  createdBy     User?                          @relation("GroupLessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  appointments  AutoscuolaAppointment[]
+  invites       AutoscuolaGroupLessonInvite[]
+  fleetVehicles AutoscuolaGroupLessonVehicle[]
 
   @@index([companyId])
   @@index([companyId, startsAt])
   @@index([instructorId])
+  @@index([vehicleId])
+  @@index([followVehicleId])
+}
+
+/// The motorcycle "fleet" of a kind="moto" group lesson: the explicit set of
+/// motos the instructor reserves for the lesson. Defines which students may
+/// enrol (a free moto of their category must remain) and bounds capacity. Each
+/// enrolled participant is auto-assigned one moto from this set.
+model AutoscuolaGroupLessonVehicle {
+  groupLessonId String @db.Uuid
+  vehicleId     String @db.Uuid
+
+  groupLesson AutoscuolaGroupLesson @relation(fields: [groupLessonId], references: [id], onDelete: Cascade)
+  vehicle     AutoscuolaVehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@id([groupLessonId, vehicleId])
   @@index([vehicleId])
 }
 
@@ -966,6 +995,27 @@ model AutoscuolaGroupLessonInviteResponse {
   @@unique([inviteId, studentId])
   @@index([inviteId])
   @@index([studentId])
+}
+
+/// Synced from the shared migration history (feature/reglo-aula → staging).
+/// Standalone table (no relations) — declared here only so this branch's schema
+/// stays in sync with the dev/staging DB and migrate dev does not try to drop it.
+model AulaLesson {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String?  @db.Uuid
+  chapterId      String?  @db.Uuid
+  title          String
+  description    String?
+  order          Int      @default(0)
+  isTemplate     Boolean  @default(false)
+  sourceLessonId String?  @db.Uuid
+  packageR2Key   String
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+  updatedAt      DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([chapterId])
+  @@index([isTemplate])
 }
 
 model AutoscuolaDocument {
