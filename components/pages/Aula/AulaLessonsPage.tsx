@@ -2,7 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { forkAulaLessonTemplate } from "@/lib/actions/aula.actions";
+import {
+  createAulaLesson,
+  forkAulaLessonTemplate,
+} from "@/lib/actions/aula.actions";
 
 type Lesson = {
   id: string;
@@ -39,6 +42,14 @@ export function AulaLessonsPage({
     });
   };
 
+  const handleCreate = () => {
+    startTransition(async () => {
+      const res = await createAulaLesson();
+      if (res.success && res.data) router.push(`aula/${res.data.id}`);
+      else setMessage(res.message ?? "Errore");
+    });
+  };
+
   return (
     <div className="p-6 space-y-8">
       <h1 className="text-2xl font-semibold">Reglo Aula — Lezioni</h1>
@@ -46,7 +57,16 @@ export function AulaLessonsPage({
       {message && <p className="text-red-600">{message}</p>}
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Le tue lezioni</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-medium">Le tue lezioni</h2>
+          <button
+            className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
+            disabled={pending}
+            onClick={handleCreate}
+          >
+            Nuova lezione
+          </button>
+        </div>
         {mine.length === 0 && (
           <p className="text-neutral-500">
             Nessuna lezione personalizzata. Personalizza una lezione standard qui sotto.

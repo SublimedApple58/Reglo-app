@@ -21,7 +21,7 @@ import {
   putAsset,
   savePackage,
 } from "@/lib/aula/package-store";
-import { slidePackageSchema } from "@/lib/aula/slides";
+import { emptyPackage, slidePackageSchema } from "@/lib/aula/slides";
 import {
   createSession,
   endSession,
@@ -114,6 +114,46 @@ export async function forkAulaLessonTemplate(templateLessonId: string) {
     });
     const destKey = companyPackageKey(membership.companyId, created.id);
     await copyPackage(template.packageR2Key, destKey);
+    const updated = await prisma.aulaLesson.update({
+      where: { id: created.id },
+      data: { packageR2Key: destKey },
+    });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AULA],
+    });
+    return { success: true, data: updated };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+const createLessonSchema = z.object({
+  title: z.string().trim().min(1).max(200).default("Nuova lezione"),
+  chapterId: z.string().uuid().optional(),
+});
+
+/** Crea una lezione vuota da zero (riga company + pacchetto vuoto su R2). */
+export async function createAulaLesson(
+  input?: z.infer<typeof createLessonSchema>,
+) {
+  try {
+    const { membership } = await requireAulaTeacher();
+    const parsed = createLessonSchema.parse(input ?? {});
+
+    const created = await prisma.aulaLesson.create({
+      data: {
+        companyId: membership.companyId,
+        chapterId: parsed.chapterId ?? null,
+        title: parsed.title,
+        isTemplate: false,
+        // key provvisoria: la rimpiazziamo con quella definitiva basata sull'id
+        packageR2Key: "",
+      },
+    });
+    const destKey = companyPackageKey(membership.companyId, created.id);
+    await savePackage(destKey, emptyPackage());
     const updated = await prisma.aulaLesson.update({
       where: { id: created.id },
       data: { packageR2Key: destKey },

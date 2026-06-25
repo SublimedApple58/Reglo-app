@@ -149,6 +149,7 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | Operazione | Tipo | Note |
 |-----------|------|------|
 | `listAulaLessons`, `getAulaLesson` | action | catalogo lezioni (template + fork company) |
+| `createAulaLesson` | action | crea una lezione vuota da zero (riga company + pacchetto vuoto su R2) → apre l'editor. Alternativa al fork quando non ci sono template |
 | `forkAulaLessonTemplate` | action | copia il pacchetto `.rppt` su R2 + nuova riga `AulaLesson` company |
 | `saveAulaPackage` | action | l'editor riscrive il pacchetto slide su R2 (load → edit → save) |
 | `uploadAulaImage` | action | upload immagine slide su R2, ritorna `r2Key` |
@@ -163,6 +164,7 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 
 ## Decisioni minori (chiuse)
 
+- **Creazione lezione**: due vie nella lista (`AulaLessonsPage`) → **"Nuova lezione"** (`createAulaLesson`, pacchetto vuoto, apre subito l'editor) oppure **"Personalizza"** un template (`forkAulaLessonTemplate`). La via "da zero" non dipende dall'esistenza di template.
 - **Organizzazione lezioni**: lista **piatta ordinata** (`AulaLesson.order`), es. una per capitolo. Nessun raggruppamento in "corsi/moduli" (rimandabile).
 - **Controllo docente**: stesso schermo proiettato + barra comandi minima (modello Kahoot), nessun secondo device.
 - **Mappatura lezione→capitolo**: `chapterId` **opzionale**; se impostato il quiz pesca da lì, ma il docente può cambiarlo/scegliere le domande al volo alla creazione del quiz.
