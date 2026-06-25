@@ -34,6 +34,7 @@ import {
   assignMotoForStudent,
   assignMotosToStudents,
   eligibleForMotoGroup,
+  instructorCanUseVehicle,
   validateMotoGroupSetup,
   MOTO_GROUP_SETUP_MESSAGES,
   type FleetVehicle,
@@ -7085,12 +7086,15 @@ type LoadedVehicle = FleetVehicle & { name: string };
 // with names, for display) or a human error message.
 async function loadMotoGroupSetup({
   companyId,
+  instructorId,
   vehicleIds,
   followVehicleId,
   followCarRules,
   capacity,
 }: {
   companyId: string;
+  /** When set, the fleet + follow car must all be accessible to this instructor. */
+  instructorId: string | null;
   vehicleIds: string[];
   followVehicleId: string | null;
   followCarRules: FollowCarRules;
@@ -7103,25 +7107,54 @@ async function loadMotoGroupSetup({
   if (!fleetIds.length) {
     return { ok: false, message: MOTO_GROUP_SETUP_MESSAGES.empty_fleet };
   }
+  const vehicleSelect = {
+    id: true,
+    name: true,
+    licenseCategory: true,
+    transmission: true,
+    assignedInstructorId: true,
+    poolMembers: { select: { instructorId: true } },
+  } as const;
+  const toAccess = (v: { assignedInstructorId: string | null; poolMembers: { instructorId: string }[] }) => ({
+    assignedInstructorId: v.assignedInstructorId,
+    poolInstructorIds: v.poolMembers.map((p) => p.instructorId),
+  });
+
   const vehicles = await prisma.autoscuolaVehicle.findMany({
     where: { id: { in: fleetIds }, companyId, status: "active" },
-    select: { id: true, name: true, licenseCategory: true, transmission: true },
+    select: vehicleSelect,
   });
   if (vehicles.length !== fleetIds.length) {
     return { ok: false, message: "Una o più moto della flotta non sono valide o non disponibili." };
   }
+  // An instructor may only build a fleet from vehicles they can use (exclusive
+  // to them, or open / in a pool they belong to).
+  if (instructorId) {
+    const inaccessible = vehicles.some((v) => !instructorCanUseVehicle(toAccess(v), instructorId));
+    if (inaccessible) {
+      return { ok: false, message: "Una moto della flotta non è disponibile per questo istruttore." };
+    }
+  }
+
   let followVehicle: LoadedVehicle | null = null;
   if (followVehicleId) {
     const fc = await prisma.autoscuolaVehicle.findFirst({
       where: { id: followVehicleId, companyId, status: "active" },
-      select: { id: true, name: true, licenseCategory: true, transmission: true },
+      select: vehicleSelect,
     });
     if (!fc) return { ok: false, message: "Auto al seguito non trovata o non disponibile." };
-    followVehicle = fc;
+    if (instructorId && !instructorCanUseVehicle(toAccess(fc), instructorId)) {
+      return { ok: false, message: "L'auto al seguito non è disponibile per questo istruttore." };
+    }
+    followVehicle = { id: fc.id, name: fc.name, licenseCategory: fc.licenseCategory, transmission: fc.transmission };
   }
-  const err = validateMotoGroupSetup({ fleet: vehicles, followVehicle, followCarRules, capacity });
+
+  const fleet: LoadedVehicle[] = vehicles.map((v) => ({
+    id: v.id, name: v.name, licenseCategory: v.licenseCategory, transmission: v.transmission,
+  }));
+  const err = validateMotoGroupSetup({ fleet, followVehicle, followCarRules, capacity });
   if (err) return { ok: false, message: MOTO_GROUP_SETUP_MESSAGES[err] };
-  return { ok: true, fleet: vehicles, followVehicle };
+  return { ok: true, fleet, followVehicle };
 }
 
 // Motos already assigned to active participants of a moto group (so a newly
@@ -7218,6 +7251,7 @@ export async function createGroupLesson(
       const capacity = payload.capacity ?? fleetIds.length;
       const setup = await loadMotoGroupSetup({
         companyId,
+        instructorId,
         vehicleIds: fleetIds,
         followVehicleId: payload.followVehicleId ?? null,
         followCarRules,
@@ -7972,6 +8006,7 @@ export async function updateGroupLesson(
 
       const setup = await loadMotoGroupSetup({
         companyId,
+        instructorId,
         vehicleIds: newFleetIds,
         followVehicleId,
         followCarRules,

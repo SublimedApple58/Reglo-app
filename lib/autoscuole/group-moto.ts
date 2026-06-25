@@ -25,6 +25,20 @@ export type FleetVehicle = {
   transmission: string | null;
 };
 
+/**
+ * Whether an instructor may actually use a vehicle (so the moto fleet / follow
+ * car can only be drawn from vehicles they have access to): exclusively assigned
+ * to them, or open / in a shared pool they belong to. A vehicle exclusive to a
+ * DIFFERENT instructor is not accessible. Mirrors the vehicle-resolution rules.
+ */
+export const instructorCanUseVehicle = (
+  v: { assignedInstructorId: string | null; poolInstructorIds: string[] },
+  instructorId: string,
+): boolean => {
+  if (v.assignedInstructorId) return v.assignedInstructorId === instructorId;
+  return v.poolInstructorIds.length === 0 || v.poolInstructorIds.includes(instructorId);
+};
+
 /** The license a participant pursues. */
 export type StudentLicense = {
   licenseCategory: string | null;

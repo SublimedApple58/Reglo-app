@@ -31,6 +31,7 @@ import {
   listOptedInGroupLessonStudents,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
+import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 
 type ResourceOption = { id: string; name: string };
 
@@ -39,6 +40,8 @@ type VehicleWithLicense = {
   name: string;
   licenseCategory: string | null;
   transmission: string | null;
+  assignedInstructorId: string | null;
+  poolInstructorIds: string[];
 };
 
 type OptedInStudent = {
@@ -168,6 +171,8 @@ export function GroupLessonCreateDialog({
                 name: String(v.name ?? "Veicolo"),
                 licenseCategory: (v.licenseCategory as string | null) ?? null,
                 transmission: (v.transmission as string | null) ?? null,
+                assignedInstructorId: (v.assignedInstructorId as string | null) ?? null,
+                poolInstructorIds: (v.poolInstructorIds as string[] | undefined) ?? [],
               })),
           );
         }
@@ -185,14 +190,22 @@ export function GroupLessonCreateDialog({
     [vehicles, vehicleId],
   );
 
+  // Only vehicles the chosen instructor can use are pickable (exclusive to them,
+  // or open / in a pool they belong to). With no instructor chosen yet, show all
+  // (the backend still enforces access on submit).
+  const accessibleVehicles = React.useMemo(
+    () => (instructorId ? vehicles.filter((v) => instructorCanUseVehicle(v, instructorId)) : vehicles),
+    [vehicles, instructorId],
+  );
+
   // Moto group: pick the fleet from motos, the follow car from cars (category B).
   const motoVehicles = React.useMemo(
-    () => vehicles.filter((v) => isMotoCategory(v.licenseCategory)),
-    [vehicles],
+    () => accessibleVehicles.filter((v) => isMotoCategory(v.licenseCategory)),
+    [accessibleVehicles],
   );
   const carVehicles = React.useMemo(
-    () => vehicles.filter((v) => v.licenseCategory === "B"),
-    [vehicles],
+    () => accessibleVehicles.filter((v) => v.licenseCategory === "B"),
+    [accessibleVehicles],
   );
   const fleet = React.useMemo(
     () => vehicles.filter((v) => fleetIds.includes(v.id)),
@@ -220,6 +233,15 @@ export function GroupLessonCreateDialog({
       prev.filter((id) => eligibleStudents.some((st) => st.id === id)),
     );
   }, [eligibleStudents]);
+
+  // Changing the instructor can make a chosen vehicle / fleet / follow car no
+  // longer accessible — drop selections that fell out of the accessible set.
+  React.useEffect(() => {
+    const ok = new Set(accessibleVehicles.map((v) => v.id));
+    setVehicleId((prev) => (prev && !ok.has(prev) ? "" : prev));
+    setFleetIds((prev) => prev.filter((id) => ok.has(id)));
+    setFollowVehicleId((prev) => (prev && !ok.has(prev) ? "" : prev));
+  }, [accessibleVehicles]);
 
   // Live search over the eligible list (accent/case-insensitive).
   const filteredStudents = React.useMemo(() => {
@@ -446,7 +468,7 @@ export function GroupLessonCreateDialog({
                       <SelectValue placeholder="Seleziona veicolo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((v) => (
+                      {accessibleVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                           {v.name}
                           {v.licenseCategory ? ` · ${v.licenseCategory}` : ""}

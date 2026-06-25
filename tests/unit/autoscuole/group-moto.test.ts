@@ -3,6 +3,7 @@ import {
   eligibleForMotoGroup,
   assignMotosToStudents,
   groupMotoFollowCarRequired,
+  instructorCanUseVehicle,
   validateMotoGroupSetup,
   MOTO_GROUP_SETUP_MESSAGES,
   type FleetVehicle,
@@ -135,6 +136,23 @@ describe("assignMotosToStudents", () => {
       ],
     });
     expect(res).toEqual({ ok: false, unassignableStudentId: "s3" });
+  });
+});
+
+describe("instructorCanUseVehicle", () => {
+  it("allows a vehicle exclusively assigned to the instructor", () => {
+    expect(instructorCanUseVehicle({ assignedInstructorId: "i1", poolInstructorIds: [] }, "i1")).toBe(true);
+  });
+  it("denies a vehicle exclusive to another instructor", () => {
+    expect(instructorCanUseVehicle({ assignedInstructorId: "i2", poolInstructorIds: [] }, "i1")).toBe(false);
+    expect(instructorCanUseVehicle({ assignedInstructorId: "i2", poolInstructorIds: ["i1"] }, "i1")).toBe(false);
+  });
+  it("allows an open vehicle (no owner, empty pool)", () => {
+    expect(instructorCanUseVehicle({ assignedInstructorId: null, poolInstructorIds: [] }, "i1")).toBe(true);
+  });
+  it("allows a pooled vehicle the instructor belongs to, denies otherwise", () => {
+    expect(instructorCanUseVehicle({ assignedInstructorId: null, poolInstructorIds: ["i1", "i3"] }, "i1")).toBe(true);
+    expect(instructorCanUseVehicle({ assignedInstructorId: null, poolInstructorIds: ["i2", "i3"] }, "i1")).toBe(false);
   });
 });
 
