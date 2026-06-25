@@ -997,27 +997,6 @@ model AutoscuolaGroupLessonInviteResponse {
   @@index([studentId])
 }
 
-/// Synced from the shared migration history (feature/reglo-aula → staging).
-/// Standalone table (no relations) — declared here only so this branch's schema
-/// stays in sync with the dev/staging DB and migrate dev does not try to drop it.
-model AulaLesson {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId      String?  @db.Uuid
-  chapterId      String?  @db.Uuid
-  title          String
-  description    String?
-  order          Int      @default(0)
-  isTemplate     Boolean  @default(false)
-  sourceLessonId String?  @db.Uuid
-  packageR2Key   String
-  createdAt      DateTime @default(now()) @db.Timestamp(6)
-  updatedAt      DateTime @updatedAt
-
-  @@index([companyId])
-  @@index([chapterId])
-  @@index([isTemplate])
-}
-
 model AutoscuolaDocument {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId String    @db.Uuid
