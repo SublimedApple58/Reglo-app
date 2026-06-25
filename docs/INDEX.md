@@ -1,5 +1,7 @@
 # Feature Index — Reglo (Web + Backend)
 
+> 🧪 **Lavori su staging?** → [STAGING.md](STAGING.md) — account di test, comandi (`ship:staging`, `migrate:staging`, seed), accesso, mobile, setup dev.
+
 ## Features
 
 | Feature | Doc | Primary files |
