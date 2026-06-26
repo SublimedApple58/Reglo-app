@@ -5203,6 +5203,7 @@ export async function getGroupLessonInvites(
           startsAt: true,
           endsAt: true,
           capacity: true,
+          kind: true,
           notes: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
@@ -5266,9 +5267,13 @@ export async function getGroupLessonInvites(
           startsAt: gl.startsAt.toISOString(),
           endsAt: gl.endsAt!.toISOString(),
           capacity: gl.capacity,
+          kind: gl.kind,
           filledSeats: gl.appointments.length,
           openSeats: Math.max(0, gl.capacity - gl.appointments.length),
           instructorName: gl.instructor?.name ?? null,
+          // For a moto group the moto is assigned only at acceptance, so the
+          // discovery list has no specific vehicle to show — surface `kind` so
+          // the mobile invite card can say "ti verrà assegnata una moto".
           vehicleName: gl.vehicle?.name ?? null,
           notes: gl.notes,
           expiresAt: gl.startsAt.toISOString(),
