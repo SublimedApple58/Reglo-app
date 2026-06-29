@@ -33,6 +33,7 @@ import {
   setStatus,
   startExam,
 } from "@/lib/aula/live-state";
+import { forceAdvanceExam } from "@/lib/aula/live-public";
 
 /**
  * Reglo Aula — server actions (console docente).
@@ -316,13 +317,37 @@ export async function openNextAulaQuestion(code: string) {
   }
 }
 
-/** EXAM: avvia lo svolgimento (apre tutte le domande contemporaneamente). */
+/**
+ * EXAM sincronizzato: avvia il quiz sulla PRIMA domanda. Da qui i partecipanti
+ * avanzano insieme (barriera per-domanda), senza intervento del docente.
+ */
 export async function startAulaExam(code: string) {
   try {
     const session = await requireSessionTeacher(code);
     if (session.mode !== "EXAM") throw new Error("NOT_EXAM_MODE");
-    const state = await startExam(code);
-    return { success: true, data: state };
+    const first = session.questionIds[0];
+    if (!first) {
+      const state = await endSession(code);
+      return { success: true, data: { state, finished: true } };
+    }
+    const state = await startExam(code, first, Date.now());
+    return { success: true, data: { state, finished: false } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * EXAM sincronizzato: il docente forza la domanda successiva (sblocca i
+ * ritardatari quando l'allineamento si ferma). Normalmente non serve: la
+ * barriera avanza da sola quando tutti hanno risposto.
+ */
+export async function forceNextAulaExamQuestion(code: string) {
+  try {
+    const session = await requireSessionTeacher(code);
+    if (session.mode !== "EXAM") throw new Error("NOT_EXAM_MODE");
+    await forceAdvanceExam(code);
+    return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

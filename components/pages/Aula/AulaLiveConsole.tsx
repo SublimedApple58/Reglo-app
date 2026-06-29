@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, useTransition } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   endAulaLiveSession,
+  forceNextAulaExamQuestion,
   nextAulaExamReview,
   openNextAulaQuestion,
   revealAulaQuestion,
@@ -29,7 +30,15 @@ type Snapshot = {
     counts: { correct: number; wrong: number; noAnswer: number };
     results: { name: string; answered: boolean; correct: boolean | null }[];
   } | null;
-  examProgress: { completed: number; answersReceived: number } | null;
+  examLive: {
+    currentIndex: number | null;
+    total: number;
+    participantCount: number;
+    aligned: number;
+    pending: number;
+    joinedAfterStart: number;
+    roster: { name: string; answeredCurrent: boolean; joinedLate: boolean }[];
+  } | null;
   examResults: {
     total: number;
     rows: { name: string; score: number; answered: number }[];
@@ -42,8 +51,10 @@ const POLL_MS = 1500;
  * Reglo Aula — console docente (vista proiettore + comandi).
  * Due modalità:
  * - LIVE: in QUESTION_OPEN mostra solo QR + barra comandi; al reveal giusto/sbagliato.
- * - EXAM: in LOBBY mostra QR + "Avvia quiz"; in IN_PROGRESS QR + avanzamento +
- *   "Termina quiz"; a ENDED la classifica per studente (correzione di massa).
+ * - EXAM ("Quiz completo") sincronizzato: in LOBBY QR + "Avvia quiz"; durante lo
+ *   svolgimento QR + avanzamento (domanda X/Y, quanti allineati, quanti entrati a
+ *   quiz avviato, chi è al passo). La domanda successiva si sblocca da sola quando
+ *   tutti hanno risposto; il docente può forzare l'avanzamento per i ritardatari.
  * Modello Kahoot, stesso schermo proiettato.
  */
 export function AulaLiveConsole({ code }: { code: string }) {
@@ -83,11 +94,21 @@ export function AulaLiveConsole({ code }: { code: string }) {
     });
 
   const isExam = snap?.mode === "EXAM";
+  const examAnswering =
+    isExam &&
+    snap?.status === "IN_PROGRESS" &&
+    !!snap.examLive &&
+    snap.examLive.currentIndex !== null;
+  const examDone =
+    isExam &&
+    snap?.status === "IN_PROGRESS" &&
+    !!snap.examLive &&
+    snap.examLive.currentIndex === null;
+  // QR a tutto schermo: LOBBY (entrambe) e LIVE QUESTION_OPEN.
   const showQrOnly =
     !snap ||
     snap.status === "LOBBY" ||
-    snap.status === "QUESTION_OPEN" ||
-    snap.status === "IN_PROGRESS";
+    (!isExam && snap.status === "QUESTION_OPEN");
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
@@ -106,16 +127,112 @@ export function AulaLiveConsole({ code }: { code: string }) {
             <p className="text-neutral-500">
               {snap.participantCount} partecipanti
               {snap.status === "QUESTION_OPEN" && " • risposta in corso"}
-              {snap.status === "IN_PROGRESS" &&
-                snap.examProgress &&
-                ` • ${snap.examProgress.completed}/${snap.participantCount} hanno completato`}
             </p>
           )}
-          {snap?.mode === "EXAM" && snap.status === "IN_PROGRESS" && (
+          {isExam && snap?.status === "LOBBY" && (
             <p className="text-sm text-neutral-400">
-              Quiz completo in corso — {snap.totalQuestions} domande sul telefono
+              Quiz completo — {snap.totalQuestions} domande, avanzamento
+              sincronizzato
             </p>
           )}
+        </div>
+      )}
+
+      {/* EXAM sincronizzato — svolgimento in corso (avanzamento + allineamento) */}
+      {examAnswering && snap.examLive && (
+        <div className="flex w-full max-w-4xl flex-col items-center gap-6">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-sm text-neutral-500">Quiz completo in corso</p>
+            <h2 className="text-3xl font-semibold">
+              Domanda {(snap.examLive.currentIndex ?? 0) + 1}/{snap.examLive.total}
+            </h2>
+          </div>
+
+          <div className="grid w-full grid-cols-3 gap-4 text-center">
+            <div className="rounded-xl border bg-white px-4 py-4">
+              <p className="text-3xl font-bold text-green-600">
+                {snap.examLive.aligned}/{snap.examLive.participantCount}
+              </p>
+              <p className="text-sm text-neutral-500">Al passo</p>
+            </div>
+            <div className="rounded-xl border bg-white px-4 py-4">
+              <p className="text-3xl font-bold text-yellow-500">
+                {snap.examLive.pending}
+              </p>
+              <p className="text-sm text-neutral-500">Stanno rispondendo</p>
+            </div>
+            <div className="rounded-xl border bg-white px-4 py-4">
+              <p className="text-3xl font-bold text-neutral-700">
+                {snap.examLive.joinedAfterStart}
+              </p>
+              <p className="text-sm text-neutral-500">Entrati a quiz avviato</p>
+            </div>
+          </div>
+
+          {/* La barra di avanzamento si riempie man mano che tutti si allineano */}
+          <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-200">
+            <div
+              className="h-full rounded-full bg-pink-500 transition-all"
+              style={{
+                width: `${
+                  snap.examLive.participantCount > 0
+                    ? Math.round(
+                        (snap.examLive.aligned /
+                          snap.examLive.participantCount) *
+                          100,
+                      )
+                    : 0
+                }%`,
+              }}
+            />
+          </div>
+
+          {snap.examLive.roster.length > 0 && (
+            <ul className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+              {snap.examLive.roster.map((r, i) => (
+                <li
+                  key={i}
+                  className={
+                    "flex items-center justify-between gap-2 rounded-md border px-3 py-1.5 text-sm " +
+                    (r.answeredCurrent
+                      ? "border-green-300 bg-green-50 text-green-700"
+                      : "border-yellow-300 bg-yellow-50 text-yellow-700")
+                  }
+                >
+                  <span className="truncate">{r.name}</span>
+                  <span className="flex shrink-0 items-center gap-1">
+                    {r.joinedLate && (
+                      <span
+                        title="Entrato a quiz avviato"
+                        className="rounded bg-neutral-200 px-1 text-[10px] text-neutral-600"
+                      >
+                        late
+                      </span>
+                    )}
+                    {r.answeredCurrent ? "✓" : "…"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <p className="text-xs text-neutral-400">
+            La prossima domanda si sblocca da sola quando tutti hanno risposto.
+          </p>
+        </div>
+      )}
+
+      {/* EXAM sincronizzato — tutti hanno completato */}
+      {examDone && snap.examLive && (
+        <div className="flex w-full max-w-2xl flex-col items-center gap-6">
+          <h2 className="text-center text-3xl font-semibold">
+            Tutti hanno completato il quiz 🎉
+          </h2>
+          <p className="text-neutral-500">
+            {snap.examLive.participantCount} partecipanti
+            {snap.examLive.joinedAfterStart > 0 &&
+              ` • ${snap.examLive.joinedAfterStart} entrati a quiz avviato`}
+          </p>
         </div>
       )}
 
@@ -243,14 +360,33 @@ export function AulaLiveConsole({ code }: { code: string }) {
               Avvia quiz
             </button>
           )}
-          {isExam && snap.status === "IN_PROGRESS" && (
+          {examAnswering && (
             <button
-              className="rounded-md bg-yellow-400 px-4 py-2 disabled:opacity-50"
+              className="rounded-md border px-4 py-2 disabled:opacity-50"
               disabled={pending}
-              onClick={() => act(() => startAulaExamReview(code))}
+              onClick={() => act(() => forceNextAulaExamQuestion(code))}
+              title="Sblocca la domanda successiva senza attendere i ritardatari"
             >
-              Termina &amp; correggi
+              Forza prossima domanda
             </button>
+          )}
+          {examDone && (
+            <>
+              <button
+                className="rounded-md bg-yellow-400 px-4 py-2 disabled:opacity-50"
+                disabled={pending}
+                onClick={() => act(() => startAulaExamReview(code))}
+              >
+                Correggi insieme
+              </button>
+              <button
+                className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
+                disabled={pending}
+                onClick={() => act(() => endAulaLiveSession(code))}
+              >
+                Mostra classifica
+              </button>
+            </>
           )}
           {isExam && snap.status === "REVIEWING" && (
             <button
