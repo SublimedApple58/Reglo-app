@@ -39,12 +39,21 @@ export type AulaLiveState = {
   questionIds: string[];
   currentQuestionId: string | null;
   createdAt: number;
+  /** EXAM: istante di avvio del quiz (per distinguere chi entra a quiz avviato). */
+  startedAt?: number;
 };
 
 export type AulaParticipant = {
   participantId: string;
   name: string;
   rejoinToken: string;
+  /** Istante di ingresso (ms). */
+  joinedAt?: number;
+  /**
+   * EXAM sincronizzato: indice della domanda su cui si trovavano tutti al
+   * momento dell'ingresso (null = entrato in LOBBY, prima dell'avvio).
+   */
+  joinedAtIndex?: number | null;
 };
 
 const TTL_SECONDS = 6 * 60 * 60; // 6h: copre l'intera lezione
@@ -123,9 +132,25 @@ export const revealQuestion = (code: string) =>
 export const endSession = (code: string) =>
   patchSession(code, { status: "ENDED", currentQuestionId: null });
 
-/** EXAM: apre tutte le domande contemporaneamente (svolgimento autonomo). */
-export const startExam = (code: string) =>
-  patchSession(code, { status: "IN_PROGRESS" });
+/**
+ * EXAM sincronizzato: avvia il quiz sulla PRIMA domanda. Tutti partono allineati
+ * e avanzano insieme (barriera per-domanda), senza intervento del docente.
+ */
+export const startExam = (code: string, firstQuestionId: string, now: number) =>
+  patchSession(code, {
+    status: "IN_PROGRESS",
+    currentQuestionId: firstQuestionId,
+    startedAt: now,
+  });
+
+/**
+ * EXAM sincronizzato: sposta la domanda corrente (la barriera è passata).
+ * `null` = tutti hanno completato l'ultima domanda (svolgimento finito).
+ */
+export const setExamCurrentQuestion = (
+  code: string,
+  questionId: string | null,
+) => patchSession(code, { currentQuestionId: questionId });
 
 /** EXAM: correzione a schermo, una domanda alla volta (il docente la spiega). */
 export const setReviewQuestion = (code: string, questionId: string) =>
@@ -153,6 +178,8 @@ export async function joinParticipant(input: {
   code: string;
   name: string;
   rejoinToken?: string;
+  now?: number;
+  joinedAtIndex?: number | null;
 }): Promise<AulaParticipant> {
   const redis = redisOrThrow();
   const participants = await listParticipants(input.code);
@@ -173,6 +200,8 @@ export async function joinParticipant(input: {
     participantId: randomUUID(),
     name: input.name.trim(),
     rejoinToken: randomUUID(),
+    joinedAt: input.now,
+    joinedAtIndex: input.joinedAtIndex ?? null,
   };
   await redis.hset(participantsKey(input.code), {
     [participant.participantId]: participant,

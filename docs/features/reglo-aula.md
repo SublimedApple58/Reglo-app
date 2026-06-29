@@ -48,8 +48,8 @@ Impronta deliberatamente minima: **una sola tabella Postgres** (puntatori), il *
 Il quiz live **non ha tabelle Postgres**. Sessione, partecipanti, risposte e conteggi vivono solo in Redis con TTL e spariscono a fine lezione:
 
 ```
-aula:live:{joinCode}              → { status, lessonId, teacherId, questionIds[], currentQuestionId, revealed, updatedAt }
-aula:live:{joinCode}:participants → set/hash { participantId → { name, rejoinToken } }   (nome univoco per sessione)
+aula:live:{joinCode}              → { status, mode, lessonId, teacherId, questionIds[], currentQuestionId, startedAt }
+aula:live:{joinCode}:participants → set/hash { participantId → { name, rejoinToken, joinedAt, joinedAtIndex } }   (nome univoco; joinedAtIndex = domanda d'ingresso in EXAM)
 aula:live:{joinCode}:answers:{questionId} → hash { participantId → answer(bool) }
 ```
 
@@ -66,11 +66,15 @@ aula:live:{joinCode}:answers:{questionId} → hash { participantId → answer(bo
 Il docente sceglie la modalità all'avvio (pulsanti **"Quiz live"** / **"Quiz completo"** nell'editor):
 
 - **LIVE** (Kahoot): una domanda alla volta, a ritmo del docente, reveal per domanda. Stati: `LOBBY → QUESTION_OPEN → QUESTION_REVEALED → … → ENDED`.
-- **EXAM** (verifica): **tutte le domande insieme** sul telefono, lo studente risponde in autonomia (può cambiare risposta finché non si termina). Al **"Termina & correggi"** si correggono in massa: il **proiettore mostra la classifica per studente** (nome + punteggio), e ogni studente vede sul telefono il proprio punteggio + correzione domanda per domanda. Stati: `LOBBY → IN_PROGRESS → ENDED`. Durante `IN_PROGRESS` il proiettore mostra **solo QR + avanzamento** (`X/Y hanno completato`), nessuna domanda a schermo (anti-copiatura).
+- **EXAM** ("Quiz completo") — **sincronizzato a barriera**: i ragazzi NON vanno ognuno per conto suo. Il quiz avanza **una domanda alla volta** e la successiva si sblocca **da sola** (senza intervento del docente) **solo quando TUTTI i partecipanti hanno risposto** alla corrente → finiscono più o meno insieme. **Chi entra a quiz avviato parte dalla domanda in cui si trovano tutti** (`joinedAtIndex`). Stati: `LOBBY → IN_PROGRESS → (currentQuestionId=null = tutti completati) → REVIEWING (opzionale) → ENDED`.
+  - **Telefono studente** (`IN_PROGRESS`): vede **solo la domanda corrente** V/F; dopo aver risposto → "Risposta inviata ✓ — attendi gli altri (X/Y pronti)". A completamento → "Hai completato! Attendi la correzione".
+  - **Proiettore** (`IN_PROGRESS`): QR (per i ritardatari) + **avanzamento e allineamento**: `Domanda X/Y`, quanti **al passo** (hanno risposto alla corrente), quanti **stanno rispondendo**, quanti **entrati a quiz avviato**, roster nominativo (✓ = al passo, … = in risposta, badge `late`). Nessun testo della domanda a schermo (anti-copiatura). Pulsante **"Forza prossima domanda"** per sbloccare i ritardatari/assenti.
+  - **Barriera** (`maybeAdvanceExam`): valutata lato server a ogni risposta inviata; idempotente, avanza di +1; passata l'ultima domanda `currentQuestionId=null`.
+  - **Correzione/classifica**: a tutti completati il docente sceglie **"Correggi insieme"** (`REVIEWING`, una domanda alla volta) o **"Mostra classifica"** (`ENDED`). Il proiettore mostra la classifica per studente; ogni studente vede il proprio punteggio + correzione domanda per domanda.
 
 ### Stati del quiz live (macchina a stati in Redis, campo `status`)
 
-`LOBBY` (QR sul proiettore, studenti entrano / standby) · `QUESTION_OPEN` (LIVE: domanda aperta, testo+bottoni sul telefono, solo QR sul proiettore) · `QUESTION_REVEALED` (LIVE: risposta + chi giusto/sbagliato sul proiettore) · `IN_PROGRESS` (EXAM: tutte le domande aperte sul telefono) · `ENDED`. Nessun timer. *(Non è un enum Prisma: è un valore di stato in Redis.)*
+`LOBBY` (QR sul proiettore, studenti entrano / standby) · `QUESTION_OPEN` (LIVE: domanda aperta, testo+bottoni sul telefono, solo QR sul proiettore) · `QUESTION_REVEALED` (LIVE: risposta + chi giusto/sbagliato sul proiettore) · `IN_PROGRESS` (EXAM sincronizzato: domanda **corrente** condivisa in `currentQuestionId`, una alla volta; `currentQuestionId=null` = tutti hanno completato) · `REVIEWING` (EXAM: correzione a schermo una domanda alla volta) · `ENDED`. Nessun timer. *(Non è un enum Prisma: è un valore di stato in Redis.)* La sessione EXAM porta anche `startedAt` (avvio quiz) e ogni partecipante `joinedAt`/`joinedAtIndex` (per "entrati a quiz avviato").
 
 ### Blocchi slide (contenuto del pacchetto `.rppt`)
 
@@ -157,7 +161,10 @@ Le **immagini** delle `QuizQuestion` (GIF ministeriali su R2) vengono mostrate q
 | `resolveAulaQuizRefs` | action | risolve i blocchi `quizRef` (testo + immagine + risposta) per la presentazione; read-only su `QuizQuestion` |
 | `createAulaLiveSession` | action | genera `joinCode` + `questionIds` (da capitolo, selezione docente) + `mode` (`LIVE`/`EXAM`) → scrive sessione in Redis |
 | `openAulaQuestion` / `revealAulaQuestion` / `nextAulaQuestion` / `endAulaLiveSession` | action | LIVE: transizioni di stato → scrittura Redis |
-| `startAulaExam` | action | EXAM: `LOBBY → IN_PROGRESS` (apre tutte le domande) |
+| `startAulaExam` | action | EXAM sincronizzato: `LOBBY → IN_PROGRESS` sulla **prima** domanda (`currentQuestionId`, `startedAt`) |
+| `forceNextAulaExamQuestion` | action | EXAM: il docente forza la domanda successiva (sblocca ritardatari); normalmente non serve |
+| `startAulaExamReview` / `nextAulaExamReview` | action | EXAM: correzione a schermo (`REVIEWING`), una domanda alla volta |
+| `maybeAdvanceExam` / `forceAdvanceExam` (`lib/aula/live-public.ts`) | helper | barriera per-domanda: avanza `currentQuestionId` quando tutti hanno risposto (o forzato) |
 | `POST /api/aula/live/[code]/join` | route | partecipante anonimo, ritorna `participantId` |
 | `GET /api/aula/live/[code]/state` | route | stato live in polling |
 | `POST /api/aula/live/[code]/answer` | route | risposta partecipante (idempotente per `[participantId, questionId]`) |

@@ -22,12 +22,21 @@ type Snapshot = {
   currentIndex: number | null;
   question: { id: string; text: string; imageUrl: string | null } | null;
   questions: Question[] | null;
+  examLive: {
+    currentIndex: number | null;
+    total: number;
+    participantCount: number;
+    aligned: number;
+    pending: number;
+  } | null;
   you:
     | {
         // LIVE
         answered?: boolean;
         correct?: boolean | null;
-        // EXAM
+        // EXAM sincronizzato
+        answeredCurrent?: boolean;
+        // EXAM (correzione/fine)
         answers?: Record<string, boolean>;
         perQuestion?: Record<string, boolean>;
         score?: number;
@@ -126,9 +135,11 @@ export function AulaStudentPlayer({ code }: { code: string }) {
     });
   }
 
-  // EXAM: risposta a una domanda specifica (modificabile fino al termine).
+  // EXAM sincronizzato: risponde alla domanda corrente. Una volta inviata si
+  // attende che tutti si allineino (la successiva si sblocca da sola).
   async function answerExam(questionId: string, value: boolean) {
     if (!participantId) return;
+    setAnswered(questionId);
     setLocalAnswers((prev) => ({ ...prev, [questionId]: value }));
     await fetch(`/api/aula/live/${code}/answer`, {
       method: "POST",
@@ -166,9 +177,75 @@ export function AulaStudentPlayer({ code }: { code: string }) {
     );
   }
 
-  // ── EXAM ──
+  // ── EXAM ("Quiz completo") sincronizzato ──
   if (snap?.mode === "EXAM") {
-    if (snap.status === "LOBBY" || !snap.questions) {
+    // LOBBY: in attesa dell'avvio.
+    if (snap.status === "LOBBY") {
+      return (
+        <div className="flex min-h-screen items-center justify-center p-6">
+          <p className="text-lg text-neutral-600">In attesa del docente…</p>
+        </div>
+      );
+    }
+
+    // IN_PROGRESS: svolgimento sincronizzato, una domanda alla volta.
+    if (snap.status === "IN_PROGRESS") {
+      // currentIndex/question nulli → tutti hanno completato, attesa correzione.
+      if (!snap.question) {
+        return (
+          <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
+            <p className="text-3xl font-bold text-pink-600">Hai completato! 🎉</p>
+            <p className="text-neutral-600">
+              Attendi che il docente mostri la correzione.
+            </p>
+          </div>
+        );
+      }
+
+      const qid = snap.question.id;
+      const answeredCurrent = snap.you?.answeredCurrent || answered === qid;
+      const aligned = snap.examLive?.aligned ?? 0;
+      const totalPart = snap.examLive?.participantCount ?? 0;
+      return (
+        <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
+          <p className="text-sm text-neutral-500">
+            Domanda {(snap.currentIndex ?? 0) + 1}/{snap.totalQuestions}
+          </p>
+          {snap.question.imageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={snap.question.imageUrl} alt="" className="max-h-48" />
+          )}
+          <p className="text-center text-lg">{snap.question.text}</p>
+          {answeredCurrent ? (
+            <div className="flex flex-col items-center gap-2 text-center">
+              <p className="text-neutral-600">Risposta inviata ✓</p>
+              <p className="text-sm text-neutral-400">
+                Attendi gli altri — {aligned}/{totalPart} pronti
+              </p>
+            </div>
+          ) : (
+            <div className="flex gap-4">
+              <button
+                className="rounded-md bg-green-500 px-8 py-3 text-white"
+                onClick={() => answerExam(qid, true)}
+              >
+                Vero
+              </button>
+              <button
+                className="rounded-md bg-red-500 px-8 py-3 text-white"
+                onClick={() => answerExam(qid, false)}
+              >
+                Falso
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // REVIEWING/ENDED: correzione/risultato. Senza l'elenco domande non c'è
+    // nulla da mostrare (difensivo).
+    if (!snap.questions) {
       return (
         <div className="flex min-h-screen items-center justify-center p-6">
           <p className="text-lg text-neutral-600">In attesa del docente…</p>
@@ -226,50 +303,10 @@ export function AulaStudentPlayer({ code }: { code: string }) {
       );
     }
 
-    // IN_PROGRESS — svolgimento di tutte le domande.
-    const answeredCount = snap.questions.filter(
-      (q) => examAnswers[q.id] !== undefined,
-    ).length;
+    // Fallback difensivo (nessuno stato EXAM gestito sopra).
     return (
-      <div className="mx-auto max-w-md space-y-5 p-6">
-        <div className="sticky top-0 -mx-6 border-b bg-white/90 px-6 py-3 text-center text-sm text-neutral-600 backdrop-blur">
-          {answeredCount}/{snap.questions.length} risposte • attendi il docente per la correzione
-        </div>
-        <ol className="space-y-4">
-          {snap.questions.map((q, i) => {
-            const given = examAnswers[q.id];
-            return (
-              <li key={q.id} className="space-y-3 rounded-lg border p-4">
-                <p className="text-sm text-neutral-500">Domanda {i + 1}</p>
-                {q.imageUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={q.imageUrl} alt="" className="max-h-40" />
-                )}
-                <p>{q.text}</p>
-                <div className="flex gap-3">
-                  <button
-                    className={
-                      "flex-1 rounded-md px-4 py-2 text-white " +
-                      (given === true ? "bg-green-600" : "bg-green-500/70")
-                    }
-                    onClick={() => answerExam(q.id, true)}
-                  >
-                    Vero
-                  </button>
-                  <button
-                    className={
-                      "flex-1 rounded-md px-4 py-2 text-white " +
-                      (given === false ? "bg-red-600" : "bg-red-500/70")
-                    }
-                    onClick={() => answerExam(q.id, false)}
-                  >
-                    Falso
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+      <div className="flex min-h-screen items-center justify-center p-6">
+        <p className="text-lg text-neutral-600">In attesa del docente…</p>
       </div>
     );
   }
