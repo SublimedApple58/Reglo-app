@@ -82,6 +82,7 @@ type AppointmentRow = {
   instructor?: ResourceOption | null;
   vehicle?: ResourceOption | null;
   followVehicle?: ResourceOption | null;
+  extraMotoVehicles?: ResourceOption[] | null;
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
   groupLessonId?: string | null;
@@ -324,6 +325,7 @@ export function AutoscuoleAgendaPage({
     instructorId: "",
     vehicleId: "",
     followVehicleId: "",
+    extraMotoVehicleIds: [] as string[],
     locationId: "",
     duration: "30",
   });
@@ -691,6 +693,12 @@ export function AutoscuoleAgendaPage({
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
       followVehicleId: needFollowCar ? form.followVehicleId : null,
+      extraMotoVehicleIds:
+        vehiclesEnabled &&
+        !!selectedVehicle &&
+        isMotoLicenseCategory(selectedVehicle.licenseCategory)
+          ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
+          : [],
       locationId: form.locationId || null,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
@@ -727,6 +735,7 @@ export function AutoscuoleAgendaPage({
       instructorId: "",
       vehicleId: "",
       followVehicleId: "",
+      extraMotoVehicleIds: [],
       locationId: defaultLocationId,
       duration: "30",
     });
@@ -825,6 +834,10 @@ export function AutoscuoleAgendaPage({
       followVehicle: item.followVehicle
         ? { id: item.followVehicle.id, name: item.followVehicle.name }
         : null,
+      extraMotoVehicles: (item.extraMotoVehicles ?? []).map((v) => ({
+        id: v.id,
+        name: v.name,
+      })),
       location: item.location
         ? { id: item.location.id, name: item.location.name }
         : null,
@@ -1200,7 +1213,7 @@ export function AutoscuoleAgendaPage({
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLesson ? (
@@ -1595,7 +1608,7 @@ export function AutoscuoleAgendaPage({
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}
+                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
@@ -2015,7 +2028,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}
+                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
@@ -2387,6 +2400,51 @@ export function AutoscuoleAgendaPage({
                           </FieldGroup>
                         );
                       })()}
+                      {(() => {
+                        const sv = vehicles.find((v) => v.id === form.vehicleId);
+                        if (!vehiclesEnabled || !sv || !isMotoLicenseCategory(sv.licenseCategory)) {
+                          return null;
+                        }
+                        const motoOptions = vehicles.filter(
+                          (v) =>
+                            isMotoLicenseCategory(v.licenseCategory) &&
+                            v.id !== form.vehicleId,
+                        );
+                        if (!motoOptions.length) return null;
+                        const toggleExtra = (id: string) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            extraMotoVehicleIds: prev.extraMotoVehicleIds.includes(id)
+                              ? prev.extraMotoVehicleIds.filter((x) => x !== id)
+                              : [...prev.extraMotoVehicleIds, id],
+                          }));
+                        return (
+                          <FieldGroup
+                            label="Moto aggiuntive"
+                            description="Occupa più di una moto per questa guida."
+                          >
+                            <div className="flex flex-wrap gap-2">
+                              {motoOptions.map((vehicle) => {
+                                const active = form.extraMotoVehicleIds.includes(vehicle.id);
+                                return (
+                                  <button
+                                    key={vehicle.id}
+                                    type="button"
+                                    onClick={() => toggleExtra(vehicle.id)}
+                                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                      active
+                                        ? "border-pink-500 bg-pink-50 text-pink-700"
+                                        : "border-border bg-white text-foreground hover:bg-gray-50"
+                                    }`}
+                                  >
+                                    {vehicle.name}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </FieldGroup>
+                        );
+                      })()}
                     </div>
                     {agendaLocations.length > 0 && (
                       <FieldGroup
@@ -2439,6 +2497,14 @@ export function AutoscuoleAgendaPage({
                       {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
                       {vehiclesEnabled && form.followVehicleId ? (
                         <SummaryRow label="Auto al seguito" value={vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"} />
+                      ) : null}
+                      {vehiclesEnabled && form.extraMotoVehicleIds.length > 0 ? (
+                        <SummaryRow
+                          label="Moto aggiuntive"
+                          value={form.extraMotoVehicleIds
+                            .map((id) => vehicles.find((v) => v.id === id)?.name ?? "—")
+                            .join(", ")}
+                        />
                       ) : null}
                       <SummaryRow
                         label="Luogo"

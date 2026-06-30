@@ -47,6 +47,7 @@ export type EditAppointmentDialogAppointment = {
   instructor?: { id?: string | null; name: string } | null;
   vehicle?: { id: string; name: string } | null;
   followVehicle?: { id: string; name: string } | null;
+  extraMotoVehicles?: { id: string; name: string }[] | null;
   location?: { id: string; name: string } | null;
 };
 
@@ -127,6 +128,10 @@ export function EditAppointmentDialog({
   const originalLessonType = appointment?.type ?? "guida";
   const originalVehicleId = appointment?.vehicle?.id ?? "";
   const originalFollowVehicleId = appointment?.followVehicle?.id ?? "";
+  const originalExtraMotoVehicleIds = React.useMemo(
+    () => (appointment?.extraMotoVehicles ?? []).map((v) => v.id),
+    [appointment],
+  );
   const originalLocationId = appointment?.location?.id ?? "";
   const originalNotes = appointment?.notes ?? "";
 
@@ -134,6 +139,9 @@ export function EditAppointmentDialog({
   const [lessonType, setLessonType] = React.useState(originalLessonType);
   const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
   const [followVehicleId, setFollowVehicleId] = React.useState(originalFollowVehicleId);
+  const [extraMotoVehicleIds, setExtraMotoVehicleIds] = React.useState<string[]>(
+    originalExtraMotoVehicleIds,
+  );
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
   // Date/time staging — start from the appointment's current slot.
@@ -155,6 +163,7 @@ export function EditAppointmentDialog({
     setLessonType(appointment.type ?? "guida");
     setVehicleId(appointment.vehicle?.id ?? "");
     setFollowVehicleId(appointment.followVehicle?.id ?? "");
+    setExtraMotoVehicleIds((appointment.extraMotoVehicles ?? []).map((v) => v.id));
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
     setNewDate(toDateStr(start));
@@ -313,11 +322,29 @@ export function EditAppointmentDialog({
   // cleared (a follow without a moto primary makes no sense).
   const effectiveFollowVehicleId = needsFollowCar ? followVehicleId : "";
 
+  // Extra motos are only meaningful when the primary is a moto. When it isn't,
+  // they are implicitly cleared.
+  const primaryIsMoto =
+    vehiclesEnabled &&
+    !!selectedVehicle &&
+    isMotoLicenseCategory(selectedVehicle.licenseCategory);
+  const extraMotoOptions = vehicles.filter(
+    (v) => isMotoLicenseCategory(v.licenseCategory) && v.id !== vehicleId,
+  );
+  const effectiveExtraMotoVehicleIds = primaryIsMoto
+    ? extraMotoVehicleIds.filter((id) => id !== vehicleId)
+    : [];
+  const sortedKey = (ids: string[]) => [...ids].sort().join(",");
+  const extraMotosChanged =
+    sortedKey(effectiveExtraMotoVehicleIds) !==
+    sortedKey(originalExtraMotoVehicleIds);
+
   const hasChanges =
     instructorId !== originalInstructorId ||
     lessonType !== originalLessonType ||
     vehicleId !== originalVehicleId ||
     effectiveFollowVehicleId !== originalFollowVehicleId ||
+    extraMotosChanged ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
     dateTimeChanged;
@@ -373,6 +400,11 @@ export function EditAppointmentDialog({
         // being a follow-car moto).
         detailsPayload.followVehicleId =
           effectiveFollowVehicleId === "" ? null : effectiveFollowVehicleId;
+        hasDetails = true;
+      }
+      if (extraMotosChanged) {
+        // Replaces the full set of extra motos (empty clears them).
+        detailsPayload.extraMotoVehicleIds = effectiveExtraMotoVehicleIds;
         hasDetails = true;
       }
       if (locationId !== originalLocationId) {
@@ -620,6 +652,42 @@ export function EditAppointmentDialog({
                   Questa guida moto richiede un&apos;auto al seguito.
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Extra motos — a moto guida occupying more than one moto. Shown only
+              when the primary vehicle is a moto and other motos exist. */}
+          {primaryIsMoto && extraMotoOptions.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-slate-700">
+                Moto aggiuntive
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {extraMotoOptions.map((v) => {
+                  const active = extraMotoVehicleIds.includes(v.id);
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        setExtraMotoVehicleIds((prev) =>
+                          prev.includes(v.id)
+                            ? prev.filter((x) => x !== v.id)
+                            : [...prev, v.id],
+                        )
+                      }
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        active
+                          ? "border-pink-500 bg-pink-50 text-pink-700"
+                          : "border-border bg-white text-foreground hover:bg-gray-50"
+                      }`}
+                    >
+                      {v.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

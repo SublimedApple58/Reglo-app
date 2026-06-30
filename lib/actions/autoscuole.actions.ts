@@ -970,11 +970,13 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
               licenseCategory: true,
             },
           },
-          // Follow car (auto al seguito) — the role="follow" join row, if any.
-          // Mapped below into `followVehicle` for agenda detail rendering.
+          // All reserved vehicles. Mapped below into `followVehicle` (the
+          // role="follow" car) and `extraMotoVehicles` (extra role="primary"
+          // motos beyond the representative `vehicleId`) for agenda rendering.
           appointmentVehicles: {
-            where: { role: "follow" },
             select: {
+              role: true,
+              vehicleId: true,
               vehicle: {
                 select: {
                   id: true,
@@ -984,7 +986,6 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
                 },
               },
             },
-            take: 1,
           },
           location: {
             select: {
@@ -1072,16 +1073,21 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
 
     const mappedAppointments = appointments.map((appointment) => {
       const { appointmentVehicles, ...rest } = appointment;
-      // Auto al seguito: the follow join's vehicle (null when single-vehicle).
+      // Auto al seguito: the role="follow" join's vehicle (null when none).
       // Ternary (not `?? null`) so the type stays nullable under the project's
       // non-strict index access, matching the gl-empty placeholder below.
-      const followVehicle =
-        appointmentVehicles.length > 0 ? appointmentVehicles[0].vehicle : null;
+      const followRow = appointmentVehicles.find((v) => v.role === "follow");
+      const followVehicle = followRow ? followRow.vehicle : null;
+      // Extra motos: role="primary" rows beyond the representative vehicleId.
+      const extraMotoVehicles = appointmentVehicles
+        .filter((v) => v.role === "primary" && v.vehicleId !== rest.vehicleId)
+        .map((v) => v.vehicle);
       return {
         ...rest,
         case: null,
         student: mapCaseStudent(appointment.student),
         followVehicle,
+        extraMotoVehicles,
         ...(gridFlags.get(appointment.id) ?? {}),
         groupLessonCapacity: appointment.groupLessonId
           ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
@@ -1150,6 +1156,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           instructor: gl.instructor,
           vehicle: gl.vehicle,
           followVehicle: null,
+          extraMotoVehicles: [],
           location: null,
           groupLessonCapacity: gl.capacity,
         } as (typeof mappedAppointments)[number]);
