@@ -49,6 +49,7 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
 
 ## API routes (`app/api/autoscuole/`)
 - `vehicles/route.ts` (GET/POST), `vehicles/[id]/route.ts` (PATCH spreads payload → `poolInstructorIds`/`status` pass through; DELETE = deactivate).
+- `appointments/[id]/route.ts` (PATCH) → `updateAutoscuolaAppointmentDetails`. Now forwards `extraMotoVehicleIds` + `followVehicleId` from the body (previously dropped) so the **mobile "Gestisci guida" Veicoli block** can add/remove/swap extra motos and the follow car on an existing moto guide. See `reglo-mobile/docs/features/vehicles.md`.
 
 ## Web UI
 - `AutoscuoleResourcesPage.tsx` — vehicle edit dialog: **"Modalità di utilizzo"** segmented (Aperto/Pool/Esclusivo; pool = instructor `ToggleChip` multiselect, exclusive = `Select`), exclusive-only follows-availability toggle, **Attivo/Manutenzione** status segment. `VehicleDetail` carries `poolInstructorIds`.
