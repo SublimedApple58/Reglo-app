@@ -278,6 +278,52 @@ function StudentSearchSelect({
   );
 }
 
+// Vehicle lines in the agenda detail. A moto guide with companions (follow car
+// and/or extra motos) is grouped into "Moto" (primary marked) + "Auto al seguito"
+// instead of one cramped line; a single-vehicle guide keeps the "Veicolo" line.
+function VehicleDetailLines({
+  item,
+  vehiclesEnabled,
+}: {
+  item: {
+    vehicle?: ResourceOption | null;
+    followVehicle?: ResourceOption | null;
+    extraMotoVehicles?: ResourceOption[] | null;
+  };
+  vehiclesEnabled: boolean;
+}) {
+  if (!vehiclesEnabled) return null;
+  const extras = item.extraMotoVehicles ?? [];
+  const follow = item.followVehicle ?? null;
+  if (!follow && extras.length === 0) {
+    return (
+      <div>
+        Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span>
+      </div>
+    );
+  }
+  const motoNames = [
+    item.vehicle ? `${item.vehicle.name} (principale)` : null,
+    ...extras.map((v) => v.name),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return (
+    <>
+      {motoNames ? (
+        <div>
+          Moto: <span className="font-medium text-foreground/85">{motoNames}</span>
+        </div>
+      ) : null}
+      {follow ? (
+        <div>
+          Auto al seguito: <span className="font-medium text-foreground/85">{follow.name}</span>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function AutoscuoleAgendaPage({
   tabs,
 }: {
@@ -1227,7 +1273,7 @@ export function AutoscuoleAgendaPage({
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>{vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}<div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div></div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLesson ? (
@@ -1622,7 +1668,7 @@ export function AutoscuoleAgendaPage({
                                     <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                     <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                      {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}
+                                      <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
@@ -2042,7 +2088,7 @@ export function AutoscuoleAgendaPage({
                                 <div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div>
                                 <div className="mt-2 space-y-1 text-xs text-muted-foreground">
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
-                                  {vehiclesEnabled && <div>Veicolo: <span className="font-medium text-foreground/85">{item.vehicle?.name ?? "Non assegnato"}</span></div>}{vehiclesEnabled && item.followVehicle ? <div>Auto al seguito: <span className="font-medium text-foreground/85">{item.followVehicle.name}</span></div> : null}{vehiclesEnabled && item.extraMotoVehicles && item.extraMotoVehicles.length > 0 ? <div>Moto aggiuntive: <span className="font-medium text-foreground/85">{item.extraMotoVehicles.map((v) => v.name).join(", ")}</span></div> : null}
+                                  <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
