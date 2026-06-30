@@ -1,5 +1,6 @@
 import {
   reconcileAppointmentVehicles,
+  buildAppointmentVehicleRows,
   resolveVehicleOwnerOnUpdate,
   type AppointmentVehicleTx,
 } from "@/lib/autoscuole/appointment-vehicles";
@@ -55,6 +56,64 @@ describe("reconcileAppointmentVehicles", () => {
     expect(create).toHaveBeenCalledWith({
       data: { appointmentId: "appt1", vehicleId: "v1", role: "primary" },
     });
+  });
+
+  it("writes extra motos as additional primary rows (+ follow), de-duped", async () => {
+    const { tx, create } = makeTx();
+    await reconcileAppointmentVehicles(tx, "appt1", "moto1", "car", [
+      "moto2",
+      "moto1", // equal to primary → dropped
+      "moto2", // duplicate → dropped
+      "moto3",
+    ]);
+    expect(create).toHaveBeenCalledTimes(4);
+    expect(create).toHaveBeenNthCalledWith(1, {
+      data: { appointmentId: "appt1", vehicleId: "moto1", role: "primary" },
+    });
+    expect(create).toHaveBeenNthCalledWith(2, {
+      data: { appointmentId: "appt1", vehicleId: "moto2", role: "primary" },
+    });
+    expect(create).toHaveBeenNthCalledWith(3, {
+      data: { appointmentId: "appt1", vehicleId: "moto3", role: "primary" },
+    });
+    expect(create).toHaveBeenNthCalledWith(4, {
+      data: { appointmentId: "appt1", vehicleId: "car", role: "follow" },
+    });
+  });
+});
+
+describe("buildAppointmentVehicleRows", () => {
+  it("returns just the primary when nothing else is given", () => {
+    expect(buildAppointmentVehicleRows({ primaryVehicleId: "v1" })).toEqual([
+      { vehicleId: "v1", role: "primary" },
+    ]);
+  });
+
+  it("orders primary, extra motos, then follow — de-duped", () => {
+    expect(
+      buildAppointmentVehicleRows({
+        primaryVehicleId: "moto1",
+        extraMotoVehicleIds: ["moto2", "moto1", "moto2"],
+        followVehicleId: "car",
+      }),
+    ).toEqual([
+      { vehicleId: "moto1", role: "primary" },
+      { vehicleId: "moto2", role: "primary" },
+      { vehicleId: "car", role: "follow" },
+    ]);
+  });
+
+  it("drops a follow car that collides with a reserved moto", () => {
+    expect(
+      buildAppointmentVehicleRows({
+        primaryVehicleId: "moto1",
+        extraMotoVehicleIds: ["car"],
+        followVehicleId: "car",
+      }),
+    ).toEqual([
+      { vehicleId: "moto1", role: "primary" },
+      { vehicleId: "car", role: "primary" },
+    ]);
   });
 });
 

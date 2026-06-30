@@ -1,5 +1,7 @@
 import {
   parseFollowCarRulesFromLimits,
+  readFollowCarMotoEnabled,
+  followCarRulesForEnabled,
   requiresFollowCar,
   isFollowCarVehicle,
   bookableLicenseKeysAtSlot,
@@ -7,79 +9,94 @@ import {
   type FollowCarRules,
 } from "@/lib/autoscuole/follow-car";
 
+// The single global rule expands to all moto categories enabled.
+const ALL_MOTO_ON = {
+  AM: { enabled: true },
+  A1: { enabled: true },
+  A2: { enabled: true },
+  A: { enabled: true },
+};
+
 describe("FOLLOW_CAR_CATEGORY", () => {
   it("is the car license (B) — the follow car is always a car in Italy", () => {
     expect(FOLLOW_CAR_CATEGORY).toBe("B");
   });
 });
 
+describe("followCarRulesForEnabled", () => {
+  it("returns an empty map when the global rule is off", () => {
+    expect(followCarRulesForEnabled(false)).toEqual({});
+  });
+
+  it("enables ALL moto categories together when on", () => {
+    expect(followCarRulesForEnabled(true)).toEqual(ALL_MOTO_ON);
+  });
+});
+
+describe("readFollowCarMotoEnabled", () => {
+  it("reads the global flag when present", () => {
+    expect(readFollowCarMotoEnabled({ followCarMotoEnabled: true })).toBe(true);
+    expect(readFollowCarMotoEnabled({ followCarMotoEnabled: false })).toBe(false);
+  });
+
+  it("defaults to false when nothing is set", () => {
+    expect(readFollowCarMotoEnabled({})).toBe(false);
+  });
+
+  it("falls back to legacy per-category rules: ON if ANY moto was enabled", () => {
+    expect(
+      readFollowCarMotoEnabled({ followCarRules: { A2: { enabled: true } } }),
+    ).toBe(true);
+    expect(
+      readFollowCarMotoEnabled({ followCarRules: { A: { enabled: false } } }),
+    ).toBe(false);
+  });
+
+  it("ignores non-moto / malformed legacy keys in the fallback", () => {
+    expect(
+      readFollowCarMotoEnabled({
+        followCarRules: { B: { enabled: true }, Z: { enabled: true }, A: true },
+      }),
+    ).toBe(false);
+  });
+
+  it("the explicit global flag wins over legacy rules", () => {
+    expect(
+      readFollowCarMotoEnabled({
+        followCarMotoEnabled: false,
+        followCarRules: { A: { enabled: true } },
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("parseFollowCarRulesFromLimits", () => {
-  it("returns an empty map when followCarRules is absent", () => {
+  it("returns an empty map when nothing is configured", () => {
     expect(parseFollowCarRulesFromLimits({})).toEqual({});
   });
 
-  it("returns an empty map when followCarRules is not an object", () => {
-    expect(parseFollowCarRulesFromLimits({ followCarRules: "nope" })).toEqual({});
-    expect(parseFollowCarRulesFromLimits({ followCarRules: 42 })).toEqual({});
-    expect(parseFollowCarRulesFromLimits({ followCarRules: null })).toEqual({});
+  it("returns all-moto-on when the global flag is true", () => {
+    expect(parseFollowCarRulesFromLimits({ followCarMotoEnabled: true })).toEqual(
+      ALL_MOTO_ON,
+    );
   });
 
-  it("keeps valid moto-category rules (enabled true or false)", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: { A: { enabled: true }, A2: { enabled: false } },
-    });
-    expect(rules).toEqual({ A: { enabled: true }, A2: { enabled: false } });
+  it("returns empty when the global flag is false", () => {
+    expect(parseFollowCarRulesFromLimits({ followCarMotoEnabled: false })).toEqual(
+      {},
+    );
   });
 
-  it("drops the B key — a car requiring a follow car makes no sense", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: { B: { enabled: true }, A: { enabled: true } },
-    });
-    expect(rules).toEqual({ A: { enabled: true } });
-    expect(rules).not.toHaveProperty("B");
+  it("derives all-moto-on from a legacy map with any moto enabled", () => {
+    expect(
+      parseFollowCarRulesFromLimits({ followCarRules: { A2: { enabled: true } } }),
+    ).toEqual(ALL_MOTO_ON);
   });
 
-  it("drops unknown / non-license keys", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: { Z: { enabled: true }, foo: { enabled: true }, A1: { enabled: true } },
-    });
-    expect(rules).toEqual({ A1: { enabled: true } });
-  });
-
-  it("drops entries whose `enabled` is not a boolean", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: {
-        A: { enabled: "true" }, // string, not boolean
-        A1: { enabled: 1 }, // number, not boolean
-        A2: {}, // missing enabled
-        AM: { enabled: true }, // the only valid one
-      },
-    });
-    expect(rules).toEqual({ AM: { enabled: true } });
-  });
-
-  it("ignores non-object values for a category", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: { A: true, A1: null, A2: { enabled: true } },
-    });
-    expect(rules).toEqual({ A2: { enabled: true } });
-  });
-
-  it("parses all four moto categories together", () => {
-    const rules = parseFollowCarRulesFromLimits({
-      followCarRules: {
-        AM: { enabled: true },
-        A1: { enabled: false },
-        A2: { enabled: true },
-        A: { enabled: true },
-      },
-    });
-    expect(rules).toEqual({
-      AM: { enabled: true },
-      A1: { enabled: false },
-      A2: { enabled: true },
-      A: { enabled: true },
-    });
+  it("returns empty for a legacy map with everything disabled", () => {
+    expect(
+      parseFollowCarRulesFromLimits({ followCarRules: { A: { enabled: false } } }),
+    ).toEqual({});
   });
 });
 

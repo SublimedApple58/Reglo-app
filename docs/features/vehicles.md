@@ -19,8 +19,8 @@ Vehicle resolution is **per license category**: if an instructor owns an exclusi
   - `followsInstructorAvailability Boolean @default(true)` — only meaningful for an exclusive vehicle (it follows its owner); pool/open vehicles always use their own availability.
 - `AutoscuolaVehiclePoolMember (vehicleId, instructorId)` — N:N shared pool. Empty + no exclusive owner = open.
 - `AutoscuolaInstructorPreferredVehicle (instructorId, licenseCategory, vehicleId)` — optional tie-break when several compatible vehicles are free.
-- `AutoscuolaAppointmentVehicle (appointmentId, vehicleId, role "primary"|"follow")` — multi-vehicle lessons. `AutoscuolaAppointment.vehicleId` is kept as the **primary** (source of truth for existing reads); `role="follow"` is the additional follow car.
-- `CompanyService.limits.followCarRules` — per-moto-category opt-in `{ A: {enabled}, ... }` for "auto al seguito".
+- `AutoscuolaAppointmentVehicle (appointmentId, vehicleId, role "primary"|"follow")` — multi-vehicle lessons. `AutoscuolaAppointment.vehicleId` is the **representative primary** (source of truth for existing reads). A moto guida may occupy **more than one moto**: extra motos are stored as additional `role="primary"` rows (ridden vehicles, distinguished from the representative only by id). `role="follow"` is the follow car (a category-B car).
+- `CompanyService.limits.followCarMotoEnabled` — **single global toggle** for "auto al seguito": when on, EVERY moto guida (any category AM/A1/A2/A) additionally reserves a follow car. Back-compat: the legacy per-category map `followCarRules` is still read — `readFollowCarMotoEnabled` returns true if any moto category was enabled — and `parseFollowCarRulesFromLimits` now DERIVES the per-category map from the global flag (all-moto-on / off), so every existing call site keeps working.
 - Migrations: `20260609120000_add_vehicle_fixed_instructor`, `20260609140000_add_license_category`, `20260623142838_vehicles_m2m_pool_followcar` (drops the unique, adds the 3 tables; non-destructive, backward-compatible by no-op).
 
 ## Vehicle resolution (shared helper)
@@ -28,7 +28,8 @@ Vehicle resolution is **per license category**: if an instructor owns an exclusi
 - `buildVehicleResolutionMaps({vehicles, poolMembers, preferred})` → exclusive/pool/preferred maps.
 - `resolveVehiclesForInstructor({...})` → `{ primary, follow? }`. Per-category exclusive-forced/pool-fallback; preferred tie-break then packing score; resolves a second category-B vehicle when `requireFollowCar`.
 - `pickBestInstructorVehicleSet({...})` → `{ instructorId, vehicleId, followVehicleId, score }`.
-- `lib/autoscuole/follow-car.ts` — `parseFollowCarRulesFromLimits`, `requiresFollowCar`, `isFollowCarVehicle`, `FOLLOW_CAR_CATEGORY="B"`.
+- `lib/autoscuole/follow-car.ts` — `parseFollowCarRulesFromLimits`, `readFollowCarMotoEnabled`, `followCarRulesForEnabled`, `requiresFollowCar`, `isFollowCarVehicle`, `FOLLOW_CAR_CATEGORY="B"`, `FOLLOW_CAR_LIMITS_KEY`.
+- `lib/autoscuole/appointment-vehicles.ts` — `reconcileAppointmentVehicles(tx, apptId, primary, follow, extraMotoIds?)` and `buildAppointmentVehicleRows({primaryVehicleId, extraMotoVehicleIds?, followVehicleId?})` (create-path rows). Both order primary → extra motos (role primary) → follow, de-duped by id.
 
 Applied at **all matcher sites** (keep in sync) — each also loads pool members + preferred + followCarRules, and busy-interval builders read both `vehicleId` AND the `AutoscuolaAppointmentVehicle` join:
 - `lib/autoscuole/slot-matcher.ts` (`findBestAutoscuolaSlot`)
@@ -51,8 +52,8 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
 
 ## Web UI
 - `AutoscuoleResourcesPage.tsx` — vehicle edit dialog: **"Modalità di utilizzo"** segmented (Aperto/Pool/Esclusivo; pool = instructor `ToggleChip` multiselect, exclusive = `Select`), exclusive-only follows-availability toggle, **Attivo/Manutenzione** status segment. `VehicleDetail` carries `poolInstructorIds`.
-- `tabs/VehiclesTab.tsx` — card badges (usage mode + maintenance) + the **"Auto al seguito (moto)"** settings card (per-category toggles → `followCarRules` via `updateAutoscuolaSettings`).
-- `AutoscuoleAgendaPage.tsx` — when a moto vehicle is picked for a manual booking and the rule is on, a required **"Auto al seguito"** Select appears; `followVehicleId` is sent on create.
+- `tabs/VehiclesTab.tsx` — card badges (usage mode + maintenance) + the **"Auto al seguito (moto)"** settings card, now a **single global toggle** → `followCarMotoEnabled` via `updateAutoscuolaSettings` (state lives in `AutoscuoleResourcesPage` as a boolean).
+- `AutoscuoleAgendaPage.tsx` / `EditAppointmentDialog.tsx` — when a moto is the primary vehicle: a required **"Auto al seguito"** Select appears (gated on the global rule) and a **"Moto aggiuntive"** chip multiselect lets the titolare reserve extra motos. `followVehicleId` + `extraMotoVehicleIds` are sent on create/update; the agenda bootstrap exposes `extraMotoVehicles` per appointment and detail cards render a "Moto aggiuntive" line.
 
 ## Behaviour notes
 - Assignment changes are **not retroactive** — only new bookings use the new rule; existing appointments keep their vehicles.
@@ -61,6 +62,7 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
   - **Edit**: `EditAppointmentDialog` edits the follow car on existing lessons; `updateAutoscuolaAppointmentDetails` accepts `followVehicleId` and reconciles the join rows transactionally (helper `reconcileAppointmentVehicles`, which also fixed a latent stale-join bug when changing the primary).
   - **Empty-slot notifications** (`freeSlotLicenseKeysTomorrow`): a moto whose category requires a follow car is only "free" when a category-B car is also free at the slot; follow cars are reserved as busy (reads the `appointmentVehicles` join).
   - **Swaps** (`createSwapOffer` + `instructorSwapAppointments`): lessons with an auto al seguito are blocked from swapping (phase-1 decision #5).
+- **Multiple motos per lesson (2026-06-30)**: a moto guida can occupy more than one moto. Set on `createAutoscuolaAppointment` / `createAutoscuolaAppointmentBatch` / `updateAutoscuolaAppointmentDetails` via `extraMotoVehicleIds` (extra motos are validated to be company motos). The instructor sets them from mobile (`BookingForm` "Moto aggiuntive"), the titolare from web. Extra motos are NOT auto-assigned by the matcher (manual only) but are reserved as busy (they live in the `appointmentVehicles` join, which every busy-builder reads). The mobile instructor booking path (`instructor-bookings/confirm` + `/confirm-batch` → `createAutoscuolaAppointment*`) now also supports `followVehicleId` + `extraMotoVehicleIds`; the batch path now writes `appointmentVehicles` rows (previously it wrote none).
 - No `trigger:deploy` is required by this feature.
 
 ## License categories (B / AM / A1 / A2 / A + transmission)
