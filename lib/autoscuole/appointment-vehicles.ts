@@ -18,27 +18,65 @@ export interface AppointmentVehicleTx {
 
 /**
  * Reconcile the AutoscuolaAppointmentVehicle join rows for an appointment so they
- * match the desired primary + follow vehicles. Invariant: `appointment.vehicleId`
- * is always the role="primary" row; an optional role="follow" row is the auto al
- * seguito. Idempotent — wipes and rewrites the rows. A follow car without a
- * primary is impossible (cleared); a follow equal to the primary is de-duped.
+ * match the desired vehicles. Invariant: `appointment.vehicleId` is always THE
+ * representative role="primary" row. A moto guida may additionally occupy more
+ * motos (`extraMotoVehicleIds`) — these are stored as further role="primary" rows
+ * (ridden vehicles), distinguished from the representative only by their id. An
+ * optional role="follow" row is the auto al seguito (a car).
+ *
+ * Idempotent — wipes and rewrites the rows. A follow/extra without a primary is
+ * impossible (cleared); ids equal to the primary or already seen are de-duped.
  */
 export async function reconcileAppointmentVehicles(
   tx: AppointmentVehicleTx,
   appointmentId: string,
   primaryVehicleId: string | null,
   followVehicleId: string | null,
+  extraMotoVehicleIds: string[] = [],
 ): Promise<void> {
   await tx.autoscuolaAppointmentVehicle.deleteMany({ where: { appointmentId } });
   if (!primaryVehicleId) return;
+  const seen = new Set<string>([primaryVehicleId]);
   await tx.autoscuolaAppointmentVehicle.create({
     data: { appointmentId, vehicleId: primaryVehicleId, role: "primary" },
   });
-  if (followVehicleId && followVehicleId !== primaryVehicleId) {
+  for (const id of extraMotoVehicleIds) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    await tx.autoscuolaAppointmentVehicle.create({
+      data: { appointmentId, vehicleId: id, role: "primary" },
+    });
+  }
+  if (followVehicleId && !seen.has(followVehicleId)) {
     await tx.autoscuolaAppointmentVehicle.create({
       data: { appointmentId, vehicleId: followVehicleId, role: "follow" },
     });
   }
+}
+
+/**
+ * Build the `AutoscuolaAppointmentVehicle.create[]` rows for a fresh appointment:
+ * the representative primary moto, any extra motos (further role="primary" rows),
+ * then the follow car (role="follow"). De-duped by vehicleId. Mirrors
+ * `reconcileAppointmentVehicles` so create and edit stay consistent.
+ */
+export function buildAppointmentVehicleRows(args: {
+  primaryVehicleId: string;
+  extraMotoVehicleIds?: string[] | null;
+  followVehicleId?: string | null;
+}): Array<{ vehicleId: string; role: string }> {
+  const rows: Array<{ vehicleId: string; role: string }> = [];
+  const seen = new Set<string>([args.primaryVehicleId]);
+  rows.push({ vehicleId: args.primaryVehicleId, role: "primary" });
+  for (const id of args.extraMotoVehicleIds ?? []) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    rows.push({ vehicleId: id, role: "primary" });
+  }
+  if (args.followVehicleId && !seen.has(args.followVehicleId)) {
+    rows.push({ vehicleId: args.followVehicleId, role: "follow" });
+  }
+  return rows;
 }
 
 /**

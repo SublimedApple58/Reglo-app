@@ -14,7 +14,6 @@ import {
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
-  MOTO_LICENSE_CATEGORIES,
   TRANSMISSIONS,
   TRANSMISSION_LABELS,
   type Transmission,
@@ -45,10 +44,8 @@ export type VehiclesTabProps = {
   setDefaultLicenseCategory: React.Dispatch<React.SetStateAction<string>>;
   defaultTransmission: string;
   setDefaultTransmission: React.Dispatch<React.SetStateAction<string>>;
-  followCarRules: Record<string, { enabled: boolean }>;
-  setFollowCarRules: React.Dispatch<
-    React.SetStateAction<Record<string, { enabled: boolean }>>
-  >;
+  followCarMotoEnabled: boolean;
+  setFollowCarMotoEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   openCreateVehicle: () => void;
   openEditVehicle: (vehicle: VehicleDetail) => void;
   openAvailabilityDialog: (vehicle: VehicleDetail) => void;
@@ -217,8 +214,8 @@ export default function VehiclesTab({
   setDefaultLicenseCategory,
   defaultTransmission,
   setDefaultTransmission,
-  followCarRules,
-  setFollowCarRules,
+  followCarMotoEnabled,
+  setFollowCarMotoEnabled,
   openCreateVehicle,
   openEditVehicle,
   openAvailabilityDialog,
@@ -280,34 +277,18 @@ export default function VehiclesTab({
       )}
       {vehiclesEnabled && (
         <div className="rounded-2xl border border-border bg-white shadow-card p-4">
-          <div className="flex flex-col gap-0.5 mb-3">
-            <span className="text-sm font-semibold">Auto al seguito (moto)</span>
-            <span className="text-xs text-muted-foreground">
-              Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
-              entrambi i veicoli risultano occupati in agenda.
-            </span>
-          </div>
-          <div className="divide-y divide-border">
-            {MOTO_LICENSE_CATEGORIES.map((cat) => {
-              const enabled = followCarRules[cat]?.enabled === true;
-              return (
-                <div
-                  key={cat}
-                  className="flex items-center justify-between py-3 cursor-pointer"
-                  onClick={() =>
-                    setFollowCarRules((prev) => ({
-                      ...prev,
-                      [cat]: { enabled: !enabled },
-                    }))
-                  }
-                >
-                  <span className="text-sm font-medium">
-                    {LICENSE_CATEGORY_LABELS[cat]}
-                  </span>
-                  <InlineToggle checked={enabled} size="sm" />
-                </div>
-              );
-            })}
+          <div
+            className="flex items-center justify-between gap-3 cursor-pointer"
+            onClick={() => setFollowCarMotoEnabled((prev) => !prev)}
+          >
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold">Auto al seguito (moto)</span>
+              <span className="text-xs text-muted-foreground">
+                Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
+                entrambi i veicoli risultano occupati in agenda.
+              </span>
+            </div>
+            <InlineToggle checked={followCarMotoEnabled} size="sm" />
           </div>
         </div>
       )}

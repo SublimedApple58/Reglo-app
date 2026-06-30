@@ -1,21 +1,25 @@
 /**
- * "Auto al seguito" (follow car) rules — Vehicles module, opt-in per category.
+ * "Auto al seguito" (follow car) rule — Vehicles module, ONE global toggle.
  *
  * Some schools require a moto guida to physically occupy TWO vehicles at once:
  * the motorcycle (ridden by the student) AND a follow car (driven by the
  * instructor behind the student). This is NOT hardcoded: a school enables it
- * per license category. When a category's rule is on, a booking for that
- * category reserves the moto (primary) PLUS a follow car, and both show busy in
- * the agenda.
+ * with a single switch that applies to ALL moto categories (AM/A1/A2/A). When
+ * on, a moto booking also reserves a follow car and both show busy in the agenda.
  *
- * The config lives in `CompanyService.limits.followCarRules` (same JSON bag as
- * `lessonPolicy*` / `defaultLicenseCategory`), so it is gated by `vehiclesEnabled`
- * and needs no dedicated table. Absent / empty = today's behavior (single
- * vehicle per lesson).
+ * The config lives in `CompanyService.limits.followCarMotoEnabled` (same JSON bag
+ * as `lessonPolicy*` / `defaultLicenseCategory`), so it is gated by
+ * `vehiclesEnabled` and needs no dedicated table. Absent / false = today's
+ * behavior (single vehicle per lesson).
+ *
+ * Back-compat: the rule used to be per-category (`limits.followCarRules`). When
+ * the new flag is absent we fall back to that legacy map and treat the global
+ * rule as ON if ANY moto category was enabled. `parseFollowCarRulesFromLimits`
+ * still returns a per-category map (now all-moto-on / all-off) so every existing
+ * call site keeps working unchanged.
  */
 
 import {
-  LICENSE_CATEGORIES,
   MOTO_LICENSE_CATEGORIES,
   type LicenseCategory,
 } from "./license";
@@ -23,44 +27,67 @@ import {
 /** The license category the follow car must serve. Italy: it's always a car (B). */
 export const FOLLOW_CAR_CATEGORY: LicenseCategory = "B";
 
-/** Per-category opt-in. Only moto categories are meaningful; B is ignored. */
-export type FollowCarRules = Partial<Record<LicenseCategory, { enabled: boolean }>>;
-
-const LICENSE_CATEGORY_SET = new Set<string>(LICENSE_CATEGORIES);
-const MOTO_LICENSE_CATEGORY_SET = new Set<string>(MOTO_LICENSE_CATEGORIES);
+/** Limits key holding the single global follow-car flag. */
+export const FOLLOW_CAR_LIMITS_KEY = "followCarMotoEnabled";
 
 /**
- * Parse `limits.followCarRules` into a normalized map. Tolerant of legacy/absent
- * data: anything not a `{ enabled: boolean }` for a known moto category is dropped.
+ * Per-category map kept for call-site compatibility. With the global rule it is
+ * now all-or-nothing across moto categories (every moto category shares the flag).
  */
-export const parseFollowCarRulesFromLimits = (
+export type FollowCarRules = Partial<Record<LicenseCategory, { enabled: boolean }>>;
+
+const MOTO_LICENSE_CATEGORY_SET = new Set<string>(MOTO_LICENSE_CATEGORIES);
+
+/** Build the per-category map from the single global flag (all moto share it). */
+export const followCarRulesForEnabled = (enabled: boolean): FollowCarRules => {
+  if (!enabled) return {};
+  const rules: FollowCarRules = {};
+  for (const cat of MOTO_LICENSE_CATEGORIES) rules[cat] = { enabled: true };
+  return rules;
+};
+
+/**
+ * Read the single global follow-car flag from `limits`. Back-compat: when the
+ * new flag is absent, fall back to the legacy per-category `followCarRules` map
+ * and return true if ANY moto category was enabled.
+ */
+export const readFollowCarMotoEnabled = (
   limits: Record<string, unknown>,
-): FollowCarRules => {
+): boolean => {
+  const flag = limits[FOLLOW_CAR_LIMITS_KEY];
+  if (typeof flag === "boolean") return flag;
   const raw =
     limits.followCarRules && typeof limits.followCarRules === "object"
       ? (limits.followCarRules as Record<string, unknown>)
       : {};
-
-  const rules: FollowCarRules = {};
   for (const [key, value] of Object.entries(raw)) {
-    // Only moto categories can require a follow car; a car requiring a "follow
-    // car" makes no sense, so ignore non-moto keys.
     if (!MOTO_LICENSE_CATEGORY_SET.has(key)) continue;
-    if (!value || typeof value !== "object") continue;
-    const enabled = (value as Record<string, unknown>).enabled;
-    if (typeof enabled === "boolean") {
-      rules[key as LicenseCategory] = { enabled };
+    if (
+      value &&
+      typeof value === "object" &&
+      (value as Record<string, unknown>).enabled === true
+    ) {
+      return true;
     }
   }
-  return rules;
+  return false;
 };
+
+/**
+ * Parse the follow-car config into the per-category map used across the matcher
+ * and UI. Now derived from the single global flag (with legacy fallback), so a
+ * moto category requires a follow car iff the school enabled the global rule.
+ */
+export const parseFollowCarRulesFromLimits = (
+  limits: Record<string, unknown>,
+): FollowCarRules => followCarRulesForEnabled(readFollowCarMotoEnabled(limits));
 
 /** True when a lesson for `category` must additionally reserve a follow car. */
 export const requiresFollowCar = (
   rules: FollowCarRules,
   category: string | null | undefined,
 ): boolean => {
-  if (!category || !LICENSE_CATEGORY_SET.has(category)) return false;
+  if (!category || !MOTO_LICENSE_CATEGORY_SET.has(category)) return false;
   return rules[category as LicenseCategory]?.enabled === true;
 };
 

@@ -40,6 +40,7 @@ import {
   type FleetVehicle,
 } from "@/lib/autoscuole/group-moto";
 import {
+  buildAppointmentVehicleRows,
   reconcileAppointmentVehicles,
   resolveVehicleOwnerOnUpdate,
 } from "@/lib/autoscuole/appointment-vehicles";
@@ -107,6 +108,9 @@ const createAppointmentSchema = z.object({
   vehicleId: z.string().uuid().optional().nullable(),
   // Follow car (auto al seguito) for moto lessons, when the school requires it.
   followVehicleId: z.string().uuid().optional().nullable(),
+  // Extra moto vehicles a moto guida may occupy beyond the primary one. Stored as
+  // additional role="primary" join rows; not auto-assigned (manual add only).
+  extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
   locationId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -175,6 +179,12 @@ const updateAppointmentDetailsSchema = z.object({
    * and belong to the company.
    */
   followVehicleId: z.string().uuid().nullable().optional(),
+  /**
+   * Extra moto vehicles occupied by a moto guida beyond the primary one. The
+   * full set replaces the current extra motos (reconciled as role="primary" join
+   * rows). Each must belong to the company, be a moto and differ from the primary.
+   */
+  extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
   /**
    * New instructor for the appointment (cluster-level reassignment).
    * Verified against availability: no overlapping appointments, no manual
@@ -2639,9 +2649,11 @@ export async function createAutoscuolaAppointment(
     // A lesson may reserve more than one vehicle (moto + follow car). Catch a
     // conflict on ANY reserved vehicle, whether the other appointment uses it as
     // its primary `vehicleId` or as a secondary (follow) row in the join.
-    const reservedVehicleIds = [payload.vehicleId, payload.followVehicleId].filter(
-      (id): id is string => Boolean(id),
-    );
+    const reservedVehicleIds = [
+      payload.vehicleId,
+      payload.followVehicleId,
+      ...(payload.extraMotoVehicleIds ?? []),
+    ].filter((id): id is string => Boolean(id));
     const conflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
@@ -2748,16 +2760,16 @@ export async function createAutoscuolaAppointment(
           invoiceStatus: paymentSnapshot.invoiceStatus,
           creditApplied: paymentSnapshot.creditApplied,
           manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
-          // Reserve every vehicle this lesson uses (primary + follow car).
+          // Reserve every vehicle this lesson uses (primary moto + any extra
+          // motos + follow car), de-duped by vehicleId.
           ...(payload.vehicleId
             ? {
                 appointmentVehicles: {
-                  create: [
-                    { vehicleId: payload.vehicleId, role: "primary" },
-                    ...(payload.followVehicleId
-                      ? [{ vehicleId: payload.followVehicleId, role: "follow" }]
-                      : []),
-                  ],
+                  create: buildAppointmentVehicleRows({
+                    primaryVehicleId: payload.vehicleId,
+                    extraMotoVehicleIds: payload.extraMotoVehicleIds,
+                    followVehicleId: payload.followVehicleId,
+                  }),
                 },
               }
             : {}),
@@ -4511,6 +4523,40 @@ export async function updateAutoscuolaAppointmentDetails(
       followVehicleChanged = true;
     }
 
+    // Handle extra moto vehicles (a moto guida occupying more than one moto). The
+    // provided set REPLACES the current extras. Each must belong to the company,
+    // be active and be a moto. Reconciled as additional role="primary" join rows.
+    let extraMotosChanged = false;
+    let desiredExtraMotoVehicleIds: string[] = [];
+    if (payload.extraMotoVehicleIds !== undefined) {
+      const uniqueIds = Array.from(new Set(payload.extraMotoVehicleIds));
+      if (uniqueIds.length) {
+        const motos = await prisma.autoscuolaVehicle.findMany({
+          where: {
+            id: { in: uniqueIds },
+            companyId: membership.companyId,
+            status: "active",
+          },
+          select: { id: true, licenseCategory: true },
+        });
+        const validIds = new Set(motos.map((m) => m.id));
+        if (!uniqueIds.every((id) => validIds.has(id))) {
+          return {
+            success: false,
+            message: "Veicolo moto extra non valido per questa autoscuola.",
+          };
+        }
+        if (!motos.every((m) => isMotoLicenseCategory(m.licenseCategory))) {
+          return {
+            success: false,
+            message: "I veicoli aggiuntivi devono essere moto.",
+          };
+        }
+      }
+      desiredExtraMotoVehicleIds = uniqueIds;
+      extraMotosChanged = true;
+    }
+
     // Handle instructor change (cluster-level single-lesson reassignment).
     // Allowed for owner/admin and for the current instructor "passing" the
     // lesson to a colleague. The student's assignedInstructorId is NOT
@@ -4558,14 +4604,15 @@ export async function updateAutoscuolaAppointmentDetails(
     // table reconciled. The primary lives both on `appointment.vehicleId` and
     // as the role="primary" join row; the follow car is the role="follow" row.
     const primaryChanged = updateData.vehicleId !== undefined;
-    const vehiclesNeedSync = primaryChanged || followVehicleChanged;
+    const vehiclesNeedSync =
+      primaryChanged || followVehicleChanged || extraMotosChanged;
 
     if (!Object.keys(updateData).length && !vehiclesNeedSync) {
       return { success: false, message: "Nessuna modifica da salvare." };
     }
 
-    // Resolve the FINAL primary + follow so reconcile (which wipes and rewrites
-    // the rows) preserves whichever side the user didn't touch.
+    // Resolve the FINAL primary + follow + extra motos so reconcile (which wipes
+    // and rewrites the rows) preserves whichever side the user didn't touch.
     const finalPrimaryVehicleId = primaryChanged
       ? updateData.vehicleId ?? null
       : appointment.vehicleId;
@@ -4576,6 +4623,19 @@ export async function updateAutoscuolaAppointmentDetails(
         select: { vehicleId: true },
       });
       finalFollowVehicleId = existingFollow?.vehicleId ?? null;
+    }
+    let finalExtraMotoVehicleIds = desiredExtraMotoVehicleIds;
+    if (vehiclesNeedSync && !extraMotosChanged) {
+      // Preserve existing extra motos: every role="primary" row except the
+      // representative primary (appointment.vehicleId).
+      const existingPrimaries =
+        await prisma.autoscuolaAppointmentVehicle.findMany({
+          where: { appointmentId: appointment.id, role: "primary" },
+          select: { vehicleId: true },
+        });
+      finalExtraMotoVehicleIds = existingPrimaries
+        .map((r) => r.vehicleId)
+        .filter((id) => id !== finalPrimaryVehicleId);
     }
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -4593,6 +4653,7 @@ export async function updateAutoscuolaAppointmentDetails(
           appointment.id,
           finalPrimaryVehicleId,
           finalFollowVehicleId,
+          finalExtraMotoVehicleIds,
         );
       }
       return row;
