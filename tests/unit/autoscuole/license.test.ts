@@ -2,6 +2,7 @@ import {
   isLicenseCategory,
   isTransmission,
   isMotoLicenseCategory,
+  licenseCategoryEligible,
   vehicleServesLicense,
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -50,7 +51,61 @@ describe("isMotoLicenseCategory", () => {
   });
 });
 
+describe("licenseCategoryEligible (moto hierarchy AM < A1 < A2 < A)", () => {
+  it("allows a moto of category <= the student's", () => {
+    // A2 student → A2, A1, AM eligible
+    expect(licenseCategoryEligible("A2", "A2")).toBe(true);
+    expect(licenseCategoryEligible("A1", "A2")).toBe(true);
+    expect(licenseCategoryEligible("AM", "A2")).toBe(true);
+  });
+
+  it("rejects a moto of category > the student's", () => {
+    expect(licenseCategoryEligible("A", "A2")).toBe(false);
+    expect(licenseCategoryEligible("A2", "A1")).toBe(false);
+    expect(licenseCategoryEligible("A1", "AM")).toBe(false);
+  });
+
+  it("treats B (car) as a separate class — never mixes with motos", () => {
+    expect(licenseCategoryEligible("B", "A")).toBe(false);
+    expect(licenseCategoryEligible("A", "B")).toBe(false);
+    expect(licenseCategoryEligible("B", "B")).toBe(true);
+  });
+
+  it("the top moto A serves every moto below", () => {
+    for (const v of ["A", "A2", "A1", "AM"]) {
+      expect(licenseCategoryEligible(v, "A")).toBe(true);
+    }
+  });
+});
+
 describe("vehicleServesLicense", () => {
+  it("applies the moto hierarchy: A1 vehicle serves an A2 student", () => {
+    expect(
+      vehicleServesLicense(
+        { licenseCategory: "A1", transmission: "manual" },
+        { licenseCategory: "A2", transmission: "manual" },
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects a higher moto: an A vehicle does NOT serve an A2 student", () => {
+    expect(
+      vehicleServesLicense(
+        { licenseCategory: "A", transmission: "manual" },
+        { licenseCategory: "A2", transmission: "manual" },
+      ),
+    ).toBe(false);
+  });
+
+  it("still enforces transmission even within the hierarchy", () => {
+    expect(
+      vehicleServesLicense(
+        { licenseCategory: "A1", transmission: "automatic" },
+        { licenseCategory: "A2", transmission: "manual" },
+      ),
+    ).toBe(false);
+  });
+
   it("matches when category AND transmission are equal", () => {
     expect(
       vehicleServesLicense(

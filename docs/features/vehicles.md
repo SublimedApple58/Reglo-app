@@ -67,7 +67,9 @@ Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded
 - No `trigger:deploy` is required by this feature.
 
 ## License categories (B / AM / A1 / A2 / A + transmission)
-Second brick of the Vehicles module. Each vehicle serves **one** license category + one transmission; each PRATICA student pursues one license path. The matcher pairs a student only with an instructor whose vehicle serves that exact category **and** transmission — so a moto instructor (moto fixed vehicle) is never matched to a car student, and an A1 student finds no slot unless a suitable 125 is free.
+Second brick of the Vehicles module. Each vehicle serves **one** license category + one transmission; each PRATICA student pursues one license path. Eligibility uses the **moto hierarchy AM < A1 < A2 < A** (since 2026-06-30): a moto student may train on any moto of category **≤** their own (an A2 student → A2/A1/AM, **not** A); **B** (car) is a separate class that only matches B; car↔moto never mix; transmission must still match exactly. This lives in `licenseCategoryEligible` / `vehicleServesLicense` (`lib/autoscuole/license.ts`) — the single chokepoint used by the matcher, availability, swaps, group-moto AND the booking pickers, so all surfaces agree.
+
+**Booking eligibility (instructor/owner) (2026-06-30):** the student picker now shows a license badge (sourced from `listDirectoryStudents`, which exposes `licenseCategory`/`transmission` on the agenda bootstrap). Web create dialog: the student list is filtered by the Auto/Moto mode and the vehicle list by the chosen student (only eligible vehicles); submit is blocked on a mismatch. Mobile `BookingForm`: the vehicle picker only offers vehicles eligible for the chosen student, a now-incompatible vehicle is cleared when the student changes, and confirm is blocked on a mismatch.
 
 - **Taxonomy**: `lib/autoscuole/license.ts` — `LICENSE_CATEGORIES = ['B','AM','A1','A2','A']`, `TRANSMISSIONS = ['manual','automatic']`, IT labels, and `vehicleServesLicense(vehicle, student)` (exact match on both; null on either side is permissive).
 - **Data model**:

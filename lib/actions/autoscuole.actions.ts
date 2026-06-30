@@ -718,6 +718,10 @@ const listDirectoryStudents = async (companyId: string) => {
   return members.map((member) => ({
     ...toStudentProfile(member.user, member.createdAt),
     assignedInstructorId: member.assignedInstructorId ?? null,
+    // Pursued license path — surfaced so the booking pickers can show a badge
+    // and validate vehicle⇄student eligibility (moto hierarchy).
+    licenseCategory: member.licenseCategory ?? null,
+    transmission: member.transmission ?? null,
   }));
 };
 

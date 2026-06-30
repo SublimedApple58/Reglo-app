@@ -49,7 +49,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
-import { TRANSMISSION_LABELS, isMotoLicenseCategory, type Transmission } from "@/lib/autoscuole/license";
+import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import {
   OutOfAvailabilitySheet,
@@ -62,7 +62,7 @@ import {
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; licenseCategory?: string | null; transmission?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -105,6 +105,8 @@ type AgendaBootstrapPayload = {
     id: string;
     firstName: string;
     lastName: string;
+    licenseCategory?: string | null;
+    transmission?: string | null;
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
@@ -249,7 +251,7 @@ function StudentSearchSelect({
                 key={s.id}
                 type="button"
                 className={cn(
-                  "flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
+                  "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
                   s.id === value && "bg-muted",
                 )}
                 onClick={() => {
@@ -258,8 +260,15 @@ function StudentSearchSelect({
                   setOpen(false);
                 }}
               >
-                <span className="font-medium">{s.firstName} {s.lastName}</span>
-                {s.email && <span className="text-[11px] text-muted-foreground">{s.email}</span>}
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium truncate">{s.firstName} {s.lastName}</span>
+                  {s.email && <span className="text-[11px] text-muted-foreground truncate">{s.email}</span>}
+                </span>
+                {s.licenseCategory ? (
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
+                    {s.licenseCategory}
+                  </span>
+                ) : null}
               </button>
             ))
           )}
@@ -670,6 +679,15 @@ export function AutoscuoleAgendaPage({
     if (!form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)) {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
+    }
+    // Vehicle⇄student license eligibility (moto hierarchy). BE re-validates.
+    if (vehiclesEnabled && form.vehicleId) {
+      const st = students.find((s) => s.id === form.studentId);
+      const veh = vehicles.find((v) => v.id === form.vehicleId);
+      if (st && veh && !vehicleServesLicense(veh, st)) {
+        toast.info({ description: "Il veicolo selezionato non è idoneo alla patente dell'allievo." });
+        return;
+      }
     }
     if (needFollowCar && !form.followVehicleId) {
       toast.info({ description: "Seleziona l'auto al seguito per la guida moto." });
@@ -2296,8 +2314,10 @@ export function AutoscuoleAgendaPage({
                                   setForm((prev) => ({
                                     ...prev,
                                     bookingMode: opt.value,
-                                    // Switching mode resets the vehicle selection so the
-                                    // form layout stays stable (no mutation on vehicle pick).
+                                    // Switching mode resets student + vehicle: the eligible
+                                    // students differ per class (Auto=B, Moto=moto), so a
+                                    // stale selection would be incompatible.
+                                    studentId: "",
                                     vehicleId: "",
                                     followVehicleId: "",
                                     extraMotoVehicleIds: [],
@@ -2353,9 +2373,21 @@ export function AutoscuoleAgendaPage({
                     </FieldGroup>
                     <FieldGroup label="Allievo" required>
                       <StudentSearchSelect
-                        students={students}
+                        students={
+                          vehiclesEnabled
+                            ? students.filter((s) =>
+                                // Hide students of the wrong class for the mode.
+                                // Students without a set license stay visible.
+                                !s.licenseCategory
+                                  ? true
+                                  : form.bookingMode === "moto"
+                                    ? isMotoLicenseCategory(s.licenseCategory)
+                                    : !isMotoLicenseCategory(s.licenseCategory),
+                              )
+                            : students
+                        }
                         value={form.studentId}
-                        onChange={(id) => setForm((prev) => ({ ...prev, studentId: id }))}
+                        onChange={(id) => setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
                       />
                     </FieldGroup>
                     <div className="grid grid-cols-2 gap-3">
@@ -2386,6 +2418,12 @@ export function AutoscuoleAgendaPage({
                                     ? isMotoLicenseCategory(vehicle.licenseCategory)
                                     : !isMotoLicenseCategory(vehicle.licenseCategory),
                                 )
+                                .filter((vehicle) => {
+                                  // Only vehicles the selected student is eligible for
+                                  // (moto hierarchy). No student yet → show all of the mode.
+                                  const st = students.find((s) => s.id === form.studentId);
+                                  return st ? vehicleServesLicense(vehicle, st) : true;
+                                })
                                 .map((vehicle) => {
                                 const assignedTo = vehicle.assignedInstructorId
                                   ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name

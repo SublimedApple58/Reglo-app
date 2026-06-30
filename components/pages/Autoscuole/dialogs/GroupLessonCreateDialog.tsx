@@ -32,6 +32,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 
 type ResourceOption = { id: string; name: string };
 
@@ -89,16 +90,12 @@ const todayYMD = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-// Exact license match, permissive when either side lacks data
-// (mirrors backend vehicleServesLicense).
+// License eligibility with the moto hierarchy (shared backend helper), permissive
+// when the vehicle is null.
 const vehicleServesStudent = (
   v: { licenseCategory: string | null; transmission: string | null } | null,
   st: { licenseCategory: string | null; transmission: string | null },
-) => {
-  if (!v || !v.licenseCategory || !v.transmission) return true;
-  if (!st.licenseCategory || !st.transmission) return true;
-  return v.licenseCategory === st.licenseCategory && v.transmission === st.transmission;
-};
+) => (v ? vehicleServesLicense(v, st) : true);
 
 export function GroupLessonCreateDialog({
   open,
