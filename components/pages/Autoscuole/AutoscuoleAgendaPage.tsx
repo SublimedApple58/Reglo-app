@@ -3,7 +3,7 @@
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle, Car, Bike } from "lucide-react";
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -323,6 +323,7 @@ export function AutoscuoleAgendaPage({
     day: "",
     time: "09:00",
     instructorId: "",
+    bookingMode: "auto" as "auto" | "moto",
     vehicleId: "",
     followVehicleId: "",
     extraMotoVehicleIds: [] as string[],
@@ -663,12 +664,9 @@ export function AutoscuoleAgendaPage({
   }, [appointments, search, rangeStart, rangeEnd]);
 
   const handleCreate = async () => {
-    const selectedVehicle = vehicles.find((v) => v.id === form.vehicleId);
+    const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
     const needFollowCar =
-      vehiclesEnabled &&
-      !!selectedVehicle &&
-      isMotoLicenseCategory(selectedVehicle.licenseCategory) &&
-      followCarRules[selectedVehicle.licenseCategory ?? ""]?.enabled === true;
+      isMotoMode && Object.values(followCarRules).some((r) => r?.enabled === true);
     if (!form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)) {
       toast.info({ description: "Completa tutti i campi richiesti." });
       return;
@@ -693,12 +691,9 @@ export function AutoscuoleAgendaPage({
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
       followVehicleId: needFollowCar ? form.followVehicleId : null,
-      extraMotoVehicleIds:
-        vehiclesEnabled &&
-        !!selectedVehicle &&
-        isMotoLicenseCategory(selectedVehicle.licenseCategory)
-          ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
-          : [],
+      extraMotoVehicleIds: isMotoMode
+        ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
+        : [],
       locationId: form.locationId || null,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
@@ -733,6 +728,7 @@ export function AutoscuoleAgendaPage({
       day: "",
       time: "09:00",
       instructorId: "",
+      bookingMode: "auto",
       vehicleId: "",
       followVehicleId: "",
       extraMotoVehicleIds: [],
@@ -2283,6 +2279,48 @@ export function AutoscuoleAgendaPage({
                       <h4 className="text-sm font-semibold text-foreground">Dettagli</h4>
                       <p className="mt-0.5 text-xs text-muted-foreground">Tipo di guida, istruttore, allievo e veicolo</p>
                     </div>
+                    {vehiclesEnabled && (
+                      <FieldGroup label="Modalità" required>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: "auto", label: "Auto", hint: "1 veicolo", icon: Car },
+                            { value: "moto", label: "Moto", hint: "+ auto al seguito", icon: Bike },
+                          ] as const).map((opt) => {
+                            const active = form.bookingMode === opt.value;
+                            const Icon = opt.icon;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() =>
+                                  setForm((prev) => ({
+                                    ...prev,
+                                    bookingMode: opt.value,
+                                    // Switching mode resets the vehicle selection so the
+                                    // form layout stays stable (no mutation on vehicle pick).
+                                    vehicleId: "",
+                                    followVehicleId: "",
+                                    extraMotoVehicleIds: [],
+                                  }))
+                                }
+                                className={cn(
+                                  "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
+                                  active
+                                    ? "border-yellow-400 bg-yellow-50"
+                                    : "border-border/60 hover:bg-gray-50",
+                                )}
+                              >
+                                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-yellow-700" : "text-muted-foreground")} />
+                                <span className="min-w-0">
+                                  <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                                  <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </FieldGroup>
+                    )}
                     <FieldGroup label="Tipo guida" required>
                       <div className="flex flex-wrap gap-1.5">
                         {LESSON_TYPE_OPTIONS.map((option) => {
@@ -2335,14 +2373,20 @@ export function AutoscuoleAgendaPage({
                         </Select>
                       </FieldGroup>
                       {vehiclesEnabled && (
-                        <FieldGroup label="Veicolo" required>
+                        <FieldGroup label={form.bookingMode === "moto" ? "Moto" : "Veicolo"} required>
                           <Select
                             value={form.vehicleId}
                             onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
                           >
-                            <SelectTrigger><SelectValue placeholder="Veicolo" /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
                             <SelectContent>
-                              {vehicles.map((vehicle) => {
+                              {vehicles
+                                .filter((vehicle) =>
+                                  form.bookingMode === "moto"
+                                    ? isMotoLicenseCategory(vehicle.licenseCategory)
+                                    : !isMotoLicenseCategory(vehicle.licenseCategory),
+                                )
+                                .map((vehicle) => {
                                 const assignedTo = vehicle.assignedInstructorId
                                   ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
                                   : null;
@@ -2370,12 +2414,10 @@ export function AutoscuoleAgendaPage({
                         </FieldGroup>
                       )}
                       {(() => {
-                        const sv = vehicles.find((v) => v.id === form.vehicleId);
                         const need =
                           vehiclesEnabled &&
-                          sv &&
-                          isMotoLicenseCategory(sv.licenseCategory) &&
-                          followCarRules[sv.licenseCategory ?? ""]?.enabled === true;
+                          form.bookingMode === "moto" &&
+                          Object.values(followCarRules).some((r) => r?.enabled === true);
                         if (!need) return null;
                         const carOptions = vehicles.filter(
                           (v) => v.licenseCategory === "B" && v.id !== form.vehicleId,
@@ -2401,8 +2443,7 @@ export function AutoscuoleAgendaPage({
                         );
                       })()}
                       {(() => {
-                        const sv = vehicles.find((v) => v.id === form.vehicleId);
-                        if (!vehiclesEnabled || !sv || !isMotoLicenseCategory(sv.licenseCategory)) {
+                        if (!vehiclesEnabled || form.bookingMode !== "moto") {
                           return null;
                         }
                         const motoOptions = vehicles.filter(
