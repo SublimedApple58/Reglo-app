@@ -21,15 +21,30 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { isMotoLicenseCategory } from "@/lib/autoscuole/license";
+import { isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
+import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
   updateAutoscuolaAppointmentDetails,
 } from "@/lib/actions/autoscuole.actions";
 
-type StudentLite = { firstName: string; lastName: string };
+type StudentLite = {
+  firstName: string;
+  lastName: string;
+  // Pursued license — filters the eligible primary moto (moto hierarchy).
+  licenseCategory?: string | null;
+  transmission?: string | null;
+};
 type InstructorOption = { id: string; name: string };
-type VehicleOption = { id: string; name: string; licenseCategory?: string | null };
+type VehicleOption = {
+  id: string;
+  name: string;
+  licenseCategory?: string | null;
+  transmission?: string | null;
+  // Pool/exclusivity — filters pickers to vehicles the instructor can use.
+  assignedInstructorId?: string | null;
+  poolInstructorIds?: string[] | null;
+};
 type LocationOption = {
   id: string;
   name: string;
@@ -307,6 +322,30 @@ export function EditAppointmentDialog({
       availability.status === "unavailable" ||
       availability.status === "error");
 
+  // Pickers only offer vehicles this lesson's instructor can use (exclusivity /
+  // pool — the instructor drives the follow car and the lesson is theirs),
+  // mirroring the mobile manage-lesson flow.
+  const usableByInstructor = (v: VehicleOption) =>
+    !instructorId ||
+    instructorCanUseVehicle(
+      { assignedInstructorId: v.assignedInstructorId ?? null, poolInstructorIds: v.poolInstructorIds ?? [] },
+      instructorId,
+    );
+  // The PRIMARY moto/vehicle is driven by the student → must serve their license
+  // (moto hierarchy). Permissive when the student's license is unknown.
+  const studentEligible = (v: VehicleOption) =>
+    appointment?.student?.licenseCategory && appointment?.student?.transmission
+      ? vehicleServesLicense(
+          { licenseCategory: v.licenseCategory ?? null, transmission: v.transmission ?? null },
+          { licenseCategory: appointment.student.licenseCategory, transmission: appointment.student.transmission },
+        )
+      : true;
+  // Primary picker: instructor-usable + student-eligible. Always keep the
+  // currently-assigned vehicle in the list so the Select can render it.
+  const primaryVehicleOptions = vehicles.filter(
+    (v) => v.id === vehicleId || (usableByInstructor(v) && studentEligible(v)),
+  );
+
   // Follow car (auto al seguito): only relevant when the selected primary
   // vehicle is a moto AND the company enabled the rule for that category.
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
@@ -316,20 +355,28 @@ export function EditAppointmentDialog({
     isMotoLicenseCategory(selectedVehicle.licenseCategory) &&
     followCarRules[selectedVehicle.licenseCategory ?? ""]?.enabled === true;
   const followCarOptions = vehicles.filter(
-    (v) => v.licenseCategory === "B" && v.id !== vehicleId,
+    (v) =>
+      v.licenseCategory === "B" &&
+      v.id !== vehicleId &&
+      (v.id === followVehicleId || usableByInstructor(v)),
   );
   // When the primary isn't a follow-car moto, the follow car is implicitly
   // cleared (a follow without a moto primary makes no sense).
   const effectiveFollowVehicleId = needsFollowCar ? followVehicleId : "";
 
   // Extra motos are only meaningful when the primary is a moto. When it isn't,
-  // they are implicitly cleared.
+  // they are implicitly cleared. Extra motos are just additional reserved
+  // vehicles → any company moto the instructor can use (NOT filtered by the
+  // student's license — matches the backend + the mobile flow).
   const primaryIsMoto =
     vehiclesEnabled &&
     !!selectedVehicle &&
     isMotoLicenseCategory(selectedVehicle.licenseCategory);
   const extraMotoOptions = vehicles.filter(
-    (v) => isMotoLicenseCategory(v.licenseCategory) && v.id !== vehicleId,
+    (v) =>
+      isMotoLicenseCategory(v.licenseCategory) &&
+      v.id !== vehicleId &&
+      (extraMotoVehicleIds.includes(v.id) || usableByInstructor(v)),
   );
   const effectiveExtraMotoVehicleIds = primaryIsMoto
     ? extraMotoVehicleIds.filter((id) => id !== vehicleId)
@@ -608,7 +655,7 @@ export function EditAppointmentDialog({
                   <SelectItem value="__none__" className="cursor-pointer">
                     Da assegnare
                   </SelectItem>
-                  {vehicles.map((v) => (
+                  {primaryVehicleOptions.map((v) => (
                     <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                       {v.name}
                     </SelectItem>

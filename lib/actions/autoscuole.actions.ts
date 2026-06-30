@@ -1173,7 +1173,13 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         appointments: mappedAppointments,
         students,
         instructors,
-        vehicles,
+        // Surface poolInstructorIds (from the poolMembers relation) so the web
+        // agenda can filter vehicle pickers to what each instructor may use,
+        // matching the mobile manage-lesson flow.
+        vehicles: vehicles.map(({ poolMembers, ...v }) => ({
+          ...v,
+          poolInstructorIds: poolMembers.map((m) => m.instructorId),
+        })),
         vehiclesEnabled: agendaVehiclesEnabled,
         groupLessonsEnabled: agendaGroupLessonsEnabled,
         followCarRules: agendaFollowCarRules,

@@ -67,6 +67,7 @@ type ResourceOption = {
   id: string;
   name: string;
   assignedInstructorId?: string | null;
+  poolInstructorIds?: string[] | null;
   licenseCategory?: string | null;
   transmission?: string | null;
 };
@@ -884,6 +885,8 @@ export function AutoscuoleAgendaPage({
       student: {
         firstName: item.student.firstName,
         lastName: item.student.lastName,
+        licenseCategory: item.student.licenseCategory ?? null,
+        transmission: item.student.transmission ?? null,
       },
       instructor: item.instructor
         ? { id: item.instructor.id, name: item.instructor.name }
@@ -1149,6 +1152,9 @@ export function AutoscuoleAgendaPage({
             id: v.id,
             name: v.name,
             licenseCategory: v.licenseCategory,
+            transmission: v.transmission,
+            assignedInstructorId: v.assignedInstructorId,
+            poolInstructorIds: v.poolInstructorIds,
           }))}
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
