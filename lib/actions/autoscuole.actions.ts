@@ -2813,6 +2813,10 @@ const createAppointmentBatchSchema = z.object({
   studentId: z.string().uuid(),
   instructorId: z.string().uuid(),
   vehicleId: z.string().uuid().optional().nullable(),
+  // Follow car + extra motos applied to every entry in the batch (same vehicle
+  // set across the slots).
+  followVehicleId: z.string().uuid().optional().nullable(),
+  extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
   locationId: z.string().uuid().optional().nullable(),
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
@@ -2890,6 +2894,30 @@ export async function createAutoscuolaAppointmentBatch(
     }
     if (payload.vehicleId && !vehicle) {
       return { success: false, message: "Veicolo non valido." };
+    }
+
+    // Validate the extra vehicles (follow car + extra motos): they must belong to
+    // the company and be active. Extra motos must additionally be motos.
+    const extraReservedIds = [
+      payload.followVehicleId,
+      ...(payload.extraMotoVehicleIds ?? []),
+    ].filter((id): id is string => Boolean(id));
+    if (extraReservedIds.length) {
+      const extraVehicles = await prisma.autoscuolaVehicle.findMany({
+        where: { id: { in: extraReservedIds }, companyId, status: "active" },
+        select: { id: true, licenseCategory: true },
+      });
+      const validIds = new Set(extraVehicles.map((v) => v.id));
+      if (!extraReservedIds.every((id) => validIds.has(id))) {
+        return { success: false, message: "Veicolo aggiuntivo non valido." };
+      }
+      const extraMotoSet = new Set(payload.extraMotoVehicleIds ?? []);
+      const motosValid = extraVehicles
+        .filter((v) => extraMotoSet.has(v.id))
+        .every((v) => isMotoLicenseCategory(v.licenseCategory));
+      if (!motosValid) {
+        return { success: false, message: "I veicoli aggiuntivi devono essere moto." };
+      }
     }
 
     // Booking block enforcement
@@ -3019,14 +3047,23 @@ export async function createAutoscuolaAppointmentBatch(
     const scanEnd = new Date(Math.max(...allEnds));
     scanEnd.setDate(scanEnd.getDate() + 1);
 
+    // Every vehicle this batch reserves on each slot (primary + follow + extras).
+    const batchReservedVehicleIds = [
+      payload.vehicleId,
+      payload.followVehicleId,
+      ...(payload.extraMotoVehicleIds ?? []),
+    ].filter((id): id is string => Boolean(id));
     const batchConflictOr: Array<Record<string, unknown>> = [
       { instructorId: resolvedInstructorId },
     ];
-    if (payload.vehicleId) {
-      batchConflictOr.push({ vehicleId: payload.vehicleId });
-      // Also catch appointments using this vehicle as a follow car (join row).
+    for (const vid of batchReservedVehicleIds) {
+      batchConflictOr.push({ vehicleId: vid });
+    }
+    if (batchReservedVehicleIds.length) {
+      // Also catch appointments using any of these vehicles in the join (e.g.
+      // a car already used as a follow car elsewhere).
       batchConflictOr.push({
-        appointmentVehicles: { some: { vehicleId: payload.vehicleId } },
+        appointmentVehicles: { some: { vehicleId: { in: batchReservedVehicleIds } } },
       });
     }
     const existingAppointments = await prisma.autoscuolaAppointment.findMany({
@@ -3158,6 +3195,19 @@ export async function createAutoscuolaAppointmentBatch(
             invoiceStatus: paymentSnapshot.invoiceStatus,
             creditApplied: paymentSnapshot.creditApplied,
             manualPaymentStatus: paymentSnapshot.manualPaymentStatus ?? null,
+            // Reserve every vehicle this slot uses (primary moto + extra motos
+            // + follow car), de-duped by vehicleId.
+            ...(payload.vehicleId
+              ? {
+                  appointmentVehicles: {
+                    create: buildAppointmentVehicleRows({
+                      primaryVehicleId: payload.vehicleId,
+                      extraMotoVehicleIds: payload.extraMotoVehicleIds,
+                      followVehicleId: payload.followVehicleId,
+                    }),
+                  },
+                }
+              : {}),
           },
         });
         results.push(appt);
