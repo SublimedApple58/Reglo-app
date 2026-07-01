@@ -2525,6 +2525,12 @@ export function AutoscuoleAgendaPage({
                                 {carOptions.map((vehicle) => (
                                   <SelectItem key={vehicle.id} value={vehicle.id}>
                                     {vehicle.name}
+                                    {vehicle.transmission ? (
+                                      <span className="text-muted-foreground">
+                                        {" · "}
+                                        {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}
+                                      </span>
+                                    ) : null}
                                   </SelectItem>
                                 ))}
                               </SelectContent>

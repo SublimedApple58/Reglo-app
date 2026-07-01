@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, type LicenseCategory } from "@/lib/autoscuole/license";
+import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
@@ -348,6 +348,10 @@ export function EditAppointmentDialog({
   // Friendly license label shown next to each vehicle in the pickers.
   const licLabel = (c?: string | null) =>
     c ? LICENSE_CATEGORY_LABELS[c as LicenseCategory] ?? c : "";
+  // Transmission label — shown for follow cars (all category B, so the useful
+  // distinction is manual vs automatic).
+  const transLabel = (t?: string | null) =>
+    t ? TRANSMISSION_LABELS[t as Transmission] ?? t : "";
 
   // Follow car (auto al seguito): only relevant when the selected primary
   // vehicle is a moto AND the company enabled the rule for that category.
@@ -699,6 +703,9 @@ export function EditAppointmentDialog({
                   {followCarOptions.map((v) => (
                     <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                       {v.name}
+                      {v.transmission ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{transLabel(v.transmission)}</span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
