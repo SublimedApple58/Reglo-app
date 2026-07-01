@@ -19,6 +19,7 @@ import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from '@/lib/autoscuole/roles';
 import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
+import { deleteAndAnonymizeUserAccount } from '@/lib/account-deletion';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -425,6 +426,19 @@ export async function deleteUser(id: string) {
           actorUserId: context.userId,
         });
       }
+    }
+
+    // Free the email when the user no longer belongs to ANY company. Removing a
+    // member left the User row (with its email) in place, so re-registering the
+    // same email later failed with "Esiste già un account per questa email".
+    // Anonymising the orphaned account (email → deleted+<id>@…, password null)
+    // releases the address, matching the mobile self-deletion behaviour. Users
+    // still in other companies are left untouched (their email must stay).
+    const remainingMemberships = await prisma.companyMember.count({
+      where: { userId: id },
+    });
+    if (remainingMemberships === 0) {
+      await deleteAndAnonymizeUserAccount(id);
     }
 
     revalidatePath('/admin/users');
