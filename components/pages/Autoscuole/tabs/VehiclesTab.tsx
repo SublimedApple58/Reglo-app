@@ -25,6 +25,7 @@ type VehicleDetail = {
   plate: string | null;
   status: string;
   assignedInstructorId: string | null;
+  poolInstructorIds: string[];
   followsInstructorAvailability: boolean;
   licenseCategory: string;
   transmission: string;
@@ -43,6 +44,8 @@ export type VehiclesTabProps = {
   setDefaultLicenseCategory: React.Dispatch<React.SetStateAction<string>>;
   defaultTransmission: string;
   setDefaultTransmission: React.Dispatch<React.SetStateAction<string>>;
+  followCarMotoEnabled: boolean;
+  setFollowCarMotoEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   openCreateVehicle: () => void;
   openEditVehicle: (vehicle: VehicleDetail) => void;
   openAvailabilityDialog: (vehicle: VehicleDetail) => void;
@@ -112,6 +115,7 @@ function VehiclesTabContent({
           return (
             <ResourceCard
               key={vehicle.id}
+              testId="vehicle-card"
               name={vehicle.name}
               subtitle={
                 <span className="flex items-center gap-1.5">
@@ -121,11 +125,29 @@ function VehiclesTabContent({
                       {vehicle.plate}
                     </span>
                   ) : null}
-                  <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                  <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
                     {vehicle.licenseCategory} ·{" "}
                     {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ??
                       vehicle.transmission}
                   </span>
+                  {vehicle.assignedInstructorId ? (
+                    <span className="rounded-full bg-pink-50 px-1.5 py-0.5 text-[10px] font-medium text-pink-700">
+                      Esclusivo
+                    </span>
+                  ) : vehicle.poolInstructorIds.length ? (
+                    <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                      Pool · {vehicle.poolInstructorIds.length}
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                      Aperto
+                    </span>
+                  )}
+                  {vehicle.status === "maintenance" ? (
+                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                      Manutenzione
+                    </span>
+                  ) : null}
                 </span>
               }
               inactive={vehicle.status === "inactive"}
@@ -192,6 +214,8 @@ export default function VehiclesTab({
   setDefaultLicenseCategory,
   defaultTransmission,
   setDefaultTransmission,
+  followCarMotoEnabled,
+  setFollowCarMotoEnabled,
   openCreateVehicle,
   openEditVehicle,
   openAvailabilityDialog,
@@ -248,6 +272,23 @@ export default function VehiclesTab({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        </div>
+      )}
+      {vehiclesEnabled && (
+        <div className="rounded-2xl border border-border bg-white shadow-card p-4">
+          <div
+            className="flex items-center justify-between gap-3 cursor-pointer"
+            onClick={() => setFollowCarMotoEnabled((prev) => !prev)}
+          >
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-semibold">Auto al seguito (moto)</span>
+              <span className="text-xs text-muted-foreground">
+                Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
+                entrambi i veicoli risultano occupati in agenda.
+              </span>
+            </div>
+            <InlineToggle checked={followCarMotoEnabled} size="sm" />
           </div>
         </div>
       )}

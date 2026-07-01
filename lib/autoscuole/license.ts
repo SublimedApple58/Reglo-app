@@ -58,9 +58,36 @@ export function isMotoLicenseCategory(value: unknown): boolean {
 }
 
 /**
+ * True when a vehicle of `vehicleCategory` is eligible for a student pursuing
+ * `studentCategory`, applying the real-world MOTO HIERARCHY:
+ *   AM < A1 < A2 < A
+ * A moto student may train on any moto of category ≤ their own (e.g. an A2
+ * student → A2, A1, AM — but NOT A). The car license "B" is a separate class:
+ * it only matches B. Car↔moto never match. Same category always matches.
+ */
+export function licenseCategoryEligible(
+  vehicleCategory: string,
+  studentCategory: string,
+): boolean {
+  if (vehicleCategory === studentCategory) return true;
+  const vMoto = isMotoLicenseCategory(vehicleCategory);
+  const sMoto = isMotoLicenseCategory(studentCategory);
+  if (vMoto && sMoto) {
+    return (
+      (MOTO_LICENSE_CATEGORIES as readonly string[]).indexOf(vehicleCategory) <=
+      (MOTO_LICENSE_CATEGORIES as readonly string[]).indexOf(studentCategory)
+    );
+  }
+  // Different classes (car vs moto), or two distinct cars — never eligible.
+  return false;
+}
+
+/**
  * True when a vehicle's (category, transmission) serves a student's pursued
- * license. Null/absent on either side is treated permissively (no constraint)
- * so incomplete data never blocks a booking; in practice both are always set.
+ * license. Category uses the moto hierarchy (`licenseCategoryEligible`);
+ * transmission must still match exactly. Null/absent on either side is treated
+ * permissively (no constraint) so incomplete data never blocks a booking; in
+ * practice both are always set.
  */
 export function vehicleServesLicense(
   vehicle: { licenseCategory?: string | null; transmission?: string | null },
@@ -68,8 +95,6 @@ export function vehicleServesLicense(
 ): boolean {
   if (!student.licenseCategory || !student.transmission) return true;
   if (!vehicle.licenseCategory || !vehicle.transmission) return true;
-  return (
-    vehicle.licenseCategory === student.licenseCategory &&
-    vehicle.transmission === student.transmission
-  );
+  if (vehicle.transmission !== student.transmission) return false;
+  return licenseCategoryEligible(vehicle.licenseCategory, student.licenseCategory);
 }

@@ -23,6 +23,18 @@
 
 After schema changes: `npx prisma generate`
 
+## Git flow & Staging
+
+Ambienti: **dev** (locale, `.env.dev`) → **staging** (branch `staging` → `staging.reglo.it`, DB Neon dedicato, `APP_ENV=staging` = invii esterni no-op, **CONDIVISO** con gli altri dev) → **prod** (`main` → `app.reglo.it`). Lavori grossi: **feature branch dedicato su entrambi i repo** (`reglo` + `reglo-mobile`), mai diretto su `main` finché non finito/approvato.
+
+Flusso pre-rilascio (regola d'oro: `staging` è condiviso → **non shippare a freddo**):
+1. `git fetch origin && git merge origin/staging` **nel tuo branch** → allinea migrazioni/commit altrui, risolvi conflitti.
+2. `pnpm ship:staging` (merge feature→staging + push, Vercel rideploya) → `pnpm migrate:staging` se ci sono migrazioni nuove.
+3. QA su `staging.reglo.it`.
+4. Rilascio prod (solo con OK utente): merge → `main`, `pnpm migrate:prod`, `pnpm trigger:deploy:prod` se cambiano i job; mobile via OTA.
+
+Dettagli: [docs/architecture/git-flow.md](docs/architecture/git-flow.md) · staging operativo (account test, comandi, accesso): [docs/STAGING.md](docs/STAGING.md). Nuova integrazione "che invia" → guardala con `externalSendsDisabled()`.
+
 ## Conventions
 
 - TypeScript strict mode, 2-space indentation
@@ -33,7 +45,7 @@ After schema changes: `npx prisma generate`
 - Short imperative commit messages, single-change scope
 - UI: Radix UI + Tailwind CSS 4 + CVA. Colors: 70% neutrals, 20% pink (`#EC4899`), 10% yellow (`#FACC15`)
 - Icons: `@tabler/icons-react` and `lucide-react`
-- Env: `.env.dev` and `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`
+- Env: `.env.dev`, `.env.staging`, `.env.prod` via `DOTENV_CONFIG_PATH`. Never commit `.env.*`. Staging = isolated DB + `APP_ENV=staging` (external sends no-op). See `docs/architecture/environments.md`.
 - Run `pnpm lint` before PRs
 
 ## Documentation

@@ -12,6 +12,7 @@ import {
   Plus,
   PhoneCall,
   ClipboardCheck,
+  Presentation,
 } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -97,6 +98,11 @@ const autoscuoleSidebarItems: SidebarItem[] = [
     title: "Quiz Patente",
     url: "autoscuole/quiz-stats",
     icon: ClipboardCheck,
+  },
+  {
+    title: "Aula",
+    url: "aula",
+    icon: Presentation,
   },
 ];
 

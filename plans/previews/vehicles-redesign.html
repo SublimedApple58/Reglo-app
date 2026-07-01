@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Reglo — Veicoli redesign (preview)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#EC4899; --primary-fg:#FFFFFF;
+    --accent:#FACC15; --accent-fg:#92400E;
+    --fg:#1F2937; --muted-fg:#6B7280; --border:#E5E7EB; --input:#E2E8F0;
+    --bg:#FFFFFF; --soft:#F8FAFC; --pink-soft:#FDF2F8;
+    --radius:20px; --shadow-card:0 2px 8px rgba(0,0,0,.08);
+    --amber-soft:#FEF3C7; --amber-fg:#92400E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Geist",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:#EEF1F5;color:var(--fg);-webkit-font-smoothing:antialiased;padding:40px}
+  .wrap{max-width:1200px;margin:0 auto}
+  h1.title{font-weight:600;font-size:22px;margin:0 0 4px}
+  p.sub{color:var(--muted-fg);font-size:14px;margin:0 0 28px;font-weight:400}
+  .grid{display:grid;grid-template-columns:380px 1fr;gap:24px;align-items:start}
+  .screen-label{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted-fg);margin:0 0 10px}
+  .card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);
+    box-shadow:var(--shadow-card);padding:22px}
+  .dialog-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .dialog-head h2{font-size:17px;font-weight:600;margin:0}
+  .x{width:30px;height:30px;border-radius:9999px;border:1px solid var(--border);display:flex;
+    align-items:center;justify-content:center;color:var(--muted-fg);font-size:15px}
+  label.fld{display:block;font-size:13px;font-weight:500;margin:14px 0 6px}
+  .input,.select{width:100%;height:42px;border:1px solid var(--input);border-radius:12px;
+    padding:0 12px;font-size:14px;font-family:inherit;color:var(--fg);background:#fff;display:flex;
+    align-items:center;justify-content:space-between}
+  .select .chev{color:var(--muted-fg)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .seg{display:flex;background:var(--soft);border:1px solid var(--border);border-radius:12px;padding:4px;gap:4px}
+  .seg button{flex:1;border:0;background:transparent;font-family:inherit;font-size:13.5px;font-weight:500;
+    color:var(--muted-fg);height:34px;border-radius:9px;cursor:pointer}
+  .seg button.on{background:#fff;color:var(--fg);box-shadow:0 1px 3px rgba(0,0,0,.1);font-weight:600}
+  .helper{font-size:12.5px;color:var(--muted-fg);margin:8px 2px 0;font-weight:400;line-height:1.5}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .chip{border:1px solid var(--border);border-radius:9999px;padding:7px 13px;font-size:13px;font-weight:500;
+    color:var(--muted-fg);display:flex;align-items:center;gap:7px;background:#fff}
+  .chip.on{background:var(--pink-soft);border-color:#F9A8D4;color:#9D174D}
+  .chip .dot{width:15px;height:15px;border-radius:5px;border:1.5px solid var(--border);display:inline-flex;
+    align-items:center;justify-content:center;font-size:10px;color:#fff}
+  .chip.on .dot{background:var(--primary);border-color:var(--primary)}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;margin-top:16px;
+    padding-top:16px;border-top:1px solid var(--border)}
+  .toggle-row .t{font-size:13.5px;font-weight:500}
+  .switch{width:42px;height:24px;border-radius:9999px;background:var(--primary);position:relative}
+  .switch.off{background:#CBD5E1}
+  .switch i{position:absolute;top:3px;left:21px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.2s}
+  .switch.off i{left:3px}
+  .status-seg{display:flex;gap:8px;margin-top:6px}
+  .pillbtn{border:1px solid var(--border);border-radius:9999px;padding:8px 16px;font-size:13px;font-weight:500;background:#fff;color:var(--muted-fg)}
+  .pillbtn.active{background:#1F2937;color:#fff;border-color:#1F2937}
+  .pillbtn.amber{background:var(--amber-soft);border-color:#FCD34D;color:var(--amber-fg)}
+  .footer{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+  .btn{height:42px;padding:0 20px;border-radius:12px;font-family:inherit;font-size:14px;font-weight:600;border:1px solid var(--border);background:#fff;color:var(--fg)}
+  .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 6px 12px rgba(236,72,153,.3)}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  .mode{border:1px solid var(--border);border-radius:16px;padding:16px}
+  .mode.sel{border-color:var(--primary);box-shadow:0 0 0 3px var(--pink-soft)}
+  .mode h3{margin:0 0 6px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+  .mode p{margin:0;font-size:12.5px;color:var(--muted-fg);line-height:1.55;font-weight:400}
+  .tag{font-size:11px;font-weight:600;padding:2px 9px;border-radius:9999px}
+  .tag.open{background:#F1F5F9;color:#475569}.tag.pool{background:#EEF2FF;color:#4338CA}.tag.excl{background:var(--pink-soft);color:#9D174D}
+  .veh-card{border:1px solid var(--border);border-radius:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+  .veh-meta{display:flex;align-items:center;gap:13px}
+  .veh-ic{width:46px;height:46px;border-radius:13px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:22px}
+  .veh-card .nm{font-size:15px;font-weight:600}
+  .veh-card .badges{display:flex;gap:7px;margin-top:5px}
+  .badge{font-size:11px;font-weight:500;padding:3px 9px;border-radius:9999px;background:#F1F5F9;color:#475569}
+  .badge.cat{background:#ECFDF5;color:#047857}
+  .section-cap{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-fg);margin:0 0 4px}
+  .follow-row{display:flex;align-items:center;justify-content:space-between;padding:13px 2px;border-bottom:1px solid var(--border)}
+  .follow-row:last-child{border-bottom:0}
+  .follow-row .lab{font-size:14px;font-weight:500}
+  .follow-row .labsub{font-size:12px;color:var(--muted-fg);font-weight:400;margin-top:2px}
+  .summary{background:var(--soft);border-radius:14px;padding:14px 16px;margin-top:16px;font-size:13px;display:flex;gap:10px;align-items:flex-start}
+  .summary b{font-weight:600}
+  .info-ic{flex:none;width:20px;height:20px;border-radius:50%;background:#DBEAFE;color:#1D4ED8;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600}
+  .stack>*{margin-bottom:34px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="title">Veicoli — redesign UI · anteprima</h1>
+  <p class="sub">Web app Reglo · design system (accent #EC4899, Geist, peso 500–600). Filosofia “default che spariscono, leve che aspettano”: l’utente base non vede nulla di nuovo.</p>
+
+  <div class="stack">
+
+    <!-- SCREEN 1 -->
+    <div>
+      <p class="screen-label">1 · Dialog modifica veicolo — modalità d’utilizzo</p>
+      <div class="grid">
+        <div class="card">
+          <div class="dialog-head"><h2>Modifica veicolo</h2><div class="x">✕</div></div>
+          <label class="fld">Nome</label>
+          <div class="input">Kawasaki Ninja 125</div>
+          <label class="fld">Targa</label>
+          <div class="input">FA 123 ZZ</div>
+          <div class="row2">
+            <div><label class="fld">Categoria patente</label><div class="select">A1 (125)<span class="chev">⌄</span></div></div>
+            <div><label class="fld">Cambio</label><div class="select">Manuale<span class="chev">⌄</span></div></div>
+          </div>
+
+          <label class="fld">Modalità di utilizzo</label>
+          <div class="seg">
+            <button>Aperto</button>
+            <button>Pool</button>
+            <button class="on">Esclusivo</button>
+          </div>
+          <label class="fld">Istruttore</label>
+          <div class="select">Mario Rossi<span class="chev">⌄</span></div>
+          <p class="helper">Solo Mario può usare questo mezzo; sparisce dal pool degli altri. Un istruttore può avere più mezzi esclusivi (es. la sua auto + la sua moto).</p>
+
+          <div class="toggle-row">
+            <div class="t">Disponibilità: segue l’istruttore</div>
+            <div class="switch"><i></i></div>
+          </div>
+
+          <label class="fld" style="margin-top:18px">Stato</label>
+          <div class="status-seg">
+            <div class="pillbtn active">Attivo</div>
+            <div class="pillbtn">Manutenzione</div>
+          </div>
+
+          <div class="footer">
+            <div class="btn">Annulla</div>
+            <div class="btn primary">Salva</div>
+          </div>
+        </div>
+
+        <div>
+          <p class="screen-label" style="margin-top:2px">Le 3 modalità (precedenza: esclusivo → pool → aperto)</p>
+          <div class="modes">
+            <div class="mode">
+              <h3><span class="tag open">Aperto</span></h3>
+              <p>Tutti gli istruttori possono usarlo. <b>È il default</b> e il comportamento di oggi: chi usa i veicoli “in maniera basilare” non tocca nulla.</p>
+            </div>
+            <div class="mode">
+              <h3><span class="tag pool">Pool</span></h3>
+              <p>Solo gli istruttori che selezioni. Usato anche per dire <b>chi può fare moto</b> (le categorie dell’istruttore derivano dai mezzi che può usare).</p>
+              <div class="chips">
+                <span class="chip on"><span class="dot">✓</span>Mario</span>
+                <span class="chip on"><span class="dot">✓</span>Luca</span>
+                <span class="chip"><span class="dot"></span>Anna</span>
+              </div>
+            </div>
+            <div class="mode sel">
+              <h3><span class="tag excl">Esclusivo</span></h3>
+              <p>Riservato a <b>un</b> istruttore, nascosto agli altri. Risolve il caso “Mario ha la sua auto <i>e</i> la sua moto”.</p>
+            </div>
+          </div>
+
+          <p class="screen-label" style="margin-top:30px">Card veicolo nella lista (badge modalità + stato)</p>
+          <div class="veh-card">
+            <div class="veh-meta">
+              <div class="veh-ic">🏍️</div>
+              <div>
+                <div class="nm">Kawasaki Ninja 125</div>
+                <div class="badges"><span class="badge cat">A1 · Manuale</span><span class="badge" style="background:#FDF2F8;color:#9D174D">Esclusivo · Mario</span></div>
+              </div>
+            </div>
+            <div class="x">✎</div>
+          </div>
+          <div class="veh-card">
+            <div class="veh-meta">
+              <div class="veh-ic">🚗</div>
+              <div>
+                <div class="nm">Fiat Panda</div>
+                <div class="badges"><span class="badge cat">B · Manuale</span><span class="badge">Aperto</span><span class="badge amber" style="background:#FEF3C7;color:#92400E">Manutenzione</span></div>
+              </div>
+            </div>
+            <div class="x">✎</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN 2 -->
+    <div>
+      <p class="screen-label">2 · Card “Auto al seguito (moto)” — impostazioni autoscuola</p>
+      <div class="grid">
+        <div class="card">
+          <p class="section-cap">Auto al seguito (moto)</p>
+          <p class="helper" style="margin:0 0 8px">Quando attivo, ogni guida moto prenota anche un’auto al seguito; entrambi i veicoli risultano occupati in agenda.</p>
+          <div class="follow-row"><div><div class="lab">AM — ciclomotore</div></div><div class="switch off"><i></i></div></div>
+          <div class="follow-row"><div><div class="lab">A1 — 125</div></div><div class="switch off"><i></i></div></div>
+          <div class="follow-row"><div><div class="lab">A2 — media</div></div><div class="switch"><i></i></div></div>
+          <div class="follow-row"><div><div class="lab">A — moto</div></div><div class="switch"><i></i></div></div>
+        </div>
+        <div>
+          <p class="screen-label" style="margin-top:2px">Comportamento</p>
+          <div class="mode" style="border-radius:16px">
+            <p>È <b>opt-in per categoria</b>, deciso dall’autoscuola — non hardcoded. Chi non fa moto o non usa l’auto al seguito non vede niente. La sezione è collassata di default (avanzata).</p>
+          </div>
+          <div class="summary"><div class="info-ic">i</div><div>Con A2 e A attivi, una guida A prenota <b>moto + un’auto (categoria B)</b>. Il motore riserva entrambi e li blocca per chiunque altro in quella fascia.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCREEN 3 -->
+    <div>
+      <p class="screen-label">3 · Prenotazione in agenda — doppio veicolo (override manuale)</p>
+      <div class="grid">
+        <div class="card">
+          <div class="dialog-head"><h2>Nuova guida</h2><div class="x">✕</div></div>
+          <label class="fld">Allievo</label><div class="input">Giulia Bianchi · A1</div>
+          <label class="fld">Istruttore</label><div class="input">Mario Rossi<span class="chev">⌄</span></div>
+          <div class="row2">
+            <div><label class="fld">Data</label><div class="input">Lun 24 giu</div></div>
+            <div><label class="fld">Orario</label><div class="input">10:00 · 90′</div></div>
+          </div>
+
+          <label class="fld">Veicolo (moto)</label>
+          <div class="select">Kawasaki Ninja 125 · A1<span class="chev">⌄</span></div>
+          <label class="fld">Auto al seguito</label>
+          <div class="select">Fiat Panda · B<span class="chev">⌄</span></div>
+
+          <div class="summary"><div class="info-ic">i</div><div>Questa guida occupa <b>2 mezzi</b>: la moto e l’auto al seguito. Precompilati dal sistema, modificabili a mano.</div></div>
+
+          <div class="footer"><div class="btn">Annulla</div><div class="btn primary">Crea guida</div></div>
+        </div>
+        <div>
+          <p class="screen-label" style="margin-top:2px">In agenda</p>
+          <div class="veh-card" style="border-left:4px solid var(--primary)">
+            <div class="veh-meta"><div class="veh-ic">🏍️</div><div><div class="nm">Giulia Bianchi — guida A1</div><div class="badges"><span class="badge">Mario Rossi</span><span class="badge cat">Ninja 125</span><span class="badge" style="background:#FDF2F8;color:#9D174D">+ Panda al seguito</span></div></div></div>
+            <div style="font-size:13px;color:var(--muted-fg);font-weight:500">10:00–11:30</div>
+          </div>
+          <div class="summary"><div class="info-ic">i</div><div>Sia <b>Ninja 125</b> sia <b>Fiat Panda</b> compaiono come occupati nelle rispettive corsie veicolo: nessun altro può prenotarli in questa fascia.</div></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

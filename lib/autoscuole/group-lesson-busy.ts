@@ -17,6 +17,11 @@ import { prisma } from "@/db/prisma";
 export type GroupLessonBusyRow = {
   instructorId: string | null;
   vehicleId: string | null;
+  /** Shared follow car of a kind="moto" group (reserved at the container level). */
+  followVehicleId: string | null;
+  /** Moto fleet of a kind="moto" group — reserved for the whole window even
+   *  before all seats fill, so external bookings cannot grab the motos. */
+  fleetVehicleIds: string[];
   startsAt: Date;
   endsAt: Date | null;
 };
@@ -26,7 +31,7 @@ export async function fetchGroupLessonBusyRows(
   rangeStart: Date,
   rangeEnd: Date,
 ): Promise<GroupLessonBusyRow[]> {
-  return prisma.autoscuolaGroupLesson.findMany({
+  const rows = await prisma.autoscuolaGroupLesson.findMany({
     where: {
       companyId,
       status: "scheduled",
@@ -36,10 +41,20 @@ export async function fetchGroupLessonBusyRows(
     select: {
       instructorId: true,
       vehicleId: true,
+      followVehicleId: true,
       startsAt: true,
       endsAt: true,
+      fleetVehicles: { select: { vehicleId: true } },
     },
   });
+  return rows.map((r) => ({
+    instructorId: r.instructorId,
+    vehicleId: r.vehicleId,
+    followVehicleId: r.followVehicleId,
+    fleetVehicleIds: r.fleetVehicles.map((f) => f.vehicleId),
+    startsAt: r.startsAt,
+    endsAt: r.endsAt,
+  }));
 }
 
 /**
@@ -55,7 +70,12 @@ export function addGroupLessonBusyIntervals(
     if (!gl.endsAt) continue;
     const start = gl.startsAt.getTime();
     const end = gl.endsAt.getTime();
-    for (const ownerId of [gl.instructorId, gl.vehicleId]) {
+    for (const ownerId of [
+      gl.instructorId,
+      gl.vehicleId,
+      gl.followVehicleId,
+      ...gl.fleetVehicleIds,
+    ]) {
       if (!ownerId) continue;
       const list = intervals.get(ownerId) ?? [];
       list.push({ start, end });

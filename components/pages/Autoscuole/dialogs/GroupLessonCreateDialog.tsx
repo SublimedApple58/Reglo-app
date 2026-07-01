@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
+import { Bike, Car, Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
 
 import {
   Dialog,
@@ -31,6 +31,8 @@ import {
   listOptedInGroupLessonStudents,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
+import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { vehicleServesLicense } from "@/lib/autoscuole/license";
 
 type ResourceOption = { id: string; name: string };
 
@@ -39,6 +41,8 @@ type VehicleWithLicense = {
   name: string;
   licenseCategory: string | null;
   transmission: string | null;
+  assignedInstructorId: string | null;
+  poolInstructorIds: string[];
 };
 
 type OptedInStudent = {
@@ -53,10 +57,15 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   instructors: ResourceOption[];
   vehiclesEnabled: boolean;
+  /** Per-moto-category follow-car rules (to require an auto al seguito). */
+  followCarRules?: Record<string, { enabled: boolean }>;
   /** Optional ISO date (YYYY-MM-DD) of the agenda's focused day to pre-fill. */
   defaultDate?: string | null;
   onCreated: () => void;
 };
+
+const MOTO_CATEGORIES = new Set(["AM", "A1", "A2", "A"]);
+const isMotoCategory = (c: string | null | undefined) => !!c && MOTO_CATEGORIES.has(c);
 
 const CAPACITY_OPTIONS = [
   { value: "3", label: "3 allievi" },
@@ -81,22 +90,19 @@ const todayYMD = () => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
 
-// Exact license match, permissive when either side lacks data
-// (mirrors backend vehicleServesLicense).
+// License eligibility with the moto hierarchy (shared backend helper), permissive
+// when the vehicle is null.
 const vehicleServesStudent = (
   v: { licenseCategory: string | null; transmission: string | null } | null,
   st: { licenseCategory: string | null; transmission: string | null },
-) => {
-  if (!v || !v.licenseCategory || !v.transmission) return true;
-  if (!st.licenseCategory || !st.transmission) return true;
-  return v.licenseCategory === st.licenseCategory && v.transmission === st.transmission;
-};
+) => (v ? vehicleServesLicense(v, st) : true);
 
 export function GroupLessonCreateDialog({
   open,
   onOpenChange,
   instructors,
   vehiclesEnabled,
+  followCarRules,
   defaultDate,
   onCreated,
 }: Props) {
@@ -107,26 +113,36 @@ export function GroupLessonCreateDialog({
   const [students, setStudents] = React.useState<OptedInStudent[]>([]);
 
   // Form state.
+  const [kind, setKind] = React.useState<"standard" | "moto">("standard");
   const [day, setDay] = React.useState("");
   const [time, setTime] = React.useState("09:00");
   const [durationMin, setDurationMin] = React.useState("180");
   const [capacityStr, setCapacityStr] = React.useState("3");
-  const CAPACITY = Number(capacityStr);
   const [instructorId, setInstructorId] = React.useState<string>("");
   const [vehicleId, setVehicleId] = React.useState<string>("");
+  // Moto group: the chosen fleet of motos + one shared follow car.
+  const [fleetIds, setFleetIds] = React.useState<string[]>([]);
+  const [followVehicleId, setFollowVehicleId] = React.useState<string>("");
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [openInvites, setOpenInvites] = React.useState(true);
   const [studentQuery, setStudentQuery] = React.useState("");
 
+  const isMoto = kind === "moto";
+  // For a moto group the real cap is the fleet size; otherwise the chosen value.
+  const CAPACITY = isMoto ? fleetIds.length : Number(capacityStr);
+
   // Load reference data (opted-in students + vehicles with license info) on open.
   React.useEffect(() => {
     if (!open) return;
+    setKind("standard");
     setDay(defaultDate || todayYMD());
     setTime("09:00");
     setDurationMin("180");
     setCapacityStr("3");
     setInstructorId("");
     setVehicleId("");
+    setFleetIds([]);
+    setFollowVehicleId("");
     setSelectedIds([]);
     setOpenInvites(true);
     setStudentQuery("");
@@ -152,6 +168,8 @@ export function GroupLessonCreateDialog({
                 name: String(v.name ?? "Veicolo"),
                 licenseCategory: (v.licenseCategory as string | null) ?? null,
                 transmission: (v.transmission as string | null) ?? null,
+                assignedInstructorId: (v.assignedInstructorId as string | null) ?? null,
+                poolInstructorIds: (v.poolInstructorIds as string[] | undefined) ?? [],
               })),
           );
         }
@@ -169,11 +187,42 @@ export function GroupLessonCreateDialog({
     [vehicles, vehicleId],
   );
 
-  // Eligible to PRE-ADD: opted-in + license-compatible with the chosen vehicle.
-  const eligibleStudents = React.useMemo(
-    () => students.filter((st) => vehicleServesStudent(selectedVehicle, st)),
-    [students, selectedVehicle],
+  // Only vehicles the chosen instructor can use are pickable (exclusive to them,
+  // or open / in a pool they belong to). With no instructor chosen yet, show all
+  // (the backend still enforces access on submit).
+  const accessibleVehicles = React.useMemo(
+    () => (instructorId ? vehicles.filter((v) => instructorCanUseVehicle(v, instructorId)) : vehicles),
+    [vehicles, instructorId],
   );
+
+  // Moto group: pick the fleet from motos, the follow car from cars (category B).
+  const motoVehicles = React.useMemo(
+    () => accessibleVehicles.filter((v) => isMotoCategory(v.licenseCategory)),
+    [accessibleVehicles],
+  );
+  const carVehicles = React.useMemo(
+    () => accessibleVehicles.filter((v) => v.licenseCategory === "B"),
+    [accessibleVehicles],
+  );
+  const fleet = React.useMemo(
+    () => vehicles.filter((v) => fleetIds.includes(v.id)),
+    [vehicles, fleetIds],
+  );
+  // A follow car is required when any fleet category has the rule enabled.
+  const followCarRequired = React.useMemo(
+    () => isMoto && fleet.some((v) => followCarRules?.[v.licenseCategory ?? ""]?.enabled === true),
+    [isMoto, fleet, followCarRules],
+  );
+
+  // Eligible to PRE-ADD: opted-in + license-compatible. Standard = the single
+  // vehicle; moto = any moto still in the chosen fleet.
+  const eligibleStudents = React.useMemo(() => {
+    if (isMoto) {
+      if (!fleet.length) return [];
+      return students.filter((st) => fleet.some((v) => vehicleServesStudent(v, st)));
+    }
+    return students.filter((st) => vehicleServesStudent(selectedVehicle, st));
+  }, [students, selectedVehicle, isMoto, fleet]);
 
   // Drop any pre-selected student that no longer matches the chosen vehicle.
   React.useEffect(() => {
@@ -181,6 +230,15 @@ export function GroupLessonCreateDialog({
       prev.filter((id) => eligibleStudents.some((st) => st.id === id)),
     );
   }, [eligibleStudents]);
+
+  // Changing the instructor can make a chosen vehicle / fleet / follow car no
+  // longer accessible — drop selections that fell out of the accessible set.
+  React.useEffect(() => {
+    const ok = new Set(accessibleVehicles.map((v) => v.id));
+    setVehicleId((prev) => (prev && !ok.has(prev) ? "" : prev));
+    setFleetIds((prev) => prev.filter((id) => ok.has(id)));
+    setFollowVehicleId((prev) => (prev && !ok.has(prev) ? "" : prev));
+  }, [accessibleVehicles]);
 
   // Live search over the eligible list (accent/case-insensitive).
   const filteredStudents = React.useMemo(() => {
@@ -204,7 +262,16 @@ export function GroupLessonCreateDialog({
       toast.error({ description: "Imposta data e ora della guida." });
       return;
     }
-    if (vehiclesEnabled && !vehicleId) {
+    if (isMoto) {
+      if (fleetIds.length === 0) {
+        toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
+        return;
+      }
+      if (followCarRequired && !followVehicleId) {
+        toast.error({ description: "Per queste moto è richiesta un'auto al seguito." });
+        return;
+      }
+    } else if (vehiclesEnabled && !vehicleId) {
       toast.error({ description: "Seleziona il veicolo della guida di gruppo." });
       return;
     }
@@ -221,8 +288,17 @@ export function GroupLessonCreateDialog({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         instructorId: instructorId || undefined,
-        vehicleId: vehiclesEnabled ? vehicleId || undefined : undefined,
-        capacity: CAPACITY,
+        ...(isMoto
+          ? {
+              kind: "moto" as const,
+              vehicleIds: fleetIds,
+              followVehicleId: followVehicleId || undefined,
+              capacity: CAPACITY,
+            }
+          : {
+              vehicleId: vehiclesEnabled ? vehicleId || undefined : undefined,
+              capacity: CAPACITY,
+            }),
         studentIds: selectedIds,
       });
       if (!res.success || !res.data) {
@@ -272,6 +348,41 @@ export function GroupLessonCreateDialog({
           </div>
         ) : (
           <div className="space-y-5">
+            {/* Tipo: standard (1 veicolo) vs moto (flotta + auto al seguito) */}
+            {vehiclesEnabled ? (
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "standard", label: "Standard", icon: Car, hint: "1 veicolo" },
+                  { value: "moto", label: "Moto", icon: Bike, hint: "flotta + auto al seguito" },
+                ] as const).map((opt) => {
+                  const active = kind === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => {
+                        setKind(opt.value);
+                        setSelectedIds([]);
+                      }}
+                      className={cn(
+                        "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
+                        active
+                          ? "border-teal-300 bg-teal-50/70"
+                          : "border-border/60 hover:bg-gray-50",
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4 shrink-0", active ? "text-teal-600" : "text-muted-foreground")} />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-foreground">{opt.label}</span>
+                        <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
             {/* When / instructor / vehicle */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
@@ -322,29 +433,31 @@ export function GroupLessonCreateDialog({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Capienza</Label>
-                <Select
-                  value={capacityStr}
-                  onValueChange={(v) => {
-                    setCapacityStr(v);
-                    // Lowering 4 → 3 with 4 pre-selected students: trim the list.
-                    setSelectedIds((prev) => prev.slice(0, Number(v)));
-                  }}
-                >
-                  <SelectTrigger className="cursor-pointer">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CAPACITY_OPTIONS.map((c) => (
-                      <SelectItem key={c.value} value={c.value} className="cursor-pointer">
-                        {c.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {vehiclesEnabled ? (
+              {!isMoto ? (
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">Capienza</Label>
+                  <Select
+                    value={capacityStr}
+                    onValueChange={(v) => {
+                      setCapacityStr(v);
+                      // Lowering 4 → 3 with 4 pre-selected students: trim the list.
+                      setSelectedIds((prev) => prev.slice(0, Number(v)));
+                    }}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAPACITY_OPTIONS.map((c) => (
+                        <SelectItem key={c.value} value={c.value} className="cursor-pointer">
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+              {vehiclesEnabled && !isMoto ? (
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Veicolo</Label>
                   <Select value={vehicleId} onValueChange={setVehicleId}>
@@ -352,7 +465,7 @@ export function GroupLessonCreateDialog({
                       <SelectValue placeholder="Seleziona veicolo" />
                     </SelectTrigger>
                     <SelectContent>
-                      {vehicles.map((v) => (
+                      {accessibleVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                           {v.name}
                           {v.licenseCategory ? ` · ${v.licenseCategory}` : ""}
@@ -364,6 +477,85 @@ export function GroupLessonCreateDialog({
               ) : null}
             </div>
 
+            {/* Moto group: choose the fleet + the shared follow car */}
+            {isMoto ? (
+              <div className="space-y-3 rounded-2xl border border-border/60 bg-gray-50/50 p-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1.5">
+                      <Bike className="h-3.5 w-3.5 text-teal-600" /> Moto della guida
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      {fleetIds.length} {fleetIds.length === 1 ? "moto" : "moto"} · {CAPACITY} posti
+                    </span>
+                  </div>
+                  {motoVehicles.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Nessuna moto disponibile. Aggiungi un veicolo moto nelle risorse.
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {motoVehicles.map((v) => {
+                        const checked = fleetIds.includes(v.id);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            onClick={() =>
+                              setFleetIds((prev) =>
+                                prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
+                              )
+                            }
+                            className={cn(
+                              "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                              checked
+                                ? "border-teal-300 bg-teal-50 text-teal-800"
+                                : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                            )}
+                          >
+                            <span className="max-w-[160px] truncate">{v.name}</span>
+                            {v.licenseCategory ? (
+                              <span className="text-[10px] text-muted-foreground">{v.licenseCategory}</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">
+                    Ogni allievo idoneo riceverà automaticamente una moto della flotta. La capienza è
+                    pari al numero di moto scelte.
+                  </p>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] text-muted-foreground">
+                    Auto al seguito{followCarRequired ? " (richiesta)" : " (facoltativa)"}
+                  </Label>
+                  <Select
+                    value={followVehicleId || "__none__"}
+                    onValueChange={(v) => setFollowVehicleId(v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue placeholder="Nessuna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="cursor-pointer">
+                        Nessuna
+                      </SelectItem>
+                      {carVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id} className="cursor-pointer">
+                          <span className="flex items-center gap-1.5">
+                            <Car className="h-3.5 w-3.5 text-muted-foreground" /> {v.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : null}
+
             {/* Pre-add eligible opted-in students */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -374,9 +566,11 @@ export function GroupLessonCreateDialog({
                   {selectedIds.length}/{CAPACITY}
                 </span>
               </div>
-              {vehiclesEnabled && !vehicleId ? (
+              {(isMoto ? fleetIds.length === 0 : vehiclesEnabled && !vehicleId) ? (
                 <p className="text-xs text-muted-foreground">
-                  Scegli prima il veicolo per vedere gli allievi abilitati.
+                  {isMoto
+                    ? "Scegli prima le moto per vedere gli allievi idonei."
+                    : "Scegli prima il veicolo per vedere gli allievi abilitati."}
                 </p>
               ) : eligibleStudents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">

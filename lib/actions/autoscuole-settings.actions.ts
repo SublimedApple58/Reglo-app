@@ -11,6 +11,12 @@ import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect"
 import { isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
+  parseFollowCarRulesFromLimits,
+  readFollowCarMotoEnabled,
+  followCarRulesForEnabled,
+  type FollowCarRules,
+} from "@/lib/autoscuole/follow-car";
+import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
@@ -348,6 +354,14 @@ const autoscuolaSettingsPatchSchema = z
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
     defaultTransmission: z.enum(TRANSMISSIONS).optional(),
+    // "Auto al seguito": single global toggle for ALL moto categories. When on,
+    // every moto guida additionally reserves a follow car.
+    followCarMotoEnabled: z.boolean().optional(),
+    // Legacy per-category map, still accepted for back-compat with old clients.
+    // The global flag above is the source of truth going forward.
+    followCarRules: z
+      .record(z.string(), z.object({ enabled: z.boolean() }))
+      .optional(),
     // Group lessons (Guide di gruppo): optional module. When on, students with
     // groupLessonsOptIn can be enrolled into / invited to group driving lessons.
     // Priced like a standard 60' lesson (no dedicated price setting).
@@ -418,6 +432,8 @@ const autoscuolaSettingsPatchSchema = z
       value.vehiclesEnabled !== undefined ||
       value.defaultLicenseCategory !== undefined ||
       value.defaultTransmission !== undefined ||
+      value.followCarMotoEnabled !== undefined ||
+      value.followCarRules !== undefined ||
       value.groupLessonsEnabled !== undefined ||
       value.quizEnabled !== undefined ||
       value.studentCancellationEnabled !== undefined,
@@ -598,6 +614,8 @@ export type AutoscuolaSettingsData = {
   vehiclesEnabled: boolean;
   defaultLicenseCategory: string;
   defaultTransmission: string;
+  followCarMotoEnabled: boolean;
+  followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
@@ -931,6 +949,8 @@ const resolveAutoscuolaSettingsData = async (
       typeof limits.defaultTransmission === "string"
         ? limits.defaultTransmission
         : "manual",
+    followCarMotoEnabled: readFollowCarMotoEnabled(limits),
+    followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
@@ -1257,6 +1277,15 @@ export async function updateAutoscuolaSettings(
     const nextDefaultTransmission =
       payload.defaultTransmission ??
       (typeof limits.defaultTransmission === "string" ? limits.defaultTransmission : "manual");
+    // Single global follow-car flag. Prefer the new flag; else derive from the
+    // legacy per-category payload (any moto on → global on); else keep current.
+    const nextFollowCarMotoEnabled =
+      payload.followCarMotoEnabled ??
+      (payload.followCarRules !== undefined
+        ? readFollowCarMotoEnabled({ followCarRules: payload.followCarRules })
+        : readFollowCarMotoEnabled(limits));
+    // Keep the legacy map in sync (all-moto-on / off) for any raw reader.
+    const nextFollowCarRules = followCarRulesForEnabled(nextFollowCarMotoEnabled);
     const nextGroupLessonsEnabled =
       payload.groupLessonsEnabled ?? limits.groupLessonsEnabled === true;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
@@ -1457,6 +1486,8 @@ export async function updateAutoscuolaSettings(
       vehiclesEnabled: nextVehiclesEnabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
+      followCarMotoEnabled: nextFollowCarMotoEnabled,
+      followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,

@@ -1,5 +1,7 @@
 # Feature Index — Reglo (Web + Backend)
 
+> 🧪 **Lavori su staging?** → [STAGING.md](STAGING.md) — account di test, comandi (`ship:staging`, `migrate:staging`, seed), accesso, mobile, setup dev.
+
 ## Features
 
 | Feature | Doc | Primary files |
@@ -23,6 +25,7 @@
 | Quiz Teoria | [quiz-theory.md](features/quiz-theory.md) | `autoscuole-quiz.actions.ts`, `quiz-engine.ts` |
 | Password Reset (mobile) | [password-reset.md](features/password-reset.md) | `lib/auth/password-reset.ts`, `lib/mobile-auth-payload.ts`, `app/api/mobile/auth/password-reset/*` |
 | Student Phase + Quiz Seats | [student-phase.md](features/student-phase.md) | `autoscuole.actions.ts` (`updateStudentPhase`), `autoscuole-settings.actions.ts` (`grantQuizSeat`, `setAutoAssignQuizOnSignup`, `getQuizSeatsContext`), `backoffice.actions.ts` (`getQuizSeatsUsage`, `deactivateTeoriaWithResolution`), `theory-reminders.ts` |
+| Reglo Aula | [reglo-aula.md](features/reglo-aula.md) | `aula.actions.ts`, `lib/aula/{slides,package-store,live-state}.ts`, `app/aula-live/[code]/`, `app/[locale]/aula/` |
 
 ## Design System
 
@@ -39,5 +42,7 @@
 | Cache system | [cache.md](architecture/cache.md) |
 | Background Jobs | [background-jobs.md](architecture/background-jobs.md) |
 | Auth & RBAC | [auth.md](architecture/auth.md) |
+| Environments (dev/staging/prod) + `APP_ENV` send kill-switch | [environments.md](architecture/environments.md) |
+| **Git flow & ambienti** (branch, `ship:staging`, rilascio prod) | [git-flow.md](architecture/git-flow.md) |
 | API Routes | [api-routes.md](architecture/api-routes.md) |
 | **Performance Playbook** — diagnose & fix slow screens (DB indexing, Redis cache, call schema/batching, per-request overhead, mobile skeletons, TanStack Query, dev-mode) | [performance-playbook.md](architecture/performance-playbook.md) |

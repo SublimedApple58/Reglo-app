@@ -5,9 +5,26 @@ import {
   SERVER_URL,
   VERIFIED_EMAIL_SENDERS,
 } from '@/lib/constants';
+import { externalSendsDisabled } from '@/lib/app-env';
 import CompanyInviteEmail from './company-invite';
 
 const getResend = () => {
+  // On staging (or with the kill switch) every email send is a no-op: the
+  // staging DB holds real contacts and must never receive real mail. This single
+  // point covers all senders in this module.
+  if (externalSendsDisabled()) {
+    return {
+      emails: {
+        send: async (payload: { to?: unknown; subject?: unknown }) => {
+          console.info("[app-env] external sends disabled — skipping email", {
+            to: payload?.to,
+            subject: payload?.subject,
+          });
+          return { data: null, error: null };
+        },
+      },
+    } as unknown as Resend;
+  }
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     throw new Error("RESEND_API_KEY is not configured");

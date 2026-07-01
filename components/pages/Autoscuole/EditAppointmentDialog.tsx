@@ -21,14 +21,30 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
+import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
   updateAutoscuolaAppointmentDetails,
 } from "@/lib/actions/autoscuole.actions";
 
-type StudentLite = { firstName: string; lastName: string };
+type StudentLite = {
+  firstName: string;
+  lastName: string;
+  // Pursued license — filters the eligible primary moto (moto hierarchy).
+  licenseCategory?: string | null;
+  transmission?: string | null;
+};
 type InstructorOption = { id: string; name: string };
-type VehicleOption = { id: string; name: string };
+type VehicleOption = {
+  id: string;
+  name: string;
+  licenseCategory?: string | null;
+  transmission?: string | null;
+  // Pool/exclusivity — filters pickers to vehicles the instructor can use.
+  assignedInstructorId?: string | null;
+  poolInstructorIds?: string[] | null;
+};
 type LocationOption = {
   id: string;
   name: string;
@@ -45,6 +61,8 @@ export type EditAppointmentDialogAppointment = {
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
   vehicle?: { id: string; name: string } | null;
+  followVehicle?: { id: string; name: string } | null;
+  extraMotoVehicles?: { id: string; name: string }[] | null;
   location?: { id: string; name: string } | null;
 };
 
@@ -92,6 +110,7 @@ type Props = {
   instructors: InstructorOption[];
   vehicles?: VehicleOption[];
   vehiclesEnabled?: boolean;
+  followCarRules?: Record<string, { enabled: boolean }>;
   locations: LocationOption[];
   onSuccess?: () => void;
 };
@@ -103,6 +122,7 @@ export function EditAppointmentDialog({
   instructors,
   vehicles = [],
   vehiclesEnabled = true,
+  followCarRules = {},
   locations,
   onSuccess,
 }: Props) {
@@ -122,12 +142,21 @@ export function EditAppointmentDialog({
   const originalInstructorId = appointment?.instructor?.id ?? "";
   const originalLessonType = appointment?.type ?? "guida";
   const originalVehicleId = appointment?.vehicle?.id ?? "";
+  const originalFollowVehicleId = appointment?.followVehicle?.id ?? "";
+  const originalExtraMotoVehicleIds = React.useMemo(
+    () => (appointment?.extraMotoVehicles ?? []).map((v) => v.id),
+    [appointment],
+  );
   const originalLocationId = appointment?.location?.id ?? "";
   const originalNotes = appointment?.notes ?? "";
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
   const [lessonType, setLessonType] = React.useState(originalLessonType);
   const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
+  const [followVehicleId, setFollowVehicleId] = React.useState(originalFollowVehicleId);
+  const [extraMotoVehicleIds, setExtraMotoVehicleIds] = React.useState<string[]>(
+    originalExtraMotoVehicleIds,
+  );
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
   // Date/time staging — start from the appointment's current slot.
@@ -148,6 +177,8 @@ export function EditAppointmentDialog({
     setInstructorId(appointment.instructor?.id ?? "");
     setLessonType(appointment.type ?? "guida");
     setVehicleId(appointment.vehicle?.id ?? "");
+    setFollowVehicleId(appointment.followVehicle?.id ?? "");
+    setExtraMotoVehicleIds((appointment.extraMotoVehicles ?? []).map((v) => v.id));
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
     setNewDate(toDateStr(start));
@@ -291,16 +322,96 @@ export function EditAppointmentDialog({
       availability.status === "unavailable" ||
       availability.status === "error");
 
+  // Pickers only offer vehicles this lesson's instructor can use (exclusivity /
+  // pool — the instructor drives the follow car and the lesson is theirs),
+  // mirroring the mobile manage-lesson flow.
+  const usableByInstructor = (v: VehicleOption) =>
+    !instructorId ||
+    instructorCanUseVehicle(
+      { assignedInstructorId: v.assignedInstructorId ?? null, poolInstructorIds: v.poolInstructorIds ?? [] },
+      instructorId,
+    );
+  // The PRIMARY moto/vehicle is driven by the student → must serve their license
+  // (moto hierarchy). Permissive when the student's license is unknown.
+  const studentEligible = (v: VehicleOption) =>
+    appointment?.student?.licenseCategory && appointment?.student?.transmission
+      ? vehicleServesLicense(
+          { licenseCategory: v.licenseCategory ?? null, transmission: v.transmission ?? null },
+          { licenseCategory: appointment.student.licenseCategory, transmission: appointment.student.transmission },
+        )
+      : true;
+  // Primary picker: instructor-usable + student-eligible. Always keep the
+  // currently-assigned vehicle in the list so the Select can render it.
+  const primaryVehicleOptions = vehicles.filter(
+    (v) => v.id === vehicleId || (usableByInstructor(v) && studentEligible(v)),
+  );
+  // Friendly license label shown next to each vehicle in the pickers.
+  const licLabel = (c?: string | null) =>
+    c ? LICENSE_CATEGORY_LABELS[c as LicenseCategory] ?? c : "";
+  // Transmission label — shown for follow cars (all category B, so the useful
+  // distinction is manual vs automatic).
+  const transLabel = (t?: string | null) =>
+    t ? TRANSMISSION_LABELS[t as Transmission] ?? t : "";
+
+  // Follow car (auto al seguito): only relevant when the selected primary
+  // vehicle is a moto AND the company enabled the rule for that category.
+  const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
+  const needsFollowCar =
+    vehiclesEnabled &&
+    !!selectedVehicle &&
+    isMotoLicenseCategory(selectedVehicle.licenseCategory) &&
+    followCarRules[selectedVehicle.licenseCategory ?? ""]?.enabled === true;
+  const followCarOptions = vehicles.filter(
+    (v) =>
+      v.licenseCategory === "B" &&
+      v.id !== vehicleId &&
+      (v.id === followVehicleId || usableByInstructor(v)),
+  );
+  // When the primary isn't a follow-car moto, the follow car is implicitly
+  // cleared (a follow without a moto primary makes no sense).
+  const effectiveFollowVehicleId = needsFollowCar ? followVehicleId : "";
+
+  // Extra motos are only meaningful when the primary is a moto. When it isn't,
+  // they are implicitly cleared. Extra motos are just additional reserved
+  // vehicles → any company moto the instructor can use (NOT filtered by the
+  // student's license — matches the backend + the mobile flow).
+  const primaryIsMoto =
+    vehiclesEnabled &&
+    !!selectedVehicle &&
+    isMotoLicenseCategory(selectedVehicle.licenseCategory);
+  // Extra motos must ALSO serve the student's license (same moto hierarchy as the
+  // primary — equal-or-lower category), on top of instructor-usability. Already
+  // selected ones are always kept so an existing set never silently drops.
+  const extraMotoOptions = vehicles.filter(
+    (v) =>
+      isMotoLicenseCategory(v.licenseCategory) &&
+      v.id !== vehicleId &&
+      (extraMotoVehicleIds.includes(v.id) || (usableByInstructor(v) && studentEligible(v))),
+  );
+  const effectiveExtraMotoVehicleIds = primaryIsMoto
+    ? extraMotoVehicleIds.filter((id) => id !== vehicleId)
+    : [];
+  const sortedKey = (ids: string[]) => [...ids].sort().join(",");
+  const extraMotosChanged =
+    sortedKey(effectiveExtraMotoVehicleIds) !==
+    sortedKey(originalExtraMotoVehicleIds);
+
   const hasChanges =
     instructorId !== originalInstructorId ||
     lessonType !== originalLessonType ||
     vehicleId !== originalVehicleId ||
+    effectiveFollowVehicleId !== originalFollowVehicleId ||
+    extraMotosChanged ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
     dateTimeChanged;
 
   const canSubmit =
-    hasChanges && !pending && !isAvailabilityBlockingSave && !isNewSlotInPast;
+    hasChanges &&
+    !pending &&
+    !isAvailabilityBlockingSave &&
+    !isNewSlotInPast &&
+    !(needsFollowCar && !followVehicleId);
 
   const handleSubmit = async () => {
     if (!canSubmit || !effectiveStart || !effectiveEnd) return;
@@ -339,6 +450,18 @@ export function EditAppointmentDialog({
       if (vehicleId !== originalVehicleId) {
         // Empty string from <Select> means "no vehicle" → null on the wire.
         detailsPayload.vehicleId = vehicleId === "" ? null : vehicleId;
+        hasDetails = true;
+      }
+      if (effectiveFollowVehicleId !== originalFollowVehicleId) {
+        // Auto al seguito — null clears it (incl. when the primary stopped
+        // being a follow-car moto).
+        detailsPayload.followVehicleId =
+          effectiveFollowVehicleId === "" ? null : effectiveFollowVehicleId;
+        hasDetails = true;
+      }
+      if (extraMotosChanged) {
+        // Replaces the full set of extra motos (empty clears them).
+        detailsPayload.extraMotoVehicleIds = effectiveExtraMotoVehicleIds;
         hasDetails = true;
       }
       if (locationId !== originalLocationId) {
@@ -542,13 +665,97 @@ export function EditAppointmentDialog({
                   <SelectItem value="__none__" className="cursor-pointer">
                     Da assegnare
                   </SelectItem>
-                  {vehicles.map((v) => (
+                  {primaryVehicleOptions.map((v) => (
                     <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                       {v.name}
+                      {v.licenseCategory ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{licLabel(v.licenseCategory)}</span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          )}
+
+          {/* Follow car (auto al seguito) — shown only for a moto primary whose
+              category has the rule enabled. Required when shown. */}
+          {needsFollowCar && (
+            <div className="flex flex-col gap-2">
+              <label
+                htmlFor="edit-follow-vehicle"
+                className="text-xs font-medium text-slate-700"
+              >
+                Auto al seguito
+              </label>
+              <Select
+                value={followVehicleId || "__none__"}
+                onValueChange={(v) => setFollowVehicleId(v === "__none__" ? "" : v)}
+                disabled={pending}
+              >
+                <SelectTrigger id="edit-follow-vehicle" className="h-10 cursor-pointer">
+                  <SelectValue placeholder="Seleziona auto al seguito" />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <SelectItem value="__none__" className="cursor-pointer">
+                    Nessuna
+                  </SelectItem>
+                  {followCarOptions.map((v) => (
+                    <SelectItem key={v.id} value={v.id} className="cursor-pointer">
+                      {v.name}
+                      {v.transmission ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{transLabel(v.transmission)}</span>
+                      ) : null}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!followVehicleId && (
+                <p className="text-[11px] text-amber-600">
+                  Questa guida moto richiede un&apos;auto al seguito.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Extra motos — a moto guida occupying more than one moto. Shown only
+              when the primary vehicle is a moto and other motos exist. */}
+          {primaryIsMoto && extraMotoOptions.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-slate-700">
+                Moto aggiuntive
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {extraMotoOptions.map((v) => {
+                  const active = extraMotoVehicleIds.includes(v.id);
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        setExtraMotoVehicleIds((prev) =>
+                          prev.includes(v.id)
+                            ? prev.filter((x) => x !== v.id)
+                            : [...prev, v.id],
+                        )
+                      }
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                        active
+                          ? "border-pink-500 bg-pink-50 text-pink-700"
+                          : "border-border bg-white text-foreground hover:bg-gray-50"
+                      }`}
+                    >
+                      {v.name}
+                      {v.licenseCategory ? (
+                        <span className={`ml-1.5 ${active ? "text-pink-500" : "text-muted-foreground"}`}>
+                          · {licLabel(v.licenseCategory)}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 

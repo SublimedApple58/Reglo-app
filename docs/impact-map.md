@@ -13,10 +13,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Communications**: case status change triggers notifications
 - → **Booking Engine**: booking request creates appointments via slot matcher
+- → **Vehicles (M:N + auto al seguito, 2026-06-24)**: an appointment reserves **N vehicles** via the `AutoscuolaAppointmentVehicle` join (`role=primary|follow`); `vehicleId` stays = the primary. A moto lesson may add a follow car. Any busy-interval builder / conflict-check must read the join, not just `vehicleId` (`slot-matcher`, `autoscuole-availability.actions`, `createAutoscuolaAppointment`, `communications.freeSlotLicenseKeysTomorrow`). `updateAutoscuolaAppointmentDetails({vehicleId, followVehicleId})` reconciles the join. Swaps exclude follow-car lessons. See `features/vehicles.md`.
 - → **Cases & Deadlines**: appointments track lesson progress per case
 - → **Penalties**: late cancellation triggers penalty charge
 - → **Mobile**: types `AutoscuolaAppointmentWithRelations` used in 14 screens
 - → **Group Lessons (per-student notes, 2026-06-16)**: a group-lesson seat is an appointment, so `updateAutoscuolaAppointmentDetails({notes})` is the per-student note editor; the seat note reaches the student via the normal `getAppointments`/`latest-note` paths (mobile teal note card). See `features/group-lessons.md`.
+- → **Group Lessons MOTO (`kind="moto"`, 2026-06-25)**: a moto group reserves a **fleet of motos** (`AutoscuolaGroupLessonVehicle`) + **one shared follow car** (`AutoscuolaGroupLesson.followVehicleId`) — both reserved at the **container level** for the whole window (`group-lesson-busy.ts`). Each participant gets an **auto-assigned** fleet moto (`lib/autoscuole/group-moto.ts`); mixed categories allowed. `findGroupLessonOverlap` now takes `vehicleIds[]` and checks other containers' fleet/follow car. Any new group-lesson conflict check must consider the fleet + follow car, not a single `vehicleId`. See `features/group-lessons.md`.
 
 ### Availability
 - → **Booking Engine**: `getPublicationModeFilter()` gates student booking; slot-matcher reads weekly/daily/published data
@@ -119,6 +121,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `SettingsTab` espone toggle "Modalità registrazione allievi" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
+
+### Reglo Aula
+- → **Quiz Teoria**: riusa **read-only** `QuizQuestion` + `QuizChapter` (DB) + immagini quiz su R2 per le domande del live (filtro per capitolo). Aula non scrive sulla banca — asset aziendale già centralizzato, non duplicato.
+- → **R2 storage**: pacchetti slide `.rppt` (`aula/templates/`, `aula/{companyId}/`) + immagini slide; stesso bucket del quiz. **Le slide non stanno nel DB.**
+- → **Redis**: tutto il quiz live (sessione/partecipanti/risposte) è effimero su Redis — **nessuna tabella Postgres** per il live (0 storico MVP). Unica tabella DB: `AulaLesson` (puntatori).
+- → **Settings / Backoffice**: flag `aulaEnabled` in `CompanyService.limits` (stesso pattern di `quizEnabled`).
+- → **Cache**: segmento `AULA`, invalidato su modifica lezioni/pacchetto slide.
+- → **Auth & RBAC**: console docente gated owner/instructor; join studente (`/aula-live/[code]`) **pubblico, no auth**.
+- → **Student Phase (TEORIA)**: contesto concettuale (lezioni di teoria), ma il live è anonimo → legame volutamente lasco.
+- **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays. Aula è un catalogo a sé (niente crediti/refund/swap/slot). Presenze ↔ agenda è estensione futura fuori scope.
 
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
