@@ -2536,10 +2536,14 @@ export function AutoscuoleAgendaPage({
                         if (!vehiclesEnabled || form.bookingMode !== "moto") {
                           return null;
                         }
+                        const extraStudent = students.find((s) => s.id === form.studentId);
                         const motoOptions = vehicles.filter(
                           (v) =>
                             isMotoLicenseCategory(v.licenseCategory) &&
-                            v.id !== form.vehicleId,
+                            v.id !== form.vehicleId &&
+                            // Extra motos follow the same moto hierarchy as the
+                            // primary: only motos the student is eligible for.
+                            (extraStudent ? vehicleServesLicense(v, extraStudent) : true),
                         );
                         if (!motoOptions.length) return null;
                         const toggleExtra = (id: string) =>
@@ -2569,6 +2573,12 @@ export function AutoscuoleAgendaPage({
                                     }`}
                                   >
                                     {vehicle.name}
+                                    {vehicle.licenseCategory ? (
+                                      <span className={active ? "text-pink-500" : "text-muted-foreground"}>
+                                        {" · "}
+                                        {vehicle.licenseCategory}
+                                      </span>
+                                    ) : null}
                                   </button>
                                 );
                               })}

@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
+import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, type LicenseCategory } from "@/lib/autoscuole/license";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
@@ -345,6 +345,9 @@ export function EditAppointmentDialog({
   const primaryVehicleOptions = vehicles.filter(
     (v) => v.id === vehicleId || (usableByInstructor(v) && studentEligible(v)),
   );
+  // Friendly license label shown next to each vehicle in the pickers.
+  const licLabel = (c?: string | null) =>
+    c ? LICENSE_CATEGORY_LABELS[c as LicenseCategory] ?? c : "";
 
   // Follow car (auto al seguito): only relevant when the selected primary
   // vehicle is a moto AND the company enabled the rule for that category.
@@ -372,11 +375,14 @@ export function EditAppointmentDialog({
     vehiclesEnabled &&
     !!selectedVehicle &&
     isMotoLicenseCategory(selectedVehicle.licenseCategory);
+  // Extra motos must ALSO serve the student's license (same moto hierarchy as the
+  // primary — equal-or-lower category), on top of instructor-usability. Already
+  // selected ones are always kept so an existing set never silently drops.
   const extraMotoOptions = vehicles.filter(
     (v) =>
       isMotoLicenseCategory(v.licenseCategory) &&
       v.id !== vehicleId &&
-      (extraMotoVehicleIds.includes(v.id) || usableByInstructor(v)),
+      (extraMotoVehicleIds.includes(v.id) || (usableByInstructor(v) && studentEligible(v))),
   );
   const effectiveExtraMotoVehicleIds = primaryIsMoto
     ? extraMotoVehicleIds.filter((id) => id !== vehicleId)
@@ -658,6 +664,9 @@ export function EditAppointmentDialog({
                   {primaryVehicleOptions.map((v) => (
                     <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                       {v.name}
+                      {v.licenseCategory ? (
+                        <span className="ml-2 text-xs text-muted-foreground">{licLabel(v.licenseCategory)}</span>
+                      ) : null}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -731,6 +740,11 @@ export function EditAppointmentDialog({
                       }`}
                     >
                       {v.name}
+                      {v.licenseCategory ? (
+                        <span className={`ml-1.5 ${active ? "text-pink-500" : "text-muted-foreground"}`}>
+                          · {licLabel(v.licenseCategory)}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
