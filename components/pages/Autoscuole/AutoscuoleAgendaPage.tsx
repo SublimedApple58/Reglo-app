@@ -749,8 +749,10 @@ export function AutoscuoleAgendaPage({
         return;
       }
     }
+    // Explicit choice required, but "Nessuna auto al seguito" (__none__) is a
+    // valid answer: the global rule suggests the follow car, it doesn't force it.
     if (needFollowCar && !form.followVehicleId) {
-      toast.info({ description: "Seleziona l'auto al seguito per la guida moto." });
+      toast.info({ description: "Scegli l'auto al seguito (o \"Nessuna\") per la guida moto." });
       return;
     }
     const startDate = buildLocalDateTime(form.day, form.time);
@@ -768,7 +770,8 @@ export function AutoscuoleAgendaPage({
       endsAt: endsAt.toISOString(),
       instructorId: form.instructorId,
       vehicleId: vehiclesEnabled ? form.vehicleId : null,
-      followVehicleId: needFollowCar ? form.followVehicleId : null,
+      followVehicleId:
+        needFollowCar && form.followVehicleId !== "__none__" ? form.followVehicleId : null,
       extraMotoVehicleIds: isMotoMode
         ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
         : [],
@@ -2408,7 +2411,7 @@ export function AutoscuoleAgendaPage({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
                     transition={{ duration: 0.15 }}
-                    className="space-y-4"
+                    className="space-y-3"
                   >
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">Dettagli</h4>
@@ -2441,16 +2444,16 @@ export function AutoscuoleAgendaPage({
                                   }))
                                 }
                                 className={cn(
-                                  "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
+                                  "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition-colors cursor-pointer",
                                   active
                                     ? "border-yellow-400 bg-yellow-50"
                                     : "border-border/60 hover:bg-gray-50",
                                 )}
                               >
                                 <Icon className={cn("h-4 w-4 shrink-0", active ? "text-yellow-700" : "text-muted-foreground")} />
-                                <span className="min-w-0">
-                                  <span className="block text-sm font-medium text-foreground">{opt.label}</span>
-                                  <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
+                                <span className="flex min-w-0 items-baseline gap-1.5">
+                                  <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                                  <span className="truncate text-[10px] text-muted-foreground">{opt.hint}</span>
                                 </span>
                               </button>
                             );
@@ -2476,7 +2479,7 @@ export function AutoscuoleAgendaPage({
                                 })
                               }
                               className={cn(
-                                "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+                                "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
                                 active
                                   ? "border-yellow-400 bg-yellow-50 text-yellow-700"
                                   : "border-border bg-gray-50 text-muted-foreground hover:bg-gray-100",
@@ -2587,6 +2590,7 @@ export function AutoscuoleAgendaPage({
                             >
                               <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
                               <SelectContent>
+                                <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
                                 {carOptions.map((vehicle) => (
                                   <SelectItem key={vehicle.id} value={vehicle.id}>
                                     {vehicle.name}
@@ -2625,10 +2629,7 @@ export function AutoscuoleAgendaPage({
                               : [...prev.extraMotoVehicleIds, id],
                           }));
                         return (
-                          <FieldGroup
-                            label="Moto aggiuntive"
-                            description="Occupa più di una moto per questa guida."
-                          >
+                          <FieldGroup label="Moto aggiuntive">
                             <div className="flex flex-wrap gap-2">
                               {motoOptions.map((vehicle) => {
                                 const active = form.extraMotoVehicleIds.includes(vehicle.id);
@@ -2637,7 +2638,7 @@ export function AutoscuoleAgendaPage({
                                     key={vehicle.id}
                                     type="button"
                                     onClick={() => toggleExtra(vehicle.id)}
-                                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                       active
                                         ? "border-pink-500 bg-pink-50 text-pink-700"
                                         : "border-border bg-white text-foreground hover:bg-gray-50"
@@ -2659,10 +2660,7 @@ export function AutoscuoleAgendaPage({
                       })()}
                     </div>
                     {agendaLocations.length > 0 && (
-                      <FieldGroup
-                        label="Luogo"
-                        description="Modificabile dopo la creazione. Aggiungi luoghi dalle Impostazioni."
-                      >
+                      <FieldGroup label="Luogo" description="Modificabile dopo la creazione.">
                         <Select
                           value={form.locationId}
                           onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}
@@ -2708,7 +2706,14 @@ export function AutoscuoleAgendaPage({
                       <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
                       {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
                       {vehiclesEnabled && form.followVehicleId ? (
-                        <SummaryRow label="Auto al seguito" value={vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"} />
+                        <SummaryRow
+                          label="Auto al seguito"
+                          value={
+                            form.followVehicleId === "__none__"
+                              ? "Nessuna"
+                              : vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"
+                          }
+                        />
                       ) : null}
                       {vehiclesEnabled && form.extraMotoVehicleIds.length > 0 ? (
                         <SummaryRow

@@ -406,12 +406,13 @@ export function EditAppointmentDialog({
     (notes ?? "") !== (originalNotes ?? "") ||
     dateTimeChanged;
 
+  // The global follow-car rule suggests the auto al seguito but doesn't force
+  // it: owner/instructor may explicitly save a moto guide with "Nessuna".
   const canSubmit =
     hasChanges &&
     !pending &&
     !isAvailabilityBlockingSave &&
-    !isNewSlotInPast &&
-    !(needsFollowCar && !followVehicleId);
+    !isNewSlotInPast;
 
   const handleSubmit = async () => {
     if (!canSubmit || !effectiveStart || !effectiveEnd) return;
@@ -713,8 +714,8 @@ export function EditAppointmentDialog({
                 </SelectContent>
               </Select>
               {!followVehicleId && (
-                <p className="text-[11px] text-amber-600">
-                  Questa guida moto richiede un&apos;auto al seguito.
+                <p className="text-[11px] text-muted-foreground">
+                  Guida moto senza auto al seguito.
                 </p>
               )}
             </div>
