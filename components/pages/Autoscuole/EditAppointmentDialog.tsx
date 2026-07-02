@@ -551,19 +551,21 @@ export function EditAppointmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => (!pending ? onOpenChange(o) : undefined)}>
-      {/* overflow-visible so the DatePicker's absolutely-positioned calendar
-          can escape the dialog bounds when opening near the bottom edge. */}
-      <DialogContent className="sm:max-w-[480px] gap-0 overflow-visible p-0">
-        <DialogHeader className="p-6 text-left">
+      {/* Capped to the viewport with an internal scrolling body (the form grew:
+          moto chips, follow car, notes). The DatePicker calendar is absolute
+          (non-portaled) but overlays the fields below it inside the scroll
+          area, so it stays fully usable. */}
+      <DialogContent className="flex max-h-[92vh] flex-col sm:max-w-[480px] gap-0 overflow-hidden p-0">
+        <DialogHeader className="shrink-0 p-6 text-left">
           <DialogTitle className="text-[18px] leading-[24px] font-semibold tracking-[-0.01em]">
             Modifica guida
           </DialogTitle>
           <p className="mt-1 text-sm text-muted-foreground">{studentLabel}</p>
         </DialogHeader>
 
-        <div className="border-t border-border" />
+        <div className="shrink-0 border-t border-border" />
 
-        <div className="flex flex-col gap-5 p-6">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
           {/* Date + time pickers — together they replace the old "Sposta" dialog. */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
@@ -844,7 +846,7 @@ export function EditAppointmentDialog({
           )}
         </div>
 
-        <DialogFooter className="gap-2 border-t border-border p-4">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border p-4">
           <Button
             type="button"
             variant="outline"
