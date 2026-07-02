@@ -93,6 +93,8 @@ export async function GET() {
         select: {
           userId: true,
           assignedInstructorId: true,
+          licenseCategory: true,
+          transmission: true,
           user: { select: { name: true } },
         },
         orderBy: { user: { name: "asc" } },
@@ -115,6 +117,8 @@ export async function GET() {
         firstName: firstName ?? "",
         lastName: rest.join(" "),
         assignedInstructorId: m.assignedInstructorId,
+        licenseCategory: m.licenseCategory ?? null,
+        transmission: m.transmission ?? null,
       };
     });
     const assignedStudentIds = studentMembers

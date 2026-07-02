@@ -58,7 +58,16 @@ type StudentEntry = {
   firstName: string;
   lastName: string;
   assignedInstructorId: string | null;
+  /** Pursued license path — shown as a badge in the assigned-students list. */
+  licenseCategory?: string | null;
+  transmission?: string | null;
 };
+
+/** Compact license tag, e.g. "A2" / "B autom." — empty when the path is unset. */
+const licenseTag = (s: StudentEntry): string | null =>
+  s.licenseCategory
+    ? `${s.licenseCategory}${s.transmission === "automatic" ? " autom." : ""}`
+    : null;
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -759,6 +768,11 @@ export default function InstructorsTab({
                             <span className="text-sm flex-1 truncate">
                               {student.firstName} {student.lastName}
                             </span>
+                            {licenseTag(student) ? (
+                              <span className="text-[10px] shrink-0 rounded-full border border-border bg-white px-1.5 py-0.5 font-medium text-foreground/70">
+                                {licenseTag(student)}
+                              </span>
+                            ) : null}
                             {assignedToOther ? (
                               <span className="text-[10px] shrink-0 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
                                 {otherInstructorName ?? "altro"}

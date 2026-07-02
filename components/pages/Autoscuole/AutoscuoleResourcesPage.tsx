@@ -320,7 +320,7 @@ export function AutoscuoleResourcesPage({
   const [clusterWorkingHoursStart, setClusterWorkingHoursStart] = React.useState<string | undefined>(undefined);
   const [clusterWorkingHoursEnd, setClusterWorkingHoursEnd] = React.useState<string | undefined>(undefined);
   const [clusterAvailabilityMode, setClusterAvailabilityMode] = React.useState<"default" | "publication">("default");
-  const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null }>>([]);
+  const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null; licenseCategory: string | null; transmission: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
@@ -952,6 +952,8 @@ export function AutoscuoleResourcesPage({
         firstName: s.firstName,
         lastName: s.lastName,
         assignedInstructorId: (s as Record<string, unknown>).assignedInstructorId as string | null,
+        licenseCategory: s.licenseCategory ?? null,
+        transmission: s.transmission ?? null,
       })));
       setClusterStudentIds(
         studRes.data
