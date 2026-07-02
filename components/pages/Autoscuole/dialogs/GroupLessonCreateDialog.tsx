@@ -32,7 +32,7 @@ import {
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
-import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { vehicleServesLicense, MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
 
 type ResourceOption = { id: string; name: string };
 
@@ -64,7 +64,7 @@ type Props = {
   onCreated: () => void;
 };
 
-const MOTO_CATEGORIES = new Set(["AM", "A1", "A2", "A"]);
+const MOTO_CATEGORIES = new Set<string>(MOTO_LICENSE_CATEGORIES);
 const isMotoCategory = (c: string | null | undefined) => !!c && MOTO_CATEGORIES.has(c);
 
 const CAPACITY_OPTIONS = [

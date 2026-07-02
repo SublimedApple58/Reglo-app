@@ -22,6 +22,7 @@ import {
   LICENSE_CATEGORY_LABELS,
   TRANSMISSIONS,
   TRANSMISSION_LABELS,
+  type LicenseCategory,
 } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 
@@ -696,7 +697,7 @@ export function AutoscuoleResourcesPage({
       studentNotesEnabled,
       autoCheckinEnabled,
       vehiclesEnabled,
-      defaultLicenseCategory: defaultLicenseCategory as "B" | "AM" | "A1" | "A2" | "A",
+      defaultLicenseCategory: defaultLicenseCategory as LicenseCategory,
       defaultTransmission: defaultTransmission as "manual" | "automatic",
       followCarMotoEnabled,
       groupLessonsEnabled,
@@ -1200,7 +1201,7 @@ export function AutoscuoleResourcesPage({
       poolInstructorIds: poolIds,
       followsInstructorAvailability:
         editVehicleMode === "exclusive" ? editVehicleFollowsAvailability : false,
-      licenseCategory: editVehicleCategory as "B" | "AM" | "A1" | "A2" | "A",
+      licenseCategory: editVehicleCategory as LicenseCategory,
       transmission: editVehicleTransmission as "manual" | "automatic",
     });
     setSavingEditVehicle(false);

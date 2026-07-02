@@ -41,8 +41,10 @@ describe("isMotoLicenseCategory", () => {
     for (const c of ["AM", "A1", "A2", "A"]) expect(isMotoLicenseCategory(c)).toBe(true);
   });
 
-  it("is false for the car license B", () => {
-    expect(isMotoLicenseCategory("B")).toBe(false);
+  it("is false for every non-moto category", () => {
+    for (const c of ["B", "BE", "C", "CE", "D", "DE"]) {
+      expect(isMotoLicenseCategory(c)).toBe(false);
+    }
   });
 
   it("is false for null / invalid", () => {
@@ -69,6 +71,19 @@ describe("licenseCategoryEligible (moto hierarchy AM < A1 < A2 < A)", () => {
     expect(licenseCategoryEligible("B", "A")).toBe(false);
     expect(licenseCategoryEligible("A", "B")).toBe(false);
     expect(licenseCategoryEligible("B", "B")).toBe(true);
+  });
+
+  it("non-moto categories (BE/C/CE/D/DE) only self-match — no hierarchy", () => {
+    for (const c of ["BE", "C", "CE", "D", "DE"]) {
+      expect(licenseCategoryEligible(c, c)).toBe(true);
+      expect(licenseCategoryEligible("B", c)).toBe(false);
+      expect(licenseCategoryEligible(c, "B")).toBe(false);
+      expect(licenseCategoryEligible(c, "A")).toBe(false);
+    }
+    // No trailer hierarchy either: CE does not serve C nor vice versa.
+    expect(licenseCategoryEligible("CE", "C")).toBe(false);
+    expect(licenseCategoryEligible("C", "CE")).toBe(false);
+    expect(licenseCategoryEligible("DE", "D")).toBe(false);
   });
 
   it("the top moto A serves every moto below", () => {

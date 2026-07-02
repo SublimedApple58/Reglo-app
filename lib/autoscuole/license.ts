@@ -10,7 +10,18 @@
  * NB: "A" is the full motorcycle license in Italy (there is no "A3").
  */
 
-export const LICENSE_CATEGORIES = ["B", "AM", "A1", "A2", "A"] as const;
+export const LICENSE_CATEGORIES = [
+  "B",
+  "BE",
+  "C",
+  "CE",
+  "D",
+  "DE",
+  "AM",
+  "A1",
+  "A2",
+  "A",
+] as const;
 export type LicenseCategory = (typeof LICENSE_CATEGORIES)[number];
 
 export const TRANSMISSIONS = ["manual", "automatic"] as const;
@@ -18,6 +29,11 @@ export type Transmission = (typeof TRANSMISSIONS)[number];
 
 export const LICENSE_CATEGORY_LABELS: Record<LicenseCategory, string> = {
   B: "B (auto)",
+  BE: "BE (auto + rimorchio)",
+  C: "C (camion)",
+  CE: "CE (camion + rimorchio)",
+  D: "D (autobus)",
+  DE: "DE (autobus + rimorchio)",
   AM: "AM (ciclomotore)",
   A1: "A1 (125)",
   A2: "A2 (media)",
@@ -44,9 +60,9 @@ export function isTransmission(value: unknown): value is Transmission {
 }
 
 /**
- * Motorcycle license categories — every category except the car license "B".
- * Used to give moto guides a dedicated colour in the agenda (keyed off the
- * assigned vehicle's category, exactly like the automatic-transmission colour).
+ * Motorcycle license categories — the "A" family only (BE/C/CE/D/DE are
+ * non-moto like B). Used to give moto guides a dedicated colour in the agenda
+ * (keyed off the assigned vehicle's category, like the automatic colour).
  */
 export const MOTO_LICENSE_CATEGORIES = ["AM", "A1", "A2", "A"] as const;
 
@@ -62,8 +78,9 @@ export function isMotoLicenseCategory(value: unknown): boolean {
  * `studentCategory`, applying the real-world MOTO HIERARCHY:
  *   AM < A1 < A2 < A
  * A moto student may train on any moto of category ≤ their own (e.g. an A2
- * student → A2, A1, AM — but NOT A). The car license "B" is a separate class:
- * it only matches B. Car↔moto never match. Same category always matches.
+ * student → A2, A1, AM — but NOT A). Non-moto categories (B, BE, C, CE, D, DE)
+ * have NO hierarchy: each only matches itself (a BE course needs a BE-marked
+ * vehicle). Cross-class never matches. Same category always matches.
  */
 export function licenseCategoryEligible(
   vehicleCategory: string,
@@ -78,7 +95,8 @@ export function licenseCategoryEligible(
       (MOTO_LICENSE_CATEGORIES as readonly string[]).indexOf(studentCategory)
     );
   }
-  // Different classes (car vs moto), or two distinct cars — never eligible.
+  // Different classes (moto vs non-moto), or two distinct non-moto categories
+  // (e.g. B vs C, BE vs B) — never eligible.
   return false;
 }
 

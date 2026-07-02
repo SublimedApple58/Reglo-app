@@ -696,7 +696,7 @@ model AutoscuolaVehiclePoolMember {
 /// category, prefer this one. No row = no preference (fall back to packing score).
 model AutoscuolaInstructorPreferredVehicle {
   instructorId    String @db.Uuid
-  licenseCategory String // B | AM | A1 | A2 | A
+  licenseCategory String // B | BE | C | CE | D | DE | AM | A1 | A2 | A
   vehicleId       String @db.Uuid
 
   instructor AutoscuolaInstructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
