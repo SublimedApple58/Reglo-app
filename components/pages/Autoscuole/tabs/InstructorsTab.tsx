@@ -26,6 +26,7 @@ import {
   SlotPill,
   ResourceCardAction,
 } from "@/components/ui/resource-card";
+import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -36,6 +37,8 @@ type InstructorDetail = {
   status: string;
   autonomousMode?: boolean;
   settings?: unknown;
+  /** Owner-picked display color (hex). Null = automatic palette. */
+  color?: string | null;
   /** Per-instructor invite code: students signing up with it land in this instructor's group. */
   inviteCode?: string | null;
   _count?: { assignedStudents: number };
@@ -101,6 +104,8 @@ interface InstructorsTabProps {
   openClusterPanel: (instructor: InstructorDetail) => void;
   openInstructorAvailabilityDialog: (instructor: InstructorDetail) => void;
   setInviteInstructorOpen: (open: boolean) => void;
+  /** Persist the instructor display color (null = back to automatic). */
+  changeInstructorColor: (instructor: InstructorDetail, color: string | null) => Promise<void>;
 
   // Sick leave
   setSickLeaveInstructor: (instructor: InstructorDetail) => void;
@@ -198,6 +203,7 @@ export default function InstructorsTab({
   openClusterPanel,
   openInstructorAvailabilityDialog,
   setInviteInstructorOpen,
+  changeInstructorColor,
   setSickLeaveInstructor,
   setSickLeaveStartDate,
   setSickLeaveEndDate,
@@ -291,6 +297,11 @@ export default function InstructorsTab({
               })()}
               actions={
                 <>
+                  <ColorSwatchPicker
+                    value={instructor.color ?? null}
+                    title="Colore istruttore"
+                    onSelect={(hex) => changeInstructorColor(instructor, hex)}
+                  />
                   <ResourceCardAction
                     onClick={() => openClusterPanel(instructor)}
                     title="Gestione autonoma"

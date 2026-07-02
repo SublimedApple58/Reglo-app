@@ -17,6 +17,7 @@
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
+| Instructor Colors | [instructor-colors.md](features/instructor-colors.md) | `lib/autoscuole/instructor-colors.ts`, `color-swatch-picker.tsx`, `InstructorsTab.tsx`, `AutoscuoleAgendaPage.tsx` |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
 | Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |

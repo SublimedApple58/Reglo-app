@@ -253,6 +253,8 @@ const updateInstructorSchema = z.object({
   status: z.string().optional(),
   userId: z.string().uuid().optional(),
   autonomousMode: z.boolean().optional(),
+  // Display color (hex). Null = back to automatic palette.
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
   settings: instructorSettingsSchema,
   assignStudentIds: z.array(z.string().uuid()).optional(),
 });
@@ -5307,6 +5309,7 @@ export async function updateAutoscuolaInstructor(
       payload.status = undefined;
       payload.userId = undefined;
       payload.autonomousMode = undefined;
+      payload.color = undefined;
     }
 
     if (payload.userId) {
@@ -5333,6 +5336,7 @@ export async function updateAutoscuolaInstructor(
         status: payload.status,
         userId: payload.userId ?? undefined,
         ...(payload.autonomousMode !== undefined ? { autonomousMode: payload.autonomousMode } : {}),
+        ...(payload.color !== undefined ? { color: payload.color } : {}),
         ...(payload.settings !== undefined ? { settings: payload.settings ?? null } : {}),
       },
     });

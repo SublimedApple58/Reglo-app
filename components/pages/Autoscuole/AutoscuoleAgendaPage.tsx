@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
+import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import {
   OutOfAvailabilitySheet,
@@ -70,6 +71,8 @@ type ResourceOption = {
   poolInstructorIds?: string[] | null;
   licenseCategory?: string | null;
   transmission?: string | null;
+  /** Instructor display color (hex) picked by the owner. Null = automatic. */
+  color?: string | null;
 };
 type AppointmentRow = {
   id: string;
@@ -159,6 +162,14 @@ type InstructorAvailabilityWeek = {
   instructorId: string;
   instructorName: string;
   days: Record<string, Array<{ startMinutes: number; endMinutes: number }>>;
+};
+
+/** Resolved instructor tint: custom hex → inline styles; legacy → classes. */
+type InstructorTint = {
+  avatarClass?: string;
+  avatarStyle?: React.CSSProperties;
+  bandClass?: string;
+  bandStyle?: React.CSSProperties;
 };
 
 const INSTRUCTOR_COLORS = [
@@ -922,15 +933,33 @@ export function AutoscuoleAgendaPage({
     }
     setStatusFilter(value);
   }, []);
-  // Stable instructor → color mapping (used in both week and day views)
+  // Stable instructor → tint mapping (used in both week and day views).
+  // Owner-picked hex (instructor.color) wins; otherwise the legacy positional
+  // palette by alphabetical index. Custom colors resolve to inline styles,
+  // legacy ones to Tailwind classes — consumers apply both.
   const instructorColorMap = React.useMemo(() => {
-    const map = new Map<string, typeof INSTRUCTOR_COLORS[0]>();
+    const map = new Map<string, InstructorTint>();
     const sorted = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
     sorted.forEach((instr, idx) => {
-      map.set(instr.id, INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length]);
+      if (instr.color) {
+        const tint = instructorTintStyles(instr.color);
+        map.set(instr.id, { avatarStyle: tint.avatar, bandStyle: tint.band });
+      } else {
+        const legacy = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
+        map.set(instr.id, { avatarClass: legacy.avatar, bandClass: legacy.bg });
+      }
     });
     return map;
   }, [instructors]);
+  // Fallback for ids missing from `instructors` (e.g. availability-only rows).
+  const tintFor = React.useCallback(
+    (instructorId: string, idx: number): InstructorTint =>
+      instructorColorMap.get(instructorId) ?? {
+        avatarClass: INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length].avatar,
+        bandClass: INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length].bg,
+      },
+    [instructorColorMap],
+  );
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
@@ -1499,11 +1528,11 @@ export function AutoscuoleAgendaPage({
                 {/* Instructor sub-headers within each day */}
                 {days.map((day) =>
                   weekInstructors.map((instr, idx) => {
-                    const color = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
+                    const tint = tintFor(instr.instructorId, idx);
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
                       <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-gray-400" : "border-border/30")}>
-                        <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", color.avatar)}>{initials}</div>
+                        <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
                         <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
                       </div>
                     );
@@ -1600,7 +1629,7 @@ export function AutoscuoleAgendaPage({
                   const isColumnHoliday = holidaySet.has(dateKey);
 
                   return weekInstructors.map((instr, instrIdx) => {
-                    const color = INSTRUCTOR_COLORS[instrIdx % INSTRUCTOR_COLORS.length];
+                    const tint = tintFor(instr.instructorId, instrIdx);
                     const ranges = instr.days[dateKey] ?? [];
                     const instrAppts = dayAppts.filter((a) => a.instructor?.id === instr.instructorId);
 
@@ -1617,7 +1646,7 @@ export function AutoscuoleAgendaPage({
                         )}
                         {/* Availability bands */}
                         {ranges.map((range, ri) => (
-                          <div key={ri} className={cn("absolute left-0 right-0", color.bg)} style={{ top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
+                          <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
                         ))}
                         {/* Hour grid lines */}
                         {hourMarks.map((hour) => (
@@ -1871,7 +1900,7 @@ export function AutoscuoleAgendaPage({
             >
               <div />
               {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
-                const color = INSTRUCTOR_COLORS[idx % INSTRUCTOR_COLORS.length];
+                const tint = tintFor(instr.id, idx);
                 const initials = instr.name
                   .split(" ")
                   .map((w) => w[0])
@@ -1883,7 +1912,7 @@ export function AutoscuoleAgendaPage({
                     key={instr.id}
                     className="flex flex-col items-center gap-1 py-2.5 border-l border-border/50"
                   >
-                    <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", color.avatar)}>
+                    <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
                       {initials}
                     </div>
                     <span className="text-[11px] font-semibold text-foreground truncate max-w-[90%]">{instr.name}</span>
@@ -1956,7 +1985,7 @@ export function AutoscuoleAgendaPage({
               const allDayAppointments = appointmentsByDay[0] ?? [];
 
               return dayViewInstructors.map((instr, instrIdx) => {
-                const color = INSTRUCTOR_COLORS[instrIdx % INSTRUCTOR_COLORS.length];
+                const tint = tintFor(instr.id, instrIdx);
                 // Filter appointments for this instructor
                 const instrAppointments = allDayAppointments.filter(
                   (a) => a.instructor?.id === instr.id,
@@ -1993,8 +2022,8 @@ export function AutoscuoleAgendaPage({
                       return (
                         <div
                           key={ri}
-                          className={cn("absolute left-0 right-0", color.bg)}
-                          style={{ top, height }}
+                          className={cn("absolute left-0 right-0", tint.bandClass)}
+                          style={{ ...tint.bandStyle, top, height }}
                         />
                       );
                     })}

@@ -74,6 +74,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: respects cluster constraints
 - → **Mobile**: `SettingsScreen`, `ClusterSettingsScreen`, `InstructorAvailabilityScreen`, `PublicationModeEditor` (9 screens total)
 
+### Instructor Colors
+- → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
+- → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)
+- → **Mobile**: `color` already returned by `GET /api/autoscuole/instructors` + agenda bootstrap (not consumed yet)
+
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs
 - → **Notifications**: sends push + WhatsApp + email reminders

@@ -587,6 +587,9 @@ model AutoscuolaInstructor {
   userId         String?  @db.Uuid
   name           String
   phone          String?
+  /// Owner-picked display color (hex, e.g. "#0EA5E9") for avatars/agenda.
+  /// Null = automatic (positional palette fallback on the clients).
+  color          String?
   status         String   @default("active")
   autonomousMode Boolean  @default(false)
   settings       Json?    @db.Json

@@ -77,7 +77,7 @@ import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
-type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; inviteCode?: string | null; _count?: { assignedStudents: number } };
+type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; color?: string | null; inviteCode?: string | null; _count?: { assignedStudents: number } };
 type VehicleDetail = {
   id: string;
   name: string;
@@ -416,6 +416,7 @@ export function AutoscuoleResourcesPage({
           status: item.status,
           autonomousMode: item.autonomousMode,
           settings: item.settings,
+          color: item.color ?? null,
           _count: item._count,
         })),
       );
@@ -1005,6 +1006,19 @@ export function AutoscuoleResourcesPage({
     setClusterInstructor(null);
   };
 
+  // Save the instructor display color (null = back to automatic palette).
+  // Awaited by ColorSwatchPicker, which spins on the trigger until we resolve.
+  const changeInstructorColor = async (instructor: InstructorDetail, color: string | null) => {
+    const res = await updateAutoscuolaInstructor({ instructorId: instructor.id, color });
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Errore salvataggio colore." });
+      return;
+    }
+    setInstructors((prev) =>
+      prev.map((item) => (item.id === instructor.id ? { ...item, color } : item)),
+    );
+  };
+
   const handleSelectInstrWeek = (weekStart: string | null) => {
     setInstrSelectedWeek(weekStart);
     if (!availInstructor) return;
@@ -1528,6 +1542,7 @@ export function AutoscuoleResourcesPage({
             instructorAvailability={instructorAvailability}
             openClusterPanel={openClusterPanel}
             openInstructorAvailabilityDialog={openInstructorAvailabilityDialog}
+            changeInstructorColor={changeInstructorColor}
             setSickLeaveInstructor={setSickLeaveInstructor}
             setSickLeaveStartDate={setSickLeaveStartDate}
             setSickLeaveEndDate={setSickLeaveEndDate}
