@@ -9,6 +9,7 @@ import carAnimation from "@/assets/Car.json";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
@@ -396,6 +397,7 @@ export function AutoscuoleAgendaPage({
     extraMotoVehicleIds: [] as string[],
     locationId: "",
     duration: "30",
+    notes: "",
   });
   type AgendaLocationOption = {
     id: string;
@@ -771,6 +773,7 @@ export function AutoscuoleAgendaPage({
         ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
         : [],
       locationId: form.locationId || null,
+      notes: form.notes.trim() || undefined,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
     });
     const res = await createAutoscuolaAppointment(makePayload());
@@ -810,6 +813,7 @@ export function AutoscuoleAgendaPage({
       extraMotoVehicleIds: [],
       locationId: defaultLocationId,
       duration: "30",
+      notes: "",
     });
     toast.success({ description: res.message ?? "Operazione completata." });
     if (Array.isArray((res as { warnings?: string[] }).warnings) && (res as { warnings?: string[] }).warnings?.length) {
@@ -2715,6 +2719,20 @@ export function AutoscuoleAgendaPage({
                       <SummaryRow
                         label="Luogo"
                         value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor="create-notes" className="text-xs font-medium text-slate-700">
+                        Note
+                      </label>
+                      <Textarea
+                        id="create-notes"
+                        value={form.notes}
+                        onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Note opzionali sulla guida"
+                        rows={3}
+                        disabled={creating}
+                        className="resize-none text-sm"
                       />
                     </div>
                   </motion.div>
