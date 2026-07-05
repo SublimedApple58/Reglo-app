@@ -4558,7 +4558,12 @@ const respondGroupLessonInviteSchema = z.object({
 
 const getGroupLessonInvitesSchema = z.object({
   studentId: z.string().uuid(),
-  limit: z.number().int().min(1).max(20).optional(),
+  // Raised from 20 (2026-07-06, Robatto): the joinable-lessons list is the
+  // student's ONLY window on group lessons — with 3-4 lessons/day a cap of 20
+  // hid everything beyond ~2 weeks ("vedo le guide di gruppo solo fino al 23").
+  limit: z.number().int().min(1).max(100).optional(),
+  /** Count/badge mode: skips the ensure-invite writes (no inviteId needed). */
+  countOnly: z.boolean().optional(),
 });
 
 const inviteToGroupLessonSchema = z.object({
@@ -5271,12 +5276,16 @@ export async function getGroupLessonInvites(
 
     const visible = await Promise.all(
       eligible.map(async (gl) => {
-        const inviteId = await ensureDiscoverableGroupLessonInvite(
-          companyId,
-          gl.id,
-          payload.studentId,
-          gl.startsAt,
-        );
+        // countOnly (home badge) only needs the eligible list length — skip
+        // the per-lesson ensure-invite writes, the caller never opens them.
+        const inviteId = payload.countOnly
+          ? null
+          : await ensureDiscoverableGroupLessonInvite(
+              companyId,
+              gl.id,
+              payload.studentId,
+              gl.startsAt,
+            );
         return {
           inviteId,
           groupLessonId: gl.id,
