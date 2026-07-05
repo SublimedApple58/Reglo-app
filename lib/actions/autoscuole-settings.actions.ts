@@ -253,6 +253,8 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderMinutes: reminderMinutesSchema.optional(),
     studentReminderMorningEnabled: z.boolean().optional(),
     studentReminderMorningTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    studentReminderDayBeforeEnabled: z.boolean().optional(),
+    studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
     slotFillChannels: channelListSchema.optional(),
     studentReminderChannels: channelListSchema.optional(),
@@ -375,6 +377,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentReminderMinutes !== undefined ||
       value.studentReminderMorningEnabled !== undefined ||
       value.studentReminderMorningTime !== undefined ||
+      value.studentReminderDayBeforeEnabled !== undefined ||
+      value.studentReminderDayBeforeTime !== undefined ||
       value.instructorReminderMinutes !== undefined ||
       value.slotFillChannels !== undefined ||
       value.studentReminderChannels !== undefined ||
@@ -536,6 +540,8 @@ export type AutoscuolaSettingsData = {
   studentReminderMinutes: number;
   studentReminderMorningEnabled: boolean;
   studentReminderMorningTime: string;
+  studentReminderDayBeforeEnabled: boolean;
+  studentReminderDayBeforeTime: string;
   instructorReminderMinutes: number;
   slotFillChannels: string[];
   studentReminderChannels: string[];
@@ -644,6 +650,14 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.studentReminderMorningTime === "string" && /^\d{2}:\d{2}$/.test(limits.studentReminderMorningTime)
       ? limits.studentReminderMorningTime
       : "08:00";
+  const studentReminderDayBeforeEnabled =
+    typeof limits.studentReminderDayBeforeEnabled === "boolean"
+      ? limits.studentReminderDayBeforeEnabled
+      : false;
+  const studentReminderDayBeforeTime =
+    typeof limits.studentReminderDayBeforeTime === "string" && /^\d{2}:\d{2}$/.test(limits.studentReminderDayBeforeTime)
+      ? limits.studentReminderDayBeforeTime
+      : "19:00";
   const instructorReminderMinutes =
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
@@ -875,6 +889,8 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderMinutes,
     studentReminderMorningEnabled,
     studentReminderMorningTime,
+    studentReminderDayBeforeEnabled,
+    studentReminderDayBeforeTime,
     instructorReminderMinutes,
     slotFillChannels,
     studentReminderChannels,
@@ -1409,6 +1425,10 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderMorningEnabled ?? (limits.studentReminderMorningEnabled === true),
       studentReminderMorningTime:
         payload.studentReminderMorningTime ?? (typeof limits.studentReminderMorningTime === "string" ? limits.studentReminderMorningTime : "08:00"),
+      studentReminderDayBeforeEnabled:
+        payload.studentReminderDayBeforeEnabled ?? (limits.studentReminderDayBeforeEnabled === true),
+      studentReminderDayBeforeTime:
+        payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
       slotFillChannels: payload.slotFillChannels ?? previousSlotFillChannels,
@@ -1526,6 +1546,8 @@ export async function updateAutoscuolaSettings(
         studentReminderMinutes: nextLimits.studentReminderMinutes,
         studentReminderMorningEnabled: nextLimits.studentReminderMorningEnabled,
         studentReminderMorningTime: nextLimits.studentReminderMorningTime,
+        studentReminderDayBeforeEnabled: nextLimits.studentReminderDayBeforeEnabled,
+        studentReminderDayBeforeTime: nextLimits.studentReminderDayBeforeTime,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
         slotFillChannels: nextLimits.slotFillChannels,
         studentReminderChannels: nextLimits.studentReminderChannels,

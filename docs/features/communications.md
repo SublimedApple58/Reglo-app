@@ -19,7 +19,8 @@ Message templates, reminder rules, appointment reminders, case deadline notifica
 - `processAutoscuolaPaymentRetries()` → delegates to payments.ts
 - `processAutoscuolaInvoiceFinalization()` → delegates to payments.ts
 - `processAutoscuolaConfiguredAppointmentReminders()` — template + rule based
-- `processAutoscuolaMorningReminders()` — morning notifications
+- `processAutoscuolaMorningReminders()` — morning notifications (`limits.studentReminderMorningEnabled` + `...Time`, fire-once al minuto configurato, guide di OGGI)
+- `processAutoscuolaDayBeforeReminders()` — day-before notifications (2026-07-06: `limits.studentReminderDayBeforeEnabled` + `...Time`, default 19:00, guide di DOMANI, kind `day_before_reminder_student`, stessi canali `studentReminderChannels`)
 - `processAutoscuolaAppointmentReminders()` — 120/60/30/20/15 min before
 - `processAutoscuolaCaseDeadlines()` — pink sheet/medical expiry alerts
 - `processAutoscuolaPendingRepositions()` → delegates to repositioning.ts

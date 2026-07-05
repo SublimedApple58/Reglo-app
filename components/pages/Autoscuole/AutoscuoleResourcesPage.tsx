@@ -242,6 +242,8 @@ export function AutoscuoleResourcesPage({
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
   const [studentReminderMorningEnabled, setStudentReminderMorningEnabled] = React.useState(false);
   const [studentReminderMorningTime, setStudentReminderMorningTime] = React.useState("08:00");
+  const [studentReminderDayBeforeEnabled, setStudentReminderDayBeforeEnabled] = React.useState(false);
+  const [studentReminderDayBeforeTime, setStudentReminderDayBeforeTime] = React.useState("19:00");
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
     "push",
@@ -498,6 +500,8 @@ export function AutoscuoleResourcesPage({
       setStudentReminderMinutes(String(res.data.studentReminderMinutes));
       setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
       setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
+      setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
+      setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
       setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
       setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
       setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
@@ -665,6 +669,8 @@ export function AutoscuoleResourcesPage({
         parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
       studentReminderMorningEnabled,
       studentReminderMorningTime,
+      studentReminderDayBeforeEnabled,
+      studentReminderDayBeforeTime,
       instructorReminderMinutes:
         parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
       slotFillChannels,
@@ -1516,6 +1522,10 @@ export function AutoscuoleResourcesPage({
             setStudentReminderMorningEnabled={setStudentReminderMorningEnabled}
             studentReminderMorningTime={studentReminderMorningTime}
             setStudentReminderMorningTime={setStudentReminderMorningTime}
+            studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
+            setStudentReminderDayBeforeEnabled={setStudentReminderDayBeforeEnabled}
+            studentReminderDayBeforeTime={studentReminderDayBeforeTime}
+            setStudentReminderDayBeforeTime={setStudentReminderDayBeforeTime}
             instructorReminderMinutes={instructorReminderMinutes}
             setInstructorReminderMinutes={setInstructorReminderMinutes}
             slotFillChannels={slotFillChannels}

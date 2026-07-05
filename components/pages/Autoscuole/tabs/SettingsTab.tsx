@@ -116,6 +116,10 @@ export type SettingsTabProps = {
   setStudentReminderMorningEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentReminderMorningTime: string;
   setStudentReminderMorningTime: (v: string) => void;
+  studentReminderDayBeforeEnabled: boolean;
+  setStudentReminderDayBeforeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  studentReminderDayBeforeTime: string;
+  setStudentReminderDayBeforeTime: (v: string) => void;
   instructorReminderMinutes: string;
   setInstructorReminderMinutes: (v: string) => void;
   slotFillChannels: ChannelValue[];
@@ -421,6 +425,10 @@ function SettingsTab({
   setStudentReminderMorningEnabled,
   studentReminderMorningTime,
   setStudentReminderMorningTime,
+  studentReminderDayBeforeEnabled,
+  setStudentReminderDayBeforeEnabled,
+  studentReminderDayBeforeTime,
+  setStudentReminderDayBeforeTime,
   instructorReminderMinutes,
   setInstructorReminderMinutes,
   slotFillChannels,
@@ -634,6 +642,34 @@ function SettingsTab({
                     <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
                     <SelectContent>
                       {["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"].map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+              )}
+            </div>
+
+            {/* Day-before reminder */}
+            <div className="max-w-2xl space-y-3">
+              <div
+                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                onClick={() => setStudentReminderDayBeforeEnabled((prev) => !prev)}
+              >
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium">Reminder il giorno prima</span>
+                  <span className="text-xs text-muted-foreground">
+                    Invia un promemoria il giorno prima della guida, all&apos;orario scelto.
+                  </span>
+                </div>
+                <InlineToggle checked={studentReminderDayBeforeEnabled} size="sm" />
+              </div>
+              {studentReminderDayBeforeEnabled && (
+                <FieldGroup label="Orario invio">
+                  <Select value={studentReminderDayBeforeTime} onValueChange={setStudentReminderDayBeforeTime}>
+                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
+                    <SelectContent>
+                      {["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"].map((t) => (
                         <SelectItem key={t} value={t}>{t}</SelectItem>
                       ))}
                     </SelectContent>

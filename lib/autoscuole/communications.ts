@@ -909,6 +909,128 @@ export const processAutoscuolaMorningReminders = async ({
   }
 };
 
+/**
+ * Day-before reminder: at the configured (evening) time, send reminders for
+ * all appointments of TOMORROW (scheduled/confirmed). Same fire-once model as
+ * the morning reminder: the cron runs every minute and this only fires when
+ * the current minute matches the configured time exactly.
+ */
+export const processAutoscuolaDayBeforeReminders = async ({
+  prisma = defaultPrisma,
+  now = new Date(),
+}: {
+  prisma?: PrismaClientLike;
+  now?: Date;
+}) => {
+  const services = await prisma.companyService.findMany({
+    where: { serviceKey: "AUTOSCUOLE", status: "ACTIVE" },
+    select: { companyId: true, limits: true },
+  });
+
+  const tz = "Europe/Rome";
+  const nowInTz = new Date(now.toLocaleString("en-US", { timeZone: tz }));
+  const currentHH = String(nowInTz.getHours()).padStart(2, "0");
+  const currentMM = String(nowInTz.getMinutes()).padStart(2, "0");
+  const currentTime = `${currentHH}:${currentMM}`;
+  const tomorrowInTz = new Date(nowInTz);
+  tomorrowInTz.setDate(tomorrowInTz.getDate() + 1);
+  const tomorrowStr = `${tomorrowInTz.getFullYear()}-${String(tomorrowInTz.getMonth() + 1).padStart(2, "0")}-${String(tomorrowInTz.getDate()).padStart(2, "0")}`;
+
+  const activeStatuses = ["scheduled", "confirmed"];
+
+  for (const service of services) {
+    const limits = (service.limits ?? {}) as Record<string, unknown>;
+    const enabled = limits.studentReminderDayBeforeEnabled === true;
+    if (!enabled) continue;
+
+    const reminderTime = typeof limits.studentReminderDayBeforeTime === "string"
+      ? limits.studentReminderDayBeforeTime
+      : "19:00";
+
+    // Only fire at the configured time (within a 1-min window)
+    if (currentTime !== reminderTime) continue;
+
+    const studentChannels = parseReminderChannels(limits.studentReminderChannels);
+
+    // Get tomorrow's appointments (in Europe/Rome timezone)
+    const dayStart = new Date(`${tomorrowStr}T00:00:00+02:00`);
+    const dayEnd = new Date(`${tomorrowStr}T23:59:59+02:00`);
+
+    const appointments = await prisma.autoscuolaAppointment.findMany({
+      where: {
+        companyId: service.companyId,
+        status: { in: activeStatuses },
+        startsAt: { gte: dayStart, lt: dayEnd },
+      },
+      include: {
+        student: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        instructor: { include: { user: { select: { id: true, email: true } } } },
+      },
+    });
+
+    for (const appointment of appointments) {
+      const studentProfile = mapStudentFromUser(appointment.student);
+      const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
+      const durationMinutes = Math.max(
+        30,
+        Math.round(
+          ((appointment.endsAt?.getTime() ??
+            appointment.startsAt.getTime() + 30 * 60 * 1000) -
+            appointment.startsAt.getTime()) /
+            60000,
+        ),
+      );
+      const timeLabel = startsAtLabel.split(" alle ")[1] ?? startsAtLabel;
+      const body = `Promemoria: domani hai una guida alle ${timeLabel}. Durata ${durationMinutes} minuti.`;
+
+      if (studentChannels.includes("push") && appointment.studentId) {
+        try {
+          await sendAutoscuolaPushToUsers({
+            companyId: service.companyId,
+            userIds: [appointment.studentId],
+            title: "Guida domani",
+            body,
+            data: {
+              kind: "day_before_reminder_student",
+              appointmentId: appointment.id,
+              startsAt: appointment.startsAt.toISOString(),
+            },
+          });
+        } catch (error) {
+          console.error("Day-before reminder push error", error);
+        }
+      }
+
+      if (studentChannels.includes("whatsapp") && studentProfile.phone) {
+        try {
+          await sendAutoscuolaWhatsApp({ to: studentProfile.phone, body });
+        } catch (error) {
+          console.error("Day-before reminder WhatsApp error", error);
+        }
+      }
+
+      if (studentChannels.includes("email") && studentProfile.email) {
+        try {
+          await sendDynamicEmail({
+            to: studentProfile.email,
+            subject: "Reglo Autoscuole · Guida domani",
+            body,
+          });
+        } catch (error) {
+          console.error("Day-before reminder email error", error);
+        }
+      }
+    }
+  }
+};
+
 export const processAutoscuolaPenaltyCharges = async ({
   prisma = defaultPrisma,
   now = new Date(),
