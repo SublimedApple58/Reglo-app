@@ -68,6 +68,10 @@ import {
   addGroupLessonBusyIntervals,
   fetchGroupLessonBusyRows,
 } from "@/lib/autoscuole/group-lesson-busy";
+import {
+  buildSlotAssignmentContext,
+  resolveSlotAssignmentForStudent,
+} from "@/lib/autoscuole/slot-assignment";
 
 const slotSchema = z.object({
   ownerType: z.enum(["student", "instructor", "vehicle"]),
@@ -4006,56 +4010,29 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       };
     }
 
-    const slotTime = offer.slot.startsAt;
-    const waitlistVehiclesEnabled =
-      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
-    const [instructorSlot, openVehicleSlots] = await Promise.all([
-      prisma.autoscuolaAvailabilitySlot.findFirst({
-        where: {
-          companyId: membership.companyId,
-          ownerType: "instructor",
-          status: "open",
-          startsAt: slotTime,
-        },
-      }),
-      prisma.autoscuolaAvailabilitySlot.findMany({
-        where: {
-          companyId: membership.companyId,
-          ownerType: "vehicle",
-          status: "open",
-          startsAt: slotTime,
-        },
-      }),
-    ]);
-
-    // Pick a vehicle slot whose vehicle serves the student's license (Vehicles
-    // module). When the module is off, any open vehicle slot is fine.
-    type OpenVehicleSlot = (typeof openVehicleSlots)[number];
-    let vehicleSlot: OpenVehicleSlot | null = openVehicleSlots.length ? openVehicleSlots[0] : null;
-    if (waitlistVehiclesEnabled && openVehicleSlots.length) {
-      const candidateVehicleIds = openVehicleSlots.map((s) => s.ownerId);
-      const candidateVehicles = await prisma.autoscuolaVehicle.findMany({
-        where: { id: { in: candidateVehicleIds } },
-        select: { id: true, licenseCategory: true, transmission: true },
-      });
-      const vehicleById = new Map(candidateVehicles.map((v) => [v.id, v]));
-      const studentLicense = {
-        licenseCategory: student.licenseCategory,
-        transmission: student.transmission,
-      };
-      vehicleSlot =
-        openVehicleSlots.find((s) => {
-          const v = vehicleById.get(s.ownerId);
-          return v ? vehicleServesLicense(v, studentLicense) : false;
-        }) ?? null;
-    }
-
-    if (!instructorSlot || !vehicleSlot) {
+    // Resolve instructor + vehicle set through the SAME engine as the booking
+    // flow (license+transmission, exclusive/pool/open, follow car, real busy
+    // intervals incl. the appointmentVehicles join and group-lesson containers,
+    // publication mode, maintenance excluded). This replaced the legacy
+    // "findFirst open availability-slot row" mechanism, which bypassed all of
+    // those rules and trusted stale slot rows.
+    const assignmentCtx = await buildSlotAssignmentContext({
+      companyId: membership.companyId,
+      rangeStart: dayBounds.start,
+      rangeEnd: dayBounds.end,
+    });
+    const assignment = resolveSlotAssignmentForStudent(assignmentCtx, {
+      licenseCategory: student.licenseCategory ?? null,
+      transmission: student.transmission ?? null,
+      startsAt: offer.slot.startsAt,
+      endsAt: offer.slot.endsAt,
+    });
+    if (!assignment) {
       return { success: false, message: "Slot non disponibile." };
     }
-    // Capture as consts so the values narrow inside the transaction closure.
-    const bookedInstructorSlot = instructorSlot;
-    const bookedVehicleSlot = vehicleSlot;
+    const assignedVehicleIds = [assignment.vehicleId, assignment.followVehicleId].filter(
+      (id): id is string => !!id,
+    );
 
     const appointmentId = randomUUID();
     const appointment = await prisma.$transaction(async (tx) => {
@@ -4069,13 +4046,10 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
       });
 
       const bookedSlots = await tx.autoscuolaAvailabilitySlot.updateMany({
-        where: {
-          id: { in: [offer.slotId, bookedInstructorSlot.id, bookedVehicleSlot.id] },
-          status: "open",
-        },
+        where: { id: offer.slotId, status: "open" },
         data: { status: "booked" },
       });
-      if (bookedSlots.count < 3) {
+      if (bookedSlots.count < 1) {
         throw new Error("Slot non disponibile.");
       }
 
@@ -4099,6 +4073,59 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
         throw new Error("Slot non disponibile.");
       }
 
+      // Race guard: the assignment was resolved against a snapshot — re-check
+      // the chosen instructor/vehicles against REAL appointments inside the tx
+      // (the legacy count-3-slot-rows guard trusted stale slot rows instead).
+      const conflicting = await tx.autoscuolaAppointment.findFirst({
+        where: {
+          companyId: membership.companyId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { lt: offer.slot.endsAt },
+          endsAt: { gt: offer.slot.startsAt },
+          OR: [
+            { instructorId: assignment.instructorId },
+            ...(assignedVehicleIds.length
+              ? [
+                  { vehicleId: { in: assignedVehicleIds } },
+                  { appointmentVehicles: { some: { vehicleId: { in: assignedVehicleIds } } } },
+                ]
+              : []),
+          ],
+        },
+        select: { id: true },
+      });
+      if (conflicting) {
+        throw new Error("Slot non disponibile.");
+      }
+
+      // Keep the legacy slot rows coherent: mark the assigned instructor and
+      // vehicle(s) as booked at this time (rows may not exist yet — upsert).
+      const slotOwners: Array<{ ownerType: string; ownerId: string }> = [
+        { ownerType: "instructor", ownerId: assignment.instructorId },
+        ...assignedVehicleIds.map((id) => ({ ownerType: "vehicle", ownerId: id })),
+      ];
+      for (const owner of slotOwners) {
+        await tx.autoscuolaAvailabilitySlot.upsert({
+          where: {
+            companyId_ownerType_ownerId_startsAt: {
+              companyId: membership.companyId,
+              ownerType: owner.ownerType,
+              ownerId: owner.ownerId,
+              startsAt: offer.slot.startsAt,
+            },
+          },
+          update: { endsAt: offer.slot.endsAt, status: "booked" },
+          create: {
+            companyId: membership.companyId,
+            ownerType: owner.ownerType,
+            ownerId: owner.ownerId,
+            startsAt: offer.slot.startsAt,
+            endsAt: offer.slot.endsAt,
+            status: "booked",
+          },
+        });
+      }
+
       // Default location: link student-initiated bookings to the company sede
       const waitlistAcceptLoc = await tx.autoscuolaLocation.findFirst({
         where: { companyId: membership.companyId, isDefault: true, archivedAt: null },
@@ -4117,10 +4144,24 @@ export async function respondWaitlistOffer(input: z.infer<typeof respondOfferSch
           startsAt: offer.slot.startsAt,
           endsAt: offer.slot.endsAt,
           status: "scheduled",
-          instructorId: bookedInstructorSlot.ownerId,
-          vehicleId: bookedVehicleSlot.ownerId,
+          instructorId: assignment.instructorId,
+          vehicleId: assignment.vehicleId,
           locationId: waitlistAcceptLoc?.id ?? null,
           slotId: offer.slotId,
+          // Reserve every vehicle this lesson uses (primary + follow car), like
+          // the main booking flow — busy-builders read this join.
+          ...(assignment.vehicleId
+            ? {
+                appointmentVehicles: {
+                  create: [
+                    { vehicleId: assignment.vehicleId, role: "primary" },
+                    ...(assignment.followVehicleId
+                      ? [{ vehicleId: assignment.followVehicleId, role: "follow" }]
+                      : []),
+                  ],
+                },
+              }
+            : {}),
           ...(await prepareAppointmentPaymentSnapshot({
             prisma: tx as never,
             companyId: membership.companyId,
@@ -4237,38 +4278,28 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
       return { success: true, data: [] };
     }
 
-    // License gate (Vehicles module): hide offers whose time has no OPEN vehicle
-    // slot serving the student's pursued license.
-    const waitlistVehiclesEnabled =
-      (autoscuolaService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
-    const studentLicense = {
-      licenseCategory: student.licenseCategory,
-      transmission: student.transmission,
-    };
-    const licenseOkByTimeMs = new Map<number, boolean>();
-    if (waitlistVehiclesEnabled) {
-      const offerTimes = Array.from(new Set(offers.map((o) => o.slot.startsAt.getTime()))).map(
-        (ms) => new Date(ms),
-      );
-      const openVehicleSlots = offerTimes.length
-        ? await prisma.autoscuolaAvailabilitySlot.findMany({
-            where: { companyId: membership.companyId, ownerType: "vehicle", status: "open", startsAt: { in: offerTimes } },
-            select: { ownerId: true, startsAt: true },
-          })
-        : [];
-      const vehicleIds = Array.from(new Set(openVehicleSlots.map((s) => s.ownerId)));
-      const vehicles = vehicleIds.length
-        ? await prisma.autoscuolaVehicle.findMany({
-            where: { id: { in: vehicleIds } },
-            select: { id: true, licenseCategory: true, transmission: true },
-          })
-        : [];
-      const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
-      for (const s of openVehicleSlots) {
-        const v = vehicleById.get(s.ownerId);
-        if (v && vehicleServesLicense(v, studentLicense)) {
-          licenseOkByTimeMs.set(s.startsAt.getTime(), true);
-        }
+    // Assignment gate: hide offers the engine couldn't actually pair for THIS
+    // student (license+transmission, pool/exclusive, follow car, real busy
+    // intervals) — mirrors the accept path so a visible offer is bookable.
+    const assignableByOfferId = new Map<string, boolean>();
+    if (offers.length) {
+      const offerStartMs = offers.map((o) => o.slot.startsAt.getTime());
+      const offerEndMs = offers.map((o) => o.slot.endsAt.getTime());
+      const assignmentCtx = await buildSlotAssignmentContext({
+        companyId: membership.companyId,
+        rangeStart: new Date(Math.min(...offerStartMs)),
+        rangeEnd: new Date(Math.max(...offerEndMs)),
+      });
+      for (const offer of offers) {
+        assignableByOfferId.set(
+          offer.id,
+          resolveSlotAssignmentForStudent(assignmentCtx, {
+            licenseCategory: student.licenseCategory ?? null,
+            transmission: student.transmission ?? null,
+            startsAt: offer.slot.startsAt,
+            endsAt: offer.slot.endsAt,
+          }) !== null,
+        );
       }
     }
 
@@ -4289,10 +4320,7 @@ export async function getWaitlistOffers(input: z.infer<typeof getWaitlistOffersS
             offer.slot.endsAt,
           ),
       )
-      .filter(
-        (offer) =>
-          !waitlistVehiclesEnabled || licenseOkByTimeMs.get(offer.slot.startsAt.getTime()) === true,
-      )
+      .filter((offer) => assignableByOfferId.get(offer.id) === true)
       .filter((offer) => {
         if (!enforceRequiredTypes || !missingRequiredTypes.length) return true;
         const compatible = getCompatibleLessonTypesForInterval({
@@ -4416,25 +4444,15 @@ export async function broadcastWaitlistOffer({
     appointmentsByStudent.set(appointment.studentId, list);
   }
 
-  // License gate (Vehicles module): only students whose pursued license matches
-  // an OPEN vehicle slot at this time could actually take it.
-  const waitlistVehiclesEnabled =
-    (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
-  let openVehicleLicenses: Array<{ licenseCategory: string | null; transmission: string | null }> | null =
-    null;
-  if (waitlistVehiclesEnabled) {
-    const openVehicleSlots = await prisma.autoscuolaAvailabilitySlot.findMany({
-      where: { companyId, ownerType: "vehicle", status: "open", startsAt: slot.startsAt },
-      select: { ownerId: true },
-    });
-    const openVehicleIds = openVehicleSlots.map((s) => s.ownerId);
-    openVehicleLicenses = openVehicleIds.length
-      ? await prisma.autoscuolaVehicle.findMany({
-          where: { id: { in: openVehicleIds } },
-          select: { licenseCategory: true, transmission: true },
-        })
-      : [];
-  }
+  // Assignment gate: only notify students the engine could ACTUALLY pair with
+  // an instructor + vehicle set at this time (license+transmission, pool/
+  // exclusive, follow car, real busy intervals) — same rules as the accept
+  // path, so an offer never reaches someone who couldn't take it.
+  const assignmentCtx = await buildSlotAssignmentContext({
+    companyId,
+    rangeStart: dayBounds.start,
+    rangeEnd: dayBounds.end,
+  });
 
   const availableStudents = students.filter((student) => {
     const availability = availabilityByStudent.get(student.user.id);
@@ -4443,16 +4461,14 @@ export async function broadcastWaitlistOffer({
     }
     const booked = appointmentsByStudent.get(student.user.id) ?? [];
     if (hasAppointmentConflict(booked, slot.startsAt, slot.endsAt)) return false;
-    if (openVehicleLicenses !== null) {
-      const studentLicense = {
-        licenseCategory: student.licenseCategory,
-        transmission: student.transmission,
-      };
-      if (!openVehicleLicenses.some((v) => vehicleServesLicense(v, studentLicense))) {
-        return false;
-      }
-    }
-    return true;
+    return (
+      resolveSlotAssignmentForStudent(assignmentCtx, {
+        licenseCategory: student.licenseCategory ?? null,
+        transmission: student.transmission ?? null,
+        startsAt: slot.startsAt,
+        endsAt: slot.endsAt,
+      }) !== null
+    );
   });
   if (!availableStudents.length) return offer;
 

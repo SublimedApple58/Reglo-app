@@ -89,6 +89,7 @@ const isAppointmentOperationallyCancellable = (appointment: {
 const releaseSlotsForAppointment = async (
   prisma: PrismaClientLike,
   appointment: {
+    id: string;
     companyId: string;
     studentId: string;
     instructorId: string | null;
@@ -104,6 +105,16 @@ const releaseSlotsForAppointment = async (
   }
   if (appointment.vehicleId) {
     ownerFilters.push({ ownerType: "vehicle", ownerId: appointment.vehicleId });
+  }
+  // Release the slot rows of every linked vehicle too (follow car, extra motos).
+  const linkedVehicles = await prisma.autoscuolaAppointmentVehicle.findMany({
+    where: { appointmentId: appointment.id },
+    select: { vehicleId: true },
+  });
+  for (const link of linkedVehicles) {
+    if (link.vehicleId !== appointment.vehicleId) {
+      ownerFilters.push({ ownerType: "vehicle", ownerId: link.vehicleId });
+    }
   }
 
   await prisma.autoscuolaAvailabilitySlot.updateMany({
@@ -247,6 +258,7 @@ export async function operationallyCancelAppointment({
     });
 
     await releaseSlotsForAppointment(tx as never, {
+      id: appointment.id,
       companyId,
       studentId: appointment.studentId,
       instructorId: appointment.instructorId,

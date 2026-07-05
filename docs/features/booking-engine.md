@@ -28,6 +28,32 @@ Gli slot proposti all'allievo (`getAllAvailableSlots` + `getDateAvailabilityMap`
 3. `buildCandidateStarts` (slot-matcher per `suggestInstructorBooking` + copia in `createBookingRequest` per i giorni alternativi) unisce la griglia legacy :00/:30 alla cascata ancorata all'inizio finestra (granularità 15') — lo scoring per adiacenza preferisce i candidati flush.
 Test: `tests/unit/autoscuole/slot-packing.test.ts`.
 
+## Waitlist ("slot liberato") — slot-assignment engine (2026-07-06)
+`respondWaitlistOffer` / `broadcastWaitlistOffer` / `getWaitlistOffers` usavano il
+meccanismo legacy delle righe `AutoscuolaAvailabilitySlot` "open" e **bypassavano
+le regole veicoli** (pool/esclusiva, auto al seguito, status active, conflitti
+reali). Ora tutti e tre passano da `lib/autoscuole/slot-assignment.ts`:
+- `buildSlotAssignmentContext(companyId, rangeStart, rangeEnd)` carica UNA volta
+  istruttori/veicoli/pool/preferred/followCarRules + resolver disponibilità +
+  pubFilter + intervalli busy REALI (appuntamenti con join `appointmentVehicles`,
+  blocchi istruttore, container guide di gruppo).
+- `resolveSlotAssignmentForStudent(ctx, {licenseCategory, transmission, startsAt,
+  endsAt})` → `{instructorId, vehicleId, followVehicleId} | null` — stesse regole
+  del flusso di prenotazione (patente+cambio, esclusiva/pool/open, auto al
+  seguito per percorsi moto). Pure in-memory: broadcast/visibilità la chiamano
+  per-allievo/per-offerta sullo stesso context. Test:
+  `tests/unit/autoscuole/slot-assignment.test.ts`.
+- L'accept scrive le righe `appointmentVehicles` (primary+follow), prenota le
+  righe slot dell'istruttore/veicoli assegnati (upsert) e ri-verifica i conflitti
+  DENTRO la transazione contro gli appuntamenti reali (niente più fiducia nelle
+  righe slot stantie).
+- Restano ESCLUSI di proposito (semantica slot_fill storica): limite settimanale
+  (bypass documentato per `bookingSource=slot_fill`), cutoff, lock cluster
+  dell'allievo sull'istruttore assegnato.
+- Fix collaterale: cancellazione/spostamento/annullamento operativo ora riaprono
+  anche le righe slot dei veicoli collegati (auto al seguito, moto aggiuntive) —
+  prima restavano "booked" per sempre.
+
 ## Governance settings
 - `appBookingActors`: "students_only" | "instructors_only" | "both"
 - `instructorBookingMode`: "manual_full" | "manual_engine"

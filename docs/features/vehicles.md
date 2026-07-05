@@ -34,6 +34,7 @@ Vehicle resolution is **per license category**: if an instructor owns an exclusi
 Applied at **all matcher sites** (keep in sync) — each also loads pool members + preferred + followCarRules, and busy-interval builders read both `vehicleId` AND the `AutoscuolaAppointmentVehicle` join:
 - `lib/autoscuole/slot-matcher.ts` (`findBestAutoscuolaSlot`)
 - `lib/actions/autoscuole-availability.actions.ts`: `createBookingRequest` (writes primary+follow join rows + both vehicle slots), `getAllAvailableSlots`, `getDateAvailabilityMap`
+- **Waitlist (2026-07-06)**: `respondWaitlistOffer` / `broadcastWaitlistOffer` / `getWaitlistOffers` via `lib/autoscuole/slot-assignment.ts` (context riusabile + resolve per-allievo; era il sito rimasto al meccanismo legacy delle righe slot e bypassava pool/esclusiva/follow-car/status). Vedi `booking-engine.md` sezione Waitlist.
 - Conflict-check in `createAutoscuolaAppointment` / batch (`autoscuole.actions.ts`): the OR covers primary + follow and queries the join (catches a car used as a follow car elsewhere).
 
 Vehicle queries use `status: "active"` → **maintenance** vehicles are excluded from matching like inactive (but keep their assignment and do NOT cancel appointments).

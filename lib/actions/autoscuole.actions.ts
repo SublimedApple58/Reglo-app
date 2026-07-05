@@ -3378,6 +3378,17 @@ export async function cancelAutoscuolaAppointment(
       if (appointment.vehicleId) {
         ownerFilters.push({ ownerType: "vehicle", ownerId: appointment.vehicleId });
       }
+      // Also release the slot rows of every linked vehicle (follow car, extra
+      // motos) — they were left "booked" forever before.
+      const linkedVehicles = await prisma.autoscuolaAppointmentVehicle.findMany({
+        where: { appointmentId: appointment.id },
+        select: { vehicleId: true },
+      });
+      for (const link of linkedVehicles) {
+        if (link.vehicleId !== appointment.vehicleId) {
+          ownerFilters.push({ ownerType: "vehicle", ownerId: link.vehicleId });
+        }
+      }
 
       await prisma.autoscuolaAvailabilitySlot.updateMany({
         where: {
@@ -3888,6 +3899,16 @@ export async function rescheduleAutoscuolaAppointment(
       }
       if (appointment.vehicleId) {
         ownerFilters.push({ ownerType: "vehicle", ownerId: appointment.vehicleId });
+      }
+      // Release the slot rows of every linked vehicle too (follow car, extra motos).
+      const linkedVehicles = await tx.autoscuolaAppointmentVehicle.findMany({
+        where: { appointmentId: appointment.id },
+        select: { vehicleId: true },
+      });
+      for (const link of linkedVehicles) {
+        if (link.vehicleId !== appointment.vehicleId) {
+          ownerFilters.push({ ownerType: "vehicle", ownerId: link.vehicleId });
+        }
       }
       await tx.autoscuolaAvailabilitySlot.updateMany({
         where: {
