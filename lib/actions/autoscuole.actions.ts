@@ -2363,6 +2363,90 @@ export async function getAutoscuolaLatestStudentAppointmentNote(input: {
   }
 }
 
+/**
+ * Overlap check against scheduled group-lesson CONTAINERS: a group lesson
+ * reserves its instructor, primary vehicle, shared follow car and moto fleet
+ * for the whole window even with ZERO participants — in that case it has no
+ * appointment rows, so appointment-based conflict scans cannot see it.
+ */
+const findGroupContainerConflict = async ({
+  companyId,
+  startsAt,
+  endsAt,
+  instructorId,
+  vehicleIds,
+}: {
+  companyId: string;
+  startsAt: Date;
+  endsAt: Date;
+  instructorId?: string | null;
+  vehicleIds?: string[];
+}) => {
+  const reserved = Array.from(new Set((vehicleIds ?? []).filter(Boolean)));
+  if (!instructorId && !reserved.length) return null;
+  return prisma.autoscuolaGroupLesson.findFirst({
+    where: {
+      companyId,
+      status: "scheduled",
+      startsAt: { lt: endsAt },
+      endsAt: { gt: startsAt },
+      OR: [
+        ...(instructorId ? [{ instructorId }] : []),
+        ...(reserved.length
+          ? [
+              { vehicleId: { in: reserved } },
+              { followVehicleId: { in: reserved } },
+              { fleetVehicles: { some: { vehicleId: { in: reserved } } } },
+            ]
+          : []),
+      ],
+    },
+    select: { id: true },
+  });
+};
+
+/**
+ * True when any of `vehicleIds` is already reserved in [startsAt, endsAt) by
+ * ANOTHER appointment (as primary `vehicleId` or via the appointmentVehicles
+ * join — follow cars and extra motos included) or by a scheduled group-lesson
+ * container. Used when EDITING a lesson's vehicles; the create paths run
+ * their own combined scan.
+ */
+const findVehicleReservationConflict = async ({
+  companyId,
+  startsAt,
+  endsAt,
+  vehicleIds,
+  excludeAppointmentId,
+}: {
+  companyId: string;
+  startsAt: Date;
+  endsAt: Date;
+  vehicleIds: string[];
+  excludeAppointmentId?: string;
+}) => {
+  const reserved = Array.from(new Set(vehicleIds.filter(Boolean)));
+  if (!reserved.length) return false;
+  const [appointmentConflict, containerConflict] = await Promise.all([
+    prisma.autoscuolaAppointment.findFirst({
+      where: {
+        companyId,
+        status: { notIn: ["cancelled"] },
+        startsAt: { lt: endsAt },
+        endsAt: { gt: startsAt },
+        ...(excludeAppointmentId ? { id: { not: excludeAppointmentId } } : {}),
+        OR: [
+          { vehicleId: { in: reserved } },
+          { appointmentVehicles: { some: { vehicleId: { in: reserved } } } },
+        ],
+      },
+      select: { id: true },
+    }),
+    findGroupContainerConflict({ companyId, startsAt, endsAt, vehicleIds: reserved }),
+  ]);
+  return Boolean(appointmentConflict || containerConflict);
+};
+
 export async function createAutoscuolaAppointment(
   input: z.infer<typeof createAppointmentSchema>,
 ) {
@@ -2719,6 +2803,24 @@ export async function createAutoscuolaAppointment(
         return {
           success: false,
           message: "L'istruttore non è disponibile in quell'orario (slot bloccato).",
+        };
+      }
+    }
+
+    // Group-lesson containers reserve instructor + vehicles even with zero
+    // participants (no appointment rows) — the scan above cannot see them.
+    if (!payload.skipConflictCheck) {
+      const containerConflict = await findGroupContainerConflict({
+        companyId,
+        startsAt: slotTime,
+        endsAt: slotEnd,
+        instructorId: resolvedInstructorId,
+        vehicleIds: reservedVehicleIds,
+      });
+      if (containerConflict) {
+        return {
+          success: false,
+          message: "Slot non disponibile: istruttore o veicolo impegnato in una guida di gruppo.",
         };
       }
     }
@@ -3132,6 +3234,29 @@ export async function createAutoscuolaAppointmentBatch(
         return {
           success: false,
           message: `Conflitto per lo slot del ${dateStr}: l'istruttore ha uno slot bloccato.`,
+        };
+      }
+
+      // Group-lesson containers (even with zero participants) reserve
+      // instructor + vehicles but have no appointment rows.
+      const containerConflict = await findGroupContainerConflict({
+        companyId,
+        startsAt: entry.startsAt,
+        endsAt: entry.endsAt,
+        instructorId: resolvedInstructorId,
+        vehicleIds: batchReservedVehicleIds,
+      });
+      if (containerConflict) {
+        const dateStr = entry.startsAt.toLocaleString("it-IT", {
+          day: "2-digit",
+          month: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          timeZone: "Europe/Rome",
+        });
+        return {
+          success: false,
+          message: `Conflitto per lo slot del ${dateStr}: istruttore o veicolo impegnato in una guida di gruppo.`,
         };
       }
 
@@ -4726,6 +4851,42 @@ export async function updateAutoscuolaAppointmentDetails(
       finalExtraMotoVehicleIds = existingPrimaries
         .map((r) => r.vehicleId)
         .filter((id) => id !== finalPrimaryVehicleId);
+    }
+
+    // Conflict check on the vehicles being ADDED by this edit: changing a
+    // lesson's vehicle bypassed every overlap check (double-booked Yaris at
+    // Robatto, 2026-07-03 — the create path would have blocked it). Only the
+    // added ids are checked, so a pre-existing overlap on an untouched vehicle
+    // never blocks unrelated edits; past lessons stay editable (record fixes).
+    if (vehiclesNeedSync && appointmentEnd.getTime() > Date.now()) {
+      const currentRows = await prisma.autoscuolaAppointmentVehicle.findMany({
+        where: { appointmentId: appointment.id },
+        select: { vehicleId: true },
+      });
+      const currentReserved = new Set(
+        [appointment.vehicleId, ...currentRows.map((r) => r.vehicleId)].filter(Boolean),
+      );
+      const addedVehicleIds = [
+        finalPrimaryVehicleId,
+        finalFollowVehicleId,
+        ...finalExtraMotoVehicleIds,
+      ].filter((id): id is string => Boolean(id) && !currentReserved.has(id as string));
+      if (addedVehicleIds.length) {
+        const conflict = await findVehicleReservationConflict({
+          companyId: membership.companyId,
+          startsAt: appointment.startsAt,
+          endsAt: appointmentEnd,
+          vehicleIds: addedVehicleIds,
+          excludeAppointmentId: appointment.id,
+        });
+        if (conflict) {
+          return {
+            success: false,
+            message: "Veicolo già impegnato in quell'orario su un'altra guida.",
+            code: "VEHICLE_UNAVAILABLE" as const,
+          };
+        }
+      }
     }
 
     const updated = await prisma.$transaction(async (tx) => {
