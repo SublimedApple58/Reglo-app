@@ -452,16 +452,19 @@ export function AutoscuoleAgendaPage({
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
   const [legendOpen, setLegendOpen] = React.useState(false);
-  // Google-Calendar-style slot menu: click on an empty agenda slot → popover
-  // with the same options as "+ Nuovo", pre-filled with the clicked day/time
-  // (and instructor when the column is instructor-specific).
+  // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
+  // block on the grid + popover with the same options as "+ Nuovo", pre-filled
+  // with the clicked day/time (and instructor when the column is instructor-
+  // specific). colLeft/colRight/ghostTop are viewport coords of the clicked
+  // column, used to anchor the popover beside the ghost.
   const [slotMenu, setSlotMenu] = React.useState<{
-    x: number;
-    y: number;
     day: Date;
     ymd: string;
     time: string;
     instructorId: string | null;
+    colLeft: number;
+    colRight: number;
+    ghostTop: number;
   } | null>(null);
   const [groupLessonPrefill, setGroupLessonPrefill] = React.useState<{ date: string; time: string; instructorId: string | null } | null>(null);
   const [blockCreating, setBlockCreating] = React.useState(false);
@@ -735,17 +738,57 @@ export function AutoscuoleAgendaPage({
     // rect.top is viewport-relative, so it already accounts for the container scroll.
     const offsetY = event.clientY - rect.top;
     const minutes = Math.max(0, Math.min(totalMinutes - SLOT_MINUTES, offsetY / PIXELS_PER_MINUTE));
-    const snapped = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES + DAY_START_HOUR * 60;
+    const startMin = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES;
+    const snapped = startMin + DAY_START_HOUR * 60;
     const normalized = normalizeDay(day);
     setSlotMenu({
-      x: event.clientX,
-      y: event.clientY,
       day: normalized,
       ymd: formatYmd(normalized),
       time: `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`,
       instructorId: instructorId ?? null,
+      colLeft: rect.left,
+      colRight: rect.right,
+      ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
   }, []);
+
+  // Ghost block rendered inside the clicked column while the slot menu is open
+  // (neutral look: white + dashed gray border, approved via desktop preview).
+  const renderSlotGhost = (day: Date, instructorId: string | null) => {
+    const active =
+      slotMenu !== null &&
+      slotMenu.ymd === formatYmd(day) &&
+      slotMenu.instructorId === instructorId;
+    const GHOST_MINUTES = 60;
+    return (
+      <AnimatePresence>
+        {active && slotMenu && (() => {
+          const [h, m] = slotMenu.time.split(":").map(Number);
+          const startMin = h * 60 + m - DAY_START_HOUR * 60;
+          const durMin = Math.min(GHOST_MINUTES, totalMinutes - startMin);
+          const endTotal = h * 60 + m + durMin;
+          const end = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
+          return (
+            <motion.div
+              key="slot-ghost"
+              initial={{ opacity: 0, scale: 0.92 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.16, ease: "easeOut" }}
+              className="pointer-events-none absolute left-1 right-1 z-30 overflow-hidden rounded-lg border-[1.5px] border-dashed border-gray-400 bg-white/85 px-2 py-1.5 shadow-[0_6px_22px_rgba(16,24,40,0.14)]"
+              style={{ top: startMin * PIXELS_PER_MINUTE, height: Math.max(30, durMin * PIXELS_PER_MINUTE - 2) }}
+            >
+              <div className="text-[11px] font-semibold tabular-nums text-foreground">{slotMenu.time} – {end}</div>
+              <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                <span className="size-1.5 shrink-0 rounded-full bg-gray-400" />
+                Nuovo evento
+              </div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
+    );
+  };
 
   // Fetch instructor availability for the visible range
   React.useEffect(() => {
@@ -1309,8 +1352,12 @@ export function AutoscuoleAgendaPage({
           (() => {
             const MENU_WIDTH = 248;
             const MENU_HEIGHT = groupLessonsEnabled ? 236 : 200;
-            const left = Math.max(8, Math.min(slotMenu.x + 4, window.innerWidth - MENU_WIDTH - 8));
-            const top = Math.max(8, Math.min(slotMenu.y + 4, window.innerHeight - MENU_HEIGHT - 8));
+            // Anchor beside the clicked column, aligned with the ghost block;
+            // flip to the left side when there is no room on the right.
+            let left = slotMenu.colRight + 10;
+            if (left + MENU_WIDTH > window.innerWidth - 8) left = slotMenu.colLeft - MENU_WIDTH - 10;
+            left = Math.max(8, left);
+            const top = Math.max(8, Math.min(slotMenu.ghostTop - 4, window.innerHeight - MENU_HEIGHT - 8));
             const instructorName = slotMenu.instructorId
               ? instructors.find((i) => i.id === slotMenu.instructorId)?.name ?? null
               : null;
@@ -1452,6 +1499,7 @@ export function AutoscuoleAgendaPage({
                     <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-border/50", isDayToday ? "bg-yellow-50/30" : "")} style={{ height: calendarHeight }}
                       onClick={(event) => openSlotMenu(event, day)}
                     >
+                      {renderSlotGhost(day, null)}
                       {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-border/40" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
                       {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
                       {dayAppointments.map((item) => {
@@ -1818,6 +1866,7 @@ export function AutoscuoleAgendaPage({
                         style={{ height: calendarHeight }}
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
+                        {renderSlotGhost(day, instr.instructorId)}
                         {isColumnHoliday && (
                           <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
                             {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
@@ -2183,6 +2232,7 @@ export function AutoscuoleAgendaPage({
                     style={{ height: calendarHeight }}
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
+                    {renderSlotGhost(day, instr.id)}
                     {/* Availability bands */}
                     {instr.ranges.map((range, ri) => {
                       const top = range.startMinutes * PIXELS_PER_MINUTE;
