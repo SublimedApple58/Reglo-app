@@ -61,6 +61,10 @@ type Props = {
   followCarRules?: Record<string, { enabled: boolean }>;
   /** Optional ISO date (YYYY-MM-DD) of the agenda's focused day to pre-fill. */
   defaultDate?: string | null;
+  /** Optional HH:mm to pre-fill (agenda slot click). */
+  defaultTime?: string | null;
+  /** Optional instructor to pre-select (agenda slot click on an instructor column). */
+  defaultInstructorId?: string | null;
   onCreated: () => void;
 };
 
@@ -99,6 +103,8 @@ export function GroupLessonCreateDialog({
   vehiclesEnabled,
   followCarRules,
   defaultDate,
+  defaultTime,
+  defaultInstructorId,
   onCreated,
 }: Props) {
   const toast = useFeedbackToast();
@@ -151,10 +157,10 @@ export function GroupLessonCreateDialog({
     if (!open) return;
     setKind("standard");
     setDay(defaultDate || todayYMD());
-    setTime("09:00");
+    setTime(defaultTime || "09:00");
     setDurationMin("180");
     setCapacityStr("3");
-    setInstructorId("");
+    setInstructorId(defaultInstructorId || "");
     setVehicleId("");
     setFleetIds([]);
     setFollowVehicleId("");
@@ -195,7 +201,7 @@ export function GroupLessonCreateDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, defaultDate, vehiclesEnabled]);
+  }, [open, defaultDate, defaultTime, defaultInstructorId, vehiclesEnabled]);
 
   const selectedVehicle = React.useMemo(
     () => vehicles.find((v) => v.id === vehicleId) ?? null,

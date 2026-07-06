@@ -9,6 +9,9 @@ Full lesson/exam lifecycle: create, propose, confirm, check-in, complete, cancel
 - `lib/autoscuole/exam-priority.ts` — 14-day priority window before exam date
 - `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` — web agenda UI (170KB)
 
+## Web agenda — slot click (Google Calendar style, 2026-07-07)
+Click su uno slot vuoto (tutte e 3 le viste: classica, istruttori-settimana, istruttori-giorno) → popover al puntatore (`slotMenu` state, portal su body) con data/ora dello slot (snap al blocco da 30', `Math.floor`) + istruttore quando la colonna è per-istruttore. Voci = stesse di "+ Nuovo": Appuntamento, Esame, Evento bloccante, Guida di gruppo (se abilitata) — ognuna apre il dialog già precompilato (giorno/ora/istruttore). `GroupLessonCreateDialog` accetta `defaultTime`/`defaultInstructorId` per questo. Prima esisteva solo il click diretto → wizard Appuntamento (viste classica e istruttori-giorno) con un calcolo dell'offset che sbagliava l'orario quando la griglia era scrollata (`+ scrollTop - 40`); ora `clientY - rect.top` puro, corretto a ogni scroll. Chiusura: click fuori, Escape, wheel.
+
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson
 - `createAutoscuolaAppointmentBatch()` — batch (exams)

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import Lottie from "lottie-react";
 import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle, Car, Bike } from "lucide-react";
@@ -156,6 +157,8 @@ const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
 // Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
 const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180", "210", "240", "270", "300"];
 const PIXELS_PER_MINUTE = 1.6;
+const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
+const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
   { value: "manovre", label: "Manovre" },
@@ -449,6 +452,18 @@ export function AutoscuoleAgendaPage({
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
   const [legendOpen, setLegendOpen] = React.useState(false);
+  // Google-Calendar-style slot menu: click on an empty agenda slot → popover
+  // with the same options as "+ Nuovo", pre-filled with the clicked day/time
+  // (and instructor when the column is instructor-specific).
+  const [slotMenu, setSlotMenu] = React.useState<{
+    x: number;
+    y: number;
+    day: Date;
+    ymd: string;
+    time: string;
+    instructorId: string | null;
+  } | null>(null);
+  const [groupLessonPrefill, setGroupLessonPrefill] = React.useState<{ date: string; time: string; instructorId: string | null } | null>(null);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
@@ -698,6 +713,39 @@ export function AutoscuoleAgendaPage({
       calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
     }
   }, [loading]);
+
+  // Close the slot menu with Escape.
+  React.useEffect(() => {
+    if (!slotMenu) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSlotMenu(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [slotMenu]);
+
+  // Click on an empty agenda slot → open the slot menu at the pointer, with the
+  // time snapped to the 30' slot that was clicked (Google Calendar behaviour).
+  const openSlotMenu = React.useCallback((
+    event: React.MouseEvent<HTMLDivElement>,
+    day: Date,
+    instructorId?: string | null,
+  ) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    // rect.top is viewport-relative, so it already accounts for the container scroll.
+    const offsetY = event.clientY - rect.top;
+    const minutes = Math.max(0, Math.min(totalMinutes - SLOT_MINUTES, offsetY / PIXELS_PER_MINUTE));
+    const snapped = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES + DAY_START_HOUR * 60;
+    const normalized = normalizeDay(day);
+    setSlotMenu({
+      x: event.clientX,
+      y: event.clientY,
+      day: normalized,
+      ymd: formatYmd(normalized),
+      time: `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`,
+      instructorId: instructorId ?? null,
+    });
+  }, []);
 
   // Fetch instructor availability for the visible range
   React.useEffect(() => {
@@ -1008,8 +1056,6 @@ export function AutoscuoleAgendaPage({
 
   const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleDays = viewMode === "week" ? days : [dayFocus];
-  const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-  const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
   const hourMarks = Array.from(
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
     (_, index) => DAY_START_HOUR + index,
@@ -1248,13 +1294,107 @@ export function AutoscuoleAgendaPage({
         />
         <GroupLessonCreateDialog
           open={createGroupLessonOpen}
-          onOpenChange={setCreateGroupLessonOpen}
+          onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) setGroupLessonPrefill(null); }}
           instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
-          defaultDate={normalizeDay(dayFocus).toISOString().slice(0, 10)}
+          defaultDate={groupLessonPrefill?.date ?? normalizeDay(dayFocus).toISOString().slice(0, 10)}
+          defaultTime={groupLessonPrefill?.time ?? null}
+          defaultInstructorId={groupLessonPrefill?.instructorId ?? null}
           onCreated={() => { load({ silent: true }); }}
         />
+
+        {/* Slot menu — click on an empty agenda slot (Google Calendar style) */}
+        {slotMenu && typeof document !== "undefined" && createPortal(
+          (() => {
+            const MENU_WIDTH = 248;
+            const MENU_HEIGHT = groupLessonsEnabled ? 236 : 200;
+            const left = Math.max(8, Math.min(slotMenu.x + 4, window.innerWidth - MENU_WIDTH - 8));
+            const top = Math.max(8, Math.min(slotMenu.y + 4, window.innerHeight - MENU_HEIGHT - 8));
+            const instructorName = slotMenu.instructorId
+              ? instructors.find((i) => i.id === slotMenu.instructorId)?.name ?? null
+              : null;
+            const closeAnd = (fn: () => void) => { setSlotMenu(null); fn(); };
+            const options: Array<{ key: string; label: string; icon: React.ReactNode; onSelect: () => void }> = [
+              {
+                key: "appointment",
+                label: "Appuntamento",
+                icon: <Plus className="size-3.5 text-pink-500" />,
+                onSelect: () => closeAnd(() => {
+                  setForm((prev) => ({ ...prev, day: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId ?? prev.instructorId }));
+                  setCreateStep(0);
+                  setCreateOpen(true);
+                }),
+              },
+              {
+                key: "exam",
+                label: "Esame",
+                icon: <GraduationCap className="size-3.5 text-violet-500" />,
+                onSelect: () => closeAnd(() => {
+                  setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", studentIds: [], note: "" });
+                  setExamStudentSearch("");
+                  setExamDialogOpen(true);
+                }),
+              },
+              {
+                key: "block",
+                label: "Evento bloccante",
+                icon: <Ban className="size-3.5 text-slate-500" />,
+                onSelect: () => closeAnd(() => {
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+                  setBlockDialogOpen(true);
+                }),
+              },
+              ...(groupLessonsEnabled ? [{
+                key: "group",
+                label: "Guida di gruppo",
+                icon: <Users className="size-3.5 text-teal-600" />,
+                onSelect: () => closeAnd(() => {
+                  setGroupLessonPrefill({ date: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId });
+                  setCreateGroupLessonOpen(true);
+                }),
+              }] : []),
+            ];
+            return (
+              <div
+                className="fixed inset-0 z-[60]"
+                onClick={() => setSlotMenu(null)}
+                onContextMenu={(e) => { e.preventDefault(); setSlotMenu(null); }}
+                onWheel={() => setSlotMenu(null)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.96, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  transition={{ duration: 0.12, ease: "easeOut" }}
+                  className="absolute rounded-xl border border-border bg-white p-1.5 shadow-dropdown"
+                  style={{ left, top, width: MENU_WIDTH }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="mb-1 border-b border-border/60 px-2.5 pb-2 pt-1.5">
+                    <div className="text-xs font-semibold capitalize text-foreground">
+                      {slotMenu.day.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                      Ore {slotMenu.time}{instructorName ? ` · ${instructorName}` : ""}
+                    </div>
+                  </div>
+                  {options.map((option) => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
+                      onClick={option.onSelect}
+                    >
+                      {option.icon}
+                      {option.label}
+                    </button>
+                  ))}
+                </motion.div>
+              </div>
+            );
+          })(),
+          document.body,
+        )}
           </>)}
         </div>
 
@@ -1310,16 +1450,7 @@ export function AutoscuoleAgendaPage({
                   const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
                   return (
                     <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-border/50", isDayToday ? "bg-yellow-50/30" : "")} style={{ height: calendarHeight }}
-                      onClick={(event) => {
-                        const target = event.target as HTMLElement;
-                        if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
-                        const minutes = Math.max(0, Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE));
-                        const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
-                        setForm((prev) => ({ ...prev, day: formatYmd(day), time: `${pad(Math.floor(rounded / 60))}:${pad(rounded % 60)}` }));
-                        setCreateStep(0); setCreateOpen(true);
-                      }}
+                      onClick={(event) => openSlotMenu(event, day)}
                     >
                       {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-border/40" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
                       {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
@@ -1683,8 +1814,9 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative overflow-hidden border-l", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative cursor-pointer overflow-hidden border-l", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
+                        onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {isColumnHoliday && (
                           <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
@@ -2049,24 +2181,7 @@ export function AutoscuoleAgendaPage({
                     key={instr.id}
                     className="relative cursor-pointer border-l border-border/50"
                     style={{ height: calendarHeight }}
-                    onClick={(event) => {
-                      const target = event.target as HTMLElement;
-                      if (target.closest("[data-radix-popper-content-wrapper], [role='menu'], button, a")) return;
-                      const rect = event.currentTarget.getBoundingClientRect();
-                      const offsetY = event.clientY - rect.top + (calendarScrollRef.current?.scrollTop ?? 0) - 40;
-                      const minutes = Math.max(0, Math.min(totalMinutes, offsetY / PIXELS_PER_MINUTE));
-                      const rounded = Math.round(minutes / SLOT_MINUTES) * SLOT_MINUTES;
-                      const hours = Math.floor(rounded / 60);
-                      const mins = rounded % 60;
-                      setForm((prev) => ({
-                        ...prev,
-                        day: formatYmd(day),
-                        time: `${pad(hours)}:${pad(mins)}`,
-                        instructorId: instr.id,
-                      }));
-                      setCreateStep(0);
-                      setCreateOpen(true);
-                    }}
+                    onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {/* Availability bands */}
                     {instr.ranges.map((range, ri) => {
