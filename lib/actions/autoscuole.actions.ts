@@ -7332,7 +7332,23 @@ async function findGroupLessonOverlap({
     status: { in: GROUP_LESSON_ACTIVE_STATUSES },
     startsAt: { lt: endsAt },
     endsAt: { gt: startsAt },
-    ...(excludeGroupLessonId ? { groupLessonId: { not: excludeGroupLessonId } } : {}),
+    // Exclude this lesson's own seats. NB: `groupLessonId: { not: id }` alone
+    // would ALSO drop rows with groupLessonId NULL (SQL `<>` is null-unsafe in
+    // Prisma) — i.e. every NORMAL appointment — which made the instructor
+    // conflict check blind on EDIT (bug fixed 2026-07-06). The explicit OR
+    // keeps null rows in; the AND wrapper avoids clashing with callers' ORs.
+    ...(excludeGroupLessonId
+      ? {
+          AND: [
+            {
+              OR: [
+                { groupLessonId: null },
+                { groupLessonId: { not: excludeGroupLessonId } },
+              ],
+            },
+          ],
+        }
+      : {}),
   };
   // Overlapping group-lesson CONTAINERS (scheduled), excluding this one.
   const containerWhere = {
