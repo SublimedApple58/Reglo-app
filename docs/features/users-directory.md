@@ -29,6 +29,14 @@ Un account con almeno una membership NON viene mai toccato: lì l'errore "Esiste
 
 Nota: durante l'accept di un invito, la release annulla momentaneamente l'invito pending (fa parte dell'anonimizzazione) ma il flusso lo marca subito `accepted` per id — comportamento atteso.
 
+## Creazione allievo dalla Directory
+
+`createCompanyUser` con ruolo `STUDENT` accetta anche (facoltativi):
+- `licenseCategory` + `transmission` — il **percorso patente**, mostrato nel dialog "Crea utente" (default: `defaultLicenseCategory`/`defaultTransmission` dai settings dell'autoscuola, fallback B/manual — stessa logica della registrazione mobile `student-register`)
+- `assignedInstructorId` — assegnazione a un **istruttore autonomo** (validato: stessa company + `autonomousMode: true`, come `assignStudentToInstructor`); il select compare solo se esistono istruttori autonomi
+
+Il dialog (`AdminUsersCreateDialog`) mostra i campi solo quando il ruolo scelto è Allievo e la company ha AUTOSCUOLE attivo. `studentPhase`/`phaseClassifiedAt` restano ai default: il badge "Conferma fase" continua a chiedere la classificazione al titolare.
+
 ## Connessioni
 
 - **Istruttori**: `deleteUser` di un istruttore → record `AutoscuolaInstructor` `inactive` + `userId: null`, guide future annullate operativamente (`operationallyCancelAppointmentsByResource`).

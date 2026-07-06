@@ -18,6 +18,7 @@ import { revalidatePath } from 'next/cache';
 import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from '@/lib/autoscuole/roles';
+import { isLicenseCategory, isTransmission } from '@/lib/autoscuole/license';
 import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
 import { deleteAndAnonymizeUserAccount, releaseEmailIfOrphaned } from '@/lib/account-deletion';
 
@@ -539,6 +540,11 @@ export async function createCompanyUser(input: {
   email: string;
   password: string;
   autoscuolaRole: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
+  // Student-only (ignored for other roles): license path + optional
+  // assignment to an autonomous instructor.
+  licenseCategory?: string;
+  transmission?: string;
+  assignedInstructorId?: string | null;
 }) {
   try {
     const session = await auth();
@@ -553,6 +559,49 @@ export async function createCompanyUser(input: {
     }
 
     const email = input.email.trim().toLowerCase();
+
+    // Students get their license path at creation (falling back to the
+    // autoscuola's configured default, like the mobile self-registration).
+    let studentFields: {
+      licenseCategory: string;
+      transmission: string;
+      assignedInstructorId: string | null;
+    } | null = null;
+    if (input.autoscuolaRole === 'STUDENT') {
+      const service = await prisma.companyService.findFirst({
+        where: { companyId: input.companyId, serviceKey: 'AUTOSCUOLE', status: 'ACTIVE' },
+        select: { limits: true },
+      });
+      const limits = (service?.limits ?? null) as Record<string, unknown> | null;
+
+      let assignedInstructorId: string | null = null;
+      if (input.assignedInstructorId) {
+        const instructor = await prisma.autoscuolaInstructor.findFirst({
+          where: {
+            id: input.assignedInstructorId,
+            companyId: input.companyId,
+            autonomousMode: true,
+          },
+          select: { id: true },
+        });
+        if (!instructor) throw new Error('Istruttore non valido o non autonomo.');
+        assignedInstructorId = instructor.id;
+      }
+
+      studentFields = {
+        licenseCategory: isLicenseCategory(input.licenseCategory)
+          ? input.licenseCategory
+          : typeof limits?.defaultLicenseCategory === 'string'
+            ? limits.defaultLicenseCategory
+            : 'B',
+        transmission: isTransmission(input.transmission)
+          ? input.transmission
+          : typeof limits?.defaultTransmission === 'string'
+            ? limits.defaultTransmission
+            : 'manual',
+        assignedInstructorId,
+      };
+    }
 
     // Orphaned accounts (deleted from the Directory but still holding the
     // email) get anonymized on the spot so the address can be reused.
@@ -578,6 +627,7 @@ export async function createCompanyUser(input: {
           userId: user.id,
           role: deriveCompanyMemberRole(input.autoscuolaRole),
           autoscuolaRole: input.autoscuolaRole,
+          ...(studentFields ?? {}),
         },
       });
 

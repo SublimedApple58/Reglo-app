@@ -23,7 +23,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createCompanyUser } from "@/lib/actions/user.actions";
+import { getAutoscuolaInstructors } from "@/lib/actions/autoscuole.actions";
+import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { companyAtom } from "@/atoms/company.store";
+import {
+  LICENSE_CATEGORIES,
+  LICENSE_CATEGORY_LABELS,
+  TRANSMISSIONS,
+  TRANSMISSION_LABELS,
+} from "@/lib/autoscuole/license";
 
 type AutoscuolaRole = "OWNER" | "INSTRUCTOR_OWNER" | "INSTRUCTOR" | "STUDENT";
 
@@ -32,11 +40,16 @@ type Props = {
   onOpenChange: (open: boolean) => void;
 };
 
+const NO_INSTRUCTOR = "__none__";
+
 const defaultForm = {
   name: "",
   email: "",
   password: "",
   autoscuolaRole: "STUDENT" as AutoscuolaRole,
+  licenseCategory: "B",
+  transmission: "manual",
+  assignedInstructorId: NO_INSTRUCTOR,
 };
 
 export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.ReactElement {
@@ -50,6 +63,37 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
 
   const companyId = company?.id ?? null;
 
+  const [autonomousInstructors, setAutonomousInstructors] = React.useState<
+    Array<{ id: string; name: string }>
+  >([]);
+
+  // When the dialog opens on an autoscuola: load autonomous instructors for
+  // the optional assignment and preselect the school's default license path
+  // (moto schools configure it once in the settings).
+  React.useEffect(() => {
+    if (!open || !isAutoscuola) return;
+    getAutoscuolaInstructors().then((res) => {
+      if (res.success && res.data) {
+        setAutonomousInstructors(
+          res.data
+            .filter((i: { autonomousMode?: boolean }) => i.autonomousMode)
+            .map((i: { id: string; name: string }) => ({ id: i.id, name: i.name })),
+        );
+      }
+    });
+    getAutoscuolaSettings().then((res) => {
+      if (res.success && res.data) {
+        setForm((p) => ({
+          ...p,
+          licenseCategory: res.data.defaultLicenseCategory ?? p.licenseCategory,
+          transmission: res.data.defaultTransmission ?? p.transmission,
+        }));
+      }
+    });
+  }, [open, isAutoscuola]);
+
+  const isStudent = isAutoscuola && form.autoscuolaRole === "STUDENT";
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!companyId) return;
@@ -62,6 +106,14 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
         email: form.email,
         password: form.password,
         autoscuolaRole: form.autoscuolaRole,
+        ...(isStudent
+          ? {
+              licenseCategory: form.licenseCategory,
+              transmission: form.transmission,
+              assignedInstructorId:
+                form.assignedInstructorId === NO_INSTRUCTOR ? null : form.assignedInstructorId,
+            }
+          : {}),
       });
 
       if (!res.success) throw new Error(res.message ?? "Errore.");
@@ -139,6 +191,71 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
                 </SelectContent>
               </Select>
             </div>
+          )}
+          {isStudent && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>Categoria patente</Label>
+                  <Select
+                    value={form.licenseCategory}
+                    onValueChange={(v) => setForm((p) => ({ ...p, licenseCategory: v }))}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LICENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat} className="cursor-pointer">
+                          {LICENSE_CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Cambio</Label>
+                  <Select
+                    value={form.transmission}
+                    onValueChange={(v) => setForm((p) => ({ ...p, transmission: v }))}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSMISSIONS.map((t) => (
+                        <SelectItem key={t} value={t} className="cursor-pointer">
+                          {TRANSMISSION_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {autonomousInstructors.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Istruttore assegnato (facoltativo)</Label>
+                  <Select
+                    value={form.assignedInstructorId}
+                    onValueChange={(v) => setForm((p) => ({ ...p, assignedInstructorId: v }))}
+                  >
+                    <SelectTrigger className="cursor-pointer">
+                      <SelectValue placeholder="Nessun istruttore" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_INSTRUCTOR} className="cursor-pointer">
+                        Nessuno (pool generale)
+                      </SelectItem>
+                      {autonomousInstructors.map((instr) => (
+                        <SelectItem key={instr.id} value={instr.id} className="cursor-pointer">
+                          {instr.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </>
           )}
           <DialogFooter>
             <Button type="submit" disabled={loading} className="w-full sm:w-auto">
