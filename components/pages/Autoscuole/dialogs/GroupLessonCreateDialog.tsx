@@ -67,11 +67,6 @@ type Props = {
 const MOTO_CATEGORIES = new Set<string>(MOTO_LICENSE_CATEGORIES);
 const isMotoCategory = (c: string | null | undefined) => !!c && MOTO_CATEGORIES.has(c);
 
-const CAPACITY_OPTIONS = [
-  { value: "3", label: "3 allievi" },
-  { value: "4", label: "4 allievi" },
-];
-
 const DURATIONS = [
   { value: "60", label: "1 ora" },
   { value: "120", label: "2 ore" },
@@ -128,8 +123,9 @@ export function GroupLessonCreateDialog({
   const [studentQuery, setStudentQuery] = React.useState("");
 
   const isMoto = kind === "moto";
-  // For a moto group the real cap is the fleet size; otherwise the chosen value.
-  const CAPACITY = isMoto ? fleetIds.length : Number(capacityStr);
+  // Free choice for both kinds (moto participants may outnumber the fleet and
+  // ride in turns). Clamped to the backend's 1–12 sanity range.
+  const CAPACITY = Math.min(12, Math.max(1, Number(capacityStr) || 1));
 
   // Load reference data (opted-in students + vehicles with license info) on open.
   React.useEffect(() => {
@@ -433,30 +429,22 @@ export function GroupLessonCreateDialog({
                   </SelectContent>
                 </Select>
               </div>
-              {!isMoto ? (
-                <div className="space-y-1">
-                  <Label className="text-[11px] text-muted-foreground">Capienza</Label>
-                  <Select
-                    value={capacityStr}
-                    onValueChange={(v) => {
-                      setCapacityStr(v);
-                      // Lowering 4 → 3 with 4 pre-selected students: trim the list.
-                      setSelectedIds((prev) => prev.slice(0, Number(v)));
-                    }}
-                  >
-                    <SelectTrigger className="cursor-pointer">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CAPACITY_OPTIONS.map((c) => (
-                        <SelectItem key={c.value} value={c.value} className="cursor-pointer">
-                          {c.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
+              <div className="space-y-1">
+                <Label className="text-[11px] text-muted-foreground">Capienza</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={capacityStr}
+                  onChange={(e) => {
+                    setCapacityStr(e.target.value);
+                    // Lowering the capacity with more students pre-selected: trim.
+                    const next = Math.min(12, Math.max(1, Number(e.target.value) || 1));
+                    setSelectedIds((prev) => prev.slice(0, next));
+                  }}
+                  className="cursor-pointer"
+                />
+              </div>
               {vehiclesEnabled && !isMoto ? (
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Veicolo</Label>

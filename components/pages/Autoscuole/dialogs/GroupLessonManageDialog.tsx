@@ -196,9 +196,10 @@ export function GroupLessonManageDialog({
         startsAt: start.toISOString(),
         endsAt: end.toISOString(),
         instructorId: instructorId || null,
-        // Moto group: keep the fleet (capacity is tied to it) and don't cascade a
-        // single vehicle onto participants — each keeps its assigned moto.
-        ...(isMoto ? {} : { vehicleId: vehicleId || null, capacity: Number(capacityStr) }),
+        capacity: Number(capacityStr),
+        // Moto group: keep the fleet and don't cascade a single vehicle onto
+        // participants — each keeps its assigned moto.
+        ...(isMoto ? {} : { vehicleId: vehicleId || null }),
       }),
       "Guida di gruppo aggiornata.",
     )) reload();
@@ -244,10 +245,16 @@ export function GroupLessonManageDialog({
                       <div className="flex items-center justify-between">
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
-                          {isMoto && p.vehicleName ? (
+                          {isMoto ? (
                             <span className="block text-[11px] text-muted-foreground">
-                              {p.vehicleName}
-                              {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
+                              {p.vehicleName ? (
+                                <>
+                                  {p.vehicleName}
+                                  {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
+                                </>
+                              ) : (
+                                "Moto a rotazione"
+                              )}
                             </span>
                           ) : null}
                         </span>
@@ -336,18 +343,17 @@ export function GroupLessonManageDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                {!isMoto ? (
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">Capienza</span>
-                    <Select value={capacityStr} onValueChange={setCapacityStr}>
-                      <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="3" className="cursor-pointer" disabled={(lesson?.filledSeats ?? 0) > 3}>3 allievi</SelectItem>
-                        <SelectItem value="4" className="cursor-pointer">4 allievi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
+                <div className="space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Capienza</span>
+                  <Input
+                    type="number"
+                    min={Math.max(1, lesson?.filledSeats ?? 1)}
+                    max={12}
+                    value={capacityStr}
+                    onChange={(e) => setCapacityStr(e.target.value)}
+                    className="cursor-pointer"
+                  />
+                </div>
                 <div className="space-y-1">
                   <span className="text-[11px] text-muted-foreground">Istruttore</span>
                   <Select value={instructorId} onValueChange={setInstructorId}>

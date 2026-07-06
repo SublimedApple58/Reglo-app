@@ -48,7 +48,10 @@ export type StudentLicense = {
 /**
  * Pick a moto from the fleet for a student: the first vehicle that serves their
  * license (category + transmission) and is not already taken by a sibling.
- * Returns the vehicle id, or null when none is available (→ student not eligible).
+ * Returns the vehicle id, or null when none is FREE. Since 2026-07-06 a null
+ * assignment no longer blocks enrolment (students may outnumber motos and ride
+ * in turns): eligibility is `eligibleForMotoGroup` (hierarchy-only), the
+ * assignment is best-effort.
  */
 export const assignMotoForStudent = (args: {
   fleet: FleetVehicle[];
@@ -64,37 +67,42 @@ export const assignMotoForStudent = (args: {
 };
 
 /**
- * A student may enrol in a moto group iff a compatible moto is still free in the
- * fleet given the motos already taken by current participants.
+ * A student may enrol in a moto group iff AT LEAST ONE fleet moto serves their
+ * license (moto hierarchy + transmission) — regardless of how many siblings
+ * already ride it. Participants may outnumber motos (they take turns); the
+ * only seat limit is the lesson capacity. (Rule change 2026-07-06: previously
+ * a compatible moto also had to be FREE.)
  */
 export const eligibleForMotoGroup = (args: {
   fleet: FleetVehicle[];
-  takenVehicleIds: Iterable<string>;
   student: StudentLicense;
-}): boolean => assignMotoForStudent(args) !== null;
+}): boolean => args.fleet.some((moto) => vehicleServesLicense(moto, args.student));
 
 /**
  * Assign motos to an ordered list of students (e.g. pre-added at creation),
- * each getting a distinct fleet moto. Stops at the first student for whom no
- * moto remains, returning that student's id so the caller can surface a clear
- * error. On success returns the full set of (studentId → vehicleId) assignments.
+ * best-effort: each student gets a distinct still-free compatible fleet moto
+ * when one remains, `vehicleId: null` otherwise (they ride in turns). Fails
+ * only when a student has NO compatible moto in the whole fleet (hierarchy),
+ * returning that student's id so the caller can surface a clear error.
  */
 export const assignMotosToStudents = (args: {
   fleet: FleetVehicle[];
   students: Array<{ studentId: string; license: StudentLicense }>;
 }):
-  | { ok: true; assignments: Array<{ studentId: string; vehicleId: string }> }
-  | { ok: false; unassignableStudentId: string } => {
+  | { ok: true; assignments: Array<{ studentId: string; vehicleId: string | null }> }
+  | { ok: false; incompatibleStudentId: string } => {
   const taken = new Set<string>();
-  const assignments: Array<{ studentId: string; vehicleId: string }> = [];
+  const assignments: Array<{ studentId: string; vehicleId: string | null }> = [];
   for (const s of args.students) {
+    if (!eligibleForMotoGroup({ fleet: args.fleet, student: s.license })) {
+      return { ok: false, incompatibleStudentId: s.studentId };
+    }
     const vehicleId = assignMotoForStudent({
       fleet: args.fleet,
       takenVehicleIds: taken,
       student: s.license,
     });
-    if (!vehicleId) return { ok: false, unassignableStudentId: s.studentId };
-    taken.add(vehicleId);
+    if (vehicleId) taken.add(vehicleId);
     assignments.push({ studentId: s.studentId, vehicleId });
   }
   return { ok: true, assignments };
@@ -116,8 +124,7 @@ export type MotoGroupSetupError =
   | "non_moto_in_fleet"
   | "follow_car_not_b"
   | "follow_car_in_fleet"
-  | "follow_car_required_missing"
-  | "capacity_exceeds_fleet";
+  | "follow_car_required_missing";
 
 export const MOTO_GROUP_SETUP_MESSAGES: Record<MotoGroupSetupError, string> = {
   empty_fleet: "Seleziona almeno una moto per la guida di gruppo.",
@@ -127,22 +134,22 @@ export const MOTO_GROUP_SETUP_MESSAGES: Record<MotoGroupSetupError, string> = {
   follow_car_in_fleet: "L'auto al seguito non può essere anche una moto della flotta.",
   follow_car_required_missing:
     "Per queste moto è richiesta un'auto al seguito: selezionala.",
-  capacity_exceeds_fleet: "La capienza non può superare il numero di moto della flotta.",
 };
 
 /**
  * Validate the setup of a moto group: a non-empty, distinct, all-moto fleet; a
  * follow car that is a category-B car distinct from the fleet, present whenever
- * the rules require it; and a capacity that fits the fleet. Returns the first
- * failing rule, or null when valid.
+ * the rules require it. Capacity is free (participants may outnumber motos and
+ * ride in turns — rule change 2026-07-06). Returns the first failing rule, or
+ * null when valid.
  */
 export const validateMotoGroupSetup = (args: {
   fleet: FleetVehicle[];
   followVehicle: FleetVehicle | null;
   followCarRules: FollowCarRules;
-  capacity: number;
+  capacity?: number;
 }): MotoGroupSetupError | null => {
-  const { fleet, followVehicle, followCarRules, capacity } = args;
+  const { fleet, followVehicle, followCarRules } = args;
 
   if (fleet.length === 0) return "empty_fleet";
 
@@ -159,8 +166,6 @@ export const validateMotoGroupSetup = (args: {
   } else if (groupMotoFollowCarRequired(followCarRules, fleet.map((m) => m.licenseCategory))) {
     return "follow_car_required_missing";
   }
-
-  if (capacity > fleet.length) return "capacity_exceeds_fleet";
 
   return null;
 };

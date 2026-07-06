@@ -91,7 +91,27 @@ type AppointmentRow = {
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
   groupLessonId?: string | null;
+  groupLessonCapacity?: number | null;
+  groupLessonKind?: string | null;
   notes?: string | null;
+};
+
+// Group-lesson cards: standard = teal, moto = orange (same style, different
+// tint so the two flavours are distinguishable at a glance).
+const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
+  const moto = item.groupLessonKind === "moto";
+  return {
+    card: moto ? "border-orange-300/80 bg-orange-100/90" : "border-teal-300/80 bg-teal-100/90",
+    badge: moto
+      ? "border-orange-200 bg-orange-200/60 text-orange-700"
+      : "border-teal-200 bg-teal-200/60 text-teal-700",
+    time: moto ? "text-orange-600" : "text-teal-600",
+    name: moto ? "text-orange-800" : "text-teal-800",
+    detailBadge: moto
+      ? "border-orange-200 bg-orange-100 text-orange-700"
+      : "border-teal-200 bg-teal-100 text-teal-700",
+    label: moto ? "Gruppo moto" : "Gruppo",
+  };
 };
 
 type ExamGroup = {
@@ -467,7 +487,7 @@ export function AutoscuoleAgendaPage({
       const filled = appts.filter((x) => !String(x.id).startsWith("gl-empty:")).length;
       regular.push({
         ...rep,
-        student: { ...rep.student, firstName: `Guida di gruppo · ${filled}/3`, lastName: "" },
+        student: { ...rep.student, firstName: `Guida di gruppo · ${filled}/${rep.groupLessonCapacity ?? 3}`, lastName: "" },
       });
     }
     const groups: ExamGroup[] = [];
@@ -1321,20 +1341,21 @@ export function AutoscuoleAgendaPage({
                         const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
                         const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
                         const isPendingAction = pendingEventActionId === item.id;
+                        const glTint = groupLessonTint(item);
                         const cardClassName = isExam
                           ? "border-violet-300/80 bg-violet-100/90"
                           : isGroupLesson
-                            ? "border-teal-300/80 bg-teal-100/90"
+                            ? glTint.card
                             : statusMeta.className;
                         return (
                           <DropdownMenu key={item.id}>
                             <DropdownMenuTrigger asChild>
                               <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
-                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? "border-teal-200 bg-teal-200/60 text-teal-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? "Gruppo" : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? "text-teal-600" : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
+                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? glTint.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? glTint.label : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? glTint.time : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>{item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}</div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
+                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>{item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}</div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className={glTint.detailBadge}>{glTint.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLesson ? (
@@ -1700,10 +1721,11 @@ export function AutoscuoleAgendaPage({
                           const isCompact = height <= 40;
                           const licenseTag = licenseTagFor(item);
                           const isPendingAction = pendingEventActionId === item.id;
+                          const glTintInstr = groupLessonTint(item);
                           const instrCardClass = isExamInstr
                             ? "border-violet-300/80 bg-violet-100/90"
                             : isGroupLessonInstr
-                              ? "border-teal-300/80 bg-teal-100/90"
+                              ? glTintInstr.card
                               : statusMeta.className;
                           return (
                             <DropdownMenu key={item.id}>
@@ -1716,8 +1738,8 @@ export function AutoscuoleAgendaPage({
                                   onClick={(e) => e.stopPropagation()}
                                 >
                                   <div className={cn("p-1", isCompact ? "p-0.5" : "")}>
-                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? "text-teal-800" : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName}{isGroupLessonInstr ? "" : ` ${item.student.lastName.charAt(0)}.`}</div>
-                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? "text-teal-600" : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? "Gruppo · " : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
+                                    <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName}{isGroupLessonInstr ? "" : ` ${item.student.lastName.charAt(0)}.`}</div>
+                                    <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
                                     ) : null}
@@ -1739,7 +1761,7 @@ export function AutoscuoleAgendaPage({
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
                                       {isGroupLessonInstr ? (
-                                        <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge>
+                                        <Badge variant="secondary" className={glTintInstr.detailBadge}>{glTintInstr.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge>
                                       ) : (
                                         <Badge variant="secondary">{statusMeta.label}</Badge>
                                       )}
@@ -2091,10 +2113,11 @@ export function AutoscuoleAgendaPage({
                       const isCompact = height <= 56;
                       const licenseTag = licenseTagFor(item);
                       const isPendingAction = pendingEventActionId === item.id;
+                      const glTintDay = groupLessonTint(item);
                       const dayCardClass = isExamDay
                         ? "border-violet-300/80 bg-violet-100/90"
                         : isGroupLessonDay
-                          ? "border-teal-300/80 bg-teal-100/90"
+                          ? glTintDay.card
                           : statusMeta.className;
 
                       return (
@@ -2122,17 +2145,17 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <>
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : isGroupLessonDay ? "text-teal-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
+                                    <div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExamDay ? "text-violet-800" : isGroupLessonDay ? glTintDay.name : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>
                                       {isExamDay && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}
                                     </div>
                                     <Badge
                                       variant="secondary"
-                                      className={cn("shrink-0 font-medium", isExamDay ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLessonDay ? "border-teal-200 bg-teal-200/60 text-teal-700" : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
+                                      className={cn("shrink-0 font-medium", isExamDay ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLessonDay ? glTintDay.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}
                                     >
-                                      {isExamDay ? "Esame" : isGroupLessonDay ? "Gruppo" : statusMeta.shortLabel}
+                                      {isExamDay ? "Esame" : isGroupLessonDay ? glTintDay.label : statusMeta.shortLabel}
                                     </Badge>
                                   </div>
-                                  <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : isGroupLessonDay ? "text-teal-600" : "text-muted-foreground")}>
+                                  <div className={cn("truncate whitespace-nowrap text-[11px]", isExamDay ? "text-violet-600" : isGroupLessonDay ? glTintDay.time : "text-muted-foreground")}>
                                     {formatTimeRange(start, end)}
                                     {!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}
                                     {!isExamDay && !isGroupLessonDay ? ` · ${item.type}` : ""}
@@ -2167,7 +2190,7 @@ export function AutoscuoleAgendaPage({
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
                                   {isGroupLessonDay ? (
-                                    <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">Guida di gruppo</Badge>
+                                    <Badge variant="secondary" className={glTintDay.detailBadge}>{glTintDay.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge>
                                   ) : (
                                     <Badge variant="secondary">{statusMeta.label}</Badge>
                                   )}

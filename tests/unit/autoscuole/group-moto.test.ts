@@ -85,21 +85,35 @@ describe("assignMotoForStudent", () => {
 });
 
 describe("eligibleForMotoGroup", () => {
-  it("is true while a compatible moto remains", () => {
+  it("is true when any fleet moto serves the license (hierarchy)", () => {
+    // A1 moto in fleet → A1, A2 and A students are eligible…
+    const fleet = [moto("m1", "A1")];
+    for (const cat of ["A1", "A2", "A"]) {
+      expect(
+        eligibleForMotoGroup({ fleet, student: { licenseCategory: cat, transmission: "manual" } }),
+      ).toBe(true);
+    }
+    // …but an AM student is not (AM < A1).
+    expect(
+      eligibleForMotoGroup({ fleet, student: { licenseCategory: "AM", transmission: "manual" } }),
+    ).toBe(false);
+  });
+
+  it("ignores how many siblings already ride the motos (turns allowed)", () => {
+    // Single A2 moto, capacity handled elsewhere: an A2 student stays eligible
+    // no matter how many participants exist.
     expect(
       eligibleForMotoGroup({
-        fleet: FLEET,
-        takenVehicleIds: ["m1"],
+        fleet: [moto("m1", "A2")],
         student: { licenseCategory: "A2", transmission: "manual" },
       }),
     ).toBe(true);
   });
 
-  it("is false once the category is exhausted", () => {
+  it("is false when no fleet moto matches the transmission", () => {
     expect(
       eligibleForMotoGroup({
-        fleet: FLEET,
-        takenVehicleIds: ["m1", "m2"],
+        fleet: [moto("m1", "A2", "automatic")],
         student: { licenseCategory: "A2", transmission: "manual" },
       }),
     ).toBe(false);
@@ -126,7 +140,9 @@ describe("assignMotosToStudents", () => {
     });
   });
 
-  it("reports the first student that cannot be assigned (4th A2 with only 2 A2 motos)", () => {
+  it("leaves the overflow student without a moto (rides in turns) instead of failing", () => {
+    // 3× A2 students on 2 free A2 motos (the A moto doesn't serve A2): the
+    // third student enrols with vehicleId null.
     const res = assignMotosToStudents({
       fleet: FLEET,
       students: [
@@ -135,7 +151,25 @@ describe("assignMotosToStudents", () => {
         { studentId: "s3", license: { licenseCategory: "A2", transmission: "manual" } },
       ],
     });
-    expect(res).toEqual({ ok: false, unassignableStudentId: "s3" });
+    expect(res).toEqual({
+      ok: true,
+      assignments: [
+        { studentId: "s1", vehicleId: "m1" },
+        { studentId: "s2", vehicleId: "m2" },
+        { studentId: "s3", vehicleId: null },
+      ],
+    });
+  });
+
+  it("fails only for a student with NO compatible moto in the whole fleet", () => {
+    const res = assignMotosToStudents({
+      fleet: FLEET, // A2 + A motos: nothing serves an AM student
+      students: [
+        { studentId: "s1", license: { licenseCategory: "A2", transmission: "manual" } },
+        { studentId: "s2", license: { licenseCategory: "AM", transmission: "manual" } },
+      ],
+    });
+    expect(res).toEqual({ ok: false, incompatibleStudentId: "s2" });
   });
 });
 
@@ -258,15 +292,15 @@ describe("validateMotoGroupSetup", () => {
     ).toBeNull();
   });
 
-  it("rejects capacity greater than the fleet size", () => {
+  it("accepts capacity greater than the fleet size (participants ride in turns)", () => {
     expect(
       validateMotoGroupSetup({
         fleet: FLEET,
         followVehicle: null,
         followCarRules: noRules,
-        capacity: 4,
+        capacity: 8,
       }),
-    ).toBe("capacity_exceeds_fleet");
+    ).toBeNull();
   });
 
   it("has a human message for every error code", () => {
@@ -277,7 +311,6 @@ describe("validateMotoGroupSetup", () => {
       "follow_car_not_b",
       "follow_car_in_fleet",
       "follow_car_required_missing",
-      "capacity_exceeds_fleet",
     ] as const;
     for (const c of codes) {
       expect(typeof MOTO_GROUP_SETUP_MESSAGES[c]).toBe("string");

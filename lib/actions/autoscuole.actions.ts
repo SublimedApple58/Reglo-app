@@ -1062,19 +1062,19 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
     const agendaGlIds = [
       ...new Set(appointments.map((a) => a.groupLessonId).filter(Boolean) as string[]),
     ];
-    const [gridFlags, agendaGlCapacities] = await Promise.all([
+    const [gridFlags, agendaGlInfo] = await Promise.all([
       buildAppointmentGridFlags(companyId, appointments),
-      // Group lesson capacity per row (configurable 3 or 4 since 2026-06-12):
-      // agenda consumers (mobile cards' seat dots) must show the REAL capacity,
-      // not a hardcoded 3.
+      // Group lesson capacity + kind per row: agenda consumers need the REAL
+      // capacity (mobile seat dots) and the kind ("standard"|"moto") for the
+      // dedicated moto-group colour.
       agendaGlIds.length
         ? prisma.autoscuolaGroupLesson
             .findMany({
               where: { id: { in: agendaGlIds } },
-              select: { id: true, capacity: true },
+              select: { id: true, capacity: true, kind: true },
             })
-            .then((rows) => new Map(rows.map((g) => [g.id, g.capacity])))
-        : Promise.resolve(new Map<string, number>()),
+            .then((rows) => new Map(rows.map((g) => [g.id, g])))
+        : Promise.resolve(new Map<string, { id: string; capacity: number; kind: string }>()),
     ]);
 
     const mappedAppointments = appointments.map((appointment) => {
@@ -1096,7 +1096,10 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         extraMotoVehicles,
         ...(gridFlags.get(appointment.id) ?? {}),
         groupLessonCapacity: appointment.groupLessonId
-          ? agendaGlCapacities.get(appointment.groupLessonId) ?? null
+          ? agendaGlInfo.get(appointment.groupLessonId)?.capacity ?? null
+          : null,
+        groupLessonKind: appointment.groupLessonId
+          ? agendaGlInfo.get(appointment.groupLessonId)?.kind ?? null
           : null,
       };
     });
@@ -1127,6 +1130,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           endsAt: true,
           notes: true,
           capacity: true,
+          kind: true,
           instructorId: true,
           vehicleId: true,
           instructor: { select: { id: true, name: true } },
@@ -1165,6 +1169,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           extraMotoVehicles: [],
           location: null,
           groupLessonCapacity: gl.capacity,
+          groupLessonKind: gl.kind,
         } as (typeof mappedAppointments)[number]);
       }
     }
@@ -7495,7 +7500,9 @@ const createGroupLessonSchema = z.object({
   /** Shared follow car (kind="moto"), category B. */
   followVehicleId: z.string().uuid().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
-  capacity: z.number().int().min(1).max(4).optional(),
+  // Free choice by owner/instructor (12 = sanity ceiling). For moto groups the
+  // participants may outnumber the fleet (they ride in turns).
+  capacity: z.number().int().min(1).max(12).optional(),
   studentIds: z.array(z.string().uuid()).optional(),
   notes: z.string().optional(),
 });
@@ -7585,8 +7592,9 @@ export async function createGroupLesson(
       });
       if (optInErr) return { success: false as const, message: optInErr };
 
-      // Auto-assign a distinct fleet moto to each pre-added student by license.
-      let assignments: Array<{ studentId: string; vehicleId: string }> = [];
+      // Auto-assign a distinct fleet moto to each pre-added student by license
+      // (best-effort: with more students than motos the extras ride in turns).
+      let assignments: Array<{ studentId: string; vehicleId: string | null }> = [];
       if (studentIds.length) {
         const members = await prisma.companyMember.findMany({
           where: { companyId, userId: { in: studentIds }, autoscuolaRole: "STUDENT" },
@@ -7606,7 +7614,7 @@ export async function createGroupLesson(
         if (!res.ok) {
           return {
             success: false as const,
-            message: "Un allievo non ha una moto compatibile disponibile nella flotta.",
+            message: "Un allievo non ha nessuna moto compatibile col suo percorso nella flotta.",
           };
         }
         assignments = res.assignments;
@@ -7664,9 +7672,11 @@ export async function createGroupLesson(
               penaltyAmount,
               penaltyCutoffAt,
               creditApplied: false,
-              // The assigned moto is the participant's primary vehicle. The
-              // shared follow car lives on the group container only.
-              appointmentVehicles: { create: [{ vehicleId: a.vehicleId, role: "primary" }] },
+              // The assigned moto is the participant's primary vehicle (none =
+              // rides in turns). The shared follow car lives on the container.
+              ...(a.vehicleId
+                ? { appointmentVehicles: { create: [{ vehicleId: a.vehicleId, role: "primary" }] } }
+                : {}),
             },
           });
         }
@@ -7874,11 +7884,12 @@ export async function addGroupLessonParticipant(
             where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
           });
           if (filled >= gl.capacity) throw new Error("Posti esauriti.");
+          if (!eligibleForMotoGroup({ fleet, student: motoLicense })) {
+            throw new Error("La patente dell'allievo non è compatibile con le moto della flotta.");
+          }
+          // Best-effort moto assignment: none free = the student rides in turns.
           const taken = await motosTakenByParticipants(tx, gl.id);
           assignedVehicleId = assignMotoForStudent({ fleet, takenVehicleIds: taken, student: motoLicense });
-          if (!assignedVehicleId) {
-            throw new Error("Nessuna moto compatibile disponibile nella flotta.");
-          }
         }
         await tx.autoscuolaAppointment.create({
           data: {
@@ -8223,8 +8234,8 @@ const updateGroupLessonSchema = z.object({
   vehicleIds: z.array(z.string().uuid()).optional(),
   /** Moto group: change the shared follow car (null clears, if not required). */
   followVehicleId: z.string().uuid().nullable().optional(),
-  /** Max participants (3 or 4) — cannot drop below the current enrolled count. */
-  capacity: z.number().int().min(1).max(4).optional(),
+  /** Max participants (free, ≤12) — cannot drop below the current enrolled count. */
+  capacity: z.number().int().min(1).max(12).optional(),
   /** Instructor operational notes on the group lesson container (null clears). */
   notes: z.string().max(2000).nullable().optional(),
 });
@@ -8443,9 +8454,6 @@ export async function listEligibleGroupLessonInvitees(groupLessonId: string) {
     const enrolled = new Set(gl.appointments.map((a) => a.studentId));
     const isMoto = gl.kind === "moto";
     const fleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
-    const takenMotos = gl.appointments
-      .map((a) => a.vehicleId)
-      .filter((v): v is string => Boolean(v));
 
     const members = await prisma.companyMember.findMany({
       where: { companyId, autoscuolaRole: "STUDENT", groupLessonsOptIn: true },
@@ -8462,8 +8470,9 @@ export async function listEligibleGroupLessonInvitees(groupLessonId: string) {
       .filter((m) => !enrolled.has(m.userId))
       .filter((m) => {
         if (isMoto) {
-          // A moto group: eligible iff a compatible fleet moto is still free.
-          return eligibleForMotoGroup({ fleet, takenVehicleIds: takenMotos, student: m });
+          // A moto group: eligible iff any fleet moto serves the license
+          // (hierarchy-only — participants may share motos in turns).
+          return eligibleForMotoGroup({ fleet, student: m });
         }
         return !(vehiclesEnabled && vehicle) || vehicleServesLicense(vehicle!, m);
       })

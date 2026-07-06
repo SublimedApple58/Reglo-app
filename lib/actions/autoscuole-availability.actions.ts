@@ -27,7 +27,7 @@ import {
   resolveVehiclesForInstructor,
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
-import { assignMotoForStudent, type FleetVehicle } from "@/lib/autoscuole/group-moto";
+import { assignMotoForStudent, eligibleForMotoGroup, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import {
   FOLLOW_CAR_CATEGORY,
   isFollowCarVehicle,
@@ -4598,7 +4598,11 @@ export async function broadcastGroupLessonInvite({
       startsAt: true,
       endsAt: true,
       capacity: true,
+      kind: true,
       vehicle: { select: { licenseCategory: true, transmission: true } },
+      fleetVehicles: {
+        select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
+      },
       appointments: {
         where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
         select: { studentId: true },
@@ -4667,10 +4671,18 @@ export async function broadcastGroupLessonInvite({
     appointmentsByStudent.set(appointment.studentId, list);
   }
 
+  const broadcastFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
   const eligible = students.filter((student) => {
     const id = student.user.id;
     if (enrolled.has(id)) return false;
-    if (vehiclesEnabled && vehicle && !vehicleServesLicense(vehicle, student)) return false;
+    if (gl.kind === "moto") {
+      // Moto group: any fleet moto must serve the license (hierarchy-only).
+      // Before 2026-07-06 moto groups had NO license filter here (container
+      // vehicle is null) — every opted-in student got the push.
+      if (vehiclesEnabled && !eligibleForMotoGroup({ fleet: broadcastFleet, student })) return false;
+    } else if (vehiclesEnabled && vehicle && !vehicleServesLicense(vehicle, student)) {
+      return false;
+    }
     const booked = appointmentsByStudent.get(id) ?? [];
     if (hasAppointmentConflict(booked, gl.startsAt, gl.endsAt!)) return false;
     return true;
@@ -4851,13 +4863,9 @@ export async function respondGroupLessonInvite(
     const isMoto = gl.kind === "moto";
     const motoFleet: FleetVehicle[] = gl.fleetVehicles.map((f) => f.vehicle);
     if (isMoto) {
-      // Eligible iff a compatible fleet moto is still free (re-checked in the tx).
-      const free = assignMotoForStudent({
-        fleet: motoFleet,
-        takenVehicleIds: [],
-        student: member,
-      });
-      if (!free) {
+      // Eligible iff any fleet moto serves the license (hierarchy-only;
+      // participants may outnumber the motos and ride in turns).
+      if (!eligibleForMotoGroup({ fleet: motoFleet, student: member })) {
         return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
       }
     } else if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
@@ -4896,7 +4904,8 @@ export async function respondGroupLessonInvite(
         throw new Error("Posti esauriti.");
       }
 
-      // Moto group: auto-assign a still-free fleet moto matching the student.
+      // Moto group: auto-assign a still-free fleet moto matching the student
+      // (best-effort — none free = the student rides in turns).
       let assignedVehicleId: string | null = gl.vehicle?.id ?? null;
       if (isMoto) {
         const taken = activeSeats
@@ -4907,9 +4916,6 @@ export async function respondGroupLessonInvite(
           takenVehicleIds: taken,
           student: member,
         });
-        if (!assignedVehicleId) {
-          throw new Error("Nessuna moto compatibile disponibile nella flotta.");
-        }
       }
 
       await tx.autoscuolaGroupLessonInviteResponse.create({
@@ -5228,6 +5234,9 @@ export async function getGroupLessonInvites(
           notes: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true, licenseCategory: true, transmission: true } },
+          fleetVehicles: {
+            select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
+          },
           appointments: {
             where: { status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
             select: { studentId: true },
@@ -5268,7 +5277,19 @@ export async function getGroupLessonInvites(
         if (declinedLessonIds.has(gl.id)) return false;
         if (gl.appointments.some((a) => a.studentId === payload.studentId)) return false;
         if (gl.appointments.length >= gl.capacity) return false;
-        if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) return false;
+        if (gl.kind === "moto") {
+          // Moto group: any fleet moto must serve the license (hierarchy-only).
+          // Before 2026-07-06 moto groups were listed to EVERY opted-in student
+          // (container vehicle is null → the standard check passed everyone).
+          if (
+            vehiclesEnabled &&
+            !eligibleForMotoGroup({ fleet: gl.fleetVehicles.map((f) => f.vehicle), student: member })
+          ) {
+            return false;
+          }
+        } else if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
+          return false;
+        }
         if (hasAppointmentConflict(appointments, gl.startsAt, gl.endsAt)) return false;
         return true;
       })
