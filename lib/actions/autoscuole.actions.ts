@@ -7553,6 +7553,11 @@ export async function createGroupLesson(
       });
       if (!instr) return { success: false as const, message: "Istruttore non trovato." };
     }
+    // A group lesson without an instructor must not exist: nobody would run it,
+    // no conflict/overlap check would protect the slot.
+    if (!instructorId) {
+      return { success: false as const, message: "Seleziona l'istruttore della guida di gruppo." };
+    }
 
     const price = await getGroupLessonPrice({ companyId });
     const priceDecimal = new Prisma.Decimal(price.toFixed(2));
@@ -8278,7 +8283,11 @@ export async function updateGroupLesson(
       return { success: false as const, message: "Orario non valido." };
     }
     const instructorId = payload.instructorId !== undefined ? payload.instructorId : gl.instructorId;
-    if (instructorId) {
+    // A group lesson must always have an instructor (same rule as creation).
+    if (!instructorId) {
+      return { success: false as const, message: "Seleziona l'istruttore della guida di gruppo." };
+    }
+    {
       const instr = await prisma.autoscuolaInstructor.findFirst({
         where: { id: instructorId, companyId, status: { not: "inactive" } },
         select: { id: true },

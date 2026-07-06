@@ -127,6 +127,25 @@ export function GroupLessonCreateDialog({
   // ride in turns). Clamped to the backend's 1–12 sanity range.
   const CAPACITY = Math.min(12, Math.max(1, Number(capacityStr) || 1));
 
+  // Accent tint follows the agenda card colour: teal = standard, ORANGE = moto.
+  const tint = isMoto
+    ? {
+        headerBadge: "border-orange-200 bg-orange-100 text-orange-700",
+        icon: "text-orange-600",
+        chipOn: "border-orange-300 bg-orange-50 text-orange-800",
+        chipOnHover: "hover:bg-orange-100",
+        rowOn: "border-orange-300 bg-orange-50/60",
+        inviteBox: "border-orange-200 bg-orange-50/60",
+      }
+    : {
+        headerBadge: "border-teal-200 bg-teal-100 text-teal-700",
+        icon: "text-teal-600",
+        chipOn: "border-teal-300 bg-teal-50 text-teal-800",
+        chipOnHover: "hover:bg-teal-100",
+        rowOn: "border-teal-300 bg-teal-50/60",
+        inviteBox: "border-teal-200 bg-teal-50/60",
+      };
+
   // Load reference data (opted-in students + vehicles with license info) on open.
   React.useEffect(() => {
     if (!open) return;
@@ -258,6 +277,10 @@ export function GroupLessonCreateDialog({
       toast.error({ description: "Imposta data e ora della guida." });
       return;
     }
+    if (!instructorId) {
+      toast.error({ description: "Seleziona l'istruttore della guida di gruppo." });
+      return;
+    }
     if (isMoto) {
       if (fleetIds.length === 0) {
         toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
@@ -328,7 +351,7 @@ export function GroupLessonCreateDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Nuova guida di gruppo
-            <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">
+            <Badge variant="secondary" className={tint.headerBadge}>
               fino a {CAPACITY} allievi
             </Badge>
           </DialogTitle>
@@ -364,11 +387,13 @@ export function GroupLessonCreateDialog({
                       className={cn(
                         "flex items-center gap-2 rounded-2xl border px-3 py-2.5 text-left transition-colors cursor-pointer",
                         active
-                          ? "border-teal-300 bg-teal-50/70"
+                          ? opt.value === "moto"
+                            ? "border-orange-300 bg-orange-50/70"
+                            : "border-teal-300 bg-teal-50/70"
                           : "border-border/60 hover:bg-gray-50",
                       )}
                     >
-                      <Icon className={cn("h-4 w-4 shrink-0", active ? "text-teal-600" : "text-muted-foreground")} />
+                      <Icon className={cn("h-4 w-4 shrink-0", active ? (opt.value === "moto" ? "text-orange-600" : "text-teal-600") : "text-muted-foreground")} />
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-foreground">{opt.label}</span>
                         <span className="block text-[11px] text-muted-foreground">{opt.hint}</span>
@@ -415,10 +440,10 @@ export function GroupLessonCreateDialog({
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-[11px] text-muted-foreground">Istruttore</Label>
+                <Label className="text-[11px] text-muted-foreground">Istruttore (obbligatorio)</Label>
                 <Select value={instructorId} onValueChange={setInstructorId}>
                   <SelectTrigger className="cursor-pointer">
-                    <SelectValue placeholder="Nessuno" />
+                    <SelectValue placeholder="Seleziona istruttore" />
                   </SelectTrigger>
                   <SelectContent>
                     {instructors.map((i) => (
@@ -471,7 +496,7 @@ export function GroupLessonCreateDialog({
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="flex items-center gap-1.5">
-                      <Bike className="h-3.5 w-3.5 text-teal-600" /> Moto della guida
+                      <Bike className="h-3.5 w-3.5 text-orange-600" /> Moto della guida
                     </Label>
                     <span className="text-[11px] text-muted-foreground">
                       {fleetIds.length} {fleetIds.length === 1 ? "moto" : "moto"} · {CAPACITY} posti
@@ -497,7 +522,7 @@ export function GroupLessonCreateDialog({
                             className={cn(
                               "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                               checked
-                                ? "border-teal-300 bg-teal-50 text-teal-800"
+                                ? "border-orange-300 bg-orange-50 text-orange-800"
                                 : "border-border/60 bg-white text-foreground hover:bg-gray-50",
                             )}
                           >
@@ -548,7 +573,7 @@ export function GroupLessonCreateDialog({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-teal-600" /> Pre-inserisci allievi
+                  <Users className={cn("h-3.5 w-3.5", tint.icon)} /> Pre-inserisci allievi
                 </Label>
                 <span className="text-[11px] text-muted-foreground">
                   {selectedIds.length}/{CAPACITY}
@@ -578,10 +603,10 @@ export function GroupLessonCreateDialog({
                             key={id}
                             type="button"
                             onClick={() => toggleStudent(id)}
-                            className="flex cursor-pointer items-center gap-1.5 rounded-full border border-teal-300 bg-teal-50 py-1 pl-3 pr-2 text-xs font-medium text-teal-800 transition-colors hover:bg-teal-100"
+                            className={cn("flex cursor-pointer items-center gap-1.5 rounded-full border py-1 pl-3 pr-2 text-xs font-medium transition-colors", tint.chipOn, tint.chipOnHover)}
                           >
                             <span className="max-w-[160px] truncate">{st?.name ?? "Allievo"}</span>
-                            <X className="h-3 w-3 shrink-0 text-teal-600" />
+                            <X className={cn("h-3 w-3 shrink-0", tint.icon)} />
                           </button>
                         );
                       })}
@@ -625,7 +650,7 @@ export function GroupLessonCreateDialog({
                             key={st.id}
                             className={cn(
                               "flex cursor-pointer items-center gap-2.5 rounded-xl border bg-white px-3 py-2 transition-colors",
-                              checked ? "border-teal-300 bg-teal-50/60" : "border-border/60",
+                              checked ? tint.rowOn : "border-border/60",
                               atCapacity && "cursor-not-allowed opacity-40",
                             )}
                           >
@@ -653,9 +678,9 @@ export function GroupLessonCreateDialog({
             </div>
 
             {/* Open remaining seats to invites */}
-            <div className="flex items-center gap-3 rounded-2xl border border-teal-200 bg-teal-50/60 px-3 py-2.5">
+            <div className={cn("flex items-center gap-3 rounded-2xl border px-3 py-2.5", tint.inviteBox)}>
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white">
-                <Megaphone className="h-4 w-4 text-teal-600" />
+                <Megaphone className={cn("h-4 w-4", tint.icon)} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium text-foreground">

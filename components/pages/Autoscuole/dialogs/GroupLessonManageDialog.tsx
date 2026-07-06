@@ -188,6 +188,10 @@ export function GroupLessonManageDialog({
   const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
     if (!groupLessonId || !startLocal) return;
+    if (!instructorId) {
+      toast.error({ description: "Seleziona l'istruttore della guida di gruppo." });
+      return;
+    }
     const start = new Date(startLocal);
     const end = new Date(start.getTime() + Number(durationMin) * 60 * 1000);
     if (await run(
@@ -355,9 +359,9 @@ export function GroupLessonManageDialog({
                   />
                 </div>
                 <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Istruttore</span>
+                  <span className="text-[11px] text-muted-foreground">Istruttore (obbligatorio)</span>
                   <Select value={instructorId} onValueChange={setInstructorId}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuno" /></SelectTrigger>
+                    <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
                     <SelectContent>
                       {instructors.map((i) => (
                         <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
