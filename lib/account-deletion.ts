@@ -5,6 +5,32 @@ const DELETED_USER_NAME = "Account eliminato";
 const buildDeletedEmail = (userId: string) =>
   `deleted+${userId}@deleted.reglo.local`;
 
+/**
+ * If `email` is held by an ORPHANED account (zero company memberships — e.g.
+ * a member removed from the Directory before deletion started anonymizing, or
+ * whose company disappeared), anonymize it so the address becomes reusable.
+ * Accounts that still belong to at least one company are left untouched.
+ *
+ * Returns true when the email is free (no user, or orphan released),
+ * false when a real account still owns it.
+ */
+export async function releaseEmailIfOrphaned(email: string): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+  const existing = await prisma.user.findUnique({
+    where: { email: normalized },
+    select: { id: true },
+  });
+  if (!existing) return true;
+
+  const memberships = await prisma.companyMember.count({
+    where: { userId: existing.id },
+  });
+  if (memberships > 0) return false;
+
+  await deleteAndAnonymizeUserAccount(existing.id);
+  return true;
+}
+
 export async function deleteAndAnonymizeUserAccount(userId: string) {
   const existingUser = await prisma.user.findUnique({
     where: { id: userId },

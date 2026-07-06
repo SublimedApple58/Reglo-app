@@ -19,7 +19,7 @@ import { Prisma, User } from '@prisma/client';
 import { getActiveCompanyContext } from '@/lib/company-context';
 import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor } from '@/lib/autoscuole/roles';
 import { operationallyCancelAppointmentsByResource } from '@/lib/autoscuole/operational-cancellation';
-import { deleteAndAnonymizeUserAccount } from '@/lib/account-deletion';
+import { deleteAndAnonymizeUserAccount, releaseEmailIfOrphaned } from '@/lib/account-deletion';
 
 // Sign in the user with credentials
 export async function signInWithCredentials(
@@ -72,6 +72,11 @@ export async function signUpUser(prevState: unknown, formData: FormData) {
     });
 
     const plainPassword = user.password;
+
+    // A previously deleted (orphaned) account must not block re-registration
+    // with the same email.
+    const emailFree = await releaseEmailIfOrphaned(user.email);
+    if (!emailFree) throw new Error('Esiste già un account con questa email.');
 
     user.password = await hash(user.password);
 
@@ -549,8 +554,10 @@ export async function createCompanyUser(input: {
 
     const email = input.email.trim().toLowerCase();
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) throw new Error('Esiste già un account con questa email.');
+    // Orphaned accounts (deleted from the Directory but still holding the
+    // email) get anonymized on the spot so the address can be reused.
+    const emailFree = await releaseEmailIfOrphaned(email);
+    if (!emailFree) throw new Error('Esiste già un account con questa email.');
 
     const hashedPassword = await hash(input.password);
 

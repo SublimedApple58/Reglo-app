@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/db/prisma";
 import { studentRegisterSchema } from "@/lib/validators";
 import { hash } from "@/lib/encrypt";
+import { releaseEmailIfOrphaned } from "@/lib/account-deletion";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { formatError } from "@/lib/utils";
 import { getSignedAssetUrl } from "@/lib/storage/r2";
@@ -90,12 +91,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if email is already taken
-    const existingUser = await prisma.user.findUnique({
-      where: { email: parsed.email.toLowerCase() },
-    });
-
-    if (existingUser) {
+    // Check if email is already taken. An orphaned account (deleted from the
+    // Directory, no memberships left) gets anonymized so the address is free.
+    const emailFree = await releaseEmailIfOrphaned(parsed.email);
+    if (!emailFree) {
       return NextResponse.json(
         { success: false, message: "Esiste già un account con questa email" },
         { status: 409 },

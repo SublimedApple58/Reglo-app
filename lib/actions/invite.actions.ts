@@ -6,6 +6,7 @@ import { sendCompanyInviteEmail } from '@/email';
 import { routing } from '@/i18n/routing';
 import { SERVER_URL } from '@/lib/constants';
 import { formatError } from '@/lib/utils';
+import { releaseEmailIfOrphaned } from '@/lib/account-deletion';
 import { getDefaultAutoscuolaRole, deriveCompanyMemberRole, isInstructor, type AutoscuolaRole } from '@/lib/autoscuole/roles';
 import {
   acceptCompanyInviteSchema,
@@ -547,11 +548,10 @@ export async function acceptCompanyInviteAndRegister(
       throw new Error('Invite has expired');
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email: invite.email.toLowerCase() },
-    });
-
-    if (existingUser) {
+    // An orphaned account (deleted from the Directory, no memberships left)
+    // holding the invite email gets anonymized so the person can re-register.
+    const emailFree = await releaseEmailIfOrphaned(invite.email);
+    if (!emailFree) {
       throw new Error('Account already exists');
     }
 

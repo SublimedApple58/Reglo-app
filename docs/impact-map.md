@@ -74,6 +74,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: respects cluster constraints
 - → **Mobile**: `SettingsScreen`, `ClusterSettingsScreen`, `InstructorAvailabilityScreen`, `PublicationModeEditor` (9 screens total)
 
+### Users Directory
+- → **Istruttori/Agenda**: `deleteUser` di un istruttore → `AutoscuolaInstructor` inactive + guide future annullate (`operationallyCancelAppointmentsByResource`)
+- → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email
+- → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
+
 ### Instructor Colors
 - → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
 - → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)

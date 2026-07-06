@@ -5,6 +5,7 @@ import { prisma } from "@/db/prisma";
 import { compare, hash } from "@/lib/encrypt";
 import { getDefaultAutoscuolaRole, isInstructor, type AutoscuolaRole } from "@/lib/autoscuole/roles";
 import { formatError } from "@/lib/utils";
+import { releaseEmailIfOrphaned } from "@/lib/account-deletion";
 import { issueMobileToken } from "@/lib/mobile-auth";
 import { buildMobileAuthPayload } from "@/lib/mobile-auth-response";
 import { getOrCreateInstructorForUser } from "@/lib/autoscuole/instructors";
@@ -157,11 +158,10 @@ export async function POST(
         );
       }
 
-      const existingUser = await prisma.user.findUnique({
-        where: { email: inviteEmail },
-        select: { id: true },
-      });
-      if (existingUser) {
+      // An orphaned account (deleted from the Directory, no memberships left)
+      // holding the invite email gets anonymized so the person can re-register.
+      const emailFree = await releaseEmailIfOrphaned(inviteEmail);
+      if (!emailFree) {
         return NextResponse.json(
           {
             success: false,
