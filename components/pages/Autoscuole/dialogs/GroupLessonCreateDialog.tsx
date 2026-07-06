@@ -203,10 +203,10 @@ export function GroupLessonCreateDialog({
   );
 
   // Only vehicles the chosen instructor can use are pickable (exclusive to them,
-  // or open / in a pool they belong to). With no instructor chosen yet, show all
-  // (the backend still enforces access on submit).
+  // or open / in a pool they belong to). With no instructor chosen yet, NO
+  // vehicle is pickable — the instructor comes first.
   const accessibleVehicles = React.useMemo(
-    () => (instructorId ? vehicles.filter((v) => instructorCanUseVehicle(v, instructorId)) : vehicles),
+    () => (instructorId ? vehicles.filter((v) => instructorCanUseVehicle(v, instructorId)) : []),
     [vehicles, instructorId],
   );
 
@@ -473,9 +473,11 @@ export function GroupLessonCreateDialog({
               {vehiclesEnabled && !isMoto ? (
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">Veicolo</Label>
-                  <Select value={vehicleId} onValueChange={setVehicleId}>
+                  {/* Vehicles are pickable only AFTER the instructor: the list
+                      is filtered to what that instructor may actually use. */}
+                  <Select value={vehicleId} onValueChange={setVehicleId} disabled={!instructorId}>
                     <SelectTrigger className="cursor-pointer">
-                      <SelectValue placeholder="Seleziona veicolo" />
+                      <SelectValue placeholder={instructorId ? "Seleziona veicolo" : "Prima scegli l'istruttore"} />
                     </SelectTrigger>
                     <SelectContent>
                       {accessibleVehicles.map((v) => (
@@ -502,7 +504,11 @@ export function GroupLessonCreateDialog({
                       {fleetIds.length} {fleetIds.length === 1 ? "moto" : "moto"} · {CAPACITY} posti
                     </span>
                   </div>
-                  {motoVehicles.length === 0 ? (
+                  {!instructorId ? (
+                    <p className="text-xs text-muted-foreground">
+                      Scegli prima l&apos;istruttore: la flotta mostra solo le moto che può usare.
+                    </p>
+                  ) : motoVehicles.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       Nessuna moto disponibile. Aggiungi un veicolo moto nelle risorse.
                     </p>
@@ -536,8 +542,8 @@ export function GroupLessonCreateDialog({
                     </div>
                   )}
                   <p className="text-[11px] text-muted-foreground">
-                    Ogni allievo idoneo riceverà automaticamente una moto della flotta. La capienza è
-                    pari al numero di moto scelte.
+                    Chi si iscrive riceve automaticamente una moto libera della flotta compatibile col
+                    suo percorso; se gli allievi superano le moto, si va a rotazione.
                   </p>
                 </div>
 
@@ -548,9 +554,10 @@ export function GroupLessonCreateDialog({
                   <Select
                     value={followVehicleId || "__none__"}
                     onValueChange={(v) => setFollowVehicleId(v === "__none__" ? "" : v)}
+                    disabled={!instructorId}
                   >
                     <SelectTrigger className="cursor-pointer">
-                      <SelectValue placeholder="Nessuna" />
+                      <SelectValue placeholder={instructorId ? "Nessuna" : "Prima scegli l'istruttore"} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__" className="cursor-pointer">
