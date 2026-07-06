@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   getGroupLesson,
+  getAutoscuolaVehicles,
   updateGroupLesson,
   addGroupLessonParticipant,
   removeGroupLessonParticipant,
@@ -33,8 +34,23 @@ import {
   updateAutoscuolaAppointmentDetails,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
+import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
+import { MOTO_LICENSE_CATEGORIES } from "@/lib/autoscuole/license";
+import { cn } from "@/lib/utils";
 
 type ResourceOption = { id: string; name: string };
+
+type VehicleWithLicense = {
+  id: string;
+  name: string;
+  licenseCategory: string | null;
+  transmission: string | null;
+  assignedInstructorId: string | null;
+  poolInstructorIds: string[];
+};
+
+const MOTO_CATEGORIES = new Set<string>(MOTO_LICENSE_CATEGORIES);
+const isMotoCategory = (c: string | null | undefined) => !!c && MOTO_CATEGORIES.has(c);
 
 type GroupLessonDetail = {
   id: string;
@@ -56,6 +72,7 @@ type GroupLessonDetail = {
     studentId: string;
     studentName: string | null;
     notes: string | null;
+    vehicleId?: string | null;
     vehicleName?: string | null;
     licenseCategory?: string | null;
   }[];
@@ -113,6 +130,10 @@ export function GroupLessonManageDialog({
   const [capacityStr, setCapacityStr] = React.useState("3");
   const [instructorId, setInstructorId] = React.useState<string>("");
   const [vehicleId, setVehicleId] = React.useState<string>("");
+  // Moto group: editable fleet + shared follow car (mirrors the mobile sheet).
+  const [fleetIds, setFleetIds] = React.useState<string[]>([]);
+  const [followId, setFollowId] = React.useState<string>("");
+  const [allVehicles, setAllVehicles] = React.useState<VehicleWithLicense[]>([]);
 
   const reload = React.useCallback(async () => {
     if (!groupLessonId) return;
@@ -129,6 +150,8 @@ export function GroupLessonManageDialog({
         setCapacityStr(String(res.data.capacity ?? 3));
         setInstructorId(res.data.instructorId ?? "");
         setVehicleId(res.data.vehicleId ?? "");
+        setFleetIds((res.data.fleet ?? []).map((f) => f.id));
+        setFollowId(res.data.followVehicleId ?? "");
       }
       if (elig.success && elig.data) {
         setEligible(elig.data.map((e) => ({ id: e.id, name: e.name ?? "Allievo" })));
@@ -143,6 +166,56 @@ export function GroupLessonManageDialog({
     if (open && groupLessonId) reload();
     if (!open) { setLesson(null); setEligible([]); }
   }, [open, groupLessonId, reload]);
+
+  // Full vehicle list (with license + access info) for the moto fleet /
+  // follow-car editors — the `vehicles` prop only carries id+name.
+  React.useEffect(() => {
+    if (!open || !vehiclesEnabled) return;
+    getAutoscuolaVehicles().then((res) => {
+      if (res.success && Array.isArray(res.data)) {
+        setAllVehicles(
+          (res.data as Array<Record<string, unknown>>)
+            .filter((v) => v.status === "active")
+            .map((v) => ({
+              id: String(v.id),
+              name: String(v.name ?? "Veicolo"),
+              licenseCategory: (v.licenseCategory as string | null) ?? null,
+              transmission: (v.transmission as string | null) ?? null,
+              assignedInstructorId: (v.assignedInstructorId as string | null) ?? null,
+              poolInstructorIds: (v.poolInstructorIds as string[] | undefined) ?? [],
+            })),
+        );
+      }
+    });
+  }, [open, vehiclesEnabled]);
+
+  // Only vehicles the (currently selected) instructor can use are pickable.
+  const accessibleVehicles = React.useMemo(
+    () => (instructorId ? allVehicles.filter((v) => instructorCanUseVehicle(v, instructorId)) : []),
+    [allVehicles, instructorId],
+  );
+  const motoVehicles = React.useMemo(
+    () => accessibleVehicles.filter((v) => isMotoCategory(v.licenseCategory)),
+    [accessibleVehicles],
+  );
+  const carVehicles = React.useMemo(
+    () => accessibleVehicles.filter((v) => v.licenseCategory === "B"),
+    [accessibleVehicles],
+  );
+  // Chips also show fleet motos that fell out of the accessible set (e.g. after
+  // an instructor change) so the current state stays visible; the BE validates.
+  const fleetOptions = React.useMemo(() => {
+    const map = new Map(motoVehicles.map((v) => [v.id, { id: v.id, name: v.name, licenseCategory: v.licenseCategory }]));
+    for (const f of lesson?.fleet ?? []) {
+      if (!map.has(f.id)) map.set(f.id, { id: f.id, name: f.name, licenseCategory: f.licenseCategory });
+    }
+    return [...map.values()];
+  }, [motoVehicles, lesson]);
+  // A moto assigned to a participant cannot leave the fleet (BE rule).
+  const assignedMotoIds = React.useMemo(
+    () => new Set((lesson?.participants ?? []).map((p) => p.vehicleId).filter(Boolean) as string[]),
+    [lesson],
+  );
 
   const run = async (fn: () => Promise<{ success: boolean; message?: string }>, okMsg: string) => {
     setBusy(true);
@@ -192,6 +265,10 @@ export function GroupLessonManageDialog({
       toast.error({ description: "Seleziona l'istruttore della guida di gruppo." });
       return;
     }
+    if (isMoto && fleetIds.length === 0) {
+      toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
+      return;
+    }
     const start = new Date(startLocal);
     const end = new Date(start.getTime() + Number(durationMin) * 60 * 1000);
     if (await run(
@@ -201,9 +278,11 @@ export function GroupLessonManageDialog({
         endsAt: end.toISOString(),
         instructorId: instructorId || null,
         capacity: Number(capacityStr),
-        // Moto group: keep the fleet and don't cascade a single vehicle onto
-        // participants — each keeps its assigned moto.
-        ...(isMoto ? {} : { vehicleId: vehicleId || null }),
+        // Moto group: fleet + shared follow car; no vehicle cascade onto the
+        // participants (each keeps its assigned moto).
+        ...(isMoto
+          ? { vehicleIds: fleetIds, followVehicleId: followId || null }
+          : { vehicleId: vehicleId || null }),
       }),
       "Guida di gruppo aggiornata.",
     )) reload();
@@ -219,9 +298,12 @@ export function GroupLessonManageDialog({
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Guida di gruppo
+            {lesson?.kind === "moto" ? "Guida di gruppo moto" : "Guida di gruppo"}
             {lesson ? (
-              <Badge variant="secondary" className="border-teal-200 bg-teal-100 text-teal-700">
+              <Badge
+                variant="secondary"
+                className={lesson.kind === "moto" ? "border-orange-200 bg-orange-100 text-orange-700" : "border-teal-200 bg-teal-100 text-teal-700"}
+              >
                 {lesson.filledSeats}/{lesson.capacity} posti
               </Badge>
             ) : null}
@@ -384,22 +466,61 @@ export function GroupLessonManageDialog({
                 ) : null}
               </div>
 
-              {/* Moto group: fleet + shared follow car (read-only summary). */}
+              {/* Moto group: editable fleet + shared follow car (mirrors mobile). */}
               {isMoto ? (
-                <div className="space-y-1 rounded-xl border border-border/50 bg-white px-3 py-2 text-xs">
-                  <div className="text-muted-foreground">
-                    Flotta:{" "}
-                    <span className="font-medium text-foreground/85">
-                      {lesson.fleet && lesson.fleet.length
-                        ? lesson.fleet.map((v) => v.name).join(", ")
-                        : "—"}
-                    </span>
+                <div className="space-y-3 rounded-xl border border-border/50 bg-white px-3 py-2.5">
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] text-muted-foreground">Moto della guida</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {fleetOptions.map((v) => {
+                        const checked = fleetIds.includes(v.id);
+                        // A moto already ridden by a participant can't be dropped.
+                        const locked = checked && assignedMotoIds.has(v.id);
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            disabled={busy || locked}
+                            title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
+                            onClick={() =>
+                              setFleetIds((prev) =>
+                                prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
+                              )
+                            }
+                            className={cn(
+                              "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                              checked
+                                ? "border-orange-300 bg-orange-50 text-orange-800"
+                                : "border-border/60 bg-white text-foreground hover:bg-gray-50",
+                              locked && "cursor-not-allowed opacity-70",
+                            )}
+                          >
+                            <span className="max-w-[160px] truncate">{v.name}</span>
+                            {v.licenseCategory ? (
+                              <span className="text-[10px] text-muted-foreground">{v.licenseCategory}</span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className="text-muted-foreground">
-                    Auto al seguito:{" "}
-                    <span className="font-medium text-foreground/85">
-                      {lesson.followVehicleName ?? "Nessuna"}
-                    </span>
+                  <div className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">Auto al seguito (facoltativa)</span>
+                    <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuna" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
+                        {carVehicles.map((v) => (
+                          <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                        ))}
+                        {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
+                          <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Se le regole la richiedono e la togli, ne verrà riassegnata una libera automaticamente.
+                    </p>
                   </div>
                 </div>
               ) : null}
