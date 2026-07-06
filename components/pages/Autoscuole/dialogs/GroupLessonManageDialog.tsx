@@ -519,7 +519,7 @@ export function GroupLessonManageDialog({
                       </SelectContent>
                     </Select>
                     <p className="text-[11px] text-muted-foreground">
-                      Se le regole la richiedono e la togli, ne verrà riassegnata una libera automaticamente.
+                      La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
                     </p>
                   </div>
                 </div>

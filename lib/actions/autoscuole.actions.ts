@@ -7910,10 +7910,12 @@ export async function addGroupLessonParticipant(
         transmission: member?.transmission ?? null,
       };
 
-      // Lazy follow car: the container may exist without one (optional at
-      // creation). The first rider makes it necessary when the rules demand it.
+      // Lazy follow car: only for the FIRST rider of a car-less lesson. Once
+      // the lesson has riders, a missing car means the staff explicitly
+      // removed it ("Nessuna") — their choice wins, never re-assign.
       if (
         !gl.followVehicleId &&
+        gl._count.appointments === 0 &&
         groupMotoFollowCarRequired(
           parseFollowCarRulesFromLimits(limits as Record<string, unknown>),
           fleet.map((m) => m.licenseCategory),
@@ -8403,23 +8405,12 @@ export async function updateGroupLesson(
       });
       if (!setup.ok) return { success: false as const, message: setup.message };
 
-      // Follow car: optional while the lesson has no riders; with enrolled
-      // participants and rules demanding it, an edit may not leave the lesson
-      // without — auto-assign a free car (or refuse).
-      let nextFollowVehicleId = followVehicleId;
-      if (
-        !nextFollowVehicleId &&
-        gl.appointments.length > 0 &&
-        groupMotoFollowCarRequired(followCarRules, setup.fleet.map((m) => m.licenseCategory))
-      ) {
-        const car = await findFreeGroupFollowCar({
-          companyId, instructorId, startsAt, endsAt, excludeGroupLessonId: gl.id,
-        });
-        if (!car) return { success: false as const, message: NO_FREE_FOLLOW_CAR_MESSAGE };
-        nextFollowVehicleId = car;
-      }
+      // Follow car: the staff's explicit choice ALWAYS wins here — clearing it
+      // ("Nessuna") persists and is never re-assigned (2026-07-06). The lazy
+      // auto-assignment only happens at the FIRST enrolment of a car-less
+      // lesson (see addGroupLessonParticipant / respondGroupLessonInvite).
 
-      const reserved = [...newFleetIds, nextFollowVehicleId].filter((v): v is string => Boolean(v));
+      const reserved = [...newFleetIds, followVehicleId].filter((v): v is string => Boolean(v));
       const overlapErr = await findGroupLessonOverlap({
         companyId, startsAt, endsAt, instructorId, vehicleIds: reserved, studentIds,
         excludeGroupLessonId: gl.id,
@@ -8430,7 +8421,7 @@ export async function updateGroupLesson(
         await tx.autoscuolaGroupLesson.update({
           where: { id: gl.id },
           data: {
-            startsAt, endsAt, instructorId, vehicleId: null, followVehicleId: nextFollowVehicleId,
+            startsAt, endsAt, instructorId, vehicleId: null, followVehicleId,
             ...(payload.capacity !== undefined ? { capacity } : {}),
             ...(notes !== undefined ? { notes } : {}),
           },

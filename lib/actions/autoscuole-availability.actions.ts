@@ -4870,8 +4870,9 @@ export async function respondGroupLessonInvite(
       if (!eligibleForMotoGroup({ fleet: motoFleet, student: member })) {
         return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
       }
-      // Lazy follow car: optional at creation, necessary from the first rider
-      // on (when the rules demand it) — auto-assign a free B car now.
+      // Lazy follow car: only for the FIRST rider of a car-less lesson (when
+      // the rules demand it). With riders already in, a missing car means the
+      // staff explicitly removed it — their choice wins, never re-assign.
       if (
         !gl.followVehicleId &&
         vehiclesEnabled &&
@@ -4880,23 +4881,28 @@ export async function respondGroupLessonInvite(
           motoFleet.map((m) => m.licenseCategory),
         )
       ) {
-        const car = await findFreeGroupFollowCar({
-          companyId,
-          instructorId: gl.instructorId,
-          startsAt: gl.startsAt,
-          endsAt: gl.endsAt,
-          excludeGroupLessonId: gl.id,
+        const riders = await prisma.autoscuolaAppointment.count({
+          where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
         });
-        if (!car) {
-          return {
-            success: false as const,
-            message: "Nessuna auto al seguito disponibile per questa guida: contatta l'autoscuola.",
-          };
+        if (riders === 0) {
+          const car = await findFreeGroupFollowCar({
+            companyId,
+            instructorId: gl.instructorId,
+            startsAt: gl.startsAt,
+            endsAt: gl.endsAt,
+            excludeGroupLessonId: gl.id,
+          });
+          if (!car) {
+            return {
+              success: false as const,
+              message: "Nessuna auto al seguito disponibile per questa guida: contatta l'autoscuola.",
+            };
+          }
+          await prisma.autoscuolaGroupLesson.updateMany({
+            where: { id: gl.id, followVehicleId: null },
+            data: { followVehicleId: car },
+          });
         }
-        await prisma.autoscuolaGroupLesson.updateMany({
-          where: { id: gl.id, followVehicleId: null },
-          data: { followVehicleId: car },
-        });
       }
     } else if (vehiclesEnabled && gl.vehicle && !vehicleServesLicense(gl.vehicle, member)) {
       return { success: false as const, message: "La tua patente non è compatibile con questa guida." };
