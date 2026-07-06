@@ -270,7 +270,7 @@ describe("validateMotoGroupSetup", () => {
     ).toBe("non_moto_in_fleet"); // the B in the fleet fails first
   });
 
-  it("requires a follow car when the rules demand it for a fleet category", () => {
+  it("accepts a MISSING follow car even when the rules demand it (assigned lazily at first enrolment)", () => {
     expect(
       validateMotoGroupSetup({
         fleet: FLEET, // contains "A"
@@ -278,10 +278,10 @@ describe("validateMotoGroupSetup", () => {
         followCarRules: { A: { enabled: true } },
         capacity: 3,
       }),
-    ).toBe("follow_car_required_missing");
+    ).toBeNull();
   });
 
-  it("accepts when the required follow car is provided", () => {
+  it("accepts when the follow car is provided", () => {
     expect(
       validateMotoGroupSetup({
         fleet: FLEET,
@@ -310,7 +310,6 @@ describe("validateMotoGroupSetup", () => {
       "non_moto_in_fleet",
       "follow_car_not_b",
       "follow_car_in_fleet",
-      "follow_car_required_missing",
     ] as const;
     for (const c of codes) {
       expect(typeof MOTO_GROUP_SETUP_MESSAGES[c]).toBe("string");

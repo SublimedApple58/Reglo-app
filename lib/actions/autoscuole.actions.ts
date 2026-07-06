@@ -34,11 +34,13 @@ import {
   assignMotoForStudent,
   assignMotosToStudents,
   eligibleForMotoGroup,
+  groupMotoFollowCarRequired,
   instructorCanUseVehicle,
   validateMotoGroupSetup,
   MOTO_GROUP_SETUP_MESSAGES,
   type FleetVehicle,
 } from "@/lib/autoscuole/group-moto";
+import { findFreeGroupFollowCar, NO_FREE_FOLLOW_CAR_MESSAGE } from "@/lib/autoscuole/group-follow-assign";
 import {
   buildAppointmentVehicleRows,
   reconcileAppointmentVehicles,
@@ -7625,7 +7627,21 @@ export async function createGroupLesson(
         assignments = res.assignments;
       }
 
-      const reserved = [...setup.fleet.map((v) => v.id), setup.followVehicle?.id].filter(
+      // Follow car: OPTIONAL at creation. When the rules require one and
+      // students are pre-added (the lesson has riders from the start), assign
+      // a free car now; otherwise it gets auto-assigned at the first enrolment.
+      let motoFollowVehicleId = setup.followVehicle?.id ?? null;
+      if (
+        !motoFollowVehicleId &&
+        studentIds.length > 0 &&
+        groupMotoFollowCarRequired(followCarRules, setup.fleet.map((m) => m.licenseCategory))
+      ) {
+        const car = await findFreeGroupFollowCar({ companyId, instructorId, startsAt, endsAt });
+        if (!car) return { success: false as const, message: NO_FREE_FOLLOW_CAR_MESSAGE };
+        motoFollowVehicleId = car;
+      }
+
+      const reserved = [...setup.fleet.map((v) => v.id), motoFollowVehicleId].filter(
         (v): v is string => Boolean(v),
       );
       const overlapErr = await findGroupLessonOverlap({
@@ -7645,7 +7661,7 @@ export async function createGroupLesson(
             kind: "moto",
             instructorId,
             vehicleId: null,
-            followVehicleId: setup.followVehicle?.id ?? null,
+            followVehicleId: motoFollowVehicleId,
             startsAt,
             endsAt,
             capacity,
@@ -7813,7 +7829,7 @@ export async function addGroupLessonParticipant(
       where: { id: payload.groupLessonId, companyId, status: "scheduled" },
       select: {
         id: true, startsAt: true, endsAt: true, capacity: true, instructorId: true,
-        kind: true, priceAmount: true, notes: true,
+        kind: true, priceAmount: true, notes: true, followVehicleId: true,
         vehicle: { select: { id: true, licenseCategory: true, transmission: true } },
         fleetVehicles: {
           select: { vehicle: { select: { id: true, licenseCategory: true, transmission: true } } },
@@ -7877,6 +7893,29 @@ export async function addGroupLessonParticipant(
         licenseCategory: member?.licenseCategory ?? null,
         transmission: member?.transmission ?? null,
       };
+
+      // Lazy follow car: the container may exist without one (optional at
+      // creation). The first rider makes it necessary when the rules demand it.
+      if (
+        !gl.followVehicleId &&
+        groupMotoFollowCarRequired(
+          parseFollowCarRulesFromLimits(limits as Record<string, unknown>),
+          fleet.map((m) => m.licenseCategory),
+        )
+      ) {
+        const car = await findFreeGroupFollowCar({
+          companyId,
+          instructorId: gl.instructorId,
+          startsAt: gl.startsAt,
+          endsAt: gl.endsAt,
+          excludeGroupLessonId: gl.id,
+        });
+        if (!car) return { success: false as const, message: NO_FREE_FOLLOW_CAR_MESSAGE };
+        await prisma.autoscuolaGroupLesson.updateMany({
+          where: { id: gl.id, followVehicleId: null },
+          data: { followVehicleId: car },
+        });
+      }
     }
 
     try {
@@ -8348,7 +8387,23 @@ export async function updateGroupLesson(
       });
       if (!setup.ok) return { success: false as const, message: setup.message };
 
-      const reserved = [...newFleetIds, followVehicleId].filter((v): v is string => Boolean(v));
+      // Follow car: optional while the lesson has no riders; with enrolled
+      // participants and rules demanding it, an edit may not leave the lesson
+      // without — auto-assign a free car (or refuse).
+      let nextFollowVehicleId = followVehicleId;
+      if (
+        !nextFollowVehicleId &&
+        gl.appointments.length > 0 &&
+        groupMotoFollowCarRequired(followCarRules, setup.fleet.map((m) => m.licenseCategory))
+      ) {
+        const car = await findFreeGroupFollowCar({
+          companyId, instructorId, startsAt, endsAt, excludeGroupLessonId: gl.id,
+        });
+        if (!car) return { success: false as const, message: NO_FREE_FOLLOW_CAR_MESSAGE };
+        nextFollowVehicleId = car;
+      }
+
+      const reserved = [...newFleetIds, nextFollowVehicleId].filter((v): v is string => Boolean(v));
       const overlapErr = await findGroupLessonOverlap({
         companyId, startsAt, endsAt, instructorId, vehicleIds: reserved, studentIds,
         excludeGroupLessonId: gl.id,
@@ -8359,7 +8414,7 @@ export async function updateGroupLesson(
         await tx.autoscuolaGroupLesson.update({
           where: { id: gl.id },
           data: {
-            startsAt, endsAt, instructorId, vehicleId: null, followVehicleId,
+            startsAt, endsAt, instructorId, vehicleId: null, followVehicleId: nextFollowVehicleId,
             ...(payload.capacity !== undefined ? { capacity } : {}),
             ...(notes !== undefined ? { notes } : {}),
           },

@@ -223,7 +223,9 @@ export function GroupLessonCreateDialog({
     () => vehicles.filter((v) => fleetIds.includes(v.id)),
     [vehicles, fleetIds],
   );
-  // A follow car is required when any fleet category has the rule enabled.
+  // The rules may demand a follow car for these fleet categories — here it
+  // stays optional (auto-assigned at the first enrolment); used only for the
+  // informative hint under the picker.
   const followCarRequired = React.useMemo(
     () => isMoto && fleet.some((v) => followCarRules?.[v.licenseCategory ?? ""]?.enabled === true),
     [isMoto, fleet, followCarRules],
@@ -286,10 +288,8 @@ export function GroupLessonCreateDialog({
         toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
         return;
       }
-      if (followCarRequired && !followVehicleId) {
-        toast.error({ description: "Per queste moto è richiesta un'auto al seguito." });
-        return;
-      }
+      // Follow car: sempre facoltativa qui — se le regole la richiedono viene
+      // assegnata automaticamente alla prima iscrizione (o subito, con pre-add).
     } else if (vehiclesEnabled && !vehicleId) {
       toast.error({ description: "Seleziona il veicolo della guida di gruppo." });
       return;
@@ -549,7 +549,7 @@ export function GroupLessonCreateDialog({
 
                 <div className="space-y-1">
                   <Label className="text-[11px] text-muted-foreground">
-                    Auto al seguito{followCarRequired ? " (richiesta)" : " (facoltativa)"}
+                    Auto al seguito (facoltativa)
                   </Label>
                   <Select
                     value={followVehicleId || "__none__"}
@@ -572,6 +572,12 @@ export function GroupLessonCreateDialog({
                       ))}
                     </SelectContent>
                   </Select>
+                  {followCarRequired && !followVehicleId ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Per queste moto le regole prevedono un&apos;auto al seguito: se non la
+                      scegli, ne verrà assegnata una libera alla prima iscrizione.
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}

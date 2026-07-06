@@ -123,8 +123,7 @@ export type MotoGroupSetupError =
   | "duplicate_fleet_vehicle"
   | "non_moto_in_fleet"
   | "follow_car_not_b"
-  | "follow_car_in_fleet"
-  | "follow_car_required_missing";
+  | "follow_car_in_fleet";
 
 export const MOTO_GROUP_SETUP_MESSAGES: Record<MotoGroupSetupError, string> = {
   empty_fleet: "Seleziona almeno una moto per la guida di gruppo.",
@@ -132,24 +131,24 @@ export const MOTO_GROUP_SETUP_MESSAGES: Record<MotoGroupSetupError, string> = {
   non_moto_in_fleet: "La flotta può contenere solo moto (categorie AM, A1, A2, A).",
   follow_car_not_b: "L'auto al seguito dev'essere un'auto (categoria B).",
   follow_car_in_fleet: "L'auto al seguito non può essere anche una moto della flotta.",
-  follow_car_required_missing:
-    "Per queste moto è richiesta un'auto al seguito: selezionala.",
 };
 
 /**
- * Validate the setup of a moto group: a non-empty, distinct, all-moto fleet; a
- * follow car that is a category-B car distinct from the fleet, present whenever
- * the rules require it. Capacity is free (participants may outnumber motos and
- * ride in turns — rule change 2026-07-06). Returns the first failing rule, or
- * null when valid.
+ * Validate the setup of a moto group: a non-empty, distinct, all-moto fleet
+ * and — IF a follow car is picked — a category-B car distinct from the fleet.
+ * The follow car is always OPTIONAL at creation (2026-07-06): when the rules
+ * require one, it gets auto-assigned lazily at the first enrolment (see
+ * `findFreeGroupFollowCar`). Capacity is free (participants may outnumber
+ * motos and ride in turns). Returns the first failing rule, or null.
  */
 export const validateMotoGroupSetup = (args: {
   fleet: FleetVehicle[];
   followVehicle: FleetVehicle | null;
-  followCarRules: FollowCarRules;
+  /** Kept for signature stability — the follow car is no longer required here. */
+  followCarRules?: FollowCarRules;
   capacity?: number;
 }): MotoGroupSetupError | null => {
-  const { fleet, followVehicle, followCarRules } = args;
+  const { fleet, followVehicle } = args;
 
   if (fleet.length === 0) return "empty_fleet";
 
@@ -163,8 +162,6 @@ export const validateMotoGroupSetup = (args: {
   if (followVehicle) {
     if (followVehicle.licenseCategory !== FOLLOW_CAR_CATEGORY) return "follow_car_not_b";
     if (ids.has(followVehicle.id)) return "follow_car_in_fleet";
-  } else if (groupMotoFollowCarRequired(followCarRules, fleet.map((m) => m.licenseCategory))) {
-    return "follow_car_required_missing";
   }
 
   return null;
