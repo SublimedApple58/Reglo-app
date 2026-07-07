@@ -103,7 +103,9 @@ type AppointmentRow = {
 const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
   const moto = item.groupLessonKind === "moto";
   return {
-    card: moto ? "border-orange-300/80 bg-orange-100/90" : "border-[#39b69a] bg-[#d4f1ec]",
+    card: moto
+      ? "bg-[#FFEDD5] shadow-[0_5px_14px_rgba(249,115,22,0.22)]"
+      : "bg-[#ECFDF5] shadow-[0_5px_14px_rgba(16,185,129,0.22)]",
     badge: moto
       ? "border-orange-200 bg-orange-200/60 text-orange-700"
       : "border-teal-200 bg-teal-200/60 text-teal-700",
@@ -1563,14 +1565,14 @@ export function AutoscuoleAgendaPage({
                         const isPendingAction = pendingEventActionId === item.id;
                         const glTint = groupLessonTint(item);
                         const cardClassName = isExam
-                          ? "border-[#9e88d4] bg-[#ede8ff]"
+                          ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                           : isGroupLesson
                             ? glTint.card
                             : statusMeta.className;
                         return (
                           <DropdownMenu key={item.id}>
                             <DropdownMenuTrigger asChild>
-                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
+                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
                                 {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? glTint.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? glTint.label : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? glTint.time : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
                               </button>
                             </DropdownMenuTrigger>
@@ -1637,7 +1639,7 @@ export function AutoscuoleAgendaPage({
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
+                                  className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                   style={{ top, height }}
                                   onClick={(e) => e.stopPropagation()}
                                 >
@@ -1685,7 +1687,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-${eg.key}`}
                                 type="button"
-                                className="absolute left-1 right-1 z-20 box-border flex items-center gap-1.5 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50 px-2 py-1.5 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
+                                className="absolute left-1 right-1 z-20 box-border flex items-center gap-1.5 overflow-hidden rounded-[10px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] px-2 py-1.5 text-left transition hover:bg-[#EDE4FF] cursor-pointer"
                                 style={{ top: 0 }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -1703,7 +1705,7 @@ export function AutoscuoleAgendaPage({
                             <button
                               key={`exam-${eg.key}`}
                               type="button"
-                              className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50 p-2 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
+                              className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] p-2 text-left transition hover:bg-[#EDE4FF] cursor-pointer"
                               style={{ top, height }}
                               onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                             >
@@ -1959,7 +1961,7 @@ export function AutoscuoleAgendaPage({
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
                           const instrCardClass = isExamInstr
-                            ? "border-[#9e88d4] bg-[#ede8ff]"
+                            ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
                               : statusMeta.className;
@@ -1968,7 +1970,7 @@ export function AutoscuoleAgendaPage({
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
+                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -2034,7 +2036,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   key={`exam-instr-${eg.key}`}
                                   type="button"
-                                  className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                  className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                   style={{ top: 0 }}
                                   onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                                 >
@@ -2056,7 +2058,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-instr-${eg.key}`}
                                 type="button"
-                                className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                 style={{ top, height }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -2089,7 +2091,7 @@ export function AutoscuoleAgendaPage({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="absolute left-0.5 right-0.5 z-[8] overflow-hidden rounded-xl border border-slate-300 bg-slate-100 text-[9px] leading-tight text-left hover:bg-slate-200 transition-colors"
+                                    className="absolute left-0.5 right-0.5 z-[8] overflow-hidden rounded-[8px] bg-[#F3F4F8] text-[9px] leading-tight text-left hover:bg-[#E7E9F1] transition-colors"
                                     style={{ top, height }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -2334,7 +2336,7 @@ export function AutoscuoleAgendaPage({
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
                       const dayCardClass = isExamDay
-                        ? "border-[#9e88d4] bg-[#ede8ff]"
+                        ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                         : isGroupLessonDay
                           ? glTintDay.card
                           : statusMeta.className;
@@ -2345,7 +2347,7 @@ export function AutoscuoleAgendaPage({
                             <button
                               type="button"
                               className={cn(
-                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
+                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5",
                                 isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
@@ -2455,7 +2457,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="absolute left-1 right-1 z-[8] overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
+                                className="absolute left-1 right-1 z-[8] overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -3133,55 +3135,41 @@ export function AutoscuoleAgendaPage({
           </div>
           <div className="px-6 py-5 space-y-5">
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per durata</p>
               <div className="space-y-1.5">
                 {[
-                  { label: "30 minuti", className: "border-[#6ec8c0] bg-[#e0faf6]" },
-                  { label: "45 minuti", className: "border-[#9cc85c] bg-[#f0fad0]" },
-                  { label: "60 minuti", className: "border-[#d4c84e] bg-[#fffce0]" },
-                  { label: "90 minuti", className: "border-[#d4a84e] bg-[#fff3dc]" },
-                  { label: "120 minuti", className: "border-[#d48080] bg-[#ffe8e8]" },
+                  { label: "Fino a 30 minuti", className: "bg-[#E3EEFF] shadow-[0_3px_8px_rgba(59,130,246,0.35)]" },
+                  { label: "31–45 minuti", className: "bg-[#EAF7CE] shadow-[0_3px_8px_rgba(132,204,22,0.35)]" },
+                  { label: "46–60 minuti", className: "bg-[#FCEFC7] shadow-[0_3px_8px_rgba(245,158,11,0.35)]" },
+                  { label: "61–90 minuti", className: "bg-[#F9DDF3] shadow-[0_3px_8px_rgba(217,70,239,0.35)]" },
+                  { label: "Oltre 90 minuti", className: "bg-[#FBD9DD] shadow-[0_3px_8px_rgba(244,63,94,0.35)]" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
                     <span className="text-xs text-foreground">{item.label}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Veicolo</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-orange-300 bg-orange-100" />
-                  <span className="text-xs text-foreground">Patente moto</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-blue-200 bg-blue-50" />
-                  <span className="text-xs text-foreground">Cambio automatico</span>
-                </div>
+                {[
+                  { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
+                  { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
+                  { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },
+                  { label: "Evento bloccante", className: "bg-[#F3F4F8]" },
+                  { label: "Annullata / Assente", className: "bg-[#F3F4F8]" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
+                    <span className="text-xs text-foreground">{item.label}</span>
+                  </div>
+                ))}
               </div>
               <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
-                Le guide con un veicolo per la patente moto (AM, A1, A2, A) o con cambio automatico usano questo colore al posto di quello della durata.
+                Lo stato della guida (programmata, presente, completata…) è indicato dal badge sul blocco: il colore di sfondo racconta durata o tipo.
               </p>
-            </div>
-            <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
-              <div className="space-y-1.5">
-                {[
-                  { label: "Esame", className: "border-[#9e88d4] bg-[#ede8ff]" },
-                  { label: "Guida di gruppo", className: "border-[#39b69a] bg-[#d4f1ec]" },
-                  { label: "Gruppo moto", className: "border-orange-300 bg-orange-100" },
-                  { label: "Completata", className: "border-[#5eba7d] bg-[#e8f7ee]" },
-                  { label: "Assente", className: "border-[#e09090] bg-[#ffe0e8]" },
-                  { label: "Annullata", className: "border-[#cccccc] bg-[#f5f5f5] opacity-60" },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
-                    <span className="text-xs text-foreground">{item.label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
         </DialogContent>
@@ -4105,31 +4093,20 @@ function buildLocalDateTime(day: string, time: string) {
   return date;
 }
 
+// Sistema colori unificato web+mobile (Reglo-Colori-Blocchi-Guida, decisioni
+// 2026-06-29): guide normali per DURATA (freddo→caldo), esami/gruppi per tipo,
+// annullata/assente muted. Stile: NIENTE bordo, sfondo vivo, ombra in tinta
+// (opacity .22). Gli override moto/automatico sono stati RIMOSSI; il ≤30 min è
+// blu (il teal è riservato alle guide di gruppo). Lo stato vive sul badge.
 function getScheduledDurationClass(appointment: AppointmentRow): string {
-  // Moto guides (vehicle assigned to a motorcycle license: AM/A1/A2/A) get a
-  // dedicated colour that OVERRIDES the per-duration palette. Keyed off the
-  // vehicle only — guides without a vehicle skip this check. Wins over the
-  // automatic colour so a moto stays a moto even on an automatic scooter.
-  if (isMotoLicenseCategory(appointment.vehicle?.licenseCategory)) {
-    return "border-orange-300/70 bg-orange-100/70";
-  }
-  // Automatic-transmission guides get a dedicated colour that OVERRIDES the
-  // per-duration palette, so schools can spot them at a glance (requested by
-  // the autoscuole). Exam/group keep their own identity colour upstream, and
-  // the "Assente"/"Annullata" states still win in getStatusMeta.
-  if ((appointment.vehicle?.transmission ?? "").toLowerCase() === "automatic") {
-    return "border-blue-300/70 bg-blue-50/80";
-  }
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
-  // Palette per durata del redesign (prototipo Airbnb): acqua → lime → giallo
-  // → ambra → rosso tenue.
-  if (dur <= 30) return "border-[#6ec8c0] bg-[#e0faf6]";
-  if (dur <= 45) return "border-[#9cc85c] bg-[#f0fad0]";
-  if (dur <= 60) return "border-[#d4c84e] bg-[#fffce0]";
-  if (dur <= 90) return "border-[#d4a84e] bg-[#fff3dc]";
-  return "border-[#d48080] bg-[#ffe8e8]";
+  if (dur <= 30) return "bg-[#E3EEFF] shadow-[0_5px_14px_rgba(59,130,246,0.22)]";
+  if (dur <= 45) return "bg-[#EAF7CE] shadow-[0_5px_14px_rgba(132,204,22,0.22)]";
+  if (dur <= 60) return "bg-[#FCEFC7] shadow-[0_5px_14px_rgba(245,158,11,0.22)]";
+  if (dur <= 90) return "bg-[#F9DDF3] shadow-[0_5px_14px_rgba(217,70,239,0.22)]";
+  return "bg-[#FBD9DD] shadow-[0_5px_14px_rgba(244,63,94,0.22)]";
 }
 
 function getStatusMeta(
@@ -4157,11 +4134,12 @@ function getStatusMeta(
     return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
   }
   if (normalized === "completed") {
-    // Le completate diventano verdi (prototipo): la durata non conta più.
-    return { label: "Completa", shortLabel: "Completata", className: "border-[#5eba7d] bg-[#e8f7ee]" };
+    // Lo stato vive sul badge, non sullo sfondo: la completata tiene il
+    // colore della durata (sistema unificato 2026-06-29).
+    return { label: "Completa", shortLabel: "Completata", className: durationClass };
   }
   if (normalized === "no_show") {
-    return { label: "Assente", shortLabel: "Assente", className: "border-[#e09090] bg-[#ffe0e8]" };
+    return { label: "Assente", shortLabel: "Assente", className: "bg-[#F3F4F8] text-[#8A90A6]" };
   }
   if (normalized.includes("proposal")) {
     return { label: "Proposta", shortLabel: "Proposta", className: durationClass };
@@ -4170,7 +4148,7 @@ function getStatusMeta(
     return { label: "Da confermare", shortLabel: "Da confermare", className: durationClass };
   }
   if (normalized === "cancelled") {
-    return { label: "Annullata", shortLabel: "Annullata", className: "border-[#cccccc] bg-[#f5f5f5] opacity-60 line-through" };
+    return { label: "Annullata", shortLabel: "Annullata", className: "bg-[#F3F4F8] text-[#8A90A6] opacity-70 line-through" };
   }
   return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
 }
