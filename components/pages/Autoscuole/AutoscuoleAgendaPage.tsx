@@ -8,6 +8,8 @@ import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, Chevro
 import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,7 +103,7 @@ type AppointmentRow = {
 const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
   const moto = item.groupLessonKind === "moto";
   return {
-    card: moto ? "border-orange-300/80 bg-orange-100/90" : "border-teal-300/80 bg-teal-100/90",
+    card: moto ? "border-orange-300/80 bg-orange-100/90" : "border-[#39b69a] bg-[#d4f1ec]",
     badge: moto
       ? "border-orange-200 bg-orange-200/60 text-orange-700"
       : "border-teal-200 bg-teal-200/60 text-teal-700",
@@ -195,15 +197,17 @@ type InstructorTint = {
   bandStyle?: React.CSSProperties;
 };
 
+// Palette posizionale di fallback (istruttori senza colore scelto). Redesign
+// 2026-07: il primo slot è neutro slate — niente più rosa di default.
 const INSTRUCTOR_COLORS = [
-  { bg: "bg-pink-50/60", border: "border-pink-200/40", text: "text-pink-700", avatar: "bg-pink-100 text-pink-700" },
+  { bg: "bg-slate-100/60", border: "border-slate-200/40", text: "text-slate-700", avatar: "bg-slate-200 text-slate-700" },
   { bg: "bg-sky-50/60", border: "border-sky-200/40", text: "text-sky-700", avatar: "bg-sky-100 text-sky-700" },
   { bg: "bg-emerald-50/60", border: "border-emerald-200/40", text: "text-emerald-700", avatar: "bg-emerald-100 text-emerald-700" },
   { bg: "bg-amber-50/60", border: "border-amber-200/40", text: "text-amber-700", avatar: "bg-amber-100 text-amber-700" },
   { bg: "bg-violet-50/60", border: "border-violet-200/40", text: "text-violet-700", avatar: "bg-violet-100 text-violet-700" },
-  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
   { bg: "bg-teal-50/60", border: "border-teal-200/40", text: "text-teal-700", avatar: "bg-teal-100 text-teal-700" },
   { bg: "bg-orange-50/60", border: "border-orange-200/40", text: "text-orange-700", avatar: "bg-orange-100 text-orange-700" },
+  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
 ];
 
 type FilterKind = "instructor" | "vehicle" | "type" | "status";
@@ -1109,55 +1113,66 @@ export function AutoscuoleAgendaPage({
       <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
         <LottieLoadingOverlay visible={loading} />
         <div className="mx-auto max-w-7xl space-y-5">
-          <header className="space-y-1.5">
-            <h1 className="ds-section-primary text-foreground">Agenda</h1>
-            <p className="text-sm text-muted-foreground">Agenda guide ed esami.</p>
-          </header>
+          <PageHeader
+            title="Agenda"
+            subtitle={(() => {
+              const activeCount = filtered.filter((a) => a.status !== "cancelled").length;
+              const todayCount = filtered.filter((a) => {
+                if (a.status === "cancelled") return false;
+                const start = toDate(a.startsAt);
+                return start >= todayNormalized && start < addDays(todayNormalized, 1);
+              }).length;
+              const periodo = viewMode === "week" ? "questa settimana" : "in giornata";
+              return viewMode === "week"
+                ? [`${todayCount} guide oggi`, `${activeCount} ${periodo}`]
+                : [`${activeCount} guide ${periodo}`];
+            })()}
+          />
           {tabs}
           {loading && <AgendaSkeleton />}
           {!loading && (<>
         <div className="flex items-center gap-3">
           {/* Date nav */}
-          <div className="flex items-center gap-1.5">
-            <Button variant="ghost" size="sm" className="size-8 p-0"
+          <div className="flex items-center gap-1">
+            <button type="button"
+              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, -7)) : setDayFocus((prev) => addDays(prev, -1))}>
               <ChevronLeft className="size-4" />
-            </Button>
-            <span className="min-w-[140px] text-center text-sm font-semibold text-foreground">
+            </button>
+            <span className="min-w-[130px] select-none text-center text-[15px] font-semibold text-foreground">
               {viewMode === "week"
                 ? formatRangeLabel(weekStart)
                 : dayFocus.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
             </span>
-            <Button variant="ghost" size="sm" className="size-8 p-0"
+            <button type="button"
+              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
-            </Button>
+            </button>
           </div>
-
-          <div className="h-5 w-px bg-border" />
 
           {/* Period toggle */}
-          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
-            <Button variant={viewMode === "week" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
-              onClick={() => setViewMode("week")}>Settimana</Button>
-            <Button variant={viewMode === "day" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
-              onClick={() => setViewMode("day")}>Giorno</Button>
-          </div>
+          <SegmentedPill
+            value={viewMode}
+            onChange={(v) => setViewMode(v)}
+            options={[
+              { value: "week", label: "Settimana" },
+              { value: "day", label: "Giorno" },
+            ]}
+          />
 
           {/* Mode toggle */}
-          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
-            <Button variant={agendaMode === "classic" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
-              onClick={() => { if (agendaMode !== "classic") toggleAgendaMode(); }}>
-              <CalendarDays className="size-3" />Classica
-            </Button>
-            <Button variant={agendaMode === "instructor" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
-              onClick={() => { if (agendaMode !== "instructor") toggleAgendaMode(); }}>
-              <Users className="size-3" />Istruttori
-            </Button>
-          </div>
+          <SegmentedPill
+            value={agendaMode}
+            onChange={(v) => { if (v !== agendaMode) toggleAgendaMode(); }}
+            options={[
+              { value: "classic", label: "Classica", icon: <CalendarDays className="size-[13px]" /> },
+              { value: "instructor", label: "Istruttori", icon: <Users className="size-[13px]" /> },
+            ]}
+          />
 
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => setLegendOpen(true)}>
-            <HelpCircle className="size-3" />Legenda
+          <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full px-2.5 text-[13px] text-[#6a6a6a] hover:text-foreground" onClick={() => setLegendOpen(true)}>
+            <HelpCircle className="size-3.5" />Legenda
           </Button>
 
           <div className="h-5 w-px bg-border" />
@@ -1216,43 +1231,46 @@ export function AutoscuoleAgendaPage({
           <div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm">
-                  <Plus className="mr-1.5 size-3.5" />
-                  Nuovo
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  title="Inserisci a mano"
+                  className="flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800"
+                >
+                  <Plus className="size-[18px]" strokeWidth={2.2} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-dropdown">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setCreateStep(0); setCreateOpen(true); }}
                 >
-                  <Plus className="size-3.5 text-pink-500" />
+                  <Plus className="size-4 text-foreground" strokeWidth={1.7} />
                   Appuntamento
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
-                  <GraduationCap className="size-3.5 text-violet-500" />
+                  <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
-                  <Ban className="size-3.5 text-slate-500" />
+                  <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
                 </button>
                 {groupLessonsEnabled && (
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
+                    className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                     onClick={() => setCreateGroupLessonOpen(true)}
                   >
-                    <Users className="size-3.5 text-teal-600" />
+                    <Users className="size-4 text-foreground" strokeWidth={1.7} />
                     Guida di gruppo
                   </button>
                 )}
@@ -1350,7 +1368,7 @@ export function AutoscuoleAgendaPage({
               {
                 key: "appointment",
                 label: "Appuntamento",
-                icon: <Plus className="size-3.5 text-pink-500" />,
+                icon: <Plus className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setForm((prev) => ({ ...prev, day: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId ?? prev.instructorId }));
                   setCreateStep(0);
@@ -1360,7 +1378,7 @@ export function AutoscuoleAgendaPage({
               {
                 key: "exam",
                 label: "Esame",
-                icon: <GraduationCap className="size-3.5 text-violet-500" />,
+                icon: <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", studentIds: [], note: "" });
                   setExamStudentSearch("");
@@ -1370,7 +1388,7 @@ export function AutoscuoleAgendaPage({
               {
                 key: "block",
                 label: "Evento bloccante",
-                icon: <Ban className="size-3.5 text-slate-500" />,
+                icon: <Ban className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
                   setBlockDialogOpen(true);
@@ -1379,7 +1397,7 @@ export function AutoscuoleAgendaPage({
               ...(groupLessonsEnabled ? [{
                 key: "group",
                 label: "Guida di gruppo",
-                icon: <Users className="size-3.5 text-teal-600" />,
+                icon: <Users className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setGroupLessonPrefill({ date: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId });
                   setCreateGroupLessonOpen(true);
@@ -1436,25 +1454,25 @@ export function AutoscuoleAgendaPage({
             <div ref={calendarScrollRef} className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card" style={{ height: "100%" }}>
               {/* Sticky day headers */}
               <div
-                className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
+                className={`sticky top-0 z-30 grid border-b border-[#eeeeee] bg-white/95 backdrop-blur-sm ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
               >
-                <div />
-                {visibleDays.map((day) => {
-                  const isDayToday = day.getTime() === todayNormalized.getTime();
-                  return (
-                    <div key={day.toISOString()} className={cn("py-2.5 text-center text-xs font-semibold transition-colors border-l border-border/50", isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground")}>
-                      {day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
-                    </div>
-                  );
-                })}
+                <div className="border-r border-[#eeeeee] bg-[#fafafa]" />
+                {visibleDays.map((day) => (
+                  <AgendaDayHeader
+                    key={day.toISOString()}
+                    day={day}
+                    isToday={day.getTime() === todayNormalized.getTime()}
+                    isHoliday={holidaySet.has(formatYmd(day))}
+                  />
+                ))}
               </div>
               {/* Calendar body */}
               <div className={`grid ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}>
                 {/* Time gutter */}
-                <div className="relative" style={{ height: calendarHeight }}>
+                <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
+                      <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">{`${pad(hour)}:00`}</span>
                     </div>
                   ))}
                   {(() => {
@@ -1479,12 +1497,13 @@ export function AutoscuoleAgendaPage({
                   const now = new Date(nowTick);
                   const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
                   const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
+                  const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                   return (
-                    <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-border/50", isDayToday ? "bg-yellow-50/30" : "")} style={{ height: calendarHeight }}
+                    <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-[#eeeeee]", isWeekendDay ? "bg-[#fafafa]" : "bg-white")} style={{ height: calendarHeight }}
                       onClick={(event) => openSlotMenu(event, day)}
                     >
                       {renderSlotGhost(day, null)}
-                      {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-border/40" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
+                      {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-[#f5f5f5]" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
                       {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
                       {dayAppointments.map((item) => {
                         const laneInfo = laneMap.get(item.id);
@@ -1506,7 +1525,7 @@ export function AutoscuoleAgendaPage({
                         const isPendingAction = pendingEventActionId === item.id;
                         const glTint = groupLessonTint(item);
                         const cardClassName = isExam
-                          ? "border-violet-300/80 bg-violet-100/90"
+                          ? "border-[#9e88d4] bg-[#ede8ff]"
                           : isGroupLesson
                             ? glTint.card
                             : statusMeta.className;
@@ -1538,9 +1557,9 @@ export function AutoscuoleAgendaPage({
                         return (
                           <DropdownMenu key={`overflow-${group.clusterId}`}>
                             <DropdownMenuTrigger asChild>
-                              <button type="button" className="absolute left-1 right-1 z-10 box-border flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-pink-200 bg-pink-50 text-left shadow-sm transition hover:bg-pink-100 hover:shadow-md" style={{ top: blockTop, height: blockHeight }} onClick={(e) => e.stopPropagation()}>
-                                <span className="text-[12px] font-bold text-pink-600">{group.allItems.length} guide</span>
-                                <span className="text-[10px] text-pink-500/80">{formatTimeRange(earliest, latest)}</span>
+                              <button type="button" className="absolute left-1 right-1 z-10 box-border flex flex-col items-start justify-center gap-0.5 overflow-hidden rounded-[7px] border border-[#0f172a] bg-[#1e293b] px-2.5 text-left transition hover:bg-[#26334a]" style={{ top: blockTop, height: blockHeight }} onClick={(e) => e.stopPropagation()}>
+                                <span className="flex items-baseline gap-1.5"><span className="text-[18px] font-bold leading-none text-white">{group.allItems.length}</span><span className="text-[11px] font-medium leading-none text-white/65">guide</span></span>
+                                <span className="text-[10px] text-white/65">{formatTimeRange(earliest, latest)}</span>
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown">
@@ -1708,12 +1727,13 @@ export function AutoscuoleAgendaPage({
                   const isDayToday = day.getTime() === todayNormalized.getTime();
                   const dayHolidayLabel = holidaySet.get(formatYmd(day));
                   const isDayHoliday = dayHolidayLabel !== undefined;
+                  const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                   return (
                     <div
                       key={`day-${day.toISOString()}`}
                       className={cn(
-                        "text-center text-xs font-semibold py-1.5 border-l border-border cursor-pointer hover:bg-gray-50 transition-colors",
-                        isDayHoliday ? "bg-red-50 text-red-600" : isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground",
+                        "flex cursor-pointer items-center justify-center gap-1.5 border-l border-[#eeeeee] py-1 transition-colors hover:bg-[#f7f7f7]",
+                        isDayHoliday ? "bg-[#fffcf0]" : isWeekendDay ? "bg-[#fafafa]" : "bg-white",
                       )}
                       style={{ gridColumn: `span ${instrCount}` }}
                       onClick={() => { setDayFocus(normalizeDay(day)); setViewMode("day"); }}
@@ -1729,8 +1749,18 @@ export function AutoscuoleAgendaPage({
                         }
                       }}
                     >
-                      <span>{day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}</span>
-                      {isDayHoliday && <span className="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">{dayHolidayLabel || "Festivo"}</span>}
+                      <span className={cn("text-[10px] font-semibold uppercase tracking-[0.5px]", isDayHoliday ? "text-amber-500" : "text-[#aaaaaa]")}>
+                        {day.toLocaleDateString("it-IT", { weekday: "short" })}
+                      </span>
+                      <span
+                        className={cn(
+                          "flex size-[26px] items-center justify-center rounded-full text-[13px] font-bold",
+                          isDayToday ? "bg-[#222222] text-white" : isDayHoliday ? "text-amber-600" : isWeekendDay ? "text-[#999999]" : "text-foreground",
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                      {isDayHoliday && <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-600">{dayHolidayLabel || "Festivo"}</span>}
                     </div>
                   );
                 })}
@@ -1740,7 +1770,7 @@ export function AutoscuoleAgendaPage({
                     const tint = tintFor(instr.instructorId, idx);
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
-                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-gray-400" : "border-border/30")}>
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
                         <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
                         <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
                       </div>
@@ -1804,10 +1834,10 @@ export function AutoscuoleAgendaPage({
               {/* Calendar body */}
               <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Time gutter — sticky left */}
-                <div className="sticky left-0 z-20 bg-white relative" style={{ height: calendarHeight }}>
+                <div className="sticky left-0 z-20 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
+                      <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">{`${pad(hour)}:00`}</span>
                     </div>
                   ))}
                   {/* Now label */}
@@ -1887,7 +1917,7 @@ export function AutoscuoleAgendaPage({
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
                           const instrCardClass = isExamInstr
-                            ? "border-violet-300/80 bg-violet-100/90"
+                            ? "border-[#9e88d4] bg-[#ede8ff]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
                               : statusMeta.className;
@@ -2126,7 +2156,7 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="flex flex-col items-center gap-1 py-2.5 border-l border-border/50"
+                    className="flex flex-col items-center gap-1 border-l border-[#eeeeee] py-2.5"
                   >
                     <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
                       {initials}
@@ -2150,14 +2180,14 @@ export function AutoscuoleAgendaPage({
             }}
           >
             {/* Time gutter */}
-            <div className="relative" style={{ height: calendarHeight }}>
+            <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
               {hourMarks.map((hour) => (
                 <div
                   key={hour}
                   className="absolute left-0 right-0 flex items-start"
                   style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                 >
-                  <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">
+                  <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">
                     {`${pad(hour)}:00`}
                   </span>
                 </div>
@@ -2210,7 +2240,7 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="relative cursor-pointer border-l border-border/50"
+                    className="relative cursor-pointer border-l border-[#eeeeee] bg-white"
                     style={{ height: calendarHeight }}
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
@@ -2231,7 +2261,7 @@ export function AutoscuoleAgendaPage({
                     {hourMarks.map((hour) => (
                       <div
                         key={hour}
-                        className="absolute left-0 right-0 h-px bg-border/40"
+                        className="absolute left-0 right-0 h-px bg-[#f5f5f5]"
                         style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                       />
                     ))}
@@ -2262,7 +2292,7 @@ export function AutoscuoleAgendaPage({
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
                       const dayCardClass = isExamDay
-                        ? "border-violet-300/80 bg-violet-100/90"
+                        ? "border-[#9e88d4] bg-[#ede8ff]"
                         : isGroupLessonDay
                           ? glTintDay.card
                           : statusMeta.className;
@@ -3036,11 +3066,11 @@ export function AutoscuoleAgendaPage({
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata</p>
               <div className="space-y-1.5">
                 {[
-                  { label: "30 minuti", className: "border-teal-200 bg-teal-50" },
-                  { label: "45 minuti", className: "border-lime-200 bg-lime-50" },
-                  { label: "60 minuti", className: "border-yellow-200 bg-yellow-50" },
-                  { label: "90 minuti", className: "border-fuchsia-200 bg-fuchsia-50" },
-                  { label: "120 minuti", className: "border-rose-200 bg-rose-50" },
+                  { label: "30 minuti", className: "border-[#6ec8c0] bg-[#e0faf6]" },
+                  { label: "45 minuti", className: "border-[#9cc85c] bg-[#f0fad0]" },
+                  { label: "60 minuti", className: "border-[#d4c84e] bg-[#fffce0]" },
+                  { label: "90 minuti", className: "border-[#d4a84e] bg-[#fff3dc]" },
+                  { label: "120 minuti", className: "border-[#d48080] bg-[#ffe8e8]" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
                     <div className={cn("h-5 w-8 rounded border-2", item.className)} />
@@ -3068,18 +3098,19 @@ export function AutoscuoleAgendaPage({
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
               <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-violet-300 bg-violet-100" />
-                  <span className="text-xs text-foreground">Esame</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-rose-200 bg-rose-100" />
-                  <span className="text-xs text-foreground">Assente</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-gray-200 bg-gray-100 opacity-60" />
-                  <span className="text-xs text-foreground">Annullata</span>
-                </div>
+                {[
+                  { label: "Esame", className: "border-[#9e88d4] bg-[#ede8ff]" },
+                  { label: "Guida di gruppo", className: "border-[#39b69a] bg-[#d4f1ec]" },
+                  { label: "Gruppo moto", className: "border-orange-300 bg-orange-100" },
+                  { label: "Completata", className: "border-[#5eba7d] bg-[#e8f7ee]" },
+                  { label: "Assente", className: "border-[#e09090] bg-[#ffe0e8]" },
+                  { label: "Annullata", className: "border-[#cccccc] bg-[#f5f5f5] opacity-60" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
+                    <span className="text-xs text-foreground">{item.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -4022,11 +4053,13 @@ function getScheduledDurationClass(appointment: AppointmentRow): string {
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
-  if (dur <= 30) return "border-teal-200/70 bg-teal-50/80";
-  if (dur <= 45) return "border-lime-200/70 bg-lime-50/80";
-  if (dur <= 60) return "border-yellow-200/70 bg-yellow-50/80";
-  if (dur <= 90) return "border-fuchsia-200/70 bg-fuchsia-50/80";
-  return "border-rose-200/70 bg-rose-50/80";
+  // Palette per durata del redesign (prototipo Airbnb): acqua → lime → giallo
+  // → ambra → rosso tenue.
+  if (dur <= 30) return "border-[#6ec8c0] bg-[#e0faf6]";
+  if (dur <= 45) return "border-[#9cc85c] bg-[#f0fad0]";
+  if (dur <= 60) return "border-[#d4c84e] bg-[#fffce0]";
+  if (dur <= 90) return "border-[#d4a84e] bg-[#fff3dc]";
+  return "border-[#d48080] bg-[#ffe8e8]";
 }
 
 function getStatusMeta(
@@ -4054,10 +4087,11 @@ function getStatusMeta(
     return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
   }
   if (normalized === "completed") {
-    return { label: "Completa", shortLabel: "Completata", className: durationClass };
+    // Le completate diventano verdi (prototipo): la durata non conta più.
+    return { label: "Completa", shortLabel: "Completata", className: "border-[#5eba7d] bg-[#e8f7ee]" };
   }
   if (normalized === "no_show") {
-    return { label: "Assente", shortLabel: "Assente", className: "border-rose-200/70 bg-rose-100/70" };
+    return { label: "Assente", shortLabel: "Assente", className: "border-[#e09090] bg-[#ffe0e8]" };
   }
   if (normalized.includes("proposal")) {
     return { label: "Proposta", shortLabel: "Proposta", className: durationClass };
@@ -4066,7 +4100,7 @@ function getStatusMeta(
     return { label: "Da confermare", shortLabel: "Da confermare", className: durationClass };
   }
   if (normalized === "cancelled") {
-    return { label: "Annullata", shortLabel: "Annullata", className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through" };
+    return { label: "Annullata", shortLabel: "Annullata", className: "border-[#cccccc] bg-[#f5f5f5] opacity-60 line-through" };
   }
   return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
 }
@@ -4122,6 +4156,59 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Intestazione colonna giorno del redesign Airbnb: DOW 10px uppercase +
+ * numero in cerchio 34px (oggi = pieno scuro), festivo con sole ambra.
+ */
+function AgendaDayHeader({
+  day,
+  isToday,
+  isHoliday,
+}: {
+  day: Date;
+  isToday: boolean;
+  isHoliday: boolean;
+}) {
+  const dow = day.getDay();
+  const isWeekend = dow === 0 || dow === 6;
+  return (
+    <div
+      className={cn(
+        "relative flex h-16 flex-col items-center justify-center gap-0.5 border-l border-[#eeeeee]",
+        isHoliday ? "bg-[#fffcf0]" : isWeekend ? "bg-[#fafafa]" : "bg-white",
+      )}
+    >
+      <div
+        className={cn(
+          "text-[10px] font-semibold uppercase tracking-[0.5px]",
+          isHoliday ? "text-amber-500" : "text-[#aaaaaa]",
+        )}
+      >
+        {day.toLocaleDateString("it-IT", { weekday: "short" })}
+      </div>
+      <div
+        className={cn(
+          "flex size-[34px] items-center justify-center rounded-full text-[17px] font-bold",
+          isToday
+            ? "bg-[#222222] text-white"
+            : isHoliday
+              ? "text-amber-600"
+              : isWeekend
+                ? "text-[#999999]"
+                : "text-foreground",
+        )}
+      >
+        {day.getDate()}
+      </div>
+      {isHoliday ? (
+        <span className="absolute right-2 top-1.5 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">
+          festivo
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function FilterTag({
   label,
   value,
@@ -4141,16 +4228,16 @@ function FilterTag({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm transition",
+        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-[13px] font-medium transition-colors",
         active
-          ? "border-yellow-200 bg-yellow-50 text-yellow-700 shadow-sm"
-          : "border-dashed border-border bg-white text-muted-foreground hover:bg-gray-50",
+          ? "border-navy-900 bg-navy-50 text-navy-900"
+          : "border-border bg-white text-[#6a6a6a] hover:bg-[#f7f7f7]",
       )}
     >
       <SlidersHorizontal className="h-3.5 w-3.5" />
       <span>{label}</span>
       {displayValue ? (
-        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-700">
+        <span className="rounded-full bg-navy-900 px-2 py-0.5 text-[11px] font-semibold text-white">
           {displayValue}
         </span>
       ) : null}
