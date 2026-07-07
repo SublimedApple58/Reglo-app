@@ -1970,7 +1970,7 @@ export function AutoscuoleAgendaPage({
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
+                                  className={cn("absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -2036,7 +2036,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   key={`exam-instr-${eg.key}`}
                                   type="button"
-                                  className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                  className="absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                   style={{ top: 0 }}
                                   onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                                 >
@@ -2058,7 +2058,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-instr-${eg.key}`}
                                 type="button"
-                                className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
+                                className="absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                 style={{ top, height }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -2091,7 +2091,7 @@ export function AutoscuoleAgendaPage({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="absolute left-0.5 right-0.5 z-[8] overflow-hidden rounded-[8px] bg-[#F3F4F8] text-[9px] leading-tight text-left hover:bg-[#E7E9F1] transition-colors"
+                                    className="absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F3F4F8] text-[9px] leading-tight text-left hover:bg-[#E7E9F1] transition-colors"
                                     style={{ top, height }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
@@ -2457,7 +2457,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="absolute left-1 right-1 z-[8] overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
+                                className="absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
