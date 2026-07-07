@@ -4849,7 +4849,10 @@ export async function updateAutoscuolaAppointmentDetails(
     let finalExtraMotoVehicleIds = desiredExtraMotoVehicleIds;
     if (vehiclesNeedSync && !extraMotosChanged) {
       // Preserve existing extra motos: every role="primary" row except the
-      // representative primary (appointment.vehicleId).
+      // representative primary. Exclude BOTH the new and the OLD primary:
+      // filtering only the new one turned the previous vehicle into a ghost
+      // "extra" on every primary change (guides showing two cars at
+      // Autoscuola Robatto, 2026-07-06).
       const existingPrimaries =
         await prisma.autoscuolaAppointmentVehicle.findMany({
           where: { appointmentId: appointment.id, role: "primary" },
@@ -4857,7 +4860,7 @@ export async function updateAutoscuolaAppointmentDetails(
         });
       finalExtraMotoVehicleIds = existingPrimaries
         .map((r) => r.vehicleId)
-        .filter((id) => id !== finalPrimaryVehicleId);
+        .filter((id) => id !== finalPrimaryVehicleId && id !== appointment.vehicleId);
     }
 
     // Conflict check on the vehicles being ADDED by this edit: changing a
