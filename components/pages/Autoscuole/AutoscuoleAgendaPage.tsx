@@ -25,7 +25,6 @@ import {
   createAutoscuolaAppointment,
   deleteAutoscuolaAppointment,
   cancelAutoscuolaAppointment,
-  permanentlyCancelAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
   createInstructorBlock,
@@ -957,24 +956,9 @@ export function AutoscuoleAgendaPage({
     setPendingEventActionId(null);
   };
 
-  const handlePermanentCancel = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler eliminare definitivamente questa guida?");
-    if (!confirmed) return;
-    setPendingEventActionId(appointmentId);
-    const res = await permanentlyCancelAutoscuolaAppointment({ appointmentId });
-    if (!res.success) {
-      toast.error({
-        description: res.message ?? "Impossibile eliminare l'appuntamento.",
-      });
-      setPendingEventActionId(null);
-      return;
-    }
-    toast.success({ description: "Guida eliminata definitivamente." });
-    await load({ silent: true });
-    setPendingEventActionId(null);
-  };
-
   const handleDelete = async (appointmentId: string) => {
+    const confirmed = window.confirm("Sei sicuro di voler cancellare questa guida?");
+    if (!confirmed) return;
     setPendingEventActionId(appointmentId);
     const res = await deleteAutoscuolaAppointment({ appointmentId });
     if (!res.success) {
@@ -1539,10 +1523,9 @@ export function AutoscuoleAgendaPage({
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLesson ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
-                              ) : (<>
+                              ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
-                              </>)}
+                              )}
                             </DropdownMenuContent>
                           </DropdownMenu>
                         );
@@ -1961,10 +1944,9 @@ export function AutoscuoleAgendaPage({
                                 {canRescheduleAppointment(item) && !isGroupLessonInstr ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonInstr ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
-                              ) : (<>
+                              ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
-                              </>)}
+                              )}
                               </DropdownMenuContent>
                             </DropdownMenu>
                           );
@@ -2374,10 +2356,9 @@ export function AutoscuoleAgendaPage({
                             {canRescheduleAppointment(item) && !isGroupLessonDay ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonDay ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
-                              ) : (<>
+                              ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                                <Button type="button" variant="ghost" size="sm" className="w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={isPendingAction} onClick={() => handlePermanentCancel(item.id)}>Elimina definitivamente</Button>
-                              </>)}
+                              )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       );
