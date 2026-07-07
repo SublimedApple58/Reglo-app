@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import React from "react";
-import { Award, BookOpen, Car, ChevronDown, ChevronRight, ExternalLink, FileText, GraduationCap, Hourglass, KeyRound, Loader2, MailPlus, NotebookPen, Ticket, UserPlus } from "lucide-react";
-import { useLocale } from "next-intl";
+import { KeyRound, Loader2, Plus, Search, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedPill } from "@/components/ui/segmented-pill";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,15 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Label } from "@/components/ui/label";
@@ -35,8 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   adjustAutoscuolaStudentLessonCredits,
@@ -64,17 +54,7 @@ import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license
 import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useIsMobile } from "@/hooks/use-mobile";
-import {
-  InputButton,
-  InputButtonAction,
-  InputButtonInput,
-  InputButtonProvider,
-  InputButtonSubmit,
-} from "@/components/animate-ui/buttons/input";
-import { ManagementBar } from "@/components/animate-ui/ui-elements/management-bar";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
-import { RegloTabs } from "@/components/ui/reglo-tabs";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 
 type StudentProfile = {
@@ -248,22 +228,168 @@ const formatDate = (value: string | Date, withTime = false) => {
   });
 };
 
-type SubTab = "students" | "late_cancellations";
+/* ── Redesign helpers ─────────────────────────────────────────────── */
+
+const AVATAR_COLORS = ["#222222", "#3f3f3f", "#6a6a6a", "#460479", "#428bff", "#1a7f50", "#c13515", "#b45309"];
+
+const avatarColor = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+};
+
+const initialsOf = (firstName: string, lastName: string) =>
+  `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+
+type PillTone = "green" | "red" | "amber" | "violet" | "blue" | "gray" | "pink";
+
+const PILL_TONES: Record<PillTone, string> = {
+  green: "border-[#c5e8d4] bg-[#f0faf4] text-[#1a7f50]",
+  red: "border-[#fad4cc] bg-[#fff4f2] text-[#c13515]",
+  amber: "border-[#f0e060] bg-[#fffce0] text-[#7a6a00]",
+  violet: "border-[#e2d0fa] bg-[#f3e8ff] text-[#7c3aed]",
+  blue: "border-[#c5d8fa] bg-[#f0f4ff] text-[#1a4fa0]",
+  gray: "border-[#dddddd] bg-[#f7f7f7] text-[#929292]",
+  pink: "border-[#f0c8df] bg-[#fdf0f6] text-[#92174d]",
+};
+
+function Pill({ tone, className, children }: { tone: PillTone; className?: string; children: React.ReactNode }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-[3px] text-[12px] font-semibold",
+        PILL_TONES[tone],
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+const PHASE_BADGES: Record<NonNullable<Student["studentPhase"]>, { label: string; tone: PillTone }> = {
+  AWAITING: { label: "In attesa", tone: "amber" },
+  TEORIA: { label: "Teoria", tone: "blue" },
+  PRATICA: { label: "Foglio rosa", tone: "pink" },
+  PATENTATO: { label: "Patentato", tone: "green" },
+};
+
+/** CTA outline compatta delle liste (stile "Dettaglio" del proto) */
+const listButtonClass =
+  "cursor-pointer select-none whitespace-nowrap rounded-[8px] border border-[#dddddd] bg-white px-3.5 py-[7px] text-[13px] font-medium text-[#222222] transition-colors hover:border-[#cdcdcd] hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-50";
+
+/** Link-azione blu inline (proto #428bff) */
+const blueLinkClass =
+  "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
+
+const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
+
+const getTheoryCountdown = (theoryExamAt: string | null | undefined) => {
+  if (!theoryExamAt) return null;
+  const exam = new Date(theoryExamAt);
+  if (Number.isNaN(exam.getTime())) return null;
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startOfExam = new Date(exam.getFullYear(), exam.getMonth(), exam.getDate());
+  const days = Math.round((startOfExam.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+  let label: string;
+  let tone: "imminent" | "soon" | "later" | "expired";
+  if (days < 0) {
+    label = "Passato";
+    tone = "expired";
+  } else if (days === 0) {
+    label = "Oggi";
+    tone = "imminent";
+  } else if (days === 1) {
+    label = "Domani";
+    tone = "imminent";
+  } else if (days <= 7) {
+    label = `Fra ${days} gg`;
+    tone = "imminent";
+  } else if (days <= 30) {
+    label = `Fra ${days} gg`;
+    tone = "soon";
+  } else {
+    label = `Fra ${days} gg`;
+    tone = "later";
+  }
+  const dateText = exam.toLocaleDateString("it-IT", { day: "2-digit", month: "short", year: "numeric" });
+  return { label, tone, dateText };
+};
+
+/** Pallino stato pagamenti accanto all'avatar (soglie invariate) */
+const unpaidDotColor = (manualUnpaid: number) =>
+  manualUnpaid >= 5 ? "#EF4444" : manualUnpaid >= 2 ? "#F59E0B" : manualUnpaid >= 1 ? "#FACC15" : "#22C55E";
+
+function StudentAvatar({ student, size = 40 }: { student: { id: string; firstName: string; lastName: string }; size?: number }) {
+  return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
+      style={{
+        width: size,
+        height: size,
+        background: avatarColor(student.id),
+        fontSize: size >= 56 ? 20 : 12,
+      }}
+    >
+      {initialsOf(student.firstName, student.lastName)}
+    </div>
+  );
+}
+
+function EmptyList({ title = "Nessun risultato", subtitle = "Nessun allievo trovato" }: { title?: string; subtitle?: string }) {
+  return (
+    <div className="flex min-h-[280px] flex-col items-center justify-center border-t border-[#ebebeb] text-center">
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" className="mb-3">
+        <circle cx="14" cy="14" r="9" stroke="#dddddd" strokeWidth="2" />
+        <path d="M21 21l6 6" stroke="#dddddd" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <p className="mb-1 text-sm font-semibold text-foreground">{title}</p>
+      <p className="text-[13px] font-medium text-[#929292]">{subtitle}</p>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 25;
+
+function LoadMoreButton({ remaining, onClick }: { remaining: number; onClick: () => void }) {
+  return (
+    <div className="flex justify-center pb-2 pt-6">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-sm font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7]"
+      >
+        <Plus className="size-[15px]" />
+        Carica altri {Math.min(PAGE_SIZE, remaining)} · {remaining} rimanenti
+      </button>
+    </div>
+  );
+}
+
+type PhaseTab = "attesa" | "teoria" | "pratica" | "patentati";
+type PraticaSubTab = "lista" | "cancellazioni";
+
+const PHASE_SUBTITLES: Record<PhaseTab, string> = {
+  attesa: "In attesa di attivazione",
+  teoria: "In preparazione all'esame teorico",
+  pratica: "In preparazione all'esame pratico",
+  patentati: "Percorso completato",
+};
 
 export function AutoscuoleStudentsPage({
   tabs,
 }: {
   tabs?: React.ReactNode;
 } = {}) {
-  const locale = useLocale();
-  const isMobile = useIsMobile();
   const toast = useFeedbackToast();
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searching, setSearching] = React.useState(false);
-  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const [panelOpen, setPanelOpen] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string | null>(null);
   const [register, setRegister] = React.useState<StudentRegister | null>(null);
   const [registerLoading, setRegisterLoading] = React.useState(false);
@@ -281,6 +407,8 @@ export function AutoscuoleStudentsPage({
   const creditsRequestRef = React.useRef(0);
 
   const [inviteCode, setInviteCode] = React.useState<string | null>(null);
+  const [inviteCodeOpen, setInviteCodeOpen] = React.useState(false);
+  const [inviteCodeCopied, setInviteCodeCopied] = React.useState(false);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
@@ -299,11 +427,18 @@ export function AutoscuoleStudentsPage({
   const [autonomousInstructors, setAutonomousInstructors] = React.useState<Array<{ id: string; name: string }>>([]);
   const [assigningSaving, setAssigningSaving] = React.useState(false);
 
-  // Sub-tabs
-  const [activeSubTab, setActiveSubTab] = React.useState<SubTab>("students");
+  // Tabs
+  const [phaseTab, setPhaseTab] = React.useState<PhaseTab>("pratica");
+  const [praticaSubTab, setPraticaSubTab] = React.useState<PraticaSubTab>("lista");
   const [lateCancellationsCount, setLateCancellationsCount] = React.useState(0);
+  const [visibleCounts, setVisibleCounts] = React.useState<Record<PhaseTab, number>>({
+    attesa: PAGE_SIZE,
+    teoria: PAGE_SIZE,
+    pratica: PAGE_SIZE,
+    patentati: PAGE_SIZE,
+  });
 
-  // Drawer tabs
+  // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
 
   // Booking block toggle
@@ -312,8 +447,6 @@ export function AutoscuoleStudentsPage({
   // Phase change dialog
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
-  // Collapsible "Patentati" section
-  const [patentatiExpanded, setPatentatiExpanded] = React.useState(false);
 
   // Quiz seats context (banner + AWAITING grant button)
   type QuizCtx = {
@@ -392,6 +525,10 @@ export function AutoscuoleStudentsPage({
     return () => clearTimeout(timer);
   }, [search]);
 
+  React.useEffect(() => {
+    setVisibleCounts({ attesa: PAGE_SIZE, teoria: PAGE_SIZE, pratica: PAGE_SIZE, patentati: PAGE_SIZE });
+  }, [debouncedSearch]);
+
   const load = React.useCallback(async (isSearch = false) => {
     if (isSearch) setSearching(true); else setLoading(true);
     const res = await getAutoscuolaStudentsWithProgress(debouncedSearch);
@@ -454,6 +591,31 @@ export function AutoscuoleStudentsPage({
     },
     [toast],
   );
+
+  const openStudentDetail = React.useCallback(
+    (studentId: string) => {
+      setSelectedStudentId(studentId);
+      setDrawerTab("summary");
+      setPanelOpen(true);
+      void loadRegister(studentId);
+      void loadCredits(studentId);
+    },
+    [loadCredits, loadRegister],
+  );
+
+  const closeStudentDetail = React.useCallback(() => {
+    setPanelOpen(false);
+    registerRequestRef.current += 1;
+    setSelectedStudentId(null);
+    setRegister(null);
+    setRegisterLoading(false);
+    creditsRequestRef.current += 1;
+    setCredits(null);
+    setCreditsLoading(false);
+    setCreditsSaving(null);
+    setCreditsInput("1");
+    setDrawerTab("summary");
+  }, []);
 
   const handleAdjustCredits = React.useCallback(
     async (direction: "grant" | "revoke") => {
@@ -616,1496 +778,1280 @@ export function AutoscuoleStudentsPage({
     });
   }, []);
 
-  const subTabItems = React.useMemo(
-    () => [
-      { key: "students" as const, label: "Allievi" },
-      {
-        key: "late_cancellations" as const,
-        label: lateCancellationsCount > 0
-          ? `Cancellazioni tardive (${lateCancellationsCount})`
-          : "Cancellazioni tardive",
-      },
-    ],
-    [lateCancellationsCount],
+  const theoryPhaseEnabled = quizCtx?.phasesEnabled.includes("TEORIA") ?? false;
+
+  const phaseTabOptions = React.useMemo(() => {
+    const options: Array<{ value: PhaseTab; label: string; count: number }> = [];
+    if (theoryPhaseEnabled || studentsByPhase.awaiting.length > 0) {
+      options.push({ value: "attesa", label: "In attesa", count: studentsByPhase.awaiting.length });
+    }
+    if (theoryPhaseEnabled || studentsByPhase.teoria.length > 0) {
+      options.push({ value: "teoria", label: "Teoria", count: studentsByPhase.teoria.length });
+    }
+    options.push({ value: "pratica", label: "Pratica", count: studentsByPhase.pratica.length });
+    if (studentsByPhase.patentato.length > 0) {
+      options.push({ value: "patentati", label: "Patentati", count: studentsByPhase.patentato.length });
+    }
+    return options;
+  }, [studentsByPhase, theoryPhaseEnabled]);
+
+  // Se il tab attivo sparisce (es. nessun patentato dopo un refetch) torna a Pratica
+  React.useEffect(() => {
+    if (!phaseTabOptions.some((opt) => opt.value === phaseTab)) {
+      setPhaseTab("pratica");
+    }
+  }, [phaseTab, phaseTabOptions]);
+
+  const copyInviteCode = React.useCallback(() => {
+    if (!inviteCode) return;
+    navigator.clipboard.writeText(inviteCode);
+    setInviteCodeCopied(true);
+    setTimeout(() => setInviteCodeCopied(false), 2000);
+  }, [inviteCode]);
+
+  const closeSearch = React.useCallback(() => {
+    setSearchOpen(false);
+    setSearch("");
+  }, []);
+
+  /* ── Rows ────────────────────────────────────────────────────────── */
+
+  const renderNameCell = (student: Student, options?: { secondLine?: string | null; showDot?: boolean }) => (
+    <div className="flex min-w-0 items-center gap-3">
+      <div className="relative shrink-0">
+        <StudentAvatar student={student} />
+        {options?.showDot && (
+          <span
+            className="absolute -bottom-0.5 -right-0.5 size-3 rounded-full ring-2 ring-white"
+            style={{ backgroundColor: unpaidDotColor(student.manualUnpaid ?? 0) }}
+            title={`${student.manualUnpaid ?? 0} guide da pagare`}
+          />
+        )}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-foreground">
+            {student.firstName} {student.lastName}
+          </span>
+          {student.bookingBlocked && <Pill tone="red">Bloccato</Pill>}
+        </div>
+        {options?.secondLine ? (
+          <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{options.secondLine}</p>
+        ) : null}
+      </div>
+    </div>
   );
+
+  const renderAttesaRows = () => {
+    const list = studentsByPhase.awaiting;
+    if (list.length === 0) {
+      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in attesa di attivazione"} />;
+    }
+    const visible = list.slice(0, visibleCounts.attesa);
+    const noSeatsLeft = quizCtx !== null && quizCtx.available <= 0;
+    return (
+      <div>
+        {visible.map((student) => {
+          const isSaving = grantSavingId === student.id;
+          return (
+            <div
+              key={student.id}
+              className="grid grid-cols-[2fr_1.5fr_1fr_auto] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            >
+              {renderNameCell(student)}
+              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
+              <div className="text-[13px] font-medium text-[#929292]">Iscritto il {formatDate(student.createdAt)}</div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className={listButtonClass}
+                  disabled={noSeatsLeft || isSaving}
+                  title={noSeatsLeft ? "Nessuna licenza disponibile" : "Assegna una licenza quiz"}
+                  onClick={() => void handleGrantSeat(student.id)}
+                >
+                  {isSaving ? "Assegno…" : "Assegna quiz"}
+                </button>
+                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
+                  Dettaglio
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {list.length > visibleCounts.attesa && (
+          <LoadMoreButton
+            remaining={list.length - visibleCounts.attesa}
+            onClick={() => setVisibleCounts((prev) => ({ ...prev, attesa: prev.attesa + PAGE_SIZE }))}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderTeoriaRows = () => {
+    const list = studentsByPhase.teoria;
+    if (list.length === 0) {
+      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase teoria"} />;
+    }
+    const visible = list.slice(0, visibleCounts.teoria);
+    return (
+      <div>
+        {visible.map((student) => {
+          const countdown = getTheoryCountdown(student.theoryExamAt);
+          return (
+            <div
+              key={student.id}
+              className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            >
+              {renderNameCell(student, { showDot: true })}
+              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
+              <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+              <div>
+                {countdown ? (
+                  <>
+                    <p
+                      className={cn(
+                        "text-sm font-semibold",
+                        countdown.tone === "imminent" ? "text-[#c13515]" : "text-foreground",
+                      )}
+                    >
+                      {countdown.label}
+                    </p>
+                    <p className="mt-px text-[11px] font-medium text-[#929292]">Esame · {countdown.dateText}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-[#929292]">Da fissare</p>
+                    <p className="mt-px text-[11px] font-medium text-[#929292]">Esame teoria</p>
+                  </>
+                )}
+              </div>
+              <div className="flex justify-end">
+                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
+                  Dettaglio
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {list.length > visibleCounts.teoria && (
+          <LoadMoreButton
+            remaining={list.length - visibleCounts.teoria}
+            onClick={() => setVisibleCounts((prev) => ({ ...prev, teoria: prev.teoria + PAGE_SIZE }))}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderPraticaRows = () => {
+    const list = studentsByPhase.pratica;
+    if (list.length === 0) {
+      return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
+    }
+    const visible = list.slice(0, visibleCounts.pratica);
+    return (
+      <div>
+        {visible.map((student) => {
+          const licenseLabel = student.licenseCategory
+            ? `${student.licenseCategory} · ${TRANSMISSION_LABELS[student.transmission as Transmission] ?? student.transmission ?? "—"}`
+            : null;
+          const instructorLabel = student.assignedInstructorId
+            ? instructorMap.get(student.assignedInstructorId) ?? null
+            : null;
+          const secondLine = [licenseLabel, instructorLabel].filter(Boolean).join(" · ") || null;
+          return (
+            <div
+              key={student.id}
+              className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+            >
+              {renderNameCell(student, { showDot: true, secondLine })}
+              <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
+              <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {student.summary.completedLessons}/{student.summary.requiredLessons}
+                </p>
+                <p className="mt-px text-[11px] font-medium text-[#929292]">
+                  {student.summary.isCompleted ? "Obbligo completato" : "Guide"}
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
+                  Dettaglio
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        {list.length > visibleCounts.pratica && (
+          <LoadMoreButton
+            remaining={list.length - visibleCounts.pratica}
+            onClick={() => setVisibleCounts((prev) => ({ ...prev, pratica: prev.pratica + PAGE_SIZE }))}
+          />
+        )}
+      </div>
+    );
+  };
+
+  const renderPatentatiRows = () => {
+    const list = studentsByPhase.patentato;
+    if (list.length === 0) {
+      return <EmptyList subtitle="Nessun allievo patentato" />;
+    }
+    const visible = list.slice(0, visibleCounts.patentati);
+    return (
+      <div>
+        {visible.map((student) => (
+          <div
+            key={student.id}
+            className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+          >
+            {renderNameCell(student)}
+            <div className="truncate pr-3 text-[13px] font-medium text-[#6a6a6a]">{student.email || "—"}</div>
+            <div className="text-[13px] font-medium text-foreground">{student.phone || "—"}</div>
+            <div>
+              <Pill tone="green">Patentato</Pill>
+            </div>
+            <div className="flex justify-end">
+              <button type="button" className={listButtonClass} onClick={() => openStudentDetail(student.id)}>
+                Dettaglio
+              </button>
+            </div>
+          </div>
+        ))}
+        {list.length > visibleCounts.patentati && (
+          <LoadMoreButton
+            remaining={list.length - visibleCounts.patentati}
+            onClick={() => setVisibleCounts((prev) => ({ ...prev, patentati: prev.patentati + PAGE_SIZE }))}
+          />
+        )}
+      </div>
+    );
+  };
+
+  /* ── Detail panel content ─────────────────────────────────────────── */
+
+  const panelHeaderStudent = selectedStudent ?? register?.student ?? null;
+
+  const renderPanelSummary = () => {
+    if (!register) return null;
+    const phaseBadge = PHASE_BADGES[register.studentPhase ?? "PRATICA"];
+    return (
+      <>
+        {/* Anagrafica */}
+        <section className="border-b border-[#f2f2f2] pb-7">
+          <p className={sectionLabelClass}>Anagrafica</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Nome</p>
+              <p className="text-sm font-medium text-foreground">
+                {register.student.firstName} {register.student.lastName}
+              </p>
+            </div>
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Email</p>
+              <p className="break-all text-sm font-medium text-foreground">{register.student.email || "—"}</p>
+            </div>
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Telefono</p>
+              <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
+            </div>
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Case attiva</p>
+              <p className="text-sm font-medium text-foreground">
+                {register.activeCase
+                  ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
+                  : "Nessuna"}
+              </p>
+            </div>
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Percorso patente</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-foreground">
+                  {register.licenseCategory
+                    ? `${register.licenseCategory} · ${
+                        TRANSMISSION_LABELS[register.transmission as Transmission] ?? register.transmission ?? "—"
+                      }`
+                    : "—"}
+                </p>
+                <button type="button" className={blueLinkClass} onClick={() => setLicenseDialogOpen(true)}>
+                  Modifica
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Fase percorso</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill tone={phaseBadge.tone}>{phaseBadge.label}</Pill>
+                <button type="button" className={blueLinkClass} onClick={() => setPhaseDialogOpen(true)}>
+                  Cambia fase
+                </button>
+                {register.studentPhase === "AWAITING" && (
+                  <button
+                    type="button"
+                    className={blueLinkClass}
+                    disabled={
+                      grantSavingId === register.student.id ||
+                      (quizCtx !== null && quizCtx.available <= 0)
+                    }
+                    onClick={() => void handleGrantSeat(register.student.id)}
+                    title={
+                      quizCtx !== null && quizCtx.available <= 0
+                        ? "Nessuna licenza quiz disponibile"
+                        : "Assegna licenza quiz e attiva la fase teoria"
+                    }
+                  >
+                    {grantSavingId === register.student.id ? "Assegno…" : "Assegna quiz"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {groupLessonsEnabledGlobal && (
+            <div
+              className="mt-5 flex cursor-pointer items-center justify-between gap-3 rounded-[10px] bg-[#f8f8f8] p-4"
+              onClick={async () => {
+                if (groupOptInSaving) return;
+                const next = !(register.groupLessonsOptIn ?? false);
+                setGroupOptInSaving(true);
+                try {
+                  const res = await updateStudentGroupLessonOptIn({
+                    studentId: register.student.id,
+                    optIn: next,
+                  });
+                  if (res.success) {
+                    setRegister((prev) =>
+                      prev ? { ...prev, groupLessonsOptIn: next } : prev,
+                    );
+                    toast.success({ description: res.message ?? "Aggiornato." });
+                  } else {
+                    toast.error({ description: res.message ?? "Errore." });
+                  }
+                } catch {
+                  toast.error({ description: "Errore aggiornamento." });
+                } finally {
+                  setGroupOptInSaving(false);
+                }
+              }}
+            >
+              <div>
+                <p className="text-sm font-semibold text-foreground">Guide di gruppo</p>
+                <p className="mt-0.5 text-[12px] font-medium text-[#929292]">
+                  {(register.groupLessonsOptIn ?? false)
+                    ? "L'allievo può partecipare alle guide di gruppo."
+                    : "L'allievo non può partecipare alle guide di gruppo."}
+                </p>
+              </div>
+              <InlineToggle checked={register.groupLessonsOptIn ?? false} size="sm" />
+            </div>
+          )}
+        </section>
+
+        {/* Gestione prenotazioni */}
+        <section className="border-b border-[#f2f2f2] py-7">
+          <p className={sectionLabelClass}>Gestione prenotazioni</p>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="mb-1 text-[12px] font-medium text-[#929292]">Prenotazioni</p>
+                <Pill tone={register.bookingBlocked ? "red" : "green"}>
+                  {register.bookingBlocked ? "Bloccate" : "Attive"}
+                </Pill>
+              </div>
+              <button
+                type="button"
+                className={blueLinkClass}
+                disabled={blockSaving}
+                onClick={() => void handleToggleBlock(!register.bookingBlocked)}
+              >
+                {blockSaving ? "Salvo…" : register.bookingBlocked ? "Sblocca" : "Blocca"}
+              </button>
+            </div>
+            {weeklyLimitActive && (
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="mb-1 text-[12px] font-medium text-[#929292]">Limite guide settimanali</p>
+                  <Pill tone={register.weeklyBookingLimitExempt ? "blue" : "gray"}>
+                    {register.weeklyBookingLimitExempt ? "Esente" : "Soggetto al limite"}
+                  </Pill>
+                </div>
+                <button
+                  type="button"
+                  className={blueLinkClass}
+                  disabled={exemptSaving}
+                  onClick={async () => {
+                    if (!selectedStudentId || exemptSaving) return;
+                    setExemptSaving(true);
+                    const res = await toggleWeeklyBookingLimitExempt({
+                      studentId: selectedStudentId,
+                      exempt: !register.weeklyBookingLimitExempt,
+                    });
+                    setExemptSaving(false);
+                    if (!res.success) {
+                      toast.error({ description: res.message ?? "Errore aggiornamento." });
+                      return;
+                    }
+                    setRegister((prev) => prev ? { ...prev, weeklyBookingLimitExempt: !prev.weeklyBookingLimitExempt } : prev);
+                    toast.success({ description: register.weeklyBookingLimitExempt ? "Limite riattivato." : "Allievo esente dal limite." });
+                  }}
+                >
+                  {exemptSaving ? "Salvo…" : register.weeklyBookingLimitExempt ? "Riattiva limite" : "Rendi esente"}
+                </button>
+              </div>
+            )}
+            {weeklyLimitActive && examPriorityEnabledGlobal && (
+              <div>
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[12px] font-medium text-[#929292]">Priorità esame</p>
+                  <span className="text-[10px] font-medium text-[#c1c1c1]">
+                    {register.examPriorityOverride === null || register.examPriorityOverride === undefined
+                      ? "automatico"
+                      : register.examPriorityOverride
+                        ? "forzato attivo"
+                        : "forzato disattivo"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Pill tone={register.examPriorityActive ? "blue" : "gray"}>
+                    {register.examPriorityActive ? "Priorità attiva" : "Nessuna priorità"}
+                  </Pill>
+                  <div className="flex items-center gap-1">
+                    {([
+                      { label: "Auto", value: null },
+                      { label: "Forza attivo", value: true },
+                      { label: "Forza disattivo", value: false },
+                    ] as const).map((opt) => {
+                      const active = register.examPriorityOverride === opt.value;
+                      return (
+                        <button
+                          key={String(opt.value)}
+                          type="button"
+                          disabled={examPrioritySaving}
+                          className={cn(
+                            "cursor-pointer select-none whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50",
+                            active
+                              ? "bg-[#222222] text-white"
+                              : "border border-[#dddddd] text-foreground hover:bg-[#f2f2f2]",
+                          )}
+                          onClick={async () => {
+                            if (!selectedStudentId || examPrioritySaving) return;
+                            if (register.examPriorityOverride === opt.value) return;
+                            setExamPrioritySaving(true);
+                            const res = await setExamPriorityOverride({
+                              studentId: selectedStudentId,
+                              override: opt.value,
+                            });
+                            setExamPrioritySaving(false);
+                            if (!res.success) {
+                              toast.error({ description: res.message ?? "Errore aggiornamento." });
+                              return;
+                            }
+                            setRegister((prev) =>
+                              prev ? { ...prev, examPriorityOverride: opt.value } : prev,
+                            );
+                            toast.success({ description: "Priorità esame aggiornata." });
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Istruttore assegnato */}
+        {autonomousInstructors.length > 0 && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={sectionLabelClass}>Istruttore assegnato</p>
+            <Select
+              value={selectedStudent?.assignedInstructorId ?? "__none__"}
+              onValueChange={async (value) => {
+                if (!selectedStudentId || assigningSaving) return;
+                setAssigningSaving(true);
+                const instrId = value === "__none__" ? null : value;
+                const res = await assignStudentToInstructor({
+                  studentId: selectedStudentId,
+                  instructorId: instrId,
+                });
+                setAssigningSaving(false);
+                if (!res.success) {
+                  toast.error({ description: res.message ?? "Errore." });
+                  return;
+                }
+                // Update local state
+                setStudents((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedStudentId
+                      ? { ...s, assignedInstructorId: instrId }
+                      : s,
+                  ),
+                );
+                toast.success({
+                  description: instrId
+                    ? `Assegnato a ${instructorMap.get(instrId) ?? "istruttore"}.`
+                    : "Rimosso dall'istruttore.",
+                });
+              }}
+            >
+              <SelectTrigger className="w-full" disabled={assigningSaving}>
+                <SelectValue placeholder="Nessun istruttore" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
+                {autonomousInstructors.map((instr) => (
+                  <SelectItem key={instr.id} value={instr.id}>
+                    {instr.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </section>
+        )}
+
+        {/* Riepilogo guide — manual mode */}
+        {manualMode && register.extendedSummary && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={sectionLabelClass}>Riepilogo guide</p>
+            <div className="grid grid-cols-4">
+              {[
+                { label: "Prenotate", value: register.extendedSummary.booked },
+                { label: "Completate", value: register.extendedSummary.completed },
+                { label: "Annullate", value: register.extendedSummary.cancelled },
+                { label: "In programma", value: register.extendedSummary.upcoming },
+              ].map((stat, i) => (
+                <div key={stat.label} className={cn("py-3 text-center", i < 3 && "border-r border-[#f2f2f2]")}>
+                  <p className="text-[22px] font-bold leading-none text-foreground">{stat.value}</p>
+                  <p className="mt-1 text-[12px] font-medium text-[#929292]">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+            {register.extendedSummary.manualUnpaid > 0 && (
+              <div className="mt-3 rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-4 py-2.5">
+                <span className="text-sm font-medium text-[#7a6a00]">
+                  Da pagare: {register.extendedSummary.manualUnpaid}
+                </span>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Obbligo guide */}
+        <section className="border-b border-[#f2f2f2] py-7">
+          <p className={cn(sectionLabelClass, "mb-3")}>Obbligo guide</p>
+          <div className="mb-2.5 flex items-baseline gap-1">
+            <span className="text-[32px] font-bold leading-none tracking-[-1px] text-foreground">
+              {register.summary.completedLessons}
+            </span>
+            <span className="text-base font-medium text-[#929292]">/{register.summary.requiredLessons}</span>
+          </div>
+          <div className="mb-1.5 h-1 overflow-hidden rounded-[2px] bg-[#f2f2f2]">
+            <div
+              className="h-full rounded-[2px] bg-navy-900 transition-all"
+              style={{
+                width: `${Math.min(100, (register.summary.completedLessons / Math.max(1, register.summary.requiredLessons)) * 100)}%`,
+              }}
+            />
+          </div>
+          <p className="text-[12px] font-medium text-[#929292]">
+            {register.summary.isCompleted
+              ? "Obbligo completato"
+              : `${register.summary.remaining} rimanenti`}
+          </p>
+        </section>
+
+        {/* Esame teorico — solo fase teoria */}
+        {register.studentPhase === "TEORIA" && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={cn(sectionLabelClass, "mb-3")}>Esame teorico</p>
+            <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f7f7] p-4">
+              <div>
+                <p className="mb-1.5 text-[13px] font-medium text-[#929292]">Data esame</p>
+                {(() => {
+                  const countdown = getTheoryCountdown(register.theoryExamAt);
+                  if (!countdown) {
+                    return (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-2.5 py-[3px]">
+                        <span className="size-1.5 rounded-full bg-[#929292]" />
+                        <span className="text-[12px] font-semibold text-[#929292]">Da fissare</span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-foreground">{countdown.dateText}</span>
+                      <Pill tone={countdown.tone === "imminent" ? "red" : countdown.tone === "soon" ? "amber" : "gray"}>
+                        {countdown.label}
+                      </Pill>
+                    </div>
+                  );
+                })()}
+              </div>
+              <button
+                type="button"
+                className="cursor-pointer text-[13px] font-semibold text-[#428bff] hover:underline"
+                onClick={() => setPhaseDialogOpen(true)}
+              >
+                Modifica
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Tipi guida */}
+        {register.byLessonType.length > 0 && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={cn(sectionLabelClass, "mb-3")}>Tipi guida completati</p>
+            <div className="flex flex-wrap gap-2">
+              {register.byLessonType.map((item) => (
+                <span
+                  key={`${item.type}-${item.count}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3 py-1 text-xs font-medium text-foreground"
+                >
+                  {formatLessonType(item.type)}
+                  <span className="text-[#929292]">{item.count}</span>
+                </span>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Crediti guida — hide in manual mode */}
+        {(paymentMode?.auto || paymentMode?.credits) && (
+          <section className="py-7">
+            <p className={cn(sectionLabelClass, "mb-3")}>Crediti guida</p>
+            {creditsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-28 rounded-full" />
+                <Skeleton className="h-10 w-full rounded-xl" />
+              </div>
+            ) : (
+              <>
+                <div className="mb-3.5 flex items-center justify-between">
+                  <div>
+                    <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Saldo disponibile</p>
+                    <p className="text-2xl font-bold leading-none text-foreground">
+                      {credits?.availableCredits ?? 0}
+                    </p>
+                  </div>
+                  <span className="rounded-[4px] border border-[#dddddd] bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#929292]">
+                    {credits?.availableCredits ?? 0} crediti
+                  </span>
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={creditsInput}
+                  onChange={(event) => setCreditsInput(event.target.value)}
+                  className="mb-2.5"
+                  placeholder="Crediti"
+                />
+                <div className="flex flex-col gap-2">
+                  <Button
+                    onClick={() => void handleAdjustCredits("grant")}
+                    disabled={creditsSaving !== null}
+                    className="w-full"
+                  >
+                    {creditsSaving === "grant" ? "Assegno…" : "Assegna crediti"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleAdjustCredits("revoke")}
+                    disabled={creditsSaving !== null}
+                    className="w-full"
+                  >
+                    {creditsSaving === "revoke" ? "Storno…" : "Storna crediti"}
+                  </Button>
+                </div>
+                {credits?.ledger.length ? (
+                  <div className="mt-5">
+                    <p className="mb-2.5 text-[12px] font-semibold tracking-[0.3px] text-[#929292]">CRONOLOGIA</p>
+                    <div>
+                      {credits.ledger.slice(0, 8).map((entry, idx, arr) => (
+                        <div
+                          key={entry.id}
+                          className={cn(
+                            "flex items-center justify-between gap-2 py-3",
+                            idx < arr.length - 1 && "border-b border-[#f2f2f2]",
+                          )}
+                        >
+                          <div>
+                            <p className="text-[13px] font-semibold text-foreground">
+                              {formatCreditReason(entry.reason)}
+                            </p>
+                            <p className="mt-0.5 text-[12px] font-medium text-[#929292]">
+                              {formatDate(entry.createdAt, true)}
+                              {entry.actorName ? ` · ${entry.actorName}` : ""}
+                            </p>
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 text-[13px]",
+                              entry.delta >= 0 ? "font-bold text-navy-900" : "font-semibold text-[#555555]",
+                            )}
+                          >
+                            {entry.delta >= 0 ? "+" : ""}
+                            {entry.delta}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    Nessun movimento crediti disponibile.
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+        )}
+      </>
+    );
+  };
+
+  const renderPanelLessons = () => {
+    if (!register) return null;
+    const sortedLessons = [...register.lessons].sort((a, b) => {
+      const aUnpaid = a.manualPaymentStatus !== "paid" && (
+        (["completed", "checked_in"].includes(a.status) && manualMode) ||
+        a.manualPaymentStatus === "unpaid" ||
+        (["cancelled", "no_show"].includes(a.status) && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
+      );
+      const bUnpaid = b.manualPaymentStatus !== "paid" && (
+        (["completed", "checked_in"].includes(b.status) && manualMode) ||
+        b.manualPaymentStatus === "unpaid" ||
+        (["cancelled", "no_show"].includes(b.status) && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
+      );
+      if (aUnpaid && !bUnpaid) return -1;
+      if (!aUnpaid && bUnpaid) return 1;
+      return 0;
+    });
+    if (!sortedLessons.length) {
+      return (
+        <div className="pt-8 text-center">
+          <p className="text-[13px] font-medium text-[#929292]">Nessuna guida registrata.</p>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {sortedLessons.map((lesson) => {
+          const isCompleted = lesson.status === "completed";
+          const isCheckedIn = lesson.status === "checked_in";
+          const isCancelled = lesson.status === "cancelled";
+          const isNoShow = lesson.status === "no_show";
+          const creditsActiveNotRequired = paymentMode?.credits && !paymentMode?.creditsRequired;
+          const creditsActiveRequired = paymentMode?.credits && paymentMode?.creditsRequired;
+          const showPaymentToggle =
+            manualMode &&
+            !creditsActiveRequired &&
+            (creditsActiveNotRequired
+              ? (isCompleted || isCheckedIn)
+              : (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid"));
+          const isPenaltyCharged =
+            (isCancelled || isNoShow) &&
+            lesson.lateCancellationAction === "charged" &&
+            lesson.manualPaymentStatus === "unpaid";
+          const isPenaltyPaid =
+            (isCancelled || isNoShow) &&
+            lesson.lateCancellationAction === "charged" &&
+            lesson.manualPaymentStatus === "paid";
+          const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
+          const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
+          const isExam = lesson.type === "esame";
+
+          return (
+            <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
+              <div className="min-w-[56px] pt-0.5 text-[12px] font-medium text-[#929292]">
+                {startDate.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
+              </div>
+              <div className="flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    {startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    {" – "}
+                    {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                        isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                      )}
+                    >
+                      {formatLessonType(t)}
+                    </span>
+                  ))}
+                </div>
+                <p className="mb-2 text-[13px] font-medium text-[#6a6a6a]">
+                  {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
+                </p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Pill tone={isCompleted || isCheckedIn ? "green" : isCancelled || isNoShow ? "red" : "gray"}>
+                    {formatStatus(lesson.status)}
+                  </Pill>
+                  {isPenaltyCharged && !lesson.creditApplied && (
+                    <Pill tone="amber">Da pagare</Pill>
+                  )}
+                  {isPenaltyCharged && lesson.creditApplied && (
+                    <Pill tone="violet">Coperta da credito</Pill>
+                  )}
+                  {isPenaltyPaid && <Pill tone="green">Pagata</Pill>}
+                  {!isPenaltyCharged && !isPenaltyPaid && lesson.creditApplied && (
+                    <Pill tone="violet">Coperta da credito</Pill>
+                  )}
+                  {!isPenaltyCharged && !isPenaltyPaid && !lesson.creditApplied && lesson.manualPaymentStatus === "paid" && manualMode && (
+                    <Pill tone="green">Pagata</Pill>
+                  )}
+                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && !isNoShow && (
+                    <Pill tone="amber">Da pagare</Pill>
+                  )}
+                  {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && !lesson.creditApplied && (
+                    <>
+                      {lesson.manualPaymentStatus !== "paid" && (
+                        <button
+                          type="button"
+                          className={cn(blueLinkClass, "ml-1")}
+                          disabled={paymentSaving === lesson.id}
+                          onClick={() => void handleSetManualPayment(lesson.id, "paid")}
+                        >
+                          {paymentSaving === lesson.id ? "Salvo…" : "Segna pagata"}
+                        </button>
+                      )}
+                      {lesson.manualPaymentStatus === "paid" && (
+                        <button
+                          type="button"
+                          className={cn(blueLinkClass, "ml-1")}
+                          disabled={paymentSaving === lesson.id}
+                          onClick={() => void handleSetManualPayment(lesson.id, "unpaid")}
+                        >
+                          {paymentSaving === lesson.id ? "Salvo…" : "Segna da pagare"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderPanelNotes = () => {
+    if (!register) return null;
+    if (!register.lessons.length) {
+      return (
+        <div className="pt-8 text-center">
+          <p className="text-[13px] font-medium text-[#929292]">Nessuna guida registrata.</p>
+        </div>
+      );
+    }
+    return (
+      <div>
+        {register.lessons.map((lesson) => {
+          const hasNote = !!lesson.notes?.trim();
+          const isExam = lesson.type === "esame";
+          const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
+          const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
+          return (
+            <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
+              <div className="min-w-[56px] pt-0.5 text-[12px] font-medium text-[#929292]">
+                {startDate.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
+              </div>
+              <div className="flex-1">
+                <div className="mb-1 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    {startDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                    {" – "}
+                    {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                        isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                      )}
+                    >
+                      {formatLessonType(t)}
+                    </span>
+                  ))}
+                  {lesson.rating != null && (
+                    <span className="ml-auto flex items-center gap-0.5 text-[10px]">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
+                      ))}
+                    </span>
+                  )}
+                </div>
+                <p className="mb-1.5 text-[13px] font-medium text-[#6a6a6a]">
+                  {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
+                </p>
+                <p
+                  className={cn(
+                    "text-[13px] leading-relaxed",
+                    hasNote ? "font-medium text-foreground" : "font-medium italic text-[#929292]",
+                  )}
+                >
+                  {lesson.notes?.trim() || "Nessuna nota"}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <PageWrapper
       title="Allievi"
       subTitle="Allievi sincronizzati dalla Directory utenti."
+      hideHero
     >
-      <div className="relative w-full space-y-5">
+      <div className="relative w-full space-y-5" data-testid="autoscuole-students-page">
         {tabs}
 
-        <RegloTabs
-          items={subTabItems}
-          activeKey={activeSubTab}
-          onChange={setActiveSubTab}
-          ariaLabel="Sezioni allievi"
-        />
-
-        {activeSubTab === "late_cancellations" ? (
-          <AutoscuoleLateCancellationsPanel
-            onCountChange={setLateCancellationsCount}
+        <div className="mx-auto max-w-7xl space-y-6">
+          <PageHeader
+            title="Allievi"
+            subtitle={[
+              `${students.length} allievi`,
+              phaseTab === "pratica" && praticaSubTab === "cancellazioni"
+                ? "Cancellazioni tardive da gestire"
+                : PHASE_SUBTITLES[phaseTab],
+            ]}
           />
-        ) : (
-          <>
-            {inviteCode ? (
-              <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
-                <span className="text-sm text-muted-foreground">Codice autoscuola:</span>
-                <span className="text-base font-bold tracking-wider text-yellow-800">{inviteCode}</span>
+
+          {loading ? (
+            <TableSkeleton rows={6} cols={5} />
+          ) : (
+            <>
+              {/* ── Toolbar ── */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <SegmentedPill
+                  value={phaseTab}
+                  onChange={(next) => setPhaseTab(next)}
+                  options={phaseTabOptions}
+                />
+                {phaseTab === "pratica" && (
+                  <>
+                    <div className="mx-1 h-5 w-px shrink-0 bg-[#dddddd]" />
+                    {([
+                      { key: "lista" as const, label: "Lista", badge: null },
+                      {
+                        key: "cancellazioni" as const,
+                        label: "Cancellazioni tardive",
+                        badge: lateCancellationsCount > 0 ? lateCancellationsCount : null,
+                      },
+                    ]).map((sub) => {
+                      const active = praticaSubTab === sub.key;
+                      return (
+                        <button
+                          key={sub.key}
+                          type="button"
+                          onClick={() => setPraticaSubTab(sub.key)}
+                          className={cn(
+                            "flex cursor-pointer select-none items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-[13px] transition-colors",
+                            active
+                              ? "bg-[#222222] font-semibold text-white"
+                              : "border border-[#dddddd] font-medium text-foreground hover:bg-[#f7f7f7]",
+                          )}
+                        >
+                          {sub.label}
+                          {sub.badge != null && (
+                            <span
+                              className={cn(
+                                "rounded-full px-1.5 text-[11px] font-semibold",
+                                active ? "bg-white/20 text-white" : "bg-[#f2f2f2] text-[#6a6a6a]",
+                              )}
+                            >
+                              {sub.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+
+                <div className="flex-1" />
+
+                {inviteCode && (
+                  <button
+                    type="button"
+                    title="Codice autoscuola"
+                    onClick={() => setInviteCodeOpen(true)}
+                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
+                  >
+                    <KeyRound className="size-[21px]" strokeWidth={1.8} />
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
-                  onClick={() => {
-                    navigator.clipboard.writeText(inviteCode);
-                  }}
+                  title="Invita allievo"
+                  onClick={() => setInviteOpen(true)}
+                  className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
                 >
-                  Copia
+                  <UserRoundPlus className="size-[21px]" strokeWidth={1.8} />
                 </button>
-              </div>
-            ) : null}
-
-            {loading ? (
-              <TableSkeleton rows={6} cols={7} />
-            ) : (
-              <>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setDebouncedSearch(search);
-                    }}
-                    className="w-full sm:max-w-sm"
-                  >
-                    <InputButtonProvider showInput setShowInput={() => {}} className="w-full">
-                      <InputButton className="w-full">
-                        <InputButtonAction className="hidden" />
-                        <InputButtonSubmit
-                          onClick={() => {}}
-                          type="submit"
-                          className="bg-foreground text-background hover:bg-foreground/90"
-                        />
-                      </InputButton>
-                      <InputButtonInput
-                        type="text"
+                {searchOpen ? (
+                  <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex min-w-[220px] items-center gap-2 rounded-full border-[1.5px] border-[#222222] bg-white px-3.5 py-[8px]">
+                      <Search className="size-[15px] text-[#929292]" strokeWidth={2} />
+                      <input
+                        autoFocus
                         placeholder="Cerca allievi"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        className="pr-14 text-sm"
+                        className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-[#929292]"
                       />
-                    </InputButtonProvider>
-                  </form>
-
-                  <ManagementBar
-                    totalRows={students.length}
-                    actions={[
-                      {
-                        id: "invite-student",
-                        label: "Invita allievo",
-                        icon: MailPlus,
-                        variant: "default",
-                        onClick: () => setInviteOpen(true),
-                      },
-                      {
-                        id: "directory",
-                        label: "Directory utenti",
-                        icon: ExternalLink,
-                        variant: "outline" as const,
-                        onClick: () => {
-                          window.location.href = `/${locale}/admin/users`;
-                        },
-                      },
-                    ]}
-                  />
-                </div>
-
-                <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-                  <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Invita allievo</DialogTitle>
-                      <DialogDescription>
-                        Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleInvite} className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="invite-email">Email</Label>
-                        <Input
-                          id="invite-email"
-                          type="email"
-                          placeholder="allievo@esempio.com"
-                          value={inviteEmail}
-                          onChange={(event) => setInviteEmail(event.target.value)}
-                          required
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Piattaforma</Label>
-                        <Select
-                          value={invitePlatform}
-                          onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Seleziona piattaforma" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Non specificata</SelectItem>
-                            <SelectItem value="ios">iOS (iPhone)</SelectItem>
-                            <SelectItem value="android">Android</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-muted-foreground">
-                          Usato per mostrare il link corretto all&apos;app store nell&apos;email.
-                        </p>
-                      </div>
-                      <DialogFooter>
-                        <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
-                          {inviteSending ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <UserPlus className="mr-2 h-4 w-4" />
-                          )}
-                          {inviteSending ? "Invio in corso…" : "Invia invito"}
-                        </Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
-
-                {searching ? (
-                  <div className="relative">
-                    <LottieLoadingOverlay visible />
-                    <div className="pointer-events-none opacity-40">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Allievo</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Telefono</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Guide</TableHead>
-                            <TableHead className="text-right">Azioni</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          <TableRow>
-                            <TableCell colSpan={6} className="h-48" />
-                          </TableRow>
-                        </TableBody>
-                      </Table>
                     </div>
-                  </div>
-                ) : students.length === 0 ? (
-                  <div className="rounded-2xl border border-border/50 bg-white p-10 text-center text-sm text-muted-foreground">
-                    Nessun allievo trovato.
+                    <button
+                      type="button"
+                      onClick={closeSearch}
+                      className="cursor-pointer select-none text-sm font-semibold text-foreground"
+                    >
+                      Annulla
+                    </button>
                   </div>
                 ) : (
-                <div className="space-y-5">
-                  {/* ── Banner licenze quiz (solo se TEORIA è attiva) ── */}
-                  {quizCtx && quizCtx.phasesEnabled.includes("TEORIA") && (
-                    <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white px-5 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
-                          <Ticket className="h-4 w-4 text-emerald-700" aria-hidden />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            Licenze Quiz Teoria
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            {quizCtx.autoAssignQuizOnSignup
-                              ? "Assegnazione automatica alla registrazione attiva"
-                              : "Assegnazione manuale: gli allievi nuovi entrano in attesa"}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                            Posti usati
-                          </p>
-                          <p
-                            className={cn(
-                              "text-base font-semibold tabular-nums",
-                              quizCtx.available <= 0
-                                ? "text-red-600"
-                                : "text-foreground",
-                            )}
-                          >
-                            {quizCtx.used}{" "}
-                            <span className="text-muted-foreground">/ {quizCtx.quizSeats}</span>
-                          </p>
-                        </div>
-                        {quizCtx.available <= 0 && (
-                          <Badge variant="outline" className="border-red-300 bg-red-50 text-red-700">
-                            Posti esauriti
-                          </Badge>
-                        )}
-                      </div>
-                    </section>
-                  )}
-
-                  {/* ── Sezione: In attesa di attivazione (AWAITING) ── */}
-                  {studentsByPhase.awaiting.length > 0 && (
-                    <section className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
-                      <header className="flex items-center justify-between gap-3 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-white px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
-                            <Hourglass className="h-4 w-4 text-amber-700" aria-hidden />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-foreground">
-                              In attesa di attivazione
-                            </h3>
-                            <p className="text-[11px] text-muted-foreground">
-                              Si sono registrati ma il percorso non è ancora stato attivato. Assegna una licenza per farli partire dalla teoria.
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="secondary" className="bg-amber-100 text-amber-800 hover:bg-amber-100">
-                          {studentsByPhase.awaiting.length}
-                        </Badge>
-                      </header>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Allievo</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Registrato</TableHead>
-                            <TableHead className="text-right">Azioni</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {studentsByPhase.awaiting.map((student) => {
-                            const noSeatsLeft =
-                              quizCtx !== null && quizCtx.available <= 0;
-                            const isSaving = grantSavingId === student.id;
-                            return (
-                              <TableRow key={student.id}>
-                                <TableCell className="font-medium">
-                                  <div className="flex items-center gap-2">
-                                    <span>{student.firstName} {student.lastName}</span>
-                                  </div>
-                                </TableCell>
-                                <TableCell>{student.email || "—"}</TableCell>
-                                <TableCell className="text-xs text-muted-foreground">
-                                  {formatDate(student.createdAt)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <div className="flex items-center justify-end gap-2">
-                                    <Button
-                                      size="sm"
-                                      className="cursor-pointer gap-1.5"
-                                      disabled={noSeatsLeft || isSaving}
-                                      title={noSeatsLeft ? "Nessuna licenza disponibile" : "Assegna una licenza quiz"}
-                                      onClick={() => void handleGrantSeat(student.id)}
-                                    >
-                                      {isSaving ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      ) : (
-                                        <KeyRound className="h-3.5 w-3.5" />
-                                      )}
-                                      {isSaving ? "Assegno…" : "Assegna quiz"}
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="cursor-pointer"
-                                      onClick={() => {
-                                        setSelectedStudentId(student.id);
-                                        setDrawerOpen(true);
-                                        void loadRegister(student.id);
-                                        void loadCredits(student.id);
-                                      }}
-                                    >
-                                      Dettaglio
-                                    </Button>
-                                  </div>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </section>
-                  )}
-
-                  {/* ── Sezione: In Teoria ── */}
-                  {studentsByPhase.teoria.length > 0 && (
-                    <section className="overflow-hidden rounded-2xl border border-pink-200 bg-white shadow-sm">
-                      <header className="flex items-center justify-between gap-3 border-b border-pink-100 bg-gradient-to-r from-pink-50 to-white px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-100">
-                            <GraduationCap className="h-4 w-4 text-pink-600" aria-hidden />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-foreground">In Teoria</h3>
-                            <p className="text-[11px] text-muted-foreground">
-                              Studenti che si stanno preparando per l&apos;esame teorico.
-                            </p>
-                          </div>
-                        </div>
-                        <Badge variant="secondary" className="bg-pink-100 text-pink-700 hover:bg-pink-100">
-                          {studentsByPhase.teoria.length}
-                        </Badge>
-                      </header>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Allievo</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Esame teoria</TableHead>
-                            <TableHead className="text-right">Azioni</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {studentsByPhase.teoria.map((student) => {
-                            let countdownLabel: string | null = null;
-                            let countdownTone: "imminent" | "soon" | "later" | "expired" = "later";
-                            if (student.theoryExamAt) {
-                              const exam = new Date(student.theoryExamAt);
-                              const now = new Date();
-                              const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                              const startOfExam = new Date(exam.getFullYear(), exam.getMonth(), exam.getDate());
-                              const days = Math.round((startOfExam.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
-                              if (days < 0) {
-                                countdownLabel = "Passato";
-                                countdownTone = "expired";
-                              } else if (days === 0) {
-                                countdownLabel = "Oggi";
-                                countdownTone = "imminent";
-                              } else if (days === 1) {
-                                countdownLabel = "Domani";
-                                countdownTone = "imminent";
-                              } else if (days <= 7) {
-                                countdownLabel = `Fra ${days} gg`;
-                                countdownTone = "imminent";
-                              } else if (days <= 30) {
-                                countdownLabel = `Fra ${days} gg`;
-                                countdownTone = "soon";
-                              } else {
-                                countdownLabel = `Fra ${days} gg`;
-                                countdownTone = "later";
-                              }
-                            }
-                            const examDateText = student.theoryExamAt
-                              ? new Date(student.theoryExamAt).toLocaleDateString("it-IT", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : null;
-                            return (
-                              <TableRow key={student.id}>
-                                <TableCell className="font-medium">
-                                  <div className="flex items-center gap-2">
-                                    <div
-                                      className="size-2.5 shrink-0 rounded-full"
-                                      style={{
-                                        backgroundColor:
-                                          (student.manualUnpaid ?? 0) >= 5
-                                            ? '#EF4444'
-                                            : (student.manualUnpaid ?? 0) >= 2
-                                              ? '#F59E0B'
-                                              : (student.manualUnpaid ?? 0) >= 1
-                                                ? '#FACC15'
-                                                : '#22C55E',
-                                      }}
-                                      title={`${student.manualUnpaid ?? 0} guide da pagare`}
-                                    />
-                                    <span>{student.firstName} {student.lastName}</span>
-                                    {student.bookingBlocked && (
-                                      <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
-                                    )}
-                                  </div>
-                                </TableCell>
-                                <TableCell>{student.email || "—"}</TableCell>
-                                <TableCell>
-                                  <Badge variant="secondary">{student.status ?? "active"}</Badge>
-                                </TableCell>
-                                <TableCell>
-                                  {examDateText ? (
-                                    <div className="flex flex-col gap-1">
-                                      <Badge
-                                        className={`w-fit text-[11px] ${
-                                          countdownTone === "imminent"
-                                            ? "bg-pink-500 text-white hover:bg-pink-500"
-                                            : countdownTone === "soon"
-                                              ? "bg-pink-100 text-pink-700 hover:bg-pink-100"
-                                              : countdownTone === "expired"
-                                                ? "bg-gray-200 text-gray-600 hover:bg-gray-200"
-                                                : "bg-gray-100 text-gray-700 hover:bg-gray-100"
-                                        }`}
-                                      >
-                                        {countdownLabel}
-                                      </Badge>
-                                      <span className="text-[11px] text-muted-foreground">{examDateText}</span>
-                                    </div>
-                                  ) : (
-                                    <span className="text-xs text-muted-foreground">Da fissare</span>
-                                  )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="cursor-pointer"
-                                    onClick={() => {
-                                      setSelectedStudentId(student.id);
-                                      setDrawerOpen(true);
-                                      void loadRegister(student.id);
-                                      void loadCredits(student.id);
-                                    }}
-                                  >
-                                    Dettaglio
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </section>
-                  )}
-
-                  {/* ── Sezione: Foglio rosa (Pratica) ── */}
-                  <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
-                    <header className="flex items-center justify-between gap-3 border-b border-border/50 bg-gray-50/60 px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100">
-                          <Car className="h-4 w-4 text-foreground" aria-hidden />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-foreground">Foglio rosa</h3>
-                          <p className="text-[11px] text-muted-foreground">
-                            Studenti che stanno svolgendo le lezioni di guida.
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="secondary">{studentsByPhase.pratica.length}</Badge>
-                    </header>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Allievo</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Telefono</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Guide</TableHead>
-                          <TableHead className="text-right">Azioni</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {studentsByPhase.pratica.length === 0 ? (
-                          <TableRow>
-                            <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                              Nessun allievo in fase pratica.
-                            </TableCell>
-                          </TableRow>
-                        ) : (
-                          studentsByPhase.pratica.map((student) => (
-                            <TableRow key={student.id}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className="size-2.5 shrink-0 rounded-full"
-                                    style={{
-                                      backgroundColor:
-                                        (student.manualUnpaid ?? 0) >= 5
-                                          ? '#EF4444'
-                                          : (student.manualUnpaid ?? 0) >= 2
-                                            ? '#F59E0B'
-                                            : (student.manualUnpaid ?? 0) >= 1
-                                              ? '#FACC15'
-                                              : '#22C55E',
-                                    }}
-                                    title={`${student.manualUnpaid ?? 0} guide da pagare`}
-                                  />
-                                  <span>{student.firstName} {student.lastName}</span>
-                                  {student.bookingBlocked && (
-                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">Bloccato</Badge>
-                                  )}
-                                  {student.assignedInstructorId && instructorMap.get(student.assignedInstructorId) && (
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                      {instructorMap.get(student.assignedInstructorId)}
-                                    </Badge>
-                                  )}
-                                  {student.licenseCategory && (
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                      {student.licenseCategory} ·{" "}
-                                      {TRANSMISSION_LABELS[
-                                        student.transmission as Transmission
-                                      ] ?? student.transmission}
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>{student.email || "—"}</TableCell>
-                              <TableCell>{student.phone || "—"}</TableCell>
-                              <TableCell>
-                                <Badge variant="secondary">{student.status ?? "active"}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <div className="flex flex-col gap-1">
-                                  <Badge variant={student.summary.isCompleted ? "success" : "outline"}>
-                                    {student.summary.completedLessons}/{student.summary.requiredLessons}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    {student.summary.isCompleted ? "Completato" : "In corso"}
-                                  </span>
-                                </div>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="cursor-pointer"
-                                  onClick={() => {
-                                    setSelectedStudentId(student.id);
-                                    setDrawerOpen(true);
-                                    void loadRegister(student.id);
-                                    void loadCredits(student.id);
-                                  }}
-                                >
-                                  Dettaglio
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))
-                        )}
-                      </TableBody>
-                    </Table>
-                  </section>
-
-                  {/* ── Sezione: Patentati (collassabile) ── */}
-                  {studentsByPhase.patentato.length > 0 && (
-                    <section className="overflow-hidden rounded-2xl border border-border/50 bg-white shadow-sm">
-                      <button
-                        type="button"
-                        onClick={() => setPatentatiExpanded((v) => !v)}
-                        className="flex w-full cursor-pointer items-center justify-between gap-3 border-b border-transparent bg-white px-4 py-3 text-left transition-colors hover:bg-gray-50"
-                        aria-expanded={patentatiExpanded}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50">
-                            <Award className="h-4 w-4 text-emerald-600" aria-hidden />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-semibold text-foreground">Patentati</h3>
-                            <p className="text-[11px] text-muted-foreground">
-                              Allievi che hanno concluso il percorso.
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
-                            {studentsByPhase.patentato.length}
-                          </Badge>
-                          {patentatiExpanded ? (
-                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
-                      </button>
-                      {patentatiExpanded && (
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Allievo</TableHead>
-                              <TableHead>Email</TableHead>
-                              <TableHead>Telefono</TableHead>
-                              <TableHead className="text-right">Azioni</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {studentsByPhase.patentato.map((student) => (
-                              <TableRow key={student.id} className="text-muted-foreground">
-                                <TableCell className="font-medium text-foreground">
-                                  {student.firstName} {student.lastName}
-                                </TableCell>
-                                <TableCell>{student.email || "—"}</TableCell>
-                                <TableCell>{student.phone || "—"}</TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="cursor-pointer"
-                                    onClick={() => {
-                                      setSelectedStudentId(student.id);
-                                      setDrawerOpen(true);
-                                      void loadRegister(student.id);
-                                      void loadCredits(student.id);
-                                    }}
-                                  >
-                                    Dettaglio
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      )}
-                    </section>
-                  )}
-                </div>
+                  <button
+                    type="button"
+                    title="Cerca allievi"
+                    onClick={() => setSearchOpen(true)}
+                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
+                  >
+                    <Search className="size-[19px]" strokeWidth={2} />
+                  </button>
                 )}
-              </>
-            )}
-          </>
-        )}
+              </div>
+
+              {/* ── Banner licenze quiz ── */}
+              {quizCtx && theoryPhaseEnabled && (phaseTab === "attesa" || phaseTab === "teoria") && (
+                <section className="flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-[#dddddd] bg-white px-5 py-3.5">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-9 items-center justify-center rounded-full bg-[#f7f7f7]">
+                      <Ticket className="size-4 text-[#6a6a6a]" aria-hidden />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Licenze Quiz Teoria</p>
+                      <p className="text-[12px] font-medium text-[#929292]">
+                        {quizCtx.autoAssignQuizOnSignup
+                          ? "Assegnazione automatica alla registrazione attiva"
+                          : "Assegnazione manuale: gli allievi nuovi entrano in attesa"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-[11px] font-medium text-[#929292]">Posti usati</p>
+                      <p
+                        className={cn(
+                          "text-base font-bold tabular-nums",
+                          quizCtx.available <= 0 ? "text-[#c13515]" : "text-foreground",
+                        )}
+                      >
+                        {quizCtx.used} <span className="font-medium text-[#929292]">/ {quizCtx.quizSeats}</span>
+                      </p>
+                    </div>
+                    {quizCtx.available <= 0 && <Pill tone="red">Posti esauriti</Pill>}
+                  </div>
+                </section>
+              )}
+
+              {/* ── Content ── */}
+              <div className="relative">
+                {searching && <LottieLoadingOverlay visible />}
+                <div className={cn(searching && "pointer-events-none opacity-40")}>
+                  {phaseTab === "attesa" && renderAttesaRows()}
+                  {phaseTab === "teoria" && renderTeoriaRows()}
+                  {phaseTab === "pratica" && praticaSubTab === "lista" && renderPraticaRows()}
+                  {phaseTab === "pratica" && praticaSubTab === "cancellazioni" && (
+                    <AutoscuoleLateCancellationsPanel onCountChange={setLateCancellationsCount} />
+                  )}
+                  {phaseTab === "patentati" && renderPatentatiRows()}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
-      <Drawer
-        open={drawerOpen}
-        direction={isMobile ? "bottom" : "right"}
-        onOpenChange={(nextOpen) => {
-          setDrawerOpen(nextOpen);
-          if (!nextOpen) {
-            registerRequestRef.current += 1;
-            setSelectedStudentId(null);
-            setRegister(null);
-            setRegisterLoading(false);
-            creditsRequestRef.current += 1;
-            setCredits(null);
-            setCreditsLoading(false);
-            setCreditsSaving(null);
-            setCreditsInput("1");
-            setDrawerTab("summary");
-          }
+      {/* ── Dialog: invita allievo ── */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Invita allievo</DialogTitle>
+            <DialogDescription>
+              Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleInvite} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="invite-email">Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="allievo@esempio.com"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Piattaforma</Label>
+              <Select
+                value={invitePlatform}
+                onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona piattaforma" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Non specificata</SelectItem>
+                  <SelectItem value="ios">iOS (iPhone)</SelectItem>
+                  <SelectItem value="android">Android</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Usato per mostrare il link corretto all&apos;app store nell&apos;email.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
+                {inviteSending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <UserPlus className="mr-2 h-4 w-4" />
+                )}
+                {inviteSending ? "Invio in corso…" : "Invia invito"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Dialog: codice autoscuola ── */}
+      <Dialog open={inviteCodeOpen} onOpenChange={setInviteCodeOpen}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>Codice autoscuola</DialogTitle>
+            <DialogDescription>
+              Condividi questo codice per dare accesso a Reglo. Al momento della registrazione,
+              chi utilizza questo codice verrà automaticamente associato alla tua autoscuola.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-between rounded-[12px] border border-[#dddddd] bg-[#f7f7f7] px-4 py-3.5">
+            <div className="flex items-center gap-2.5">
+              <KeyRound className="size-4 text-[#929292]" strokeWidth={1.9} />
+              <span className="text-[12px] font-medium text-[#929292]">Il tuo codice</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-bold tracking-[2px] text-foreground">{inviteCode}</span>
+              <button
+                type="button"
+                onClick={copyInviteCode}
+                className="cursor-pointer select-none rounded-[8px] border border-[#cfcfdc] bg-navy-50 px-3 py-1.5 text-[13px] font-semibold text-navy-900 transition-colors hover:bg-[#e2e2e8]"
+              >
+                {inviteCodeCopied ? "Copiato!" : "Copia"}
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Detail panel ── */}
+      <DetailPanel
+        open={panelOpen}
+        onOpenChange={(next) => {
+          if (!next) closeStudentDetail();
         }}
+        testId="student-detail-panel"
       >
-        <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,960px)] data-[vaul-drawer-direction=right]:sm:max-w-4xl h-full">
-          {/* Header with student info */}
-          <DrawerHeader className="border-b border-border/40 bg-white px-5 py-4">
-            <div className="flex items-center gap-3.5">
-              {selectedStudent && (
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-pink-50 ring-1 ring-pink-100">
-                  <span className="text-base font-bold text-pink-500">
-                    {selectedStudent.firstName.charAt(0)}{selectedStudent.lastName.charAt(0)}
-                  </span>
+        <div className="border-b border-[#dddddd] px-6 pt-6">
+          <div className="relative mb-5 flex flex-col items-center pt-2 text-center">
+            <button
+              type="button"
+              aria-label="Chiudi"
+              onClick={closeStudentDetail}
+              className="absolute right-0 top-0 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f2f2f2]"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M3 3l8 8M11 3l-8 8" stroke="#6a6a6a" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+            {panelHeaderStudent && <StudentAvatar student={panelHeaderStudent} size={56} />}
+            <div className="mt-3">
+              <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
+                {panelHeaderStudent
+                  ? `${panelHeaderStudent.firstName} ${panelHeaderStudent.lastName}`
+                  : "Dettaglio allievo"}
+              </p>
+              <p className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                {register?.student.email || register?.student.phone || selectedStudent?.email || ""}
+              </p>
+              {register?.bookingBlocked && (
+                <div className="mt-2 flex justify-center">
+                  <Pill tone="red">Prenotazioni bloccate</Pill>
                 </div>
               )}
-              <div className="min-w-0 flex-1">
-                <DrawerTitle className="text-base font-semibold text-foreground">
-                  {selectedStudent
-                    ? `${selectedStudent.firstName} ${selectedStudent.lastName}`
-                    : "Dettaglio allievo"}
-                </DrawerTitle>
-                <DrawerDescription className="text-xs text-muted-foreground">
-                  {register?.student.email || register?.student.phone || "Registro guide allievo"}
-                </DrawerDescription>
-              </div>
-              {register?.studentPhase && (
-                <Badge
-                  variant={
-                    register.studentPhase === "AWAITING"
-                      ? "outline"
-                      : register.studentPhase === "TEORIA"
-                        ? "outline"
-                        : register.studentPhase === "PATENTATO"
-                          ? "secondary"
-                          : "default"
-                  }
-                  className={cn(
-                    "shrink-0 text-[10px]",
-                    register.studentPhase === "AWAITING" &&
-                      "border-amber-300 bg-amber-50 text-amber-700",
-                  )}
-                >
-                  {register.studentPhase === "AWAITING"
-                    ? "In attesa"
-                    : register.studentPhase === "TEORIA"
-                      ? "Teoria"
-                      : register.studentPhase === "PATENTATO"
-                        ? "Patentato"
-                        : "Foglio rosa"}
-                </Badge>
-              )}
-              {register?.bookingBlocked && (
-                <Badge variant="destructive" className="shrink-0 text-[10px]">Bloccato</Badge>
-              )}
             </div>
-
-            {/* Drawer tabs */}
-            {register && (
-              <div className="mt-3 flex gap-1 rounded-lg bg-gray-100/80 p-1">
-                {([
-                  { key: "summary" as const, label: "Riepilogo", icon: BookOpen },
-                  { key: "lessons" as const, label: "Guide", icon: FileText },
-                  { key: "notes" as const, label: `Note${register.lessons.filter(l => l.notes?.trim()).length ? ` (${register.lessons.filter(l => l.notes?.trim()).length})` : ""}`, icon: NotebookPen },
-                ]).map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    onClick={() => setDrawerTab(tab.key)}
-                    className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                      drawerTab === tab.key
-                        ? "bg-white text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <tab.icon className="h-3.5 w-3.5" />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </DrawerHeader>
-
-          <div className="flex-1 space-y-4 overflow-y-auto p-4 md:p-6">
-            {registerLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-24 w-full rounded-2xl" />
-                <Skeleton className="h-24 w-full rounded-2xl" />
-                <Skeleton className="h-56 w-full rounded-2xl" />
-              </div>
-            ) : register ? (
-              <>
-                {/* ── TAB: Riepilogo ── */}
-                {drawerTab === "summary" && (
-                  <>
-                    {/* Anagrafica */}
-                    <section className="rounded-2xl border border-border/50 bg-white p-4">
-                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                        Anagrafica
-                      </p>
-                      <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Nome</p>
-                          <p className="text-sm font-medium text-foreground">
-                            {register.student.firstName} {register.student.lastName}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Email</p>
-                          <p className="text-sm font-medium text-foreground">{register.student.email || "—"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Telefono</p>
-                          <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Case attiva</p>
-                          <p className="text-sm font-medium text-foreground">
-                            {register.activeCase
-                              ? `${register.activeCase.status}${register.activeCase.category ? ` · ${register.activeCase.category}` : ""}`
-                              : "Nessuna"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Percorso patente</p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-medium text-foreground">
-                              {register.licenseCategory
-                                ? `${register.licenseCategory} · ${
-                                    TRANSMISSION_LABELS[
-                                      register.transmission as Transmission
-                                    ] ?? register.transmission ?? "—"
-                                  }`
-                                : "—"}
-                            </p>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 cursor-pointer px-2 text-[11px]"
-                              onClick={() => setLicenseDialogOpen(true)}
-                            >
-                              Modifica
-                            </Button>
-                          </div>
-                        </div>
-                        {groupLessonsEnabledGlobal && (
-                          <div className="sm:col-span-2">
-                            <div
-                              className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-white/70 px-3.5 py-2.5 cursor-pointer"
-                              onClick={async () => {
-                                if (groupOptInSaving) return;
-                                const next = !(register.groupLessonsOptIn ?? false);
-                                setGroupOptInSaving(true);
-                                try {
-                                  const res = await updateStudentGroupLessonOptIn({
-                                    studentId: register.student.id,
-                                    optIn: next,
-                                  });
-                                  if (res.success) {
-                                    setRegister((prev) =>
-                                      prev ? { ...prev, groupLessonsOptIn: next } : prev,
-                                    );
-                                    toast.success({ description: res.message ?? "Aggiornato." });
-                                  } else {
-                                    toast.error({ description: res.message ?? "Errore." });
-                                  }
-                                } catch {
-                                  toast.error({ description: "Errore aggiornamento." });
-                                } finally {
-                                  setGroupOptInSaving(false);
-                                }
-                              }}
-                            >
-                              <div className="flex flex-col gap-0.5">
-                                <span className="text-sm font-medium text-foreground">Guide di gruppo</span>
-                                <span className="text-[11px] text-muted-foreground">
-                                  {(register.groupLessonsOptIn ?? false)
-                                    ? "L'allievo può partecipare alle guide di gruppo."
-                                    : "L'allievo non può partecipare alle guide di gruppo."}
-                                </span>
-                              </div>
-                              <InlineToggle checked={register.groupLessonsOptIn ?? false} size="sm" />
-                            </div>
-                          </div>
-                        )}
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Fase percorso</p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge
-                              variant={
-                                register.studentPhase === "AWAITING"
-                                  ? "outline"
-                                  : register.studentPhase === "TEORIA"
-                                    ? "outline"
-                                    : register.studentPhase === "PATENTATO"
-                                      ? "secondary"
-                                      : "default"
-                              }
-                              className={cn(
-                                "text-[11px]",
-                                register.studentPhase === "AWAITING" &&
-                                  "border-amber-300 bg-amber-50 text-amber-700",
-                              )}
-                            >
-                              {register.studentPhase === "AWAITING"
-                                ? "In attesa"
-                                : register.studentPhase === "TEORIA"
-                                  ? "Teoria"
-                                  : register.studentPhase === "PATENTATO"
-                                    ? "Patentato"
-                                    : "Foglio rosa"}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 cursor-pointer px-2 text-[11px]"
-                              onClick={() => setPhaseDialogOpen(true)}
-                            >
-                              Cambia fase
-                            </Button>
-                            {register.studentPhase === "AWAITING" && (
-                              <Button
-                                size="sm"
-                                className="h-6 cursor-pointer gap-1 px-2 text-[11px]"
-                                disabled={
-                                  grantSavingId === register.student.id ||
-                                  (quizCtx !== null && quizCtx.available <= 0)
-                                }
-                                onClick={() => void handleGrantSeat(register.student.id)}
-                                title={
-                                  quizCtx !== null && quizCtx.available <= 0
-                                    ? "Nessuna licenza quiz disponibile"
-                                    : "Assegna licenza quiz e attiva la fase teoria"
-                                }
-                              >
-                                {grantSavingId === register.student.id ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <KeyRound className="h-3 w-3" />
-                                )}
-                                {grantSavingId === register.student.id
-                                  ? "Assegno…"
-                                  : "Assegna quiz"}
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
-                          <div className="flex items-center gap-2">
-                            <Badge variant={register.bookingBlocked ? "destructive" : "secondary"} className="text-[11px]">
-                              {register.bookingBlocked ? "Bloccate" : "Attive"}
-                            </Badge>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2 text-[11px]"
-                              disabled={blockSaving}
-                              onClick={() => void handleToggleBlock(!register.bookingBlocked)}
-                            >
-                              {blockSaving
-                                ? "Salvo..."
-                                : register.bookingBlocked
-                                  ? "Sblocca"
-                                  : "Blocca"}
-                            </Button>
-                          </div>
-                        </div>
-                        {weeklyLimitActive && (
-                          <div>
-                            <p className="text-[11px] text-muted-foreground">Limite guide settimanali</p>
-                            <div className="flex items-center gap-2">
-                              <Badge variant={register.weeklyBookingLimitExempt ? "secondary" : "outline"} className="text-[11px]">
-                                {register.weeklyBookingLimitExempt ? "Esente" : "Soggetto al limite"}
-                              </Badge>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[11px]"
-                                disabled={exemptSaving}
-                                onClick={async () => {
-                                  if (!selectedStudentId || exemptSaving) return;
-                                  setExemptSaving(true);
-                                  const res = await toggleWeeklyBookingLimitExempt({
-                                    studentId: selectedStudentId,
-                                    exempt: !register.weeklyBookingLimitExempt,
-                                  });
-                                  setExemptSaving(false);
-                                  if (!res.success) {
-                                    toast.error({ description: res.message ?? "Errore aggiornamento." });
-                                    return;
-                                  }
-                                  setRegister((prev) => prev ? { ...prev, weeklyBookingLimitExempt: !prev.weeklyBookingLimitExempt } : prev);
-                                  toast.success({ description: register.weeklyBookingLimitExempt ? "Limite riattivato." : "Allievo esente dal limite." });
-                                }}
-                              >
-                                {exemptSaving
-                                  ? "Salvo..."
-                                  : register.weeklyBookingLimitExempt
-                                    ? "Riattiva limite"
-                                    : "Rendi esente"}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                        {weeklyLimitActive && examPriorityEnabledGlobal && (
-                          <div>
-                            <p className="text-[11px] text-muted-foreground">Priorit&agrave; esame</p>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant={register.examPriorityActive ? "secondary" : "outline"} className="text-[11px]">
-                                {register.examPriorityActive ? "Priorit\u00e0 attiva" : "Nessuna priorit\u00e0"}
-                              </Badge>
-                              <span className="text-[10px] text-muted-foreground">
-                                {register.examPriorityOverride === null || register.examPriorityOverride === undefined
-                                  ? "(automatico)"
-                                  : register.examPriorityOverride
-                                    ? "(forzato attivo)"
-                                    : "(forzato disattivo)"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 mt-1.5">
-                              {([
-                                { label: "Auto", value: null },
-                                { label: "Forza attivo", value: true },
-                                { label: "Forza disattivo", value: false },
-                              ] as const).map((opt) => (
-                                <Button
-                                  key={String(opt.value)}
-                                  variant={register.examPriorityOverride === opt.value ? "default" : "ghost"}
-                                  size="sm"
-                                  className="h-6 px-2 text-[11px]"
-                                  disabled={examPrioritySaving}
-                                  onClick={async () => {
-                                    if (!selectedStudentId || examPrioritySaving) return;
-                                    if (register.examPriorityOverride === opt.value) return;
-                                    setExamPrioritySaving(true);
-                                    const res = await setExamPriorityOverride({
-                                      studentId: selectedStudentId,
-                                      override: opt.value,
-                                    });
-                                    setExamPrioritySaving(false);
-                                    if (!res.success) {
-                                      toast.error({ description: res.message ?? "Errore aggiornamento." });
-                                      return;
-                                    }
-                                    setRegister((prev) =>
-                                      prev ? { ...prev, examPriorityOverride: opt.value } : prev,
-                                    );
-                                    toast.success({ description: "Priorit\u00e0 esame aggiornata." });
-                                  }}
-                                >
-                                  {examPrioritySaving ? "..." : opt.label}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </section>
-
-                    {/* Instructor assignment */}
-                    {autonomousInstructors.length > 0 && (
-                      <section className="rounded-2xl border border-border/50 bg-white p-4">
-                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                          Istruttore assegnato
-                        </p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <Select
-                            value={selectedStudent?.assignedInstructorId ?? "__none__"}
-                            onValueChange={async (value) => {
-                              if (!selectedStudentId || assigningSaving) return;
-                              setAssigningSaving(true);
-                              const instrId = value === "__none__" ? null : value;
-                              const res = await assignStudentToInstructor({
-                                studentId: selectedStudentId,
-                                instructorId: instrId,
-                              });
-                              setAssigningSaving(false);
-                              if (!res.success) {
-                                toast.error({ description: res.message ?? "Errore." });
-                                return;
-                              }
-                              // Update local state
-                              setStudents((prev) =>
-                                prev.map((s) =>
-                                  s.id === selectedStudentId
-                                    ? { ...s, assignedInstructorId: instrId }
-                                    : s,
-                                ),
-                              );
-                              toast.success({
-                                description: instrId
-                                  ? `Assegnato a ${instructorMap.get(instrId) ?? "istruttore"}.`
-                                  : "Rimosso dall'istruttore.",
-                              });
-                            }}
-                          >
-                            <SelectTrigger className="w-full" disabled={assigningSaving}>
-                              <SelectValue placeholder="Nessun istruttore" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
-                              {autonomousInstructors.map((instr) => (
-                                <SelectItem key={instr.id} value={instr.id}>
-                                  {instr.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Stats — manual mode */}
-                    {manualMode && register.extendedSummary && (
-                      <section className="rounded-2xl border border-border/50 bg-white p-4">
-                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                          Riepilogo guide
-                        </p>
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                          {[
-                            { label: "Prenotate", value: register.extendedSummary.booked },
-                            { label: "Completate", value: register.extendedSummary.completed },
-                            { label: "Annullate", value: register.extendedSummary.cancelled },
-                            { label: "In programma", value: register.extendedSummary.upcoming },
-                          ].map((stat) => (
-                            <div key={stat.label} className="rounded-xl bg-gray-50/80 p-3">
-                              <p className="text-[11px] text-muted-foreground">{stat.label}</p>
-                              <p className="text-xl font-semibold text-foreground">{stat.value}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {register.extendedSummary.manualUnpaid > 0 && (
-                          <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                            <span className="text-sm font-medium text-amber-800">
-                              Da pagare: {register.extendedSummary.manualUnpaid}
-                            </span>
-                          </div>
-                        )}
-                      </section>
-                    )}
-
-                    {/* Obbligo guide */}
-                    <section className="rounded-2xl border border-border/50 bg-white p-4">
-                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                        Obbligo guide
-                      </p>
-                      <div className="flex items-end gap-6">
-                        <div className="flex items-baseline gap-1">
-                          <span className="text-3xl font-bold text-foreground">
-                            {register.summary.completedLessons}
-                          </span>
-                          <span className="text-sm text-muted-foreground">
-                            /{register.summary.requiredLessons}
-                          </span>
-                        </div>
-                        <div className="flex-1">
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
-                            <div
-                              className="h-full rounded-full bg-pink-400 transition-all"
-                              style={{
-                                width: `${Math.min(100, (register.summary.completedLessons / Math.max(1, register.summary.requiredLessons)) * 100)}%`,
-                              }}
-                            />
-                          </div>
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            {register.summary.isCompleted
-                              ? "Obbligo completato"
-                              : `${register.summary.remaining} rimanenti`}
-                          </p>
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Tipi guida */}
-                    {register.byLessonType.length > 0 && (
-                      <section className="rounded-2xl border border-border/50 bg-white p-4">
-                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                          Tipi guida completati
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {register.byLessonType.map((item) => (
-                            <span
-                              key={`${item.type}-${item.count}`}
-                              className="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-medium text-foreground ring-1 ring-border/40"
-                            >
-                              {formatLessonType(item.type)}
-                              <span className="text-muted-foreground">{item.count}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </section>
-                    )}
-
-                    {/* Crediti guida — hide in manual mode */}
-                    {(paymentMode?.auto || paymentMode?.credits) && (
-                      <section className="rounded-2xl border border-border/50 bg-white p-4">
-                        <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                          Crediti guida
-                        </p>
-                        {creditsLoading ? (
-                          <div className="space-y-2">
-                            <Skeleton className="h-6 w-28 rounded-full" />
-                            <Skeleton className="h-10 w-full rounded-xl" />
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <p className="text-[11px] text-muted-foreground">Saldo disponibile</p>
-                                <p className="text-2xl font-semibold text-foreground">
-                                  {credits?.availableCredits ?? 0}
-                                </p>
-                              </div>
-                              <Badge variant="outline">
-                                {credits?.availableCredits ?? 0} crediti
-                              </Badge>
-                            </div>
-                            <div className="mt-3 grid gap-2 sm:grid-cols-[140px,1fr,1fr]">
-                              <Input
-                                type="number"
-                                min={1}
-                                step={1}
-                                value={creditsInput}
-                                onChange={(event) => setCreditsInput(event.target.value)}
-                                className="bg-gray-50/80"
-                                placeholder="Crediti"
-                              />
-                              <Button
-                                onClick={() => void handleAdjustCredits("grant")}
-                                disabled={creditsSaving !== null}
-                              >
-                                {creditsSaving === "grant" ? "Assegno..." : "Assegna crediti"}
-                              </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => void handleAdjustCredits("revoke")}
-                                disabled={creditsSaving !== null}
-                              >
-                                {creditsSaving === "revoke" ? "Storno..." : "Storna crediti"}
-                              </Button>
-                            </div>
-                            {credits?.ledger.length ? (
-                              <div className="mt-3 space-y-1.5">
-                                {credits.ledger.slice(0, 8).map((entry) => (
-                                  <div
-                                    key={entry.id}
-                                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-50/80 p-3"
-                                  >
-                                    <div className="space-y-0.5">
-                                      <p className="text-sm font-medium text-foreground">
-                                        {formatCreditReason(entry.reason)}
-                                      </p>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        {formatDate(entry.createdAt, true)}
-                                        {entry.actorName ? ` · ${entry.actorName}` : ""}
-                                      </p>
-                                    </div>
-                                    <Badge variant={entry.delta >= 0 ? "secondary" : "outline"}>
-                                      {entry.delta >= 0 ? "+" : ""}
-                                      {entry.delta}
-                                    </Badge>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="mt-2 text-sm text-muted-foreground">
-                                Nessun movimento crediti disponibile.
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </section>
-                    )}
-                  </>
-                )}
-
-                {/* ── TAB: Guide ── */}
-                {drawerTab === "lessons" && (() => {
-                  const sortedLessons = [...register.lessons].sort((a, b) => {
-                    const aUnpaid = a.manualPaymentStatus !== "paid" && (
-                      (["completed", "checked_in"].includes(a.status) && manualMode) ||
-                      a.manualPaymentStatus === "unpaid" ||
-                      (["cancelled", "no_show"].includes(a.status) && a.lateCancellationAction === "charged" && a.manualPaymentStatus === "unpaid")
-                    );
-                    const bUnpaid = b.manualPaymentStatus !== "paid" && (
-                      (["completed", "checked_in"].includes(b.status) && manualMode) ||
-                      b.manualPaymentStatus === "unpaid" ||
-                      (["cancelled", "no_show"].includes(b.status) && b.lateCancellationAction === "charged" && b.manualPaymentStatus === "unpaid")
-                    );
-                    if (aUnpaid && !bUnpaid) return -1;
-                    if (!aUnpaid && bUnpaid) return 1;
-                    return 0;
-                  });
-                  return (
-                  <>
-                    {sortedLessons.length ? (
-                      <div className="space-y-2">
-                        {sortedLessons.map((lesson) => {
-                          const isCompleted = lesson.status === "completed";
-                          const isCheckedIn = lesson.status === "checked_in";
-                          const isCancelled = lesson.status === "cancelled";
-                          const isNoShow = lesson.status === "no_show";
-                          const creditsActiveNotRequired = paymentMode?.credits && !paymentMode?.creditsRequired;
-                          const creditsActiveRequired = paymentMode?.credits && paymentMode?.creditsRequired;
-                          const showPaymentToggle =
-                            manualMode &&
-                            !creditsActiveRequired &&
-                            (creditsActiveNotRequired
-                              ? (isCompleted || isCheckedIn)
-                              : (isCompleted || isCheckedIn || lesson.manualPaymentStatus === "unpaid"));
-                          const isPenaltyCharged =
-                            (isCancelled || isNoShow) &&
-                            lesson.lateCancellationAction === "charged" &&
-                            lesson.manualPaymentStatus === "unpaid";
-                          const isPenaltyPaid =
-                            (isCancelled || isNoShow) &&
-                            lesson.lateCancellationAction === "charged" &&
-                            lesson.manualPaymentStatus === "paid";
-
-                          return (
-                            <div
-                              key={lesson.id}
-                              className="rounded-2xl border border-border/50 bg-white p-3.5"
-                            >
-                              <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="text-sm font-semibold text-foreground">
-                                  {formatDate(lesson.startsAt, true)}
-                                </p>
-                                <div className="flex items-center gap-1.5">
-                                  {isPenaltyCharged && !lesson.creditApplied && (
-                                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
-                                      {isNoShow ? "Assente" : "Annullata"} — Da pagare
-                                    </Badge>
-                                  )}
-                                  {isPenaltyCharged && lesson.creditApplied && (
-                                    <Badge variant="secondary" className="border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
-                                      {isNoShow ? "Assente" : "Annullata"} — Coperta da credito
-                                    </Badge>
-                                  )}
-                                  {isPenaltyPaid && (
-                                    <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
-                                      {isNoShow ? "Assente" : "Annullata"} — Pagata
-                                    </Badge>
-                                  )}
-                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.creditApplied && (
-                                    <Badge variant="secondary" className="border-violet-200 bg-violet-50 text-violet-700 text-[10px]">
-                                      Coperta da credito
-                                    </Badge>
-                                  )}
-                                  {!isPenaltyCharged && !isPenaltyPaid && !lesson.creditApplied && lesson.manualPaymentStatus === "paid" && manualMode && (
-                                    <Badge variant="secondary" className="border-green-200 bg-green-50 text-green-700 text-[10px]">
-                                      Pagata
-                                    </Badge>
-                                  )}
-                                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && !isNoShow && (
-                                    <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 text-[10px]">
-                                      Da pagare
-                                    </Badge>
-                                  )}
-                                  <Badge
-                                    variant={isCompleted ? "secondary" : "outline"}
-                                    className="text-[10px]"
-                                  >
-                                    {formatStatus(lesson.status)}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <p className="mt-1 text-xs text-muted-foreground">
-                                {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string) => formatLessonType(t)).join(", ")} · {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
-                              </p>
-                              {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && !lesson.creditApplied && (
-                                <div className="mt-2 flex gap-2">
-                                  {(lesson.manualPaymentStatus !== "paid") && (
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-7 text-xs"
-                                      disabled={paymentSaving === lesson.id}
-                                      onClick={() =>
-                                        void handleSetManualPayment(lesson.id, "paid")
-                                      }
-                                    >
-                                      {paymentSaving === lesson.id ? "Salvo..." : "Segna pagata"}
-                                    </Button>
-                                  )}
-                                  {lesson.manualPaymentStatus === "paid" && (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-7 text-xs"
-                                      disabled={paymentSaving === lesson.id}
-                                      onClick={() =>
-                                        void handleSetManualPayment(lesson.id, "unpaid")
-                                      }
-                                    >
-                                      {paymentSaving === lesson.id ? "Salvo..." : "Segna da pagare"}
-                                    </Button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <FileText className="mb-2 h-8 w-8 text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground">Nessuna guida registrata.</p>
-                      </div>
-                    )}
-                  </>
-                  );
-                })()}
-
-                {/* ── TAB: Note ── */}
-                {drawerTab === "notes" && (
-                  <>
-                    {register.lessons.length ? (
-                      <div className="relative space-y-0">
-                        {register.lessons.map((lesson, idx) => {
-                          const hasNote = !!lesson.notes?.trim();
-                          const isLast = idx === register.lessons.length - 1;
-                          const isExam = lesson.type === "esame";
-                          const lessonDate = lesson.startsAt instanceof Date
-                            ? lesson.startsAt
-                            : new Date(lesson.startsAt);
-                          const endDate = lesson.startsAt instanceof Date
-                            ? new Date(lesson.startsAt.getTime() + lesson.durationMinutes * 60000)
-                            : new Date(new Date(lesson.startsAt).getTime() + lesson.durationMinutes * 60000);
-
-                          return (
-                            <div key={lesson.id} className="flex gap-4">
-                              {/* Timeline */}
-                              <div className="flex w-16 shrink-0 flex-col items-center pt-3.5">
-                                <span className="text-[11px] font-semibold text-muted-foreground">
-                                  {lessonDate.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })}
-                                </span>
-                                {!isLast && (
-                                  <div className="mt-2 flex-1 border-l border-dashed border-border/60" />
-                                )}
-                              </div>
-
-                              {/* Card */}
-                              {isExam ? (
-                                <div className="mb-2.5 flex flex-1 overflow-hidden rounded-2xl border border-violet-200 bg-violet-50/80 shadow-sm shadow-violet-200/50">
-                                  <div className="w-1 shrink-0 bg-violet-500" />
-                                  <div className="flex-1 p-3.5">
-                                    <div className="flex items-center gap-2">
-                                      <span className="inline-flex size-6 items-center justify-center rounded-full bg-violet-500">
-                                        <GraduationCap className="size-3.5 text-white" />
-                                      </span>
-                                      <span className="text-[11px] font-bold uppercase tracking-wider text-violet-700">Esame</span>
-                                      <span className="text-xs font-semibold text-violet-400">
-                                        {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                        {" – "}
-                                        {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                      </span>
-                                    </div>
-                                    <p className="mt-0.5 text-[11px] text-violet-500">
-                                      {lesson.instructorName || "Istruttore n/d"}
-                                    </p>
-                                    {hasNote && (
-                                      <p className="mt-2 text-sm leading-relaxed text-foreground">{lesson.notes!.trim()}</p>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                              <div
-                                className={cn(
-                                  "mb-2.5 flex-1 rounded-2xl border p-3.5",
-                                  hasNote
-                                    ? "border-border/50 bg-white"
-                                    : "border-border/30 bg-gray-50/50",
-                                )}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-foreground">
-                                    {lessonDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                    {" – "}
-                                    {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
-                                  </span>
-                                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
-                                    <span key={i} className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600">
-                                      {formatLessonType(t)}
-                                    </span>
-                                  ))}
-                                  {lesson.rating != null && (
-                                    <span className="ml-auto flex items-center gap-0.5 text-[10px]">
-                                      {Array.from({ length: 5 }, (_, i) => (
-                                        <span key={i} className={i < lesson.rating! ? "text-yellow-400" : "text-gray-200"}>★</span>
-                                      ))}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                                  {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
-                                </p>
-                                <p
-                                    className={`mt-2 text-sm leading-relaxed ${
-                                      hasNote ? "text-foreground" : "text-muted-foreground/50 italic"
-                                    }`}
-                                  >
-                                    {lesson.notes?.trim() || "Nessuna nota"}
-                                  </p>
-                              </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <NotebookPen className="mb-2 h-8 w-8 text-muted-foreground/40" />
-                        <p className="text-sm text-muted-foreground">Nessuna guida registrata.</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Seleziona un allievo per visualizzare il registro guide.
-              </p>
-            )}
           </div>
+          <div className="flex items-stretch">
+            {([
+              { key: "summary" as const, label: "Riepilogo" },
+              { key: "lessons" as const, label: "Guide" },
+              { key: "notes" as const, label: register ? `Note${register.lessons.filter(l => l.notes?.trim()).length ? ` (${register.lessons.filter(l => l.notes?.trim()).length})` : ""}` : "Note" },
+            ]).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setDrawerTab(tab.key)}
+                className={cn(
+                  "flex-1 cursor-pointer select-none border-b-2 px-2 py-3 text-center text-sm transition-colors",
+                  drawerTab === tab.key
+                    ? "border-[#222222] font-semibold text-foreground"
+                    : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <DrawerFooter className="border-t border-border/40 bg-white px-5 py-3">
-            <DrawerClose asChild>
-              <Button variant="outline" size="sm">Chiudi</Button>
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+        <div className="p-6">
+          {registerLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-24 w-full rounded-2xl" />
+              <Skeleton className="h-24 w-full rounded-2xl" />
+              <Skeleton className="h-56 w-full rounded-2xl" />
+            </div>
+          ) : register ? (
+            <>
+              {drawerTab === "summary" && renderPanelSummary()}
+              {drawerTab === "lessons" && renderPanelLessons()}
+              {drawerTab === "notes" && renderPanelNotes()}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Seleziona un allievo per visualizzare il registro guide.
+            </p>
+          )}
+        </div>
+      </DetailPanel>
+
       {register && selectedStudentId && (
         <ChangeStudentPhaseDialog
           open={phaseDialogOpen}

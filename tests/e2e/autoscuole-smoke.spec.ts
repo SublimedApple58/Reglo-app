@@ -11,7 +11,8 @@ test.describe("Autoscuole smoke", () => {
     "E2E_USER_EMAIL/E2E_USER_PASSWORD non configurati per smoke test.",
   );
 
-  test("login e navigazione dashboard/agenda/pagamenti @smoke", async ({ page }, testInfo) => {
+  test("login e navigazione agenda/allievi/pagamenti @smoke", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
     const emailInput = page.locator('input[name="email"], input[type="email"]');
     const passwordInput = page.locator('input[name="password"], input[type="password"]');
 
@@ -57,15 +58,56 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
 
+    // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
-    await expect(page.getByTestId("app-sidebar")).toBeVisible();
-    await expect(page.getByTestId("autoscuole-dashboard-page")).toBeVisible();
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60000 });
 
     await page.goto("/it/user/autoscuole?tab=agenda");
-    await expect(page.getByTestId("autoscuole-agenda-page")).toBeVisible();
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible();
 
     await page.goto("/it/user/autoscuole?tab=payments");
     await expect(page.getByTestId("autoscuole-payments-page")).toBeVisible();
+  });
+
+  test("allievi: lista, dettaglio panel e cancellazioni tardive @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole?tab=students");
+    await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60000 });
+
+    // Tab a pillola Pratica visibile con conteggio
+    await expect(page.getByRole("tab", { name: /Pratica/ })).toBeVisible({ timeout: 30000 });
+
+    // Apertura detail panel dal primo Dettaglio (se ci sono allievi)
+    const firstDetail = page.getByRole("button", { name: "Dettaglio" }).first();
+    if (await firstDetail.isVisible({ timeout: 10000 }).catch(() => false)) {
+      await firstDetail.click();
+      const panel = page.getByTestId("student-detail-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      // Tab Guide del panel
+      await panel.getByText("Guide", { exact: true }).click();
+      await page.keyboard.press("Escape");
+      await expect(panel).not.toBeVisible();
+    }
+
+    // Sotto-tab Cancellazioni tardive
+    await page.getByRole("button", { name: /Cancellazioni tardive/ }).click();
+    await expect(
+      page
+        .getByText(/Nessuna cancellazione tardiva|Addebita/)
+        .first(),
+    ).toBeVisible({ timeout: 30000 });
   });
 });

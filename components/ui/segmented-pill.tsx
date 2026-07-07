@@ -16,7 +16,13 @@ export function SegmentedPill<T extends string>({
 }: {
   value: T;
   onChange: (value: T) => void;
-  options: Array<{ value: T; label: React.ReactNode; icon?: React.ReactNode }>;
+  options: Array<{
+    value: T;
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    /** Conteggio grigio accanto alla label (stile tab Allievi del proto) */
+    count?: number;
+  }>;
   className?: string;
 }) {
   return (
@@ -45,6 +51,16 @@ export function SegmentedPill<T extends string>({
           >
             {opt.icon}
             {opt.label}
+            {opt.count != null && (
+              <span
+                className={cn(
+                  "text-[12px] font-semibold",
+                  active ? "text-[#929292]" : "text-[#c1c1c1]",
+                )}
+              >
+                {opt.count}
+              </span>
+            )}
           </button>
         );
       })}
