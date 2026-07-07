@@ -2673,6 +2673,38 @@ export async function createAutoscuolaAppointment(
       };
     }
 
+    // Follow car + extra motos: allowed ONLY when the primary vehicle is a
+    // moto (a car guida carries a single vehicle), and each must be a
+    // company-owned active vehicle — extras additionally must be motos.
+    // Previously this path accepted them with NO validation at all.
+    const singleExtraIds = [
+      payload.followVehicleId,
+      ...(payload.extraMotoVehicleIds ?? []),
+    ].filter((id): id is string => Boolean(id));
+    if (singleExtraIds.length) {
+      if (!vehicle || !isMotoLicenseCategory(vehicle.licenseCategory)) {
+        return {
+          success: false,
+          message: "Auto al seguito e moto aggiuntive sono consentite solo sulle guide in moto.",
+        };
+      }
+      const extraVehicles = await prisma.autoscuolaVehicle.findMany({
+        where: { id: { in: singleExtraIds }, companyId, status: "active" },
+        select: { id: true, licenseCategory: true },
+      });
+      const validExtraIds = new Set(extraVehicles.map((v) => v.id));
+      if (!singleExtraIds.every((id) => validExtraIds.has(id))) {
+        return { success: false, message: "Veicolo aggiuntivo non valido." };
+      }
+      const extraMotoSet = new Set(payload.extraMotoVehicleIds ?? []);
+      const motosValid = extraVehicles
+        .filter((v) => extraMotoSet.has(v.id))
+        .every((v) => isMotoLicenseCategory(v.licenseCategory));
+      if (!motosValid) {
+        return { success: false, message: "I veicoli aggiuntivi devono essere moto." };
+      }
+    }
+
     if (lessonPolicy.lessonPolicyEnabled && !requestedType && !requestedTypes.length) {
       return {
         success: false,
@@ -3024,6 +3056,14 @@ export async function createAutoscuolaAppointmentBatch(
       ...(payload.extraMotoVehicleIds ?? []),
     ].filter((id): id is string => Boolean(id));
     if (extraReservedIds.length) {
+      // Same moto-only rule as the single create: follow car and extra motos
+      // exist only on moto lessons (the primary must be a moto).
+      if (!vehicle || !isMotoLicenseCategory(vehicle.licenseCategory)) {
+        return {
+          success: false,
+          message: "Auto al seguito e moto aggiuntive sono consentite solo sulle guide in moto.",
+        };
+      }
       const extraVehicles = await prisma.autoscuolaVehicle.findMany({
         where: { id: { in: extraReservedIds }, companyId, status: "active" },
         select: { id: true, licenseCategory: true },
@@ -4861,6 +4901,37 @@ export async function updateAutoscuolaAppointmentDetails(
       finalExtraMotoVehicleIds = existingPrimaries
         .map((r) => r.vehicleId)
         .filter((id) => id !== finalPrimaryVehicleId && id !== appointment.vehicleId);
+    }
+
+    // Moto-only rule: extra motos and the follow car exist only when the FINAL
+    // primary vehicle is a moto. Explicitly provided on a non-moto guida →
+    // error; inherited ones (e.g. switching a moto guida onto a car) are
+    // silently dropped by the reconcile below.
+    if (vehiclesNeedSync && (finalExtraMotoVehicleIds.length || finalFollowVehicleId)) {
+      const finalPrimary = finalPrimaryVehicleId
+        ? await prisma.autoscuolaVehicle.findFirst({
+            where: { id: finalPrimaryVehicleId, companyId: membership.companyId },
+            select: { licenseCategory: true },
+          })
+        : null;
+      const primaryIsMoto =
+        !!finalPrimary && isMotoLicenseCategory(finalPrimary.licenseCategory);
+      if (!primaryIsMoto) {
+        if (extraMotosChanged && desiredExtraMotoVehicleIds.length) {
+          return {
+            success: false,
+            message: "Le moto aggiuntive sono consentite solo sulle guide in moto.",
+          };
+        }
+        if (followVehicleChanged && desiredFollowVehicleId) {
+          return {
+            success: false,
+            message: "L'auto al seguito è consentita solo sulle guide in moto.",
+          };
+        }
+        finalExtraMotoVehicleIds = [];
+        finalFollowVehicleId = null;
+      }
     }
 
     // Conflict check on the vehicles being ADDED by this edit: changing a
