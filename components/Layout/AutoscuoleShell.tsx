@@ -225,7 +225,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <span className="text-[15px] font-medium">Impostazioni dell&apos;account</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push("/user/autoscuole?tab=payments")}
+                    onClick={() => router.push("/user/autoscuole?tab=settings&pane=payments")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
                     <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.8} />

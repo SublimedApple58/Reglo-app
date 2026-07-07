@@ -2,10 +2,11 @@
 
 import React from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { Bell, CalendarDays, Car, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, type LucideIcon } from "lucide-react";
 
-import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,10 @@ const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
 const InstructorsTab = dynamic(() => import("./tabs/InstructorsTab"));
 const StudentsTab = dynamic(() => import("./tabs/StudentsTab"));
 const VehiclesTab = dynamic(() => import("./tabs/VehiclesTab"));
+const AutoscuolePaymentsPage = dynamic(() =>
+  import("./AutoscuolePaymentsPage").then((m) => m.AutoscuolePaymentsPage),
+);
+import type { SettingsSectionKey } from "./tabs/SettingsTab";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -234,13 +239,63 @@ type OverrideInfo = {
   schedule: DayScheduleEntry[];
 };
 
+/** Voci della sidebar dell'overlay "Impostazioni dell'account" (pattern proto #section-configurazione) */
+type ConfigPane =
+  | "locations"
+  | "payments"
+  | "bookings"
+  | "policy"
+  | "reminders"
+  | "students"
+  | "instructors"
+  | "vehicles"
+  | "hours";
+
+const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
+  [
+    { key: "locations", label: "Sede e luoghi", icon: MapPin },
+    { key: "payments", label: "Fatturazione e pagamenti", icon: CreditCard },
+  ],
+  [
+    { key: "bookings", label: "Prenotazioni", icon: CalendarDays },
+    { key: "policy", label: "Policy tipi guida", icon: ClipboardList },
+    { key: "reminders", label: "Promemoria e notifiche", icon: Bell },
+    { key: "students", label: "Gestione allievi", icon: UserRoundCog },
+  ],
+  [
+    { key: "instructors", label: "Istruttori", icon: Users },
+    { key: "vehicles", label: "Veicoli", icon: Car },
+    { key: "hours", label: "Ore guida", icon: Clock },
+  ],
+];
+
+const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
+  locations: "Sede e luoghi",
+  payments: "Fatturazione e pagamenti",
+  bookings: "Prenotazioni",
+  policy: "Policy tipi guida",
+  reminders: "Promemoria e notifiche",
+  students: "Gestione allievi",
+  instructors: "Istruttori",
+  vehicles: "Veicoli",
+  hours: "Ore guida",
+};
+
 export function AutoscuoleResourcesPage({
   tabs,
 }: {
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
-  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles" | "students" | "hours">("settings");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
+    const pane = searchParams?.get("pane");
+    return pane && CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
+      ? (pane as ConfigPane)
+      : "bookings";
+  });
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
@@ -1512,45 +1567,11 @@ export function AutoscuoleResourcesPage({
   const toggleSection = (key: string) =>
     setExpandedSection((prev) => (prev === key ? null : key));
 
-  return (
-    <PageWrapper
-      title="Configurazione"
-      subTitle="Gestisci prenotazioni, notifiche e risorse"
-    >
-      <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
-        {tabs}
-
-        {/* Sub-tabs */}
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-white p-1.5 shadow-card">
-          {([
-            { key: "settings" as const, label: "Impostazioni", icon: Settings2 },
-            { key: "instructors" as const, label: "Istruttori", icon: Users },
-            { key: "vehicles" as const, label: "Veicoli", icon: Truck },
-            { key: "students" as const, label: "Gestione allievi", icon: UserRoundCog },
-            { key: "hours" as const, label: "Ore guida", icon: Clock },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setConfigTab(tab.key)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                configTab === tab.key
-                  ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                  : "text-muted-foreground hover:text-foreground hover:bg-gray-50",
-              )}
-            >
-              <tab.icon className="size-3.5" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <SettingsSkeleton />
-        ) : configTab === "settings" ? (
+  // Le sezioni impostazioni (Prenotazioni/Promemoria/Policy/Sede/Registrazione)
+  // sono rese una alla volta come pannello dell'overlay.
+  const renderSettingsSection = (section: SettingsSectionKey) => (
           <SettingsTab
+            section={section}
             expandedSection={expandedSection}
             toggleSection={toggleSection}
             availabilityWeeks={availabilityWeeks}
@@ -1597,6 +1618,81 @@ export function AutoscuoleResourcesPage({
             handleSaveSettings={handleSaveSettings}
             savingSettings={savingSettings}
           />
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[450] flex flex-col overflow-hidden bg-white"
+      data-testid="autoscuole-settings-page"
+    >
+      {tabs}
+      {/* ── Header overlay ── */}
+      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[#dddddd] px-6 lg:px-10">
+        <Image
+          src="/images/nav/logo-reglo-tight.png"
+          alt="Reglo"
+          width={30}
+          height={30}
+          className="select-none object-contain"
+        />
+        <button
+          type="button"
+          onClick={() => router.push(`${pathname}?tab=agenda`)}
+          className="cursor-pointer select-none rounded-full px-[22px] py-2 text-sm font-medium text-foreground transition-colors hover:bg-[#f2f2f2]"
+        >
+          Fatto
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
+        <div className="grid min-h-0 w-full max-w-[1280px] grid-rows-[auto_1fr] lg:grid-rows-1 grid-cols-1 lg:grid-cols-[380px_1fr]">
+          {/* ── Sidebar ── */}
+          <div className="min-h-0 overflow-x-auto border-b border-[#ebebeb] px-4 py-3 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-0 lg:py-12 lg:pr-10">
+            <h1 className="mb-8 hidden text-[28px] font-bold tracking-[-0.6px] text-foreground lg:block">
+              Impostazioni dell&apos;account
+            </h1>
+            <nav className="flex gap-1 lg:flex-col lg:gap-0.5">
+              {CONFIG_PANE_GROUPS.map((group, groupIndex) => (
+                <React.Fragment key={groupIndex}>
+                  {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}
+                  {group.map((pane) => {
+                    const active = configTab === pane.key;
+                    return (
+                      <button
+                        key={pane.key}
+                        type="button"
+                        onClick={() => setConfigTab(pane.key)}
+                        className={cn(
+                          "flex shrink-0 cursor-pointer select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
+                          active
+                            ? "bg-[#f2f2f2] font-semibold text-foreground"
+                            : "font-medium text-[#444444] hover:bg-[#ebebeb] hover:text-foreground",
+                        )}
+                      >
+                        <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />
+                        {pane.label}
+                      </button>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </nav>
+          </div>
+
+          {/* ── Content ── */}
+          <div className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
+            <LottieLoadingOverlay visible={loading} />
+            {configTab !== "payments" && (
+              <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+                {CONFIG_PANE_TITLES[configTab]}
+              </h2>
+            )}
+            {loading ? (
+          <SettingsSkeleton />
+        ) : configTab === "bookings" || configTab === "policy" || configTab === "reminders" || configTab === "locations" ? (
+          renderSettingsSection(configTab)
+        ) : configTab === "payments" ? (
+          <AutoscuolePaymentsPage tabs={null} />
         ) : configTab === "instructors" ? (
           <InstructorsTab
             instructors={instructors}
@@ -1666,6 +1762,7 @@ export function AutoscuoleResourcesPage({
             clusterSaving={clusterSaving}
           />
         ) : configTab === "students" ? (
+          <div className="space-y-10">
           <StudentsTab
             expandedSection={expandedSection}
             toggleSection={toggleSection}
@@ -1717,6 +1814,8 @@ export function AutoscuoleResourcesPage({
             savingSettings={savingSettings}
             toast={toast}
           />
+          {renderSettingsSection("registration")}
+          </div>
         ) : configTab === "hours" ? (
           <InstructorHoursDashboard />
         ) : (
@@ -1740,6 +1839,9 @@ export function AutoscuoleResourcesPage({
             savingSettings={savingSettings}
           />
         )}
+          </div>
+        </div>
+      </div>
 
         {/* ── Instructor availability dialog */}
         <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
@@ -1772,10 +1874,10 @@ export function AutoscuoleResourcesPage({
               {/* Tab switcher (default mode only) */}
               {availInstructorMode === "default" && (
                 <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                     Predefinito
                   </button>
-                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                     Calendario
                   </button>
                 </div>
@@ -1821,7 +1923,7 @@ export function AutoscuoleResourcesPage({
                           )}
                         </div>
                       ))}
-                      <button type="button" onClick={() => setInstrDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
+                      <button type="button" onClick={() => setInstrDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors">
                         <Plus className="size-3" />
                         Aggiungi fascia
                       </button>
@@ -1871,7 +1973,7 @@ export function AutoscuoleResourcesPage({
                   Rimuovi disponibilità
                 </button>
               ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availInstructor) { const weekStart = getWeekStart(new Date(calendarSelectedDate)).toISOString().slice(0, 10); handleResetInstrOverride(); } }} disabled={savingInstrAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
+                <button type="button" onClick={() => { if (calendarSelectedDate && availInstructor) { const weekStart = getWeekStart(new Date(calendarSelectedDate)).toISOString().slice(0, 10); handleResetInstrOverride(); } }} disabled={savingInstrAvailability || !calendarSelectedDate} className="text-xs text-navy-900 hover:text-navy-700 hover:underline disabled:opacity-40">
                   Ripristina predefinito
                 </button>
               )}
@@ -2251,10 +2353,10 @@ export function AutoscuoleResourcesPage({
             <div className="px-6 pt-5 pb-4 border-b border-border">
               <h3 className="text-base font-semibold text-foreground">Disponibilità — {availVehicle?.name}</h3>
               <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                <button type="button" onClick={() => { setAvailDialogTab("default"); setVehSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                <button type="button" onClick={() => { setAvailDialogTab("default"); setVehSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   Predefinito
                 </button>
-                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                   Calendario
                 </button>
               </div>
@@ -2290,7 +2392,7 @@ export function AutoscuoleResourcesPage({
                           )}
                         </div>
                       ))}
-                      <button type="button" onClick={() => setVehDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
+                      <button type="button" onClick={() => setVehDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors">
                         <Plus className="size-3" />
                         Aggiungi fascia
                       </button>
@@ -2319,7 +2421,7 @@ export function AutoscuoleResourcesPage({
                   Rimuovi disponibilità
                 </button>
               ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availVehicle) handleResetVehOverride(); }} disabled={savingAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
+                <button type="button" onClick={() => { if (calendarSelectedDate && availVehicle) handleResetVehOverride(); }} disabled={savingAvailability || !calendarSelectedDate} className="text-xs text-navy-900 hover:text-navy-700 hover:underline disabled:opacity-40">
                   Ripristina predefinito
                 </button>
               )}
@@ -2467,8 +2569,7 @@ export function AutoscuoleResourcesPage({
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-    </PageWrapper>
+    </div>
   );
 }
 
@@ -2651,15 +2752,15 @@ function AvailabilityCalendar({
               className={cn(
                 "relative flex h-8 w-8 mx-auto cursor-pointer items-center justify-center rounded-full text-xs font-medium transition-colors",
                 isSelected
-                  ? "bg-yellow-400 text-white"
+                  ? "bg-navy-900 text-white"
                   : isToday
-                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                    ? "bg-[#eeeef4] text-navy-900 border border-[#cfcfdc]"
                     : "text-foreground hover:bg-gray-100",
               )}
             >
               {cell.day}
               {hasOverride && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-yellow-400" />
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-navy-900" />
               )}
             </button>
           );
@@ -2672,7 +2773,7 @@ function AvailabilityCalendar({
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-foreground capitalize">{selectedDayLabel}</span>
             {hasOverrideOnSelected && (
-              <span className="rounded-full bg-yellow-100 border border-yellow-200 px-2 py-0.5 text-[10px] font-medium text-yellow-700">Override</span>
+              <span className="rounded-full bg-[#eeeef4] border border-[#cfcfdc] px-2 py-0.5 text-[10px] font-medium text-navy-900">Override</span>
             )}
           </div>
           <div
@@ -2683,7 +2784,7 @@ function AvailabilityCalendar({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDayEnabled(!dayEnabled); } }}
             className={cn(
               "flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors",
-              dayEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+              dayEnabled ? "border-[#cfcfdc] bg-[#eeeef4]" : "border-border bg-white",
             )}
           >
             <span className="text-xs font-medium text-foreground">Disponibile</span>
@@ -2717,7 +2818,7 @@ function AvailabilityCalendar({
               <button
                 type="button"
                 onClick={() => setRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
-                className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors"
+                className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors"
               >
                 <Plus className="size-3" />
                 Aggiungi fascia

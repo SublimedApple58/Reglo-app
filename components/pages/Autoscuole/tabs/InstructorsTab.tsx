@@ -446,9 +446,9 @@ export default function InstructorsTab({
               <>
                 {/* ── Codice di invito istruttore ── */}
                 {clusterInstructor?.inviteCode ? (
-                  <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
+                  <div className="flex items-center gap-3 rounded-2xl border border-[#dddddd] bg-[#f7f7f7] px-5 py-3">
                     <span className="text-sm text-muted-foreground">Codice istruttore:</span>
-                    <span className="text-base font-bold tracking-wider text-yellow-800">
+                    <span className="text-base font-bold tracking-wider text-foreground">
                       {clusterInstructor.inviteCode}
                     </span>
                     <button
@@ -755,7 +755,7 @@ export default function InstructorsTab({
                             key={student.id}
                             className={cn(
                               "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
-                              isAssignedHere ? "bg-yellow-50/80" : "hover:bg-white",
+                              isAssignedHere ? "bg-[#eeeef4]" : "hover:bg-white",
                             )}
                             onClick={() => {
                               setClusterStudentIds((prev) =>

@@ -59,12 +59,19 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
     - Modal codici: sotto il codice autoscuola ora lista le **chiavi degli istruttori autonomi** (nome + codice + Copia; solo autonomi con codice; `getAutoscuolaInstructors` espone già `inviteCode`).
     - Icona invita → **Crea account allievo**: dialog con Nome/Cognome, Email, Password, Categoria patente + Cambio (default dai settings), **Fase di partenza** (solo se Teoria attiva: In attesa / Teoria (disabilitata se posti quiz 0, consuma licenza) / Foglio rosa; default rispecchia la self-registration mobile), Istruttore assegnato opzionale. Backend: `createCompanyUser` (user.actions) esteso con `studentPhase` (TEORIA = grant seat con check posti, phaseClassifiedAt). Il vecchio invito email (`inviteAutoscuolaStudent`) non è più esposto qui.
 
+- Fase 4 Impostazioni dell'account FATTA (in attesa di verifica utente):
+  - `AutoscuoleResourcesPage` trasformata in **overlay full-screen** (fixed inset-0 z-[450], testid `autoscuole-settings-page`): header 72px logo+«Fatto» (torna a ?tab=agenda), grid 380px+1fr max-w-1280, sidebar «Impostazioni dell'account» con 3 gruppi separati da divider (Sede e luoghi, Fatturazione e pagamenti | Prenotazioni, Policy tipi guida, Promemoria e notifiche, Gestione allievi | Istruttori, Veicoli, Ore guida), voce attiva bg #f2f2f2; content scrollabile con h2 24/700; deep-link `?tab=settings&pane=<key>`; su mobile la sidebar diventa barra orizzontale scrollabile.
+  - `SettingsTab` ha ora la prop `section` (SettingsSectionKey): renderizza UNA sezione senza chrome accordion (`standalone` su AccordionSection = solo descrizione+contenuto). Le pane bookings/policy/reminders/locations usano questa modalità; `registration` è appesa in fondo alla pane Gestione allievi; il tab legacy accordion resta funzionante se `section` non è passata.
+  - **Pagamenti dentro Impostazioni**: pane `payments` monta `AutoscuolePaymentsPage tabs={null}`; menu hamburger «Pagamenti» → `?tab=settings&pane=payments` (la route ?tab=payments resta come fallback).
+  - Giallo legacy neutralizzato: `ToggleChip` attivo → near-black #222 (primitiva condivisa), icone accordion `bg-[#eef0f6] text-navy-900`, PolicySwitch/card attive → `#eeeef4`/`#cfcfdc`, tab dei dialog disponibilità → bianco+bordo, calendario override → navy, banner codice istruttore neutro, LocationFormDialog. NON toccati i gialli semantici di warning (Stripe requirements, pallino pending).
+  - e2e: `auth.setup.ts` fixato (aspettava ancora `autoscuole-dashboard-page` → `autoscuole-agenda-page`). Tutti e 5 i test passano in locale, incluso `vehicles.auth.spec` che attraversa il nuovo overlay (bottone «Veicoli» in sidebar).
+  - TODO possibili post-verifica: restyle interno delle card Istruttori/Veicoli/Gestione allievi (ora conservano il layout a card legacy, solo colori neutralizzati); pane «Informazioni aziendali» del proto (profilo con foto + campi inline edit) non esiste ancora — richiede backend, valutare con l'utente.
+
 ## Next steps
 
-1. **Verifica utente fase 3 Allievi** (attesa QA: il dev DB ha 1 solo allievo, testare su un DB più ricco / staging clone).
-2. **Fase 4 — Impostazioni dell'account**: ex Configurazione come overlay full-screen con sidebar sinistra (proto #section-configurazione), Pagamenti dentro. E2e vehicles.auth.spec passa da ?tab=settings: verificare che continui a funzionare.
-4. **Fase 5 — Segretaria** (pagina voice: linea attiva card, script, orario, richiamate).
-5. **Fase 6 — Minori**: Utenti (/admin/users restyle), Ore guida (nuova), Area personale (nuova), referral + Novità nel menu.
-6. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification.
+1. **Verifica utente fase 3 (Allievi) + fase 4 (Impostazioni)** — il dev DB ha 1 solo allievo, QA vero su staging clone.
+2. **Fase 5 — Segretaria** (pagina voice: linea attiva card, script, orario, richiamate).
+3. **Fase 6 — Minori**: Utenti (/admin/users restyle), Area personale (nuova), referral + Novità nel menu. (Ore guida già raggiungibile dall'overlay Impostazioni.)
+4. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification.
 
 Promemoria operativi: dev server è dell'utente (NO pnpm build con dev attivo); verificare con typecheck+lint+Playwright (login titolare@reglo.it/RegloTest2026!, aspettare hydration 3.5s prima del fill); commit su feat/airbnb-redesign, NIENTE staging/prod fino a fine progetto; proto renderizzabile con `python3 -m http.server 8899` in ~/Downloads/dashboard + Playwright.

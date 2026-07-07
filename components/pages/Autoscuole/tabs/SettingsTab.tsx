@@ -93,9 +93,17 @@ function formatMinutes(totalMinutes: number) {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+/** Chiavi delle sezioni renderizzabili in modalità standalone (overlay Impostazioni) */
+export type SettingsSectionKey = "bookings" | "reminders" | "policy" | "locations" | "registration";
+
 export type SettingsTabProps = {
   expandedSection: string | null;
   toggleSection: (key: string) => void;
+  /**
+   * Se valorizzata, renderizza SOLO quella sezione senza chrome accordion
+   * (usata dall'overlay "Impostazioni dell'account" del redesign).
+   */
+  section?: SettingsSectionKey;
   // Booking settings
   availabilityWeeks: string;
   setAvailabilityWeeks: (v: string) => void;
@@ -159,9 +167,11 @@ export type SettingsTabProps = {
 function RegistrationModeSection({
   expanded,
   onToggle,
+  standalone,
 }: {
   expanded: boolean;
   onToggle: () => void;
+  standalone?: boolean;
 }) {
   const toast = useFeedbackToast();
   type Ctx = {
@@ -223,6 +233,7 @@ function RegistrationModeSection({
       expanded={expanded}
       onToggle={onToggle}
       isLast
+      standalone={standalone}
     >
       <div className="space-y-4">
         <div className="rounded-xl border border-border bg-white p-4">
@@ -277,6 +288,7 @@ function AccordionSection({
   onToggle,
   isFirst,
   isLast,
+  standalone,
   children,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -286,8 +298,18 @@ function AccordionSection({
   onToggle: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Rende solo il contenuto, senza header cliccabile né bordi (overlay Impostazioni) */
+  standalone?: boolean;
   children: React.ReactNode;
 }) {
+  if (standalone) {
+    return (
+      <div>
+        <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">{description}</p>
+        {children}
+      </div>
+    );
+  }
   return (
     <div className={cn(!isFirst && "border-t border-border")}>
       <div
@@ -302,8 +324,8 @@ function AccordionSection({
         )}
       >
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-yellow-50">
-            <Icon className="h-4 w-4 text-yellow-600" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eef0f6]">
+            <Icon className="h-4 w-4 text-navy-900" />
           </span>
           <div>
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -357,7 +379,7 @@ function PolicySwitch({
       className={cn(
         "flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-all duration-150",
         checked
-          ? "border-yellow-200 bg-yellow-50 hover:bg-yellow-100/50"
+          ? "border-[#cfcfdc] bg-[#eeeef4] hover:bg-[#e2e2e8]"
           : "border-border bg-white hover:bg-gray-50",
       )}
     >
@@ -450,12 +472,17 @@ function SettingsTab({
   updateConstraintWindow,
   handleSaveSettings,
   savingSettings,
+  section,
 }: SettingsTabProps) {
+  const standalone = Boolean(section);
+  const show = (key: SettingsSectionKey) => !section || section === key;
+  const showSaveButton = !section || section === "bookings" || section === "reminders" || section === "policy";
   return (
     <>
-      {/* Accordion settings card */}
-      <div className="rounded-2xl border border-border bg-white shadow-card">
+      {/* Accordion settings card (chrome solo in modalità tab legacy) */}
+      <div className={standalone ? undefined : "rounded-2xl border border-border bg-white shadow-card"}>
         {/* ── Prenotazioni ── */}
+        {show("bookings") && (
         <AccordionSection
           icon={CalendarDays}
           title="Prenotazioni"
@@ -463,6 +490,7 @@ function SettingsTab({
           expanded={expandedSection === "bookings"}
           onToggle={() => toggleSection("bookings")}
           isFirst
+          standalone={standalone}
         >
           <div className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
@@ -575,14 +603,17 @@ function SettingsTab({
             </div>
           </div>
         </AccordionSection>
+        )}
 
         {/* ── Reminder e notifiche ── */}
+        {show("reminders") && (
         <AccordionSection
           icon={Bell}
           title="Reminder e notifiche"
           description="Quando e su quali canali inviare promemoria a allievi e istruttori."
           expanded={expandedSection === "reminders"}
           onToggle={() => toggleSection("reminders")}
+          standalone={standalone}
         >
           <div className="space-y-5">
             <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
@@ -703,14 +734,17 @@ function SettingsTab({
             </div>
           </div>
         </AccordionSection>
+        )}
 
         {/* ── Policy tipi guida ── */}
+        {show("policy") && (
         <AccordionSection
           icon={ClipboardList}
           title="Policy tipi guida"
           description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
           expanded={expandedSection === "policy"}
           onToggle={() => toggleSection("policy")}
+          standalone={standalone}
         >
           <div className="space-y-5">
             {/* Global toggles */}
@@ -744,7 +778,7 @@ function SettingsTab({
                       key={option.value}
                       className={cn(
                         "rounded-xl border bg-white p-3 transition-all duration-200",
-                        hasLimit ? "border-yellow-200" : "border-border",
+                        hasLimit ? "border-[#cfcfdc]" : "border-border",
                       )}
                     >
                       {/* Header: name + pill actions */}
@@ -774,7 +808,7 @@ function SettingsTab({
                         className={cn(
                           "flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-all duration-150",
                           hasLimit
-                            ? "bg-yellow-50 text-foreground"
+                            ? "bg-[#eeeef4] text-foreground"
                             : "bg-gray-50 text-muted-foreground hover:bg-gray-100",
                         )}
                       >
@@ -848,35 +882,44 @@ function SettingsTab({
             </div>
           </div>
         </AccordionSection>
+        )}
 
         {/* ── Sede e luoghi ── */}
+        {show("locations") && (
         <AccordionSection
           icon={MapPin}
           title="Sede e luoghi"
           description="Sede dell'autoscuola e luoghi extra per le guide. Mostrati agli allievi nel dettaglio della guida."
           expanded={expandedSection === "locations"}
           onToggle={() => toggleSection("locations")}
+          standalone={standalone}
         >
           <LocationsSection />
         </AccordionSection>
+        )}
 
         {/* ── Modalità registrazione allievi (solo se TEORIA è attiva) ── */}
+        {show("registration") && (
         <RegistrationModeSection
           expanded={expandedSection === "registration"}
           onToggle={() => toggleSection("registration")}
+          standalone={standalone}
         />
+        )}
       </div>
 
       {/* Save button */}
-      <div className="flex justify-end">
-        <Button
-          onClick={handleSaveSettings}
-          disabled={savingSettings}
-          className="min-w-[180px]"
-        >
-          {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-        </Button>
-      </div>
+      {showSaveButton && (
+        <div className={cn("flex justify-end", standalone && "mt-8")}>
+          <Button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="min-w-[180px]"
+          >
+            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+          </Button>
+        </div>
+      )}
     </>
   );
 }
