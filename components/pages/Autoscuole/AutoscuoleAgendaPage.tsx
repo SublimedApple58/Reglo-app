@@ -4228,19 +4228,20 @@ function FilterTag({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-[13px] font-medium transition-colors",
+        "inline-flex h-9 max-w-[220px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] transition-colors",
         active
-          ? "border-navy-900 bg-navy-50 text-navy-900"
-          : "border-border bg-white text-[#6a6a6a] hover:bg-[#f7f7f7]",
+          ? "border-[#222222] bg-white font-semibold text-foreground shadow-[inset_0_0_0_0.5px_#222222]"
+          : "border-border bg-white font-medium text-[#6a6a6a] hover:border-[#c1c1c1]",
       )}
     >
-      <SlidersHorizontal className="h-3.5 w-3.5" />
-      <span>{label}</span>
-      {displayValue ? (
-        <span className="rounded-full bg-navy-900 px-2 py-0.5 text-[11px] font-semibold text-white">
-          {displayValue}
-        </span>
-      ) : null}
+      {active ? (
+        <span className="truncate">{displayValue ?? label}</span>
+      ) : (
+        <>
+          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
+          <span>{label}</span>
+        </>
+      )}
     </button>
   );
 }
