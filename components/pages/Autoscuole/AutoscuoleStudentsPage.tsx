@@ -50,8 +50,16 @@ import {
 } from "@/lib/actions/autoscuole-settings.actions";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
-import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
-import { inviteAutoscuolaStudent } from "@/lib/actions/invite.actions";
+import {
+  LICENSE_CATEGORIES,
+  LICENSE_CATEGORY_LABELS,
+  TRANSMISSIONS,
+  TRANSMISSION_LABELS,
+  type Transmission,
+} from "@/lib/autoscuole/license";
+import { createCompanyUser } from "@/lib/actions/user.actions";
+import { useAtomValue } from "jotai";
+import { companyAtom } from "@/atoms/company.store";
 import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
@@ -408,12 +416,30 @@ export function AutoscuoleStudentsPage({
 
   const [inviteCode, setInviteCode] = React.useState<string | null>(null);
   const [inviteCodeOpen, setInviteCodeOpen] = React.useState(false);
-  const [inviteCodeCopied, setInviteCodeCopied] = React.useState(false);
+  const [copiedCode, setCopiedCode] = React.useState<string | null>(null);
 
-  const [inviteOpen, setInviteOpen] = React.useState(false);
-  const [inviteEmail, setInviteEmail] = React.useState("");
-  const [invitePlatform, setInvitePlatform] = React.useState<"ios" | "android" | "none">("none");
-  const [inviteSending, setInviteSending] = React.useState(false);
+  // Crea account allievo
+  const company = useAtomValue(companyAtom);
+  const [createOpen, setCreateOpen] = React.useState(false);
+  const [createSaving, setCreateSaving] = React.useState(false);
+  const emptyCreateForm = React.useMemo(
+    () => ({
+      firstName: "",
+      lastName: "",
+      email: "",
+      password: "",
+      licenseCategory: "B",
+      transmission: "manual",
+      assignedInstructorId: "__none__",
+      studentPhase: "PRATICA" as "AWAITING" | "TEORIA" | "PRATICA",
+    }),
+    [],
+  );
+  const [createForm, setCreateForm] = React.useState(emptyCreateForm);
+  const [licenseDefaults, setLicenseDefaults] = React.useState<{
+    licenseCategory: string;
+    transmission: string;
+  }>({ licenseCategory: "B", transmission: "manual" });
 
   // Payment mode
   const [paymentMode, setPaymentMode] = React.useState<PaymentModeState | null>(null);
@@ -424,7 +450,9 @@ export function AutoscuoleStudentsPage({
 
   // Instructor clusters
   const [instructorMap, setInstructorMap] = React.useState<Map<string, string>>(new Map());
-  const [autonomousInstructors, setAutonomousInstructors] = React.useState<Array<{ id: string; name: string }>>([]);
+  const [autonomousInstructors, setAutonomousInstructors] = React.useState<
+    Array<{ id: string; name: string; inviteCode: string | null }>
+  >([]);
   const [assigningSaving, setAssigningSaving] = React.useState(false);
 
   // Tabs
@@ -458,6 +486,7 @@ export function AutoscuoleStudentsPage({
   };
   const [quizCtx, setQuizCtx] = React.useState<QuizCtx | null>(null);
   const [grantSavingId, setGrantSavingId] = React.useState<string | null>(null);
+  const theoryPhaseEnabled = quizCtx?.phasesEnabled.includes("TEORIA") ?? false;
 
   const refreshQuizCtx = React.useCallback(async () => {
     const res = await getQuizSeatsContext();
@@ -710,30 +739,61 @@ export function AutoscuoleStudentsPage({
     [paymentSaving, toast],
   );
 
-  const handleInvite = React.useCallback(
+  const openCreateDialog = React.useCallback(() => {
+    setCreateForm({
+      ...emptyCreateForm,
+      licenseCategory: licenseDefaults.licenseCategory,
+      transmission: licenseDefaults.transmission,
+      // Fase di partenza: rispecchia la self-registration mobile — se la
+      // Teoria è attiva parte da Teoria (posti permettendo) o In attesa.
+      studentPhase: theoryPhaseEnabled
+        ? quizCtx && quizCtx.autoAssignQuizOnSignup && quizCtx.available > 0
+          ? "TEORIA"
+          : "AWAITING"
+        : "PRATICA",
+    });
+    setCreateOpen(true);
+  }, [emptyCreateForm, licenseDefaults, quizCtx, theoryPhaseEnabled]);
+
+  const handleCreateStudent = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      const email = inviteEmail.trim();
-      if (!email) {
-        toast.error({ description: "Inserisci un indirizzo email." });
+      if (!company?.id || createSaving) return;
+      const firstName = createForm.firstName.trim();
+      const lastName = createForm.lastName.trim();
+      const email = createForm.email.trim();
+      if (!firstName || !lastName || !email || !createForm.password) {
+        toast.error({ description: "Compila tutti i campi obbligatori." });
         return;
       }
-      setInviteSending(true);
-      const res = await inviteAutoscuolaStudent({
+      setCreateSaving(true);
+      const res = await createCompanyUser({
+        companyId: company.id,
+        name: `${firstName} ${lastName}`,
         email,
-        platform: invitePlatform === "none" ? undefined : invitePlatform,
+        password: createForm.password,
+        autoscuolaRole: "STUDENT",
+        licenseCategory: createForm.licenseCategory,
+        transmission: createForm.transmission,
+        assignedInstructorId:
+          createForm.assignedInstructorId === "__none__" ? null : createForm.assignedInstructorId,
+        studentPhase: createForm.studentPhase,
       });
-      setInviteSending(false);
+      setCreateSaving(false);
       if (!res.success) {
-        toast.error({ description: res.message ?? "Invito non riuscito." });
+        toast.error({ description: res.message ?? "Creazione non riuscita." });
         return;
       }
-      toast.success({ title: "Invito inviato", description: `Email inviata a ${email}.` });
-      setInviteEmail("");
-      setInvitePlatform("none");
-      setInviteOpen(false);
+      toast.success({
+        title: "Account creato",
+        description: `${firstName} ${lastName} può accedere all'app con la sua email.`,
+      });
+      setCreateOpen(false);
+      setCreateForm(emptyCreateForm);
+      void load(true);
+      if (createForm.studentPhase === "TEORIA") void refreshQuizCtx();
     },
-    [inviteEmail, invitePlatform, toast],
+    [company?.id, createForm, createSaving, emptyCreateForm, load, refreshQuizCtx, toast],
   );
 
   const initialRef = React.useRef(true);
@@ -755,6 +815,10 @@ export function AutoscuoleStudentsPage({
         setWeeklyLimitActive(res.data.weeklyBookingLimitEnabled ?? false);
         setExamPriorityEnabledGlobal(res.data.examPriorityEnabled ?? false);
         setGroupLessonsEnabledGlobal(res.data.groupLessonsEnabled === true);
+        setLicenseDefaults({
+          licenseCategory: res.data.defaultLicenseCategory ?? "B",
+          transmission: res.data.defaultTransmission ?? "manual",
+        });
       }
     });
     getAutoscuolaInstructors().then((res) => {
@@ -763,7 +827,11 @@ export function AutoscuoleStudentsPage({
         setAutonomousInstructors(
           res.data
             .filter((i: { autonomousMode?: boolean }) => i.autonomousMode)
-            .map((i: { id: string; name: string }) => ({ id: i.id, name: i.name })),
+            .map((i: { id: string; name: string; inviteCode?: string | null }) => ({
+              id: i.id,
+              name: i.name,
+              inviteCode: i.inviteCode ?? null,
+            })),
         );
       }
     });
@@ -777,8 +845,6 @@ export function AutoscuoleStudentsPage({
       }
     });
   }, []);
-
-  const theoryPhaseEnabled = quizCtx?.phasesEnabled.includes("TEORIA") ?? false;
 
   const phaseTabOptions = React.useMemo(() => {
     const options: Array<{ value: PhaseTab; label: string; count: number }> = [];
@@ -802,12 +868,11 @@ export function AutoscuoleStudentsPage({
     }
   }, [phaseTab, phaseTabOptions]);
 
-  const copyInviteCode = React.useCallback(() => {
-    if (!inviteCode) return;
-    navigator.clipboard.writeText(inviteCode);
-    setInviteCodeCopied(true);
-    setTimeout(() => setInviteCodeCopied(false), 2000);
-  }, [inviteCode]);
+  const copyCode = React.useCallback((code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  }, []);
 
   const closeSearch = React.useCallback(() => {
     setSearchOpen(false);
@@ -1799,8 +1864,8 @@ export function AutoscuoleStudentsPage({
                 )}
                 <button
                   type="button"
-                  title="Invita allievo"
-                  onClick={() => setInviteOpen(true)}
+                  title="Crea account allievo"
+                  onClick={openCreateDialog}
                   className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
                 >
                   <UserRoundPlus className="size-[21px]" strokeWidth={1.8} />
@@ -1888,61 +1953,168 @@ export function AutoscuoleStudentsPage({
         </div>
       </div>
 
-      {/* ── Dialog: invita allievo ── */}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+      {/* ── Dialog: crea account allievo ── */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Invita allievo</DialogTitle>
+            <DialogTitle>Crea account allievo</DialogTitle>
             <DialogDescription>
-              Invia un invito via email. L&apos;allievo riceverà un link per accedere all&apos;app.
+              Crea direttamente l&apos;account: l&apos;allievo accede all&apos;app con email e password scelte qui.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleInvite} className="space-y-4">
+          <form onSubmit={handleCreateStudent} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="create-first-name">Nome</Label>
+                <Input
+                  id="create-first-name"
+                  placeholder="Mario"
+                  value={createForm.firstName}
+                  onChange={(event) => setCreateForm((p) => ({ ...p, firstName: event.target.value }))}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-last-name">Cognome</Label>
+                <Input
+                  id="create-last-name"
+                  placeholder="Rossi"
+                  value={createForm.lastName}
+                  onChange={(event) => setCreateForm((p) => ({ ...p, lastName: event.target.value }))}
+                  required
+                />
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="invite-email">Email</Label>
+              <Label htmlFor="create-email">Email</Label>
               <Input
-                id="invite-email"
+                id="create-email"
                 type="email"
                 placeholder="allievo@esempio.com"
-                value={inviteEmail}
-                onChange={(event) => setInviteEmail(event.target.value)}
+                value={createForm.email}
+                onChange={(event) => setCreateForm((p) => ({ ...p, email: event.target.value }))}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label>Piattaforma</Label>
-              <Select
-                value={invitePlatform}
-                onValueChange={(value) => setInvitePlatform(value as "ios" | "android" | "none")}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona piattaforma" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Non specificata</SelectItem>
-                  <SelectItem value="ios">iOS (iPhone)</SelectItem>
-                  <SelectItem value="android">Android</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Usato per mostrare il link corretto all&apos;app store nell&apos;email.
-              </p>
+              <Label htmlFor="create-password">Password</Label>
+              <Input
+                id="create-password"
+                type="password"
+                placeholder="••••••••"
+                value={createForm.password}
+                onChange={(event) => setCreateForm((p) => ({ ...p, password: event.target.value }))}
+                required
+                minLength={6}
+              />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Categoria patente</Label>
+                <Select
+                  value={createForm.licenseCategory}
+                  onValueChange={(value) => setCreateForm((p) => ({ ...p, licenseCategory: value }))}
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LICENSE_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat} className="cursor-pointer">
+                        {LICENSE_CATEGORY_LABELS[cat]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Cambio</Label>
+                <Select
+                  value={createForm.transmission}
+                  onValueChange={(value) => setCreateForm((p) => ({ ...p, transmission: value }))}
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSMISSIONS.map((t) => (
+                      <SelectItem key={t} value={t} className="cursor-pointer">
+                        {TRANSMISSION_LABELS[t]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {theoryPhaseEnabled && (
+              <div className="space-y-2">
+                <Label>Fase di partenza</Label>
+                <Select
+                  value={createForm.studentPhase}
+                  onValueChange={(value) =>
+                    setCreateForm((p) => ({ ...p, studentPhase: value as "AWAITING" | "TEORIA" | "PRATICA" }))
+                  }
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AWAITING" className="cursor-pointer">In attesa</SelectItem>
+                    <SelectItem
+                      value="TEORIA"
+                      className="cursor-pointer"
+                      disabled={quizCtx !== null && quizCtx.available <= 0}
+                    >
+                      Teoria{quizCtx !== null && quizCtx.available <= 0 ? " — posti quiz esauriti" : ""}
+                    </SelectItem>
+                    <SelectItem value="PRATICA" className="cursor-pointer">Foglio rosa</SelectItem>
+                  </SelectContent>
+                </Select>
+                {quizCtx && (
+                  <p className="text-xs text-muted-foreground">
+                    Teoria consuma una licenza quiz ({quizCtx.available} disponibil{quizCtx.available === 1 ? "e" : "i"}).
+                  </p>
+                )}
+              </div>
+            )}
+            {autonomousInstructors.length > 0 && (
+              <div className="space-y-2">
+                <Label>Istruttore assegnato (facoltativo)</Label>
+                <Select
+                  value={createForm.assignedInstructorId}
+                  onValueChange={(value) => setCreateForm((p) => ({ ...p, assignedInstructorId: value }))}
+                >
+                  <SelectTrigger className="cursor-pointer">
+                    <SelectValue placeholder="Nessun istruttore" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__" className="cursor-pointer">
+                      Nessuno (pool generale)
+                    </SelectItem>
+                    {autonomousInstructors.map((instr) => (
+                      <SelectItem key={instr.id} value={instr.id} className="cursor-pointer">
+                        {instr.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <DialogFooter>
-              <Button type="submit" disabled={inviteSending} className="w-full sm:w-auto">
-                {inviteSending ? (
+              <Button type="submit" disabled={createSaving} className="w-full sm:w-auto">
+                {createSaving ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <UserPlus className="mr-2 h-4 w-4" />
                 )}
-                {inviteSending ? "Invio in corso…" : "Invia invito"}
+                {createSaving ? "Creazione…" : "Crea account"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog: codice autoscuola ── */}
+      {/* ── Dialog: codici di accesso ── */}
       <Dialog open={inviteCodeOpen} onOpenChange={setInviteCodeOpen}>
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
@@ -1961,13 +2133,49 @@ export function AutoscuoleStudentsPage({
               <span className="text-lg font-bold tracking-[2px] text-foreground">{inviteCode}</span>
               <button
                 type="button"
-                onClick={copyInviteCode}
+                onClick={() => inviteCode && copyCode(inviteCode)}
                 className="cursor-pointer select-none rounded-[8px] border border-[#cfcfdc] bg-navy-50 px-3 py-1.5 text-[13px] font-semibold text-navy-900 transition-colors hover:bg-[#e2e2e8]"
               >
-                {inviteCodeCopied ? "Copiato!" : "Copia"}
+                {copiedCode === inviteCode ? "Copiato!" : "Copia"}
               </button>
             </div>
           </div>
+          {autonomousInstructors.some((instr) => instr.inviteCode) && (
+            <div className="mt-1">
+              <p className="mb-1 text-[12px] font-semibold text-[#929292]">Chiavi istruttori autonomi</p>
+              <p className="mb-3 text-[12px] font-medium text-[#929292]">
+                Chi si registra con la chiave di un istruttore viene iscritto all&apos;autoscuola e
+                assegnato direttamente a lui.
+              </p>
+              <div className="overflow-hidden rounded-[12px] border border-[#dddddd]">
+                {autonomousInstructors
+                  .filter((instr) => instr.inviteCode)
+                  .map((instr, idx, arr) => (
+                    <div
+                      key={instr.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 bg-white px-4 py-3",
+                        idx < arr.length - 1 && "border-b border-[#f2f2f2]",
+                      )}
+                    >
+                      <span className="truncate text-[13px] font-semibold text-foreground">{instr.name}</span>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <span className="text-[15px] font-bold tracking-[2px] text-foreground">
+                          {instr.inviteCode}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyCode(instr.inviteCode!)}
+                          className="cursor-pointer select-none rounded-[8px] border border-[#dddddd] bg-white px-2.5 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-[#f2f2f2]"
+                        >
+                          {copiedCode === instr.inviteCode ? "Copiato!" : "Copia"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -55,6 +55,9 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - `AutoscuoleLateCancellationsPanel.tsx` restyled: card hairline #dddddd radius 14 p-6, griglia info 2 col (preavviso in rosso), badge pill, footer border-t con Addebita/Non addebitare.
   - NIENTE PERSO: tutte le funzioni preesistenti mantenute (assegna quiz, cambia fase, modifica patente, blocco prenotazioni, esenzione limite, priorità esame, istruttore assegnato, crediti+ledger, pagamenti manuali guida per guida, penali cancellazioni, note+rating, invito email con piattaforma, codice autoscuola, ricerca server-side, conteggio cancellazioni tardive nel sub-tab). "Directory utenti" (ex ManagementBar) ora vive solo nel menu hamburger della shell ("Utenti"). L'unica sezione proto NON implementata è il tab "Esami" (esiti Promosso/Bocciato): non esiste backend per gli esiti esame — eventuale feature futura, non fa parte del restyle.
   - e2e: `autoscuole-smoke.spec.ts` aggiornato (era stantio: testid dashboard/sidebar rimossi) + nuovo test Allievi (lista, panel, tab Guide, Cancellazioni tardive). 2/2 verdi in locale.
+  - Rifiniture post-feedback utente:
+    - Modal codici: sotto il codice autoscuola ora lista le **chiavi degli istruttori autonomi** (nome + codice + Copia; solo autonomi con codice; `getAutoscuolaInstructors` espone già `inviteCode`).
+    - Icona invita → **Crea account allievo**: dialog con Nome/Cognome, Email, Password, Categoria patente + Cambio (default dai settings), **Fase di partenza** (solo se Teoria attiva: In attesa / Teoria (disabilitata se posti quiz 0, consuma licenza) / Foglio rosa; default rispecchia la self-registration mobile), Istruttore assegnato opzionale. Backend: `createCompanyUser` (user.actions) esteso con `studentPhase` (TEORIA = grant seat con check posti, phaseClassifiedAt). Il vecchio invito email (`inviteAutoscuolaStudent`) non è più esposto qui.
 
 ## Next steps
 

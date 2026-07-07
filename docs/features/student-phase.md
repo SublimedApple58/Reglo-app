@@ -42,6 +42,10 @@ Migrazioni:
 | Backoffice card licenze + fasi | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` |
 | Backoffice resolve dialog | `components/pages/Backoffice/BackofficeResolveTeoriaDeactivationDialog.tsx` |
 
+## Creazione account allievo da web (titolare)
+
+`createCompanyUser` (`lib/actions/user.actions.ts`) accetta `studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA'` (solo ruolo STUDENT). AWAITING/TEORIA richiedono `'TEORIA' ∈ phasesEnabled`; TEORIA consuma un seat (check posti + `quizSeatGrantedAt = now`), altrimenti errore "Posti quiz esauriti". Usato dal dialog "Crea account allievo" della sezione Allievi (`AutoscuoleStudentsPage.tsx`, default fase = stessa regola della self-registration mobile) e da `AdminUsersCreateDialog` (che non passa la fase → default PRATICA).
+
 ## Decisione di fase alla registrazione
 
 `POST /api/mobile/auth/student-register` (dentro la transaction). Il campo `schoolCode` accetta sia il codice autoscuola sia il **codice istruttore** (lookup company-first; vedi `instructor-clusters.md`): in quel caso la membership nasce con `assignedInstructorId` valorizzato, ma le regole di fase sono identiche.
