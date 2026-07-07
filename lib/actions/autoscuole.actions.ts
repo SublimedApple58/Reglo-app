@@ -7427,6 +7427,7 @@ async function findGroupLessonOverlap({
   vehicleIds,
   studentIds,
   excludeGroupLessonId,
+  db = prisma,
 }: {
   companyId: string;
   startsAt: Date;
@@ -7435,6 +7436,8 @@ async function findGroupLessonOverlap({
   vehicleIds: string[];
   studentIds: string[];
   excludeGroupLessonId?: string;
+  /** Pass the transaction client to re-check under the creation lock. */
+  db?: Prisma.TransactionClient;
 }): Promise<string | null> {
   const baseWhere = {
     companyId,
@@ -7470,24 +7473,24 @@ async function findGroupLessonOverlap({
   const reserved = Array.from(new Set(vehicleIds.filter(Boolean)));
 
   if (instructorId) {
-    const instrConflict = await prisma.autoscuolaAppointment.findFirst({
+    const instrConflict = await db.autoscuolaAppointment.findFirst({
       where: { ...baseWhere, instructorId },
       select: { id: true },
     });
     if (instrConflict) return "L'istruttore ha già un impegno in quell'orario.";
-    const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+    const blockConflict = await db.autoscuolaInstructorBlock.findFirst({
       where: { companyId, instructorId, startsAt: { lt: endsAt }, endsAt: { gt: startsAt } },
       select: { id: true },
     });
     if (blockConflict) return "L'istruttore ha uno slot bloccato in quell'orario.";
-    const instrContainer = await prisma.autoscuolaGroupLesson.findFirst({
+    const instrContainer = await db.autoscuolaGroupLesson.findFirst({
       where: { ...containerWhere, instructorId },
       select: { id: true },
     });
     if (instrContainer) return "L'istruttore ha già un impegno in quell'orario.";
   }
   if (reserved.length) {
-    const vehicleConflict = await prisma.autoscuolaAppointment.findFirst({
+    const vehicleConflict = await db.autoscuolaAppointment.findFirst({
       where: {
         ...baseWhere,
         OR: [
@@ -7498,7 +7501,7 @@ async function findGroupLessonOverlap({
       select: { id: true },
     });
     if (vehicleConflict) return "Un veicolo è già impegnato in quell'orario.";
-    const containerConflict = await prisma.autoscuolaGroupLesson.findFirst({
+    const containerConflict = await db.autoscuolaGroupLesson.findFirst({
       where: {
         ...containerWhere,
         OR: [
@@ -7512,7 +7515,7 @@ async function findGroupLessonOverlap({
     if (containerConflict) return "Un veicolo è già impegnato in quell'orario.";
   }
   if (studentIds.length) {
-    const studentConflicts = await prisma.autoscuolaAppointment.findMany({
+    const studentConflicts = await db.autoscuolaAppointment.findMany({
       where: { ...baseWhere, studentId: { in: studentIds } },
       select: { studentId: true },
     });
@@ -7522,6 +7525,29 @@ async function findGroupLessonOverlap({
     }
   }
   return null;
+}
+
+// Creation is check-then-insert: two submits in flight together (double click
+// racing across two requests, two tabs) can BOTH pass the pre-check and insert
+// twin lessons — happened in prod (Robatto, 2026-06-18, twin 15-17 lessons 18s
+// apart). Inside the create transaction we serialize per company with an
+// advisory lock and re-run the overlap check: the second transaction waits for
+// the first to commit, then its re-check sees the freshly created lesson.
+async function lockAndRecheckGroupLessonOverlap(
+  tx: Prisma.TransactionClient,
+  args: {
+    companyId: string;
+    startsAt: Date;
+    endsAt: Date;
+    instructorId: string | null;
+    vehicleIds: string[];
+    studentIds: string[];
+  },
+): Promise<void> {
+  // ::text — the lock function returns void, which Prisma can't deserialize.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('group-lesson-create'), hashtext(${args.companyId}))::text`;
+  const raceErr = await findGroupLessonOverlap({ ...args, db: tx });
+  if (raceErr) throw new Error(raceErr);
 }
 
 /** A fleet/follow vehicle as loaded for moto-group setup (FleetVehicle + name). */
@@ -7780,6 +7806,14 @@ export async function createGroupLesson(
       if (overlapErr) return { success: false as const, message: overlapErr };
 
       const groupLesson = await prisma.$transaction(async (tx) => {
+        await lockAndRecheckGroupLessonOverlap(tx, {
+          companyId,
+          startsAt,
+          endsAt,
+          instructorId,
+          vehicleIds: reserved,
+          studentIds,
+        });
         const gl = await tx.autoscuolaGroupLesson.create({
           data: {
             companyId,
@@ -7877,6 +7911,14 @@ export async function createGroupLesson(
     if (overlapErr) return { success: false as const, message: overlapErr };
 
     const groupLesson = await prisma.$transaction(async (tx) => {
+      await lockAndRecheckGroupLessonOverlap(tx, {
+        companyId,
+        startsAt,
+        endsAt,
+        instructorId,
+        vehicleIds: vehicleId ? [vehicleId] : [],
+        studentIds,
+      });
       const gl = await tx.autoscuolaGroupLesson.create({
         data: {
           companyId,
