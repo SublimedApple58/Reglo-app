@@ -214,7 +214,7 @@ type FilterKind = "instructor" | "vehicle" | "type" | "status";
 
 type FilterEditorState = {
   kind: FilterKind;
-  value: string;
+  value: string[];
 };
 type FilterOption = {
   value: string;
@@ -383,10 +383,13 @@ export function AutoscuoleAgendaPage({
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const [instructorFilter, setInstructorFilter] = React.useState("all");
-  const [vehicleFilter, setVehicleFilter] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
-  const [typeFilter, setTypeFilter] = React.useState("all");
+  // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
+  // Applicati client-side sul bootstrap già caricato — cambiare filtro non
+  // rifà la fetch.
+  const [instructorFilter, setInstructorFilter] = React.useState<string[]>([]);
+  const [vehicleFilter, setVehicleFilter] = React.useState<string[]>([]);
+  const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
+  const [typeFilter, setTypeFilter] = React.useState<string[]>([]);
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
   const [agendaMode, setAgendaMode] = React.useState<"instructor" | "classic">(() => {
@@ -558,14 +561,9 @@ export function AutoscuoleAgendaPage({
         limit: "500",
       });
 
-      if (instructorFilter !== "all") params.set("instructorId", instructorFilter);
-      if (vehicleFilter !== "all") params.set("vehicleId", vehicleFilter);
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      if (typeFilter !== "all") params.set("type", typeFilter);
-
       return `/api/autoscuole/agenda/bootstrap?${params.toString()}`;
     },
-    [instructorFilter, statusFilter, typeFilter, vehicleFilter],
+    [],
   );
 
   const load = React.useCallback(async (options?: {
@@ -822,14 +820,38 @@ export function AutoscuoleAgendaPage({
         instrMap.set(avail.instructorId, { id: avail.instructorId, name: avail.instructorName, ranges });
       }
     }
-    return Array.from(instrMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [viewMode, instructors, instructorAvailability, dayFocus]);
+    // Filtro istruttori attivo → in vista Istruttori restano solo le loro colonne.
+    const list = Array.from(instrMap.values()).filter(
+      (instr) => instructorFilter.length === 0 || instructorFilter.includes(instr.id),
+    );
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [viewMode, instructors, instructorAvailability, dayFocus, instructorFilter]);
 
   const filtered = React.useMemo(() => {
     return regularAppointments.filter((item) => {
       // Always hide cancelled appointments from the agenda — the cancellation
       // is recorded server-side, but the slot should free up visually.
       if ((item.status ?? "").toLowerCase() === "cancelled") return false;
+
+      // Filtri multi-selezione (vuoto = tutto passa).
+      if (instructorFilter.length > 0 && !instructorFilter.includes(item.instructor?.id ?? "")) {
+        return false;
+      }
+      if (vehicleFilter.length > 0) {
+        const vehicleIds = [
+          item.vehicle?.id,
+          item.followVehicle?.id,
+          ...(item.extraMotoVehicles ?? []).map((v) => v.id),
+        ].filter(Boolean) as string[];
+        if (!vehicleIds.some((id) => vehicleFilter.includes(id))) return false;
+      }
+      if (typeFilter.length > 0) {
+        const itemTypes = [item.type, ...(item.types ?? [])];
+        if (!itemTypes.some((t) => typeFilter.includes(t))) return false;
+      }
+      if (statusFilter.length > 0 && !statusFilter.includes((item.status ?? "").toLowerCase())) {
+        return false;
+      }
 
       const term = search.trim().toLowerCase();
       if (
@@ -844,7 +866,7 @@ export function AutoscuoleAgendaPage({
       const end = getAppointmentEnd(item);
       return start < rangeEnd && end > rangeStart;
     });
-  }, [appointments, search, rangeStart, rangeEnd]);
+  }, [appointments, search, rangeStart, rangeEnd, instructorFilter, vehicleFilter, typeFilter, statusFilter]);
 
   const handleCreate = async () => {
     const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
@@ -1024,7 +1046,7 @@ export function AutoscuoleAgendaPage({
     });
   };
 
-  const applyFilter = React.useCallback((kind: FilterKind, value: string) => {
+  const applyFilter = React.useCallback((kind: FilterKind, value: string[]) => {
     if (kind === "instructor") {
       setInstructorFilter(value);
       return;
@@ -1179,23 +1201,39 @@ export function AutoscuoleAgendaPage({
 
           {/* Filters */}
           <div className="flex items-center gap-1.5">
-            <FilterTag label="Istruttore" value={instructorFilter} allValue="all"
+            <FilterTag label="Istruttore" selected={instructorFilter}
               onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
-              displayValue={instructorFilter === "all" ? null : instructors.find((item) => item.id === instructorFilter)?.name ?? "Selezionato"} />
+              displayValue={
+                instructorFilter.length === 1
+                  ? instructors.find((item) => item.id === instructorFilter[0])?.name ?? "1 istruttore"
+                  : `${instructorFilter.length} istruttori`
+              } />
             {vehiclesEnabled && (
-              <FilterTag label="Veicolo" value={vehicleFilter} allValue="all"
+              <FilterTag label="Veicolo" selected={vehicleFilter}
                 onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
-                displayValue={vehicleFilter === "all" ? null : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"} />
+                displayValue={
+                  vehicleFilter.length === 1
+                    ? vehicles.find((item) => item.id === vehicleFilter[0])?.name ?? "1 veicolo"
+                    : `${vehicleFilter.length} veicoli`
+                } />
             )}
-            <FilterTag label="Tipo" value={typeFilter} allValue="all"
+            <FilterTag label="Tipo" selected={typeFilter}
               onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
-              displayValue={typeFilter === "all" ? null : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ?? typeFilter} />
-            <FilterTag label="Stato" value={statusFilter} allValue="all"
+              displayValue={
+                typeFilter.length === 1
+                  ? LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter[0])?.label ?? typeFilter[0]
+                  : `${typeFilter.length} tipi`
+              } />
+            <FilterTag label="Stato" selected={statusFilter}
               onClick={() => setFilterEditor({ kind: "status", value: statusFilter })}
-              displayValue={statusFilter === "all" ? null : getStatusMeta(statusFilter).label} />
-            {(instructorFilter !== "all" || vehicleFilter !== "all" || typeFilter !== "all" || statusFilter !== "all") && (
+              displayValue={
+                statusFilter.length === 1
+                  ? getStatusMeta(statusFilter[0]).label
+                  : `${statusFilter.length} stati`
+              } />
+            {(instructorFilter.length > 0 || vehicleFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0) && (
               <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs px-2"
-                onClick={() => { setInstructorFilter("all"); setVehicleFilter("all"); setTypeFilter("all"); setStatusFilter("all"); }}>
+                onClick={() => { setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}>
                 Reset
               </Button>
             )}
@@ -1698,9 +1736,13 @@ export function AutoscuoleAgendaPage({
 
         {/* ── INSTRUCTOR WEEKLY VIEW ── */}
         {agendaMode === "instructor" && viewMode === "week" && (() => {
-          const weekInstructors = instructorAvailability.length > 0
+          const weekInstructorsAll = instructorAvailability.length > 0
             ? instructorAvailability
             : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
+          // Filtro istruttori attivo → solo le colonne selezionate.
+          const weekInstructors = instructorFilter.length > 0
+            ? weekInstructorsAll.filter((i) => instructorFilter.includes(i.instructorId))
+            : weekInstructorsAll;
           const instrCount = Math.max(1, weekInstructors.length);
           const totalCols = instrCount * 7; // instructor sub-columns across 7 days
 
@@ -2470,26 +2512,54 @@ export function AutoscuoleAgendaPage({
           </DialogHeader>
           {filterEditor ? (
             <div className="space-y-4">
-              <Select
-                value={filterEditor.value}
-                onValueChange={(value) =>
-                  setFilterEditor((current) =>
-                    current ? { ...current, value } : current,
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona filtro" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DialogFooter>
+              <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
+                {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => {
+                  const checked = filterEditor.value.includes(item.value);
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() =>
+                        setFilterEditor((current) =>
+                          current
+                            ? {
+                                ...current,
+                                value: checked
+                                  ? current.value.filter((v) => v !== item.value)
+                                  : [...current.value, item.value],
+                              }
+                            : current,
+                        )
+                      }
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                          checked ? "border-navy-900 bg-navy-900" : "border-[#c1c1c1] bg-white",
+                        )}
+                      >
+                        {checked ? (
+                          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                            <path d="M3 7.4l2.6 2.6L11 4.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <DialogFooter className="items-center gap-2">
+                <button
+                  type="button"
+                  className="mr-auto cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
+                  onClick={() =>
+                    setFilterEditor((current) => (current ? { ...current, value: [] } : current))
+                  }
+                >
+                  Azzera
+                </button>
                 <Button type="button" variant="outline" onClick={() => setFilterEditor(null)}>
                   Chiudi
                 </Button>
@@ -4118,28 +4188,18 @@ function getFilterOptions(
   vehicles: ResourceOption[],
 ): FilterOption[] {
   if (kind === "instructor") {
-    return [
-      { value: "all", label: "Tutti gli istruttori" },
-      ...instructors.map((item) => ({ value: item.id, label: item.name })),
-    ];
+    return instructors.map((item) => ({ value: item.id, label: item.name }));
   }
   if (kind === "vehicle") {
-    return [
-      { value: "all", label: "Tutti i veicoli" },
-      ...vehicles.map((item) => ({ value: item.id, label: item.name })),
-    ];
+    return vehicles.map((item) => ({ value: item.id, label: item.name }));
   }
   if (kind === "type") {
-    return [
-      { value: "all", label: "Tutti i tipi" },
-      ...LESSON_TYPE_OPTIONS.map((option) => ({
-        value: option.value,
-        label: option.label,
-      })),
-    ];
+    return LESSON_TYPE_OPTIONS.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }));
   }
   return [
-    { value: "all", label: "Tutti gli stati" },
     { value: "scheduled", label: "In programma" },
     { value: "checked_in", label: "Presente" },
     { value: "completed", label: "Completata" },
@@ -4211,18 +4271,16 @@ function AgendaDayHeader({
 
 function FilterTag({
   label,
-  value,
-  allValue,
+  selected,
   onClick,
   displayValue,
 }: {
   label: string;
-  value: string;
-  allValue: string;
+  selected: string[];
   onClick: () => void;
   displayValue?: string | null;
 }) {
-  const active = value !== allValue;
+  const active = selected.length > 0;
   return (
     <button
       type="button"
