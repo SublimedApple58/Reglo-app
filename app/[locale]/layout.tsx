@@ -1,13 +1,16 @@
 import '@/assets/styles/globals.css';
 import { APP_DESCRIPTION, APP_NAME, SERVER_URL } from '@/lib/constants';
 import type { Metadata } from 'next';
+import { Figtree } from 'next/font/google';
 import { SessionProvider } from 'next-auth/react';
 import { NextIntlClientProvider } from 'next-intl';
 import { Toaster } from '@/components/ui/toaster';
 
-const fontVars = {
-  "--font-geist-sans": "'Space Grotesk', system-ui, -apple-system, Segoe UI, sans-serif",
-} as React.CSSProperties;
+const figtree = Figtree({
+  subsets: ['latin'],
+  variable: '--font-geist-sans',
+  fallback: ['Circular', '-apple-system', 'system-ui', 'Helvetica Neue', 'sans-serif'],
+});
 
 export const metadata: Metadata = {
   title: {
@@ -33,8 +36,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className="antialiased"
-        style={fontVars}
+        className={`${figtree.variable} font-sans antialiased`}
         data-new-gr-c-s-check-loaded='14.1241.0'
         data-gr-ext-installed=''
       >
