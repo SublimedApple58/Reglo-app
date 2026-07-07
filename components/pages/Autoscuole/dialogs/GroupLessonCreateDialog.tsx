@@ -225,6 +225,11 @@ export function GroupLessonCreateDialog({
     () => accessibleVehicles.filter((v) => v.licenseCategory === "B"),
     [accessibleVehicles],
   );
+  // Standard group = one shared CAR: motos only belong to the moto flow.
+  const standardVehicles = React.useMemo(
+    () => accessibleVehicles.filter((v) => !isMotoCategory(v.licenseCategory)),
+    [accessibleVehicles],
+  );
   const fleet = React.useMemo(
     () => vehicles.filter((v) => fleetIds.includes(v.id)),
     [vehicles, fleetIds],
@@ -486,7 +491,7 @@ export function GroupLessonCreateDialog({
                       <SelectValue placeholder={instructorId ? "Seleziona veicolo" : "Prima scegli l'istruttore"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {accessibleVehicles.map((v) => (
+                      {standardVehicles.map((v) => (
                         <SelectItem key={v.id} value={v.id} className="cursor-pointer">
                           {v.name}
                           {v.licenseCategory ? ` · ${v.licenseCategory}` : ""}

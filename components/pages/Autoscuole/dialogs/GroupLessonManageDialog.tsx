@@ -202,6 +202,23 @@ export function GroupLessonManageDialog({
     () => accessibleVehicles.filter((v) => v.licenseCategory === "B"),
     [accessibleVehicles],
   );
+  // Standard group vehicle = a CAR (motos live in the moto flow only). The
+  // currently-assigned vehicle stays selectable even if it fell out of the
+  // accessible set (e.g. after an instructor change) — the BE validates.
+  const standardVehicles = React.useMemo(() => {
+    const list = accessibleVehicles.filter((v) => !isMotoCategory(v.licenseCategory));
+    if (lesson?.vehicleId && !list.some((v) => v.id === lesson.vehicleId)) {
+      list.push({
+        id: lesson.vehicleId,
+        name: lesson.vehicleName ?? "Veicolo attuale",
+        licenseCategory: null,
+        transmission: null,
+        assignedInstructorId: null,
+        poolInstructorIds: [],
+      });
+    }
+    return list;
+  }, [accessibleVehicles, lesson]);
   // Chips also show fleet motos that fell out of the accessible set (e.g. after
   // an instructor change) so the current state stays visible; the BE validates.
   const fleetOptions = React.useMemo(() => {
@@ -457,7 +474,7 @@ export function GroupLessonManageDialog({
                     <Select value={vehicleId} onValueChange={setVehicleId}>
                       <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuno" /></SelectTrigger>
                       <SelectContent>
-                        {vehicles.map((v) => (
+                        {standardVehicles.map((v) => (
                           <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
                         ))}
                       </SelectContent>

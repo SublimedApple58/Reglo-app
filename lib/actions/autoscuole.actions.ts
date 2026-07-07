@@ -7850,6 +7850,10 @@ export async function createGroupLesson(
         select: { id: true, licenseCategory: true, transmission: true },
       });
       if (!v) return { success: false as const, message: "Veicolo non trovato." };
+      // A standard group shares one CAR — motos belong to the kind="moto" flow.
+      if (isMotoLicenseCategory(v.licenseCategory)) {
+        return { success: false as const, message: "Per una guida di gruppo in moto usa la modalità Moto." };
+      }
       vehicle = v;
     }
     const vehicleId = vehicle?.id ?? null;
@@ -8569,6 +8573,10 @@ export async function updateGroupLesson(
         select: { id: true, licenseCategory: true, transmission: true },
       });
       if (!v) return { success: false as const, message: "Veicolo non trovato." };
+      // Same rule as creation: a standard group's shared vehicle is a CAR.
+      if (payload.vehicleId !== undefined && isMotoLicenseCategory(v.licenseCategory)) {
+        return { success: false as const, message: "Per una guida di gruppo in moto usa la modalità Moto." };
+      }
       vehicle = v;
     }
     if (vehiclesEnabled && vehicle && studentIds.length) {
