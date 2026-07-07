@@ -302,6 +302,7 @@ export default function InstructorsTab({
                 if (typeof s.workingHoursStart === "string" && typeof s.workingHoursEnd === "string") {
                   parts.push(`Orario lavoro: ${s.workingHoursStart}–${s.workingHoursEnd}`);
                 }
+                if (s.availabilityMode === "publication") parts.push("Disponibilità a pubblicazione");
                 return parts.length ? parts.join(" · ") : undefined;
               })()}
               actions={

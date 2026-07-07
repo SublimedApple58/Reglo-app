@@ -6024,17 +6024,24 @@ export async function getAutoscuolaInstructorWeeklyAvailabilities() {
         ownerType: "instructor",
       },
     });
-    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> }> =
+    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }>; rangesByDay?: Record<string, Array<{ startMinutes: number; endMinutes: number }>> }> =
       {};
     for (const availability of availabilities) {
       const ranges = Array.isArray(availability.ranges)
         ? (availability.ranges as Array<{ startMinutes: number; endMinutes: number }>)
         : undefined;
+      // Per-weekday map (authoritative when present) — the publication editor
+      // needs it to project the base schedule onto un-edited weeks.
+      const rangesByDay =
+        availability.rangesByDay && typeof availability.rangesByDay === "object" && !Array.isArray(availability.rangesByDay)
+          ? (availability.rangesByDay as Record<string, Array<{ startMinutes: number; endMinutes: number }>>)
+          : undefined;
       map[availability.ownerId] = {
         daysOfWeek: availability.daysOfWeek,
         startMinutes: availability.startMinutes,
         endMinutes: availability.endMinutes,
         ...(ranges?.length ? { ranges } : {}),
+        ...(rangesByDay ? { rangesByDay } : {}),
       };
     }
     return { success: true as const, data: map };
@@ -6181,17 +6188,24 @@ export async function getAutoscuolaVehicleWeeklyAvailabilities() {
         ownerType: "vehicle",
       },
     });
-    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> }> =
+    const map: Record<string, { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }>; rangesByDay?: Record<string, Array<{ startMinutes: number; endMinutes: number }>> }> =
       {};
     for (const availability of availabilities) {
       const ranges = Array.isArray(availability.ranges)
         ? (availability.ranges as Array<{ startMinutes: number; endMinutes: number }>)
         : undefined;
+      // Per-weekday map (authoritative when present) — the publication editor
+      // needs it to project the base schedule onto un-edited weeks.
+      const rangesByDay =
+        availability.rangesByDay && typeof availability.rangesByDay === "object" && !Array.isArray(availability.rangesByDay)
+          ? (availability.rangesByDay as Record<string, Array<{ startMinutes: number; endMinutes: number }>>)
+          : undefined;
       map[availability.ownerId] = {
         daysOfWeek: availability.daysOfWeek,
         startMinutes: availability.startMinutes,
         endMinutes: availability.endMinutes,
         ...(ranges?.length ? { ranges } : {}),
+        ...(rangesByDay ? { rangesByDay } : {}),
       };
     }
     return { success: true as const, data: map };

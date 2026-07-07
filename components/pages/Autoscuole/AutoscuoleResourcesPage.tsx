@@ -52,7 +52,14 @@ import {
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
+import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
 import { InstructorHoursDashboard } from "@/components/pages/Autoscuole/InstructorHoursDashboard";
+
+/** Availability mode from the instructor settings JSON ("default" unless explicitly "publication"). */
+const readAvailabilityMode = (settings: unknown): "default" | "publication" =>
+  settings && typeof settings === "object" && (settings as Record<string, unknown>).availabilityMode === "publication"
+    ? "publication"
+    : "default";
 
 /** Compute Monday (ISO week start) for a date */
 const getWeekStart = (date: Date): Date => {
@@ -102,7 +109,7 @@ const vehicleUsageMode = (vehicle: {
     : vehicle.poolInstructorIds.length
       ? "pool"
       : "open";
-type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }> };
+type VehicleWeeklyAvailability = { daysOfWeek: number[]; startMinutes: number; endMinutes: number; ranges?: Array<{ startMinutes: number; endMinutes: number }>; rangesByDay?: Record<string, Array<{ startMinutes: number; endMinutes: number }>> };
 type AvailabilitySlot = {
   id: string;
   ownerId: string;
@@ -343,6 +350,10 @@ export function AutoscuoleResourcesPage({
 
   // ── Shared availability dialog state
   const [availDialogTab, setAvailDialogTab] = React.useState<"default" | "calendar">("default");
+  // Mode of the instructor currently open in the availability dialog
+  // (publication → week-by-week editor, default → Predefinito/Calendario tabs).
+  const [availInstructorMode, setAvailInstructorMode] = React.useState<"default" | "publication">("default");
+  const [availModeSwitching, setAvailModeSwitching] = React.useState(false);
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
   const [calendarSelectedDate, setCalendarSelectedDate] = React.useState<string | null>(null);
   const [calendarDayRanges, setCalendarDayRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
@@ -886,6 +897,7 @@ export function AutoscuoleResourcesPage({
 
   const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
     const current = instructorWeeklyAvailability[instructor.id];
+    setAvailInstructorMode(readAvailabilityMode(instructor.settings));
     setAvailDialogTab("default");
     setCalendarSelectedDate(null);
     setCalendarMonth(new Date());
@@ -907,6 +919,43 @@ export function AutoscuoleResourcesPage({
     setInstrDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
     );
+  };
+
+  // Switch the instructor between default ↔ publication availability mode from
+  // the dialog (same setting the cluster panel and the mobile app expose).
+  const handleSwitchAvailabilityMode = async () => {
+    if (!availInstructor) return;
+    const next = availInstructorMode === "publication" ? "default" : "publication";
+    const label =
+      next === "publication"
+        ? "PUBBLICAZIONE: l'istruttore compila e pubblica la disponibilità settimana per settimana; gli allievi prenotano solo le settimane pubblicate."
+        : "PREDEFINITA: settimana tipo valida ogni settimana, con eccezioni dal calendario.";
+    if (!window.confirm(`Cambiare la modalità disponibilità di ${availInstructor.name}?\n\n${label}`)) return;
+    setAvailModeSwitching(true);
+    const existingSettings =
+      availInstructor.settings && typeof availInstructor.settings === "object"
+        ? (availInstructor.settings as Record<string, unknown>)
+        : {};
+    const updatedSettings = { ...existingSettings, availabilityMode: next } as Parameters<
+      typeof updateAutoscuolaInstructor
+    >[0]["settings"] & Record<string, unknown>;
+    const res = await updateAutoscuolaInstructor({
+      instructorId: availInstructor.id,
+      settings: updatedSettings,
+    });
+    setAvailModeSwitching(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile cambiare modalità." });
+      return;
+    }
+    setAvailInstructorMode(next);
+    setAvailInstructor((prev) => (prev ? { ...prev, settings: updatedSettings } : prev));
+    setInstructors((prev) =>
+      prev.map((i) => (i.id === availInstructor.id ? { ...i, settings: updatedSettings } : i)),
+    );
+    toast.success({
+      description: `Modalità disponibilità: ${next === "publication" ? "Pubblicazione" : "Predefinita"}.`,
+    });
   };
 
   /** Build default per-day schedule from the flat base availability */
@@ -1694,23 +1743,56 @@ export function AutoscuoleResourcesPage({
 
         {/* ── Instructor availability dialog */}
         <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
-          <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
+          <DialogContent className={cn("gap-0 p-0 overflow-y-hidden overflow-x-clip", availInstructorMode === "publication" ? "sm:max-w-[560px]" : "sm:max-w-[480px]")}>
             <DialogTitle className="sr-only">Disponibilità — {availInstructor?.name}</DialogTitle>
             <div className="px-6 pt-5 pb-4 border-b border-border">
               <h3 className="text-base font-semibold text-foreground">Disponibilità — {availInstructor?.name}</h3>
-              {/* Tab switcher */}
-              <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Predefinito
-                </button>
-                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Calendario
+              {/* Mode badge + switch (mirrors the mobile availability-mode setting) */}
+              <div className="mt-2 flex items-center gap-2">
+                {availInstructorMode === "publication" ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
+                    <span className="size-1.5 rounded-full bg-blue-500" />
+                    Modalità pubblicazione
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
+                    <span className="size-1.5 rounded-full bg-gray-400" />
+                    Modalità predefinita
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSwitchAvailabilityMode}
+                  disabled={availModeSwitching}
+                  className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  {availModeSwitching ? "Cambio..." : "Cambia modalità"}
                 </button>
               </div>
+              {/* Tab switcher (default mode only) */}
+              {availInstructorMode === "default" && (
+                <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
+                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    Predefinito
+                  </button>
+                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                    Calendario
+                  </button>
+                </div>
+              )}
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              {availDialogTab === "default" ? (
+            {/* min-w-0: DialogContent is a grid — without it the week rail's
+                intrinsic width expands the item past the dialog and the whole
+                content bleeds/scrolls horizontally. */}
+            <div className="min-w-0 px-6 py-5 space-y-4">
+              {availInstructorMode === "publication" && availInstructor ? (
+                <InstructorPublicationEditor
+                  instructorId={availInstructor.id}
+                  base={instructorWeeklyAvailability[availInstructor.id] ?? null}
+                  onChanged={() => loadAvailability(date)}
+                />
+              ) : availDialogTab === "default" ? (
                 <>
                   <FieldGroup label="Giorni attivi">
                     <div className="flex flex-wrap gap-1.5">
@@ -1778,6 +1860,11 @@ export function AutoscuoleResourcesPage({
               )}
             </div>
 
+            {availInstructorMode === "publication" ? (
+              <div className="flex items-center justify-end border-t border-border px-6 py-4">
+                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)}>Chiudi</Button>
+              </div>
+            ) : (
             <div className="flex items-center justify-between border-t border-border px-6 py-4">
               {availDialogTab === "default" ? (
                 <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
@@ -1858,6 +1945,7 @@ export function AutoscuoleResourcesPage({
                 </Button>
               </div>
             </div>
+            )}
           </DialogContent>
         </Dialog>
 

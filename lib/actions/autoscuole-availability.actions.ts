@@ -5583,7 +5583,7 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
 
     // Load source for missing days
     let sourceOverrides: Array<{ date: Date; ranges: unknown }> = [];
-    let defaultAvail: { daysOfWeek: number[]; ranges: TimeRange[] } | null = null;
+    let defaultAvail: AvailabilityRecord | null = null;
 
     if (lastPublished) {
       const lpStart = new Date(lastPublished.weekStart);
@@ -5626,9 +5626,10 @@ export async function publishInstructorWeek(input: z.infer<typeof publishWeekSch
         }
       } else if (defaultAvail) {
         const dayOfWeek = dayOffset === 6 ? 0 : dayOffset + 1; // Convert Mon=0..Sun=6 to Sun=0..Sat=6
-        if (defaultAvail.daysOfWeek.includes(dayOfWeek)) {
-          ranges = defaultAvail.ranges;
-        }
+        // rangesForDay honours per-day schedules (rangesByDay): with a per-day
+        // base, defaultToAvailabilityRecord leaves the flat `ranges` EMPTY, so
+        // reading it directly materialized every day as OFF (bug 2026-07-07).
+        ranges = rangesForDay(defaultAvail, dayOfWeek);
       }
       // Ranges empty = day off
 
