@@ -65,7 +65,11 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - **Pagamenti dentro Impostazioni**: pane `payments` monta `AutoscuolePaymentsPage tabs={null}`; menu hamburger «Pagamenti» → `?tab=settings&pane=payments` (la route ?tab=payments resta come fallback).
   - Giallo legacy neutralizzato: `ToggleChip` attivo → near-black #222 (primitiva condivisa), icone accordion `bg-[#eef0f6] text-navy-900`, PolicySwitch/card attive → `#eeeef4`/`#cfcfdc`, tab dei dialog disponibilità → bianco+bordo, calendario override → navy, banner codice istruttore neutro, LocationFormDialog. NON toccati i gialli semantici di warning (Stripe requirements, pallino pending).
   - e2e: `auth.setup.ts` fixato (aspettava ancora `autoscuole-dashboard-page` → `autoscuole-agenda-page`). Tutti e 5 i test passano in locale, incluso `vehicles.auth.spec` che attraversa il nuovo overlay (bottone «Veicoli» in sidebar).
-  - TODO possibili post-verifica: restyle interno delle card Istruttori/Veicoli/Gestione allievi (ora conservano il layout a card legacy, solo colori neutralizzati); pane «Informazioni aziendali» del proto (profilo con foto + campi inline edit) non esiste ancora — richiede backend, valutare con l'utente.
+  - Rifiniture post-feedback:
+    - **Fix select nell'overlay**: z-[450] copriva i portal Radix (z-50) → overlay a z-40 (sopra header shell z-30, sotto Select/Dialog).
+    - **Pane «Informazioni aziendali»** (nuova, prima voce sidebar): `tabs/BusinessInfoPane.tsx` — foto profilo 132px con badge Modifica (upload → POST /api/uploads/company-logo esistente, aggiorna anche companyAtom.logoUrl → avatar shell), campi inline-edit stile proto (Nome e cognome → updateProfile, Nome Autoscuola → updateCompanyName, Telefono → updateProfile esteso con `phone`; nuova action `getMyProfile`), email mascherata in sola lettura (cambio email = assistenza).
+    - **Card Istruttori/Veicoli come proto**: `resource-card.tsx` riscritta (hairline #dddddd radius 14, nome 16/700, azioni = icone nude grigie, pill fasce navy #eef0f6/#cfcfdc, minuti 13/700, empty box #f8f8f8; niente banda gialla); card dashed «Invita istruttore»/«Nuovo veicolo» in coda al grid (asset proto in `public/images/settings/`); **ColorSwatchPicker mantenuto** (scelta colore istruttore non presente nel design ma da conservare); badge veicolo neutralizzati (Esclusivo/Pool navy pill, B·Manuale grigio).
+    - `InlineToggle` attivo giallo → navy-900 (primitiva condivisa); bottone Salva fucsia in VehiclesTab → Button standard.
 
 ## Next steps
 

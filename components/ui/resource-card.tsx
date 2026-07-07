@@ -4,8 +4,10 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * ResourceCard — card for instructors/vehicles with availability info.
- * Yellow accent strip for availability section.
+ * ResourceCard — card istruttori/veicoli nello stile del redesign Airbnb
+ * (proto #config-tab-istruttori): hairline #dddddd radius 14, nome 16/700,
+ * azioni = icone nude in alto a destra, riga disponibilità grigia, footer
+ * con pill navy delle fasce + minuti totali in bold.
  */
 export function ResourceCard({
   name,
@@ -37,76 +39,75 @@ export function ResourceCard({
     <div
       data-testid={testId}
       className={cn(
-        "rounded-xl border border-border bg-white shadow-card transition-shadow hover:shadow-card-primary",
+        "rounded-[14px] border border-[#dddddd] bg-white p-5",
         inactive && "opacity-55",
         className,
       )}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 p-4 pb-2">
+      {/* Header: nome + azioni nude */}
+      <div className="mb-2 flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-semibold text-foreground">
+            <span className="truncate text-base font-bold text-foreground">
               {name}
             </span>
             {inactive && (
-              <span className="shrink-0 rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-500">
+              <span className="shrink-0 rounded-full border border-[#fad4cc] bg-[#fff4f2] px-2 py-0.5 text-[10px] font-semibold text-[#c13515]">
                 {inactiveLabel}
               </span>
             )}
           </div>
           {subtitle && (
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="mt-0.5 text-xs font-medium text-[#929292]">
               {subtitle}
             </div>
           )}
         </div>
         {actions && (
-          <div className="flex items-center gap-1 shrink-0">{actions}</div>
+          <div className="flex shrink-0 items-center gap-2.5">{actions}</div>
         )}
       </div>
 
-      {/* Availability summary */}
+      {/* Riga disponibilità settimanale */}
       {availabilitySummary && (
-        <div className="px-4 pb-2 text-[11px] text-muted-foreground">
+        <div className="mb-3.5 text-xs font-medium text-[#929292]">
           {availabilitySummary}
         </div>
       )}
 
-      {/* Slots section — yellow accent */}
-      <div className="border-t border-border bg-yellow-50/50 px-4 py-2.5 rounded-b-xl">
+      {/* Footer: pill fasce + minuti totali */}
+      {slots ? (
         <div className="flex items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1.5">
-            {slots ?? (
-              <span className="text-xs text-muted-foreground">
-                {emptyLabel}
-              </span>
-            )}
-          </div>
+          <div className="flex flex-wrap gap-1.5">{slots}</div>
           {totalLabel && (
-            <span className="shrink-0 text-xs tabular-nums text-yellow-700 font-medium">
+            <span className="shrink-0 text-[13px] font-bold tabular-nums text-foreground">
               {totalLabel}
             </span>
           )}
         </div>
-      </div>
+      ) : (
+        <div className="rounded-[8px] bg-[#f8f8f8] p-3 text-center text-[13px] font-medium text-[#929292]">
+          {emptyLabel}
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * SlotPill — time range pill inside ResourceCard.
+ * SlotPill — pill navy della fascia oraria dentro ResourceCard (stile proto).
  */
 export function SlotPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-0.5 text-[11px] font-medium text-yellow-700">
+    <span className="rounded-full border border-[#cfcfdc] bg-[#eef0f6] px-2.5 py-1 text-xs font-semibold text-navy-900">
       {children}
     </span>
   );
 }
 
 /**
- * ResourceCardAction — icon button for ResourceCard header.
+ * ResourceCardAction — icona-azione nuda nell'header della card (stile proto:
+ * grigia, diventa scura in hover, nessun box).
  */
 export function ResourceCardAction({
   onClick,
@@ -122,7 +123,7 @@ export function ResourceCardAction({
       type="button"
       onClick={onClick}
       title={title}
-      className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition hover:bg-gray-50 hover:text-foreground"
+      className="flex cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
     >
       {children}
     </button>

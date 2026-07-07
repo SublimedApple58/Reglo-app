@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Image from "next/image";
 import { Plus, Clock, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -274,17 +275,7 @@ export default function InstructorsTab({
 }: InstructorsTabProps) {
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div />
-        <Button
-          size="sm"
-          onClick={() => setInviteInstructorOpen(true)}
-        >
-          <Plus className="size-3.5 mr-1.5" />
-          Invita istruttore
-        </Button>
-      </div>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+      <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
         {instructors.map((instructor) => {
           const wa = instructorWeeklyAvailability[instructor.id] ?? null;
           const ranges = instructorAvailability[instructor.id] ?? [];
@@ -316,13 +307,13 @@ export default function InstructorsTab({
                     onClick={() => openClusterPanel(instructor)}
                     title="Gestione autonoma"
                   >
-                    <Settings2 className="size-3.5" />
+                    <Settings2 className="size-[15px]" strokeWidth={1.8} />
                   </ResourceCardAction>
                   <ResourceCardAction
                     onClick={() => openInstructorAvailabilityDialog(instructor)}
                     title="Modifica disponibilità"
                   >
-                    <Clock className="size-3.5" />
+                    <Clock className="size-[15px]" strokeWidth={1.8} />
                   </ResourceCardAction>
                   <ResourceCardAction
                     onClick={() => {
@@ -366,11 +357,26 @@ export default function InstructorsTab({
             />
           );
         })}
-        {!instructors.length ? (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
-            Nessun istruttore disponibile.
-          </div>
-        ) : null}
+        {/* Card dashed "Invita istruttore" (stile proto) */}
+        <button
+          type="button"
+          onClick={() => setInviteInstructorOpen(true)}
+          className="flex min-h-[150px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[14px] border-[1.5px] border-dashed border-[#d5d5d5] bg-transparent p-5 transition-colors hover:border-navy-900 hover:bg-navy-50"
+        >
+          <span className="relative size-[58px]">
+            <Image
+              src="/images/settings/istruttore-nuovo.png"
+              alt=""
+              width={58}
+              height={58}
+              className="size-[58px] rounded-full object-cover"
+            />
+            <span className="absolute -bottom-px -right-px flex size-[22px] items-center justify-center rounded-full border-2 border-white bg-navy-900">
+              <Plus className="size-3 text-white" strokeWidth={2.4} />
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-navy-900">Invita istruttore</span>
+        </button>
       </div>
 
       {/* ── Cluster panel dialog ── */}

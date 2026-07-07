@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,9 @@ const StudentsTab = dynamic(() => import("./tabs/StudentsTab"));
 const VehiclesTab = dynamic(() => import("./tabs/VehiclesTab"));
 const AutoscuolePaymentsPage = dynamic(() =>
   import("./AutoscuolePaymentsPage").then((m) => m.AutoscuolePaymentsPage),
+);
+const BusinessInfoPane = dynamic(() =>
+  import("./tabs/BusinessInfoPane").then((m) => m.BusinessInfoPane),
 );
 import type { SettingsSectionKey } from "./tabs/SettingsTab";
 import {
@@ -241,6 +244,7 @@ type OverrideInfo = {
 
 /** Voci della sidebar dell'overlay "Impostazioni dell'account" (pattern proto #section-configurazione) */
 type ConfigPane =
+  | "business"
   | "locations"
   | "payments"
   | "bookings"
@@ -253,6 +257,7 @@ type ConfigPane =
 
 const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
   [
+    { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
     { key: "locations", label: "Sede e luoghi", icon: MapPin },
     { key: "payments", label: "Fatturazione e pagamenti", icon: CreditCard },
   ],
@@ -270,6 +275,7 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
 ];
 
 const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
+  business: "Informazioni aziendali",
   locations: "Sede e luoghi",
   payments: "Fatturazione e pagamenti",
   bookings: "Prenotazioni",
@@ -1622,7 +1628,7 @@ export function AutoscuoleResourcesPage({
 
   return (
     <div
-      className="fixed inset-0 z-[450] flex flex-col overflow-hidden bg-white"
+      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-white"
       data-testid="autoscuole-settings-page"
     >
       {tabs}
@@ -1689,6 +1695,8 @@ export function AutoscuoleResourcesPage({
             )}
             {loading ? (
           <SettingsSkeleton />
+        ) : configTab === "business" ? (
+          <BusinessInfoPane />
         ) : configTab === "bookings" || configTab === "policy" || configTab === "reminders" || configTab === "locations" ? (
           renderSettingsSection(configTab)
         ) : configTab === "payments" ? (

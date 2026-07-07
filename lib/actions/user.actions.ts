@@ -151,7 +151,22 @@ export async function getUserById(userId: string) {
 }
 
 // Update the user profile
-export async function updateProfile(user: { name: string; email: string }) {
+/** Profilo dell'utente loggato (per la pane "Informazioni aziendali" e simili). */
+export async function getMyProfile() {
+  try {
+    const session = await auth();
+    const currentUser = await prisma.user.findFirst({
+      where: { id: session?.user?.id },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+    if (!currentUser) throw new Error('User not found');
+    return { success: true as const, data: currentUser };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function updateProfile(user: { name: string; email: string; phone?: string | null }) {
   try {
     const session = await auth();
 
@@ -169,6 +184,7 @@ export async function updateProfile(user: { name: string; email: string }) {
       },
       data: {
         name: user.name,
+        ...(user.phone !== undefined ? { phone: user.phone?.trim() || null } : {}),
       },
     });
 

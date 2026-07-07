@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * InlineToggle — iOS-style toggle switch.
- * Uses yellow when on, gray when off.
+ * Navy when on (redesign Airbnb), gray when off.
  */
 export function InlineToggle({
   checked,
@@ -33,7 +33,7 @@ export function InlineToggle({
       className={cn(
         "relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200",
         trackSize,
-        checked ? "bg-yellow-400" : "bg-black/15",
+        checked ? "bg-navy-900" : "bg-black/15",
         disabled && "pointer-events-none opacity-40",
       )}
     >

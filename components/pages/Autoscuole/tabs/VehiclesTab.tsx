@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Plus, Clock, Pencil, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
@@ -100,14 +101,7 @@ function VehiclesTabContent({
 }) {
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div />
-        <Button size="sm" onClick={openCreateVehicle}>
-          <Plus className="size-3.5 mr-1.5" />
-          Nuovo veicolo
-        </Button>
-      </div>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+      <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
         {vehicles.map((vehicle) => {
           const wa = vehicleWeeklyAvailability[vehicle.id] ?? null;
           const ranges = vehicleAvailability[vehicle.id] ?? [];
@@ -125,21 +119,21 @@ function VehiclesTabContent({
                       {vehicle.plate}
                     </span>
                   ) : null}
-                  <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700">
+                  <span className="rounded-[6px] bg-[#f2f2f2] px-[7px] py-0.5 text-[11px] font-semibold text-[#6a6a6a]">
                     {vehicle.licenseCategory} ·{" "}
                     {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ??
                       vehicle.transmission}
                   </span>
                   {vehicle.assignedInstructorId ? (
-                    <span className="rounded-full bg-pink-50 px-1.5 py-0.5 text-[10px] font-medium text-pink-700">
+                    <span className="rounded-[6px] border border-[#cfcfdc] bg-[#eef0f6] px-[7px] py-0.5 text-[11px] font-semibold text-navy-900">
                       Esclusivo
                     </span>
                   ) : vehicle.poolInstructorIds.length ? (
-                    <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">
+                    <span className="rounded-[6px] border border-[#cfcfdc] bg-[#eef0f6] px-[7px] py-0.5 text-[11px] font-semibold text-navy-900">
                       Pool · {vehicle.poolInstructorIds.length}
                     </span>
                   ) : (
-                    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                    <span className="rounded-[6px] bg-[#f2f2f2] px-[7px] py-0.5 text-[11px] font-semibold text-[#6a6a6a]">
                       Aperto
                     </span>
                   )}
@@ -193,11 +187,28 @@ function VehiclesTabContent({
             />
           );
         })}
-        {!vehicles.length ? (
-          <div className="flex items-center justify-center rounded-xl border border-dashed border-border bg-gray-50/50 p-6 text-sm text-muted-foreground">
-            Nessun veicolo disponibile.
-          </div>
-        ) : null}
+        {/* Card dashed "Nuovo veicolo" (stile proto) */}
+        <button
+          type="button"
+          onClick={openCreateVehicle}
+          className="flex min-h-[150px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[14px] border-[1.5px] border-dashed border-[#d5d5d5] bg-transparent p-5 transition-colors hover:border-navy-900 hover:bg-navy-50"
+        >
+          <span className="relative size-[58px]">
+            <span className="flex size-[58px] items-center justify-center overflow-hidden rounded-full bg-[#eef3f7]">
+              <Image
+                src="/images/settings/veicolo-nuovo.png"
+                alt=""
+                width={52}
+                height={52}
+                className="size-[52px] object-contain"
+              />
+            </span>
+            <span className="absolute -bottom-px -right-px flex size-[22px] items-center justify-center rounded-full border-2 border-white bg-navy-900">
+              <Plus className="size-3 text-white" strokeWidth={2.4} />
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-navy-900">Nuovo veicolo</span>
+        </button>
       </div>
     </>
   );
@@ -307,7 +318,7 @@ export default function VehiclesTab({
         <Button
           onClick={handleSaveSettings}
           disabled={savingSettings}
-          className="bg-pink-500 text-white hover:bg-pink-600 rounded-full px-6 py-2.5 text-sm font-semibold shadow-md"
+          className="min-w-[180px]"
         >
           {savingSettings ? "Salvataggio..." : "Salva configurazione"}
         </Button>
