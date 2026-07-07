@@ -18,6 +18,7 @@ Instructor and vehicle availability management: weekly schedules, daily override
 - Resolver: `buildAvailabilityResolver()` — checks slots against weekly + daily overrides
 - Slot generation: `createAvailabilitySlots()`, `getAllAvailableSlots()`
 - Vehicle: `setAutoscuolaVehicleWeeklyAvailability()`
+- **Fix 2026-07-07 (fasce che "si cancellavano a caso")**: `setAutoscuolaInstructorWeeklyAvailability` + variante vehicle ora RITORNANO anche `ranges` nel data. Prima la risposta era senza fasce, la web `AutoscuoleResourcesPage` la salvava nella mappa locale → riaprendo il dialog Disponibilità subito dopo un salvataggio si vedeva UNA sola fascia piatta, e risalvando da lì il DB veniva sovrascritto perdendo le altre fasce (riprodotto con 3 fasce su Reglo srl dev).
 
 ## DB models
 - `AutoscuolaWeeklyAvailability` — recurring base schedule (daysOfWeek, startMinutes, endMinutes, JSON `ranges`, JSON `rangesByDay`)

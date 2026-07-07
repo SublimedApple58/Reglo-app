@@ -6117,7 +6117,18 @@ export async function setAutoscuolaInstructorWeeklyAvailability(
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
-    return { success: true as const, data: { daysOfWeek: availability.daysOfWeek, startMinutes: availability.startMinutes, endMinutes: availability.endMinutes } };
+    // Return `ranges` too: the page stores this payload in its local map, and a
+    // rangeless response made the dialog reopen with ONE flat band — re-saving
+    // from there silently wiped the other bands (Reglo srl, 2026-07-07).
+    return {
+      success: true as const,
+      data: {
+        daysOfWeek: availability.daysOfWeek,
+        startMinutes: availability.startMinutes,
+        endMinutes: availability.endMinutes,
+        ranges: rangesJson,
+      },
+    };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -6258,7 +6269,17 @@ export async function setAutoscuolaVehicleWeeklyAvailability(
 
     await invalidateAutoscuoleCache({ companyId, segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA] });
 
-    return { success: true as const, data: { daysOfWeek: availability.daysOfWeek, startMinutes: availability.startMinutes, endMinutes: availability.endMinutes } };
+    // Same as the instructor variant: include `ranges` so the page's local map
+    // doesn't lose the extra bands after a save (destructive on re-save).
+    return {
+      success: true as const,
+      data: {
+        daysOfWeek: availability.daysOfWeek,
+        startMinutes: availability.startMinutes,
+        endMinutes: availability.endMinutes,
+        ranges: rangesJson,
+      },
+    };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
