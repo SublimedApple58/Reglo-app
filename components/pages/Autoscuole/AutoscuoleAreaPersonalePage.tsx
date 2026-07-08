@@ -7,15 +7,10 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useSession } from "next-auth/react";
 import {
   Camera,
-  Check,
   CircleUserRound,
-  Copy,
   CreditCard,
-  Eye,
-  EyeOff,
   FileText,
   Loader2,
-  Lock,
   Receipt,
 } from "lucide-react";
 
@@ -31,9 +26,13 @@ const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
   { key: "abbonamento", label: "Abbonamento", icon: <CreditCard className="size-6" strokeWidth={1.9} /> },
 ];
 
+const RESET_INPUT_CLASS =
+  "h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] hover:border-[#929292] focus:border-[#222222]";
+
 /** Pane unica "Il tuo profilo": foto personale (cerchio 132px con badge
- * Modifica, stesso pattern della foto autoscuola) + sezione Credenziali con
- * il vault in stile proto (righe mascherate, Rivela/Copia, nota custodia). */
+ * Modifica, stesso pattern della foto autoscuola) + sezione Credenziali:
+ * email dell'account e reimpostazione password con codice OTP via email
+ * (stessi endpoint del flusso mobile `/api/mobile/auth/password-reset`). */
 function ProfiloPane() {
   const toast = useFeedbackToast();
   const { data: sessionData, update: updateSession } = useSession();
@@ -42,20 +41,85 @@ function ProfiloPane() {
   const setUserRefresh = useSetAtom(userRefreshAtom);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
-  const [credRevealed, setCredRevealed] = React.useState(false);
-  const [credCopied, setCredCopied] = React.useState(false);
+  const [resetOpen, setResetOpen] = React.useState(false);
+  const [resetRequesting, setResetRequesting] = React.useState(false);
+  const [resetSubmitting, setResetSubmitting] = React.useState(false);
+  const [resetCode, setResetCode] = React.useState("");
+  const [resetPassword, setResetPassword] = React.useState("");
+  const [resetPasswordConfirm, setResetPasswordConfirm] = React.useState("");
 
   const name = session?.user?.name ?? "";
   const email = session?.user?.email ?? "";
 
-  const handleCopyCredentials = async () => {
-    if (!email) return;
+  const requestResetCode = async () => {
+    if (!email || resetRequesting) return;
+    setResetRequesting(true);
     try {
-      await navigator.clipboard.writeText(email);
-      setCredCopied(true);
-      setTimeout(() => setCredCopied(false), 1800);
+      const res = await fetch("/api/mobile/auth/password-reset/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const json = (await res.json()) as { success: boolean; message?: string };
+      if (!res.ok || !json.success) {
+        toast.error({ description: json.message ?? "Invio del codice non riuscito." });
+        return;
+      }
+      setResetOpen(true);
     } catch {
-      toast.error({ description: "Copia non riuscita." });
+      toast.error({ description: "Invio del codice non riuscito." });
+    } finally {
+      setResetRequesting(false);
+    }
+  };
+
+  const cancelReset = () => {
+    setResetOpen(false);
+    setResetCode("");
+    setResetPassword("");
+    setResetPasswordConfirm("");
+  };
+
+  const confirmReset = async () => {
+    if (resetSubmitting) return;
+    if (resetCode.trim().length !== 6) {
+      toast.error({ description: "Il codice è di 6 cifre." });
+      return;
+    }
+    if (resetPassword.length < 6) {
+      toast.error({ description: "La nuova password deve avere almeno 6 caratteri." });
+      return;
+    }
+    if (resetPassword !== resetPasswordConfirm) {
+      toast.error({ description: "Le password non coincidono." });
+      return;
+    }
+    setResetSubmitting(true);
+    try {
+      const res = await fetch("/api/mobile/auth/password-reset/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          code: resetCode.trim(),
+          password: resetPassword,
+          confirmPassword: resetPasswordConfirm,
+        }),
+      });
+      const json = (await res.json()) as { success: boolean; message?: string };
+      if (!res.ok || !json.success) {
+        toast.error({ description: json.message ?? "Reimpostazione non riuscita." });
+        return;
+      }
+      cancelReset();
+      toast.success({
+        title: "Password aggiornata",
+        description: "Dalla prossima volta accedi con la nuova password (anche sull'app).",
+      });
+    } catch {
+      toast.error({ description: "Reimpostazione non riuscita." });
+    } finally {
+      setResetSubmitting(false);
     }
   };
   const initials =
@@ -144,77 +208,115 @@ function ProfiloPane() {
         </div>
       </div>
 
-      {/* ── Credenziali (vault, stile proto #ap-tab-credenziali) ── */}
+      {/* ── Credenziali: email account + reimposta password (OTP email) ── */}
       <div className="mt-12 max-w-[680px]">
         <h3 className="mb-[18px] text-lg font-bold tracking-[-0.3px] text-foreground">
           Credenziali
         </h3>
-        <div className="mb-4 overflow-hidden rounded-2xl border border-[#ebebeb]">
-          <div className="flex items-center gap-3 border-b border-[#ebebeb] bg-[#f7f9ff] px-[22px] py-[13px]">
-            <Lock className="size-[18px] text-[#2a6fdb]" strokeWidth={1.8} />
-            <span className="text-[13.5px] font-semibold text-[#2a6fdb]">
-              Vault sicuro · cifrato end-to-end
-            </span>
-          </div>
+        <div className="overflow-hidden rounded-2xl border border-[#ebebeb]">
           <div className="px-[22px] py-[18px]">
             <div className="border-b border-[#f2f2f2] py-[11px]">
-              <div className="mb-[5px] text-xs font-semibold text-[#929292]">
-                Email / Username
-              </div>
-              <div className="truncate font-mono text-base font-semibold tracking-[0.5px] text-foreground">
-                {credRevealed ? email || "—" : "••••••••••••••••••••"}
+              <div className="mb-[5px] text-xs font-semibold text-[#929292]">Email</div>
+              <div className="truncate text-base font-semibold text-foreground">
+                {email || "—"}
               </div>
             </div>
-            <div className="py-[11px]">
-              <div className="mb-[5px] text-xs font-semibold text-[#929292]">Password</div>
-              {credRevealed ? (
-                <div className="text-[13px] font-medium italic text-[#929292]">
-                  Custodita dal team Reglo — non ancora caricata nel vault.
+            {!resetOpen ? (
+              <div className="flex items-center justify-between gap-4 pt-[11px]">
+                <div className="min-w-0">
+                  <div className="mb-[5px] text-xs font-semibold text-[#929292]">Password</div>
+                  <div className="font-mono text-base font-semibold tracking-[0.5px] text-foreground">
+                    ••••••••••••
+                  </div>
                 </div>
-              ) : (
-                <div className="font-mono text-base font-semibold tracking-[0.5px] text-foreground">
-                  ••••••••••••
+                <button
+                  type="button"
+                  onClick={requestResetCode}
+                  disabled={resetRequesting}
+                  className="flex shrink-0 cursor-pointer select-none items-center gap-2 rounded-[10px] border border-[#dddddd] px-4 py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7] disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {resetRequesting && <Loader2 className="size-4 animate-spin" />}
+                  Reimposta password
+                </button>
+              </div>
+            ) : (
+              <div className="pt-[11px]">
+                <div className="mb-[5px] text-xs font-semibold text-[#929292]">Password</div>
+                <p className="mb-4 text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+                  Ti abbiamo inviato un codice di 6 cifre a{" "}
+                  <span className="font-semibold text-foreground">{email}</span>. Inseriscilo
+                  qui sotto insieme alla nuova password: la userai anche per accedere
+                  all&apos;app.
+                </p>
+                <div className="mb-3">
+                  <div className="mb-2 text-xs font-semibold text-[#555555]">Codice</div>
+                  <input
+                    value={resetCode}
+                    onChange={(e) =>
+                      setResetCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                    }
+                    inputMode="numeric"
+                    placeholder="000000"
+                    className={cn(
+                      RESET_INPUT_CLASS,
+                      "w-[160px] font-mono text-base tracking-[4px]",
+                    )}
+                  />
                 </div>
-              )}
-            </div>
-            <div className="mt-3.5 flex gap-2.5">
-              <button
-                type="button"
-                onClick={() => setCredRevealed((prev) => !prev)}
-                className="flex flex-1 cursor-pointer select-none items-center justify-center gap-2 rounded-[10px] border border-[#dddddd] p-3 text-sm font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
-              >
-                {credRevealed ? (
-                  <EyeOff className="size-4" strokeWidth={1.7} />
-                ) : (
-                  <Eye className="size-4" strokeWidth={1.7} />
-                )}
-                {credRevealed ? "Nascondi" : "Rivela"}
-              </button>
-              <button
-                type="button"
-                onClick={handleCopyCredentials}
-                className="flex flex-1 cursor-pointer select-none items-center justify-center gap-2 rounded-[10px] bg-[#222222] p-3 text-sm font-semibold text-white transition-colors hover:bg-black"
-              >
-                {credCopied ? (
-                  <Check className="size-[15px]" strokeWidth={2} />
-                ) : (
-                  <Copy className="size-[15px]" strokeWidth={1.7} />
-                )}
-                {credCopied ? "Copiato" : "Copia"}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-[18px] py-[13px]">
-          <div className="mb-1.5 text-xs font-bold text-[#7a6a00]">
-            Custodia delle credenziali
-          </div>
-          <div className="text-xs font-medium leading-relaxed text-[#7a6a00]">
-            Reglo conserva e gestisce le credenziali di accesso. La condivisione avviene
-            esclusivamente tramite link protetti e temporanei:{" "}
-            <strong>non inviare mai le credenziali via email, chat o documenti condivisi</strong>.
-            In caso di sospetto accesso non autorizzato, il team Reglo interviene
-            tempestivamente per assisterti.
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-[#555555]">
+                      Nuova password
+                    </div>
+                    <input
+                      type="password"
+                      value={resetPassword}
+                      onChange={(e) => setResetPassword(e.target.value)}
+                      placeholder="Minimo 6 caratteri"
+                      className={RESET_INPUT_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-2 text-xs font-semibold text-[#555555]">
+                      Conferma password
+                    </div>
+                    <input
+                      type="password"
+                      value={resetPasswordConfirm}
+                      onChange={(e) => setResetPasswordConfirm(e.target.value)}
+                      placeholder="Ripeti la password"
+                      className={RESET_INPUT_CLASS}
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={cancelReset}
+                    className="cursor-pointer select-none rounded-[10px] border border-[#dddddd] px-4 py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
+                  >
+                    Annulla
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmReset}
+                    disabled={resetSubmitting}
+                    className="flex cursor-pointer select-none items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    {resetSubmitting && <Loader2 className="size-4 animate-spin" />}
+                    Conferma nuova password
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestResetCode}
+                    disabled={resetRequesting}
+                    className="ml-auto cursor-pointer select-none text-[13px] font-semibold text-[#6a6a6a] underline underline-offset-2 transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    Invia di nuovo il codice
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -224,9 +326,9 @@ function ProfiloPane() {
 
 /**
  * Area personale (overlay full-screen stile Impostazioni, dal proto
- * #section-areapersonale). I contenuti sono in gran parte in arrivo: nessun
- * backend esiste ancora per vault credenziali, contratto/fatture e
- * abbonamento — le pane mostrano lo scaffold del design con stati onesti.
+ * #section-areapersonale). Profilo e credenziali (email + reset password OTP)
+ * sono funzionanti; contratto/fatture e abbonamento non hanno ancora backend —
+ * quelle pane mostrano lo scaffold del design con stati onesti.
  */
 export function AutoscuoleAreaPersonalePage() {
   const router = useRouter();
