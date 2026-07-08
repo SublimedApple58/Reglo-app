@@ -19,6 +19,7 @@
 
 ## Note di rilascio
 
-- Migration da applicare su staging/prod al rilascio (`pnpm migrate:staging` / `pnpm migrate:prod`).
+- **2026-07-08: su STAGING** — `ship:staging` fatto (staging = 17cc919, deploy Vercel Ready) + `pnpm migrate:staging` applicata (`20260708160036_support_center`). Verifica dev completa: giro chat titolare→backoffice→risposta→badge→feedback 7/7 + e2e verdi. staging.reglo.it è dietro Vercel SSO: il QA va fatto da browser loggato, non via curl.
+- Al rilascio PROD: `pnpm migrate:prod` (stessa migration).
 - **Riavviare il server dopo la migration in dev** (Prisma client rigenerato non viene ricaricato a caldo).
 - I mock precedenti (canned reply "Giulia", feedback non salvato) sono rimossi; e2e aggiornato ("Ciao! Qui parli direttamente").
