@@ -142,6 +142,7 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - **Veicoli** (`tabs/VehiclesTab.tsx`): card "Modulo veicoli" / "Percorso patente di default" / "Auto al seguito (moto)" in stile mock — bordo #e8e8e8 radius 14 px-6 py-5, titolo 15/600 + desc 13.5 grigia, InlineToggle lg (solo il toggle è cliccabile), select h-11 radius 10 con label 12/600 #555; wrapper `space-y-4`. Card veicolo/dashed "Nuovo veicolo" già a posto (ResourceCard).
   - **Policy tipi guida** (`tabs/SettingsTab.tsx`): `PolicySwitch` → riga proto bg #f8f8f8 radius 10 p-4 toggle lg (niente più variante navy quando attiva); label "CONFIGURA PER TIPO DI GUIDA" 11px uppercase #929292; card per tipo = chip proto (bordo 1.5 #9fc3f0 + bg #eaf2fd quando obbligatoria, cerchio-check 20px #cfe0fb/#1a2b45, label 13.5/600) con dentro la riga "Limite orario" (toggle sm) + espansione giorni (ToggleChip azzurre) e select inizio/fine — TUTTE le funzioni esistenti mantenute (obbligatorietà per tipo + vincoli giorni/fasce), grid 3 col.
   - Typecheck+lint ok; e2e: "utenti" flaky sotto carico parallelo (passa da solo, sezione non toccata), il resto verde.
+  - Addendum su richiesta utente: dialog "Nuovo veicolo" ora con select **Categoria patente + Cambio** (preimpostati sul percorso patente di default; createVehicleSchema li accettava già) — prima si potevano scegliere solo in modifica.
 
 ## Next steps
 
