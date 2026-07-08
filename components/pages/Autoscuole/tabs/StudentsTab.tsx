@@ -1,23 +1,7 @@
 "use client";
 
 import React from "react";
-import { AnimatePresence, motion } from "motion/react";
-import {
-  Bell,
-  Calendar,
-  ChevronDown,
-  CircleMinus,
-  CircleX,
-  Clock,
-  FileText,
-  KeyRound,
-  Loader2,
-  Repeat2,
-  Send,
-  UserCheck,
-  UserRoundCheck,
-  UsersRound,
-} from "lucide-react";
+import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -115,169 +99,57 @@ const NOTIFICATION_TIME_OPTIONS = [
   "22:00",
 ];
 
-/** Card accordion del proto #config-tab-gestione: bordo #dddddd, radius 14,
- * icona 36px navy su #eef0f6, chevron che ruota. */
-function GestioneCard({
-  icon: Icon,
-  title,
-  description,
-  expanded,
-  onToggle,
-  children,
-}: {
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number | string }>;
-  title: string;
-  description: string;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-2 overflow-hidden rounded-[14px] border border-[#dddddd] bg-white">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className="flex w-full cursor-pointer select-none items-center gap-4 px-6 py-5 transition-colors hover:bg-[#fafafa]"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] border border-[#cfcfdc] bg-[#eef0f6]">
-          <Icon className="h-4 w-4 text-navy-900" strokeWidth={1.6} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-semibold text-foreground">{title}</h3>
-          <p className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</p>
-        </div>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-[#929292] transition-transform duration-200",
-            expanded && "rotate-180",
-          )}
-        />
-      </div>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-            animate={{ height: "auto", opacity: 1, overflow: "visible", transitionEnd: { overflow: "visible" } }}
-            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            <div className="border-t border-[#f5f5f5] px-6 pb-6 pt-1">{children}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/** Riga toggle principale del proto: sfondo #f8f8f8, titolo 14/600, toggle navy. */
-function GestioneRow({
+/** Riga setting flat (stile lista Airbnb): titolo 600 + descrizione grigia,
+ * toggle navy grande a destra. Solo il toggle è cliccabile. */
+function SettingRow({
   title,
   titleExtra,
   description,
   checked,
   onToggle,
+  control,
+  nested,
 }: {
   title: string;
   titleExtra?: React.ReactNode;
   description: string;
-  checked: boolean;
-  onToggle: () => void;
+  checked?: boolean;
+  onToggle?: () => void;
+  /** Sostituisce il toggle (es. bottone pausa) */
+  control?: React.ReactNode;
+  /** Riga annidata sotto un setting padre (spaziatura ridotta) */
+  nested?: boolean;
 }) {
   return (
-    <div
-      role="switch"
-      tabIndex={0}
-      aria-checked={checked}
-      onClick={onToggle}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-      className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-    >
-      <div>
-        <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+    <div className={cn("flex items-center justify-between gap-8", nested && "mt-8")}>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-base font-semibold text-foreground">
           {title}
           {titleExtra}
         </div>
-        <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
+        <div className="mt-1 max-w-[720px] text-[15px] font-normal leading-relaxed text-[#6a6a6a]">
+          {description}
+        </div>
       </div>
-      <InlineToggle checked={checked} size="lg" />
+      {control ?? <InlineToggle checked={Boolean(checked)} onChange={onToggle} size="xl" />}
     </div>
   );
 }
 
-/** Riga toggle annidata (senza sfondo) per i sotto-setting, come nel proto. */
-function GestioneSubRow({
-  title,
-  description,
-  checked,
-  onToggle,
-  control,
-}: {
-  title: string;
-  description: string;
-  checked?: boolean;
-  onToggle?: () => void;
-  control?: React.ReactNode;
-}) {
-  const interactive = Boolean(onToggle);
+/** Campo con etichetta grigia sopra (select / input), come nei mock. */
+function FieldBlock({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div
-      role={interactive ? "switch" : undefined}
-      tabIndex={interactive ? 0 : undefined}
-      aria-checked={interactive ? checked : undefined}
-      onClick={onToggle}
-      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle?.(); } } : undefined}
-      className={cn(
-        "mt-[18px] flex items-center justify-between gap-4 px-0.5 py-1.5",
-        interactive && "cursor-pointer",
-      )}
-    >
-      <div>
-        <div className="text-sm font-semibold text-foreground">{title}</div>
-        <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
-      </div>
-      {control ?? <InlineToggle checked={Boolean(checked)} size="lg" />}
-    </div>
-  );
-}
-
-/** Input numerico stile proto: 120px, bordo 1.5px, focus nero. */
-function GestioneNumberField({
-  label,
-  value,
-  min,
-  max,
-  fallback,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  fallback: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="px-0.5 pt-[18px]">
-      <div className="mb-[9px] text-sm font-semibold text-foreground">{label}</div>
-      <input
-        type="number"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Math.max(min, Math.min(max, Number(e.target.value) || fallback)))}
-        className="w-[120px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
-      />
+    <div className="mt-7">
+      <div className="mb-2.5 text-sm font-medium text-[#6a6a6a]">{label}</div>
+      {children}
     </div>
   );
 }
 
 const SELECT_TRIGGER_CLASS =
-  "h-11 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0";
+  "h-[52px] w-[400px] max-w-full rounded-[12px] border-[1.5px] border-[#dddddd] px-4 text-base font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0 [&_svg]:size-[18px]";
 
-/** Tooltip informativo (i) come nel proto guide di gruppo. */
+/** Tooltip informativo (i) sul titolo, come nel proto guide di gruppo. */
 function InfoTooltip({ text }: { text: string }) {
   const [open, setOpen] = React.useState(false);
   return (
@@ -287,7 +159,7 @@ function InfoTooltip({ text }: { text: string }) {
       onMouseLeave={() => setOpen(false)}
       onClick={(e) => { e.stopPropagation(); setOpen((prev) => !prev); }}
     >
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="shrink-0 cursor-pointer">
+      <svg width="15" height="15" viewBox="0 0 14 14" fill="none" className="shrink-0 cursor-pointer">
         <circle cx="7" cy="7" r="6" stroke="#b0b0b0" strokeWidth="1.2" />
         <path d="M7 6.2v3.3" stroke="#b0b0b0" strokeWidth="1.4" strokeLinecap="round" />
         <circle cx="7" cy="4.2" r="0.85" fill="#b0b0b0" />
@@ -302,16 +174,10 @@ function InfoTooltip({ text }: { text: string }) {
   );
 }
 
-/** Modalità registrazione allievi — non presente nel proto ma parte della web
+/** Modalità registrazione allievi — non presente nei mock ma parte della web
  * app: assegnazione automatica della licenza quiz alla registrazione.
- * Salva subito alla pressione del toggle (nessun "Salva configurazione"). */
-function RegistrationCard({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}) {
+ * Salva subito alla pressione del toggle. Nascosta senza fase TEORIA. */
+function RegistrationSection() {
   const toast = useFeedbackToast();
   type Ctx = {
     quizSeats: number;
@@ -338,7 +204,6 @@ function RegistrationCard({
     void refresh();
   }, [refresh]);
 
-  // Senza fase TEORIA il toggle non ha significato: la card sparisce.
   if (!loading && (!ctx || !ctx.phasesEnabled.includes("TEORIA"))) {
     return null;
   }
@@ -365,50 +230,31 @@ function RegistrationCard({
   };
 
   return (
-    <GestioneCard
-      icon={KeyRound}
-      title="Modalità registrazione allievi"
-      description="Cosa succede quando un nuovo allievo si registra con il codice autoscuola."
-      expanded={expanded}
-      onToggle={onToggle}
-    >
-      <div
-        role="switch"
-        tabIndex={0}
-        aria-checked={enabled}
-        onClick={() => void handleToggle()}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); void handleToggle(); } }}
-        className={cn(
-          "mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4",
-          (saving || loading) && "pointer-events-none opacity-70",
-        )}
-      >
-        <div>
-          <div className="text-sm font-semibold text-foreground">
-            Assegnazione automatica della licenza quiz
-          </div>
-          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-            {enabled
-              ? "I nuovi allievi ricevono subito una licenza quiz (se disponibile) e partono direttamente in fase Teoria."
-              : "I nuovi allievi entrano in stato 'In attesa di attivazione'. Devi assegnare la licenza manualmente per farli partire dalla teoria."}
-          </div>
-          {!enabled && available > 0 && (
-            <div className="mt-2 text-xs font-medium text-amber-700">
-              Attivando l&apos;auto-assegnazione, gli allievi attualmente in attesa
-              riceveranno automaticamente una licenza (fino a {available} posti
-              liberi, ordine cronologico di registrazione).
-            </div>
-          )}
-        </div>
-        {saving ? (
-          <Loader2 className="size-5 shrink-0 animate-spin text-[#929292]" />
-        ) : (
-          <InlineToggle checked={enabled} size="lg" />
-        )}
-      </div>
-
-      <div className="mt-4 flex items-center justify-between rounded-[12px] border border-[#e8e8e8] px-5 py-4">
-        <span className="text-[13px] font-medium text-[#929292]">Licenze quiz</span>
+    <div className="py-8">
+      <SettingRow
+        title="Assegnazione automatica della licenza quiz"
+        description={
+          enabled
+            ? "I nuovi allievi ricevono subito una licenza quiz (se disponibile) e partono direttamente in fase Teoria."
+            : "I nuovi allievi entrano in stato 'In attesa di attivazione'. Devi assegnare la licenza manualmente per farli partire dalla teoria."
+        }
+        checked={enabled}
+        onToggle={() => void handleToggle()}
+        control={
+          saving || loading ? (
+            <Loader2 className="size-6 shrink-0 animate-spin text-[#929292]" />
+          ) : undefined
+        }
+      />
+      {!enabled && available > 0 && (
+        <p className="mt-3 max-w-[720px] text-[13px] font-medium leading-relaxed text-amber-700">
+          Attivando l&apos;auto-assegnazione, gli allievi attualmente in attesa riceveranno
+          automaticamente una licenza (fino a {available} posti liberi, ordine cronologico
+          di registrazione).
+        </p>
+      )}
+      <div className="mt-6 flex max-w-[400px] items-center justify-between rounded-[12px] border border-[#e8e8e8] px-5 py-4">
+        <span className="text-sm font-medium text-[#6a6a6a]">Licenze quiz</span>
         <span className="text-sm font-semibold tabular-nums text-foreground">
           {loading ? (
             <Loader2 className="size-4 animate-spin text-[#929292]" />
@@ -419,13 +265,11 @@ function RegistrationCard({
           )}
         </span>
       </div>
-    </GestioneCard>
+    </div>
   );
 }
 
 export default function StudentsTab({
-  expandedSection,
-  toggleSection,
   bookingCutoffEnabled,
   setBookingCutoffEnabled,
   bookingCutoffTime,
@@ -483,7 +327,7 @@ export default function StudentsTab({
   return (
     <div data-testid="gestione-allievi-pane">
       {/* ── Sub-tab Prenotazioni / Guide / App allievi ── */}
-      <div className="mb-7 flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
+      <div className="flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
         {GESTIONE_TABS.map((tab) => (
           <button
             key={tab.key}
@@ -502,25 +346,18 @@ export default function StudentsTab({
       </div>
 
       {/* ══ PRENOTAZIONI ══ */}
-      <div className={cn(gestioneTab !== "prenotazioni" && "hidden")}>
-        <GestioneCard
-          icon={Clock}
-          title="Limite prenotazione"
-          description="Imposta un orario limite il giorno prima entro cui gli allievi possono prenotare."
-          expanded={expandedSection === "bookingCutoff"}
-          onToggle={() => toggleSection("bookingCutoff")}
-        >
-          <GestioneRow
+      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "prenotazioni" && "hidden")}>
+        <div className="py-8">
+          <SettingRow
             title="Stop alle prenotazioni last-minute"
             description="Dopo un certo orario, gli allievi non possono più prenotare la guida del giorno dopo. Es: oltre le 19:30 si può prenotare solo da due giorni in avanti."
             checked={bookingCutoffEnabled}
             onToggle={() => setBookingCutoffEnabled((prev) => !prev)}
           />
           {bookingCutoffEnabled && (
-            <div className="mt-3.5 pb-1">
-              <div className="mb-2 text-xs font-semibold text-[#555555]">Orario di chiusura</div>
+            <FieldBlock label="Orario di chiusura">
               <Select value={bookingCutoffTime} onValueChange={setBookingCutoffTime}>
-                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
+                <SelectTrigger className={SELECT_TRIGGER_CLASS}>
                   <SelectValue placeholder="Orario" />
                 </SelectTrigger>
                 <SelectContent>
@@ -529,34 +366,31 @@ export default function StudentsTab({
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </FieldBlock>
           )}
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={Calendar}
-          title="Limite guide settimanali"
-          description="Limita il numero massimo di guide prenotabili da un allievo per settimana."
-          expanded={expandedSection === "weeklyLimit"}
-          onToggle={() => toggleSection("weeklyLimit")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Massimo di guide a settimana"
             description="Quante guide può prenotare un allievo in una settimana (lun–dom). Tu e gli istruttori potete sempre superarlo confermando."
             checked={weeklyBookingLimitEnabled}
             onToggle={() => setWeeklyBookingLimitEnabled((prev) => !prev)}
           />
           {weeklyBookingLimitEnabled && (
-            <div className="pb-3.5">
-              <GestioneNumberField
-                label="Guide a settimana per allievo"
-                value={weeklyBookingLimit}
-                min={1}
-                max={50}
-                fallback={1}
-                onChange={setWeeklyBookingLimit}
-              />
-              <GestioneSubRow
+            <>
+              <FieldBlock label="Guide a settimana per allievo">
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={weeklyBookingLimit}
+                  onChange={(e) => setWeeklyBookingLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+                  className="h-[52px] w-60 rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-4 text-base font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
+                />
+              </FieldBlock>
+              <SettingRow
+                nested
                 title="Precedenza a chi ha l'esame vicino"
                 description="Gli allievi con l'esame in arrivo possono prenotare più guide degli altri."
                 checked={examPriorityEnabled}
@@ -564,22 +398,26 @@ export default function StudentsTab({
               />
               {examPriorityEnabled && (
                 <>
-                  <GestioneNumberField
-                    label="Giorni prima dell'esame in cui scatta la precedenza"
-                    value={examPriorityDaysBeforeExam}
-                    min={1}
-                    max={60}
-                    fallback={14}
-                    onChange={setExamPriorityDaysBeforeExam}
-                  />
-                  <GestioneSubRow
+                  <FieldBlock label="Giorni prima dell'esame in cui scatta la precedenza">
+                    <input
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={examPriorityDaysBeforeExam}
+                      onChange={(e) => setExamPriorityDaysBeforeExam(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
+                      className="h-[52px] w-60 rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-4 text-base font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
+                    />
+                  </FieldBlock>
+                  <SettingRow
+                    nested
                     title="Riserva i posti a chi ha l'esame"
                     description="Nei giorni di precedenza, chi non ha l'esame può prenotare solo dopo che tutti gli allievi con esame hanno scelto il loro posto."
                     checked={examPriorityBlockNonExam}
                     onToggle={() => setExamPriorityBlockNonExam((prev) => !prev)}
                   />
                   {examPriorityBlockNonExam && (
-                    <GestioneSubRow
+                    <SettingRow
+                      nested
                       title="Sospendi la riserva per oggi"
                       description={
                         isPaused
@@ -612,29 +450,22 @@ export default function StudentsTab({
                   )}
                 </>
               )}
-            </div>
+            </>
           )}
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={CircleMinus}
-          title="Fascia oraria ristretta"
-          description="Definisci una fascia oraria difficile da riempire. Gli allievi disponibili in quella fascia potranno prenotare solo lì."
-          expanded={expandedSection === "restrictedTimeRange"}
-          onToggle={() => toggleSection("restrictedTimeRange")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Riempi le fasce più vuote"
             description="Scegli una fascia poco richiesta: chi è disponibile in quell'orario potrà prenotare solo lì, così si riempie."
             checked={restrictedTimeRangeEnabled}
             onToggle={() => setRestrictedTimeRangeEnabled((prev) => !prev)}
           />
           {restrictedTimeRangeEnabled && (
-            <div className="flex flex-wrap gap-4 px-0.5 pb-1 pt-[18px]">
-              <div>
-                <div className="mb-[9px] text-sm font-semibold text-foreground">Inizio fascia</div>
+            <div className="flex flex-wrap gap-5">
+              <FieldBlock label="Inizio fascia">
                 <Select value={restrictedTimeRangeStart} onValueChange={setRestrictedTimeRangeStart}>
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[180px]")}>
+                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[190px]")}>
                     <SelectValue placeholder="Inizio" />
                   </SelectTrigger>
                   <SelectContent>
@@ -643,11 +474,10 @@ export default function StudentsTab({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
-              <div>
-                <div className="mb-[9px] text-sm font-semibold text-foreground">Fine fascia</div>
+              </FieldBlock>
+              <FieldBlock label="Fine fascia">
                 <Select value={restrictedTimeRangeEnd} onValueChange={setRestrictedTimeRangeEnd}>
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[180px]")}>
+                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[190px]")}>
                     <SelectValue placeholder="Fine" />
                   </SelectTrigger>
                   <SelectContent>
@@ -656,32 +486,25 @@ export default function StudentsTab({
                     ))}
                   </SelectContent>
                 </Select>
-              </div>
+              </FieldBlock>
             </div>
           )}
-        </GestioneCard>
+        </div>
       </div>
 
       {/* ══ GUIDE ══ */}
-      <div className={cn(gestioneTab !== "guide" && "hidden")}>
-        <GestioneCard
-          icon={Repeat2}
-          title="Sostituiscimi"
-          description="Consenti agli allievi di proporre scambi guide tra loro."
-          expanded={expandedSection === "swap"}
-          onToggle={() => toggleSection("swap")}
-        >
-          <GestioneRow
+      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "guide" && "hidden")}>
+        <div className="py-8">
+          <SettingRow
             title="Consenti scambi tra allievi"
             description="Gli allievi potranno proporre ad altri di prendere il loro posto in una guida futura."
             checked={swapEnabled}
             onToggle={() => setSwapEnabled((prev) => !prev)}
           />
           {swapEnabled && (
-            <div className="mt-3.5 pb-1">
-              <div className="mb-2 text-xs font-semibold text-[#555555]">Modalità notifica</div>
+            <FieldBlock label="Modalità notifica">
               <Select value={swapNotifyMode} onValueChange={(value) => setSwapNotifyMode(value as "all" | "available_only")}>
-                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px] max-w-full")}>
+                <SelectTrigger className={SELECT_TRIGGER_CLASS}>
                   <SelectValue placeholder="Modalità" />
                 </SelectTrigger>
                 <SelectContent>
@@ -689,56 +512,38 @@ export default function StudentsTab({
                   <SelectItem value="all">Tutti gli allievi</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </FieldBlock>
           )}
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={CircleX}
-          title="Annullamento guide"
-          description="Consenti o blocca l'annullamento delle guide da parte degli allievi."
-          expanded={expandedSection === "studentCancellation"}
-          onToggle={() => toggleSection("studentCancellation")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Consenti annullamento guide da app"
             description={
               studentCancellationEnabled
-                ? "Gli allievi possono annullare le proprie guide dall'app."
+                ? "Gli allievi possono annullare le proprie guide direttamente dall'app."
                 : "Gli allievi non possono annullare le guide. Devono contattare l'autoscuola."
             }
             checked={studentCancellationEnabled}
             onToggle={() => setStudentCancellationEnabled((prev) => !prev)}
           />
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={UserCheck}
-          title="Presenza automatica"
-          description="Check-in automatico delle guide all'orario di inizio. L'istruttore può segnare solo l'assenza."
-          expanded={expandedSection === "autoCheckin"}
-          onToggle={() => toggleSection("autoCheckin")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Presenza automatica"
             description={
               autoCheckinEnabled
-                ? "Attivo — le guide si segnano come presenti in automatico."
+                ? "Attivo — le guide si segnano come presenti in automatico all'orario di inizio."
                 : "Disattivo — l'istruttore deve cliccare \"Presente\"."
             }
             checked={autoCheckinEnabled}
             onToggle={() => setAutoCheckinEnabled((prev) => !prev)}
           />
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={UsersRound}
-          title="Guide di gruppo"
-          description="Guide con 1 istruttore e 1 veicolo per fino a 3 allievi abilitati. Si abilita l'allievo dal suo dettaglio."
-          expanded={expandedSection === "groupLessons"}
-          onToggle={() => toggleSection("groupLessons")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Attiva guide di gruppo"
             titleExtra={
               <InfoTooltip text={`Non scala crediti: ogni partecipante avrà una guida "da pagare" al prezzo di una guida normale.`} />
@@ -747,34 +552,22 @@ export default function StudentsTab({
             checked={groupLessonsEnabled}
             onToggle={() => setGroupLessonsEnabled((prev) => !prev)}
           />
-        </GestioneCard>
+        </div>
       </div>
 
       {/* ══ APP ALLIEVI ══ */}
-      <div className={cn(gestioneTab !== "app" && "hidden")}>
-        <GestioneCard
-          icon={FileText}
-          title="Note allievi"
-          description="Consenti agli allievi di vedere le note delle guide dall'app."
-          expanded={expandedSection === "studentNotes"}
-          onToggle={() => toggleSection("studentNotes")}
-        >
-          <GestioneRow
+      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "app" && "hidden")}>
+        <div className="py-8">
+          <SettingRow
             title="Mostra note nell'app allievi"
             description="Gli allievi potranno consultare le note rilasciate dagli istruttori dopo ogni guida, direttamente dalla loro app."
             checked={studentNotesEnabled}
             onToggle={() => setStudentNotesEnabled((prev) => !prev)}
           />
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={Bell}
-          title="Notifica slot vuoti"
-          description="Notifica automaticamente gli allievi quando ci sono guide disponibili per il giorno dopo."
-          expanded={expandedSection === "emptySlotNotification"}
-          onToggle={() => toggleSection("emptySlotNotification")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Notifica slot disponibili domani"
             description="Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere per il giorno dopo."
             checked={emptySlotNotificationEnabled}
@@ -782,13 +575,12 @@ export default function StudentsTab({
           />
           {emptySlotNotificationEnabled && (
             <>
-              <div className="mt-4">
-                <div className="mb-2 text-xs font-semibold text-[#555555]">Destinatari</div>
+              <FieldBlock label="Destinatari">
                 <Select
                   value={emptySlotNotificationTarget}
                   onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}
                 >
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px] max-w-full")}>
+                  <SelectTrigger className={SELECT_TRIGGER_CLASS}>
                     <SelectValue placeholder="Destinatari" />
                   </SelectTrigger>
                   <SelectContent>
@@ -796,11 +588,10 @@ export default function StudentsTab({
                     <SelectItem value="all">Tutti gli allievi</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
+              </FieldBlock>
 
-              <div className="mt-4">
-                <div className="mb-2.5 text-xs font-semibold text-[#555555]">Orari di invio</div>
-                <div className="flex flex-wrap gap-2">
+              <FieldBlock label="Orari di invio">
+                <div className="flex flex-wrap gap-2.5">
                   {NOTIFICATION_TIME_OPTIONS.map((time) => {
                     const active = emptySlotNotificationTimes.includes(time);
                     return (
@@ -817,9 +608,9 @@ export default function StudentsTab({
                           });
                         }}
                         className={cn(
-                          "cursor-pointer select-none rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                          "cursor-pointer select-none rounded-full px-[18px] py-2 text-[15px] font-medium transition-colors",
                           active
-                            ? "border-[1.5px] border-[#9fc3f0] bg-[#cfe0fb] text-[#1a2b45]"
+                            ? "border-[1.5px] border-[#9fc3f0] bg-[#cfe0fb] font-semibold text-[#1a2b45]"
                             : "border-[1.5px] border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]",
                         )}
                       >
@@ -828,11 +619,11 @@ export default function StudentsTab({
                     );
                   })}
                 </div>
-              </div>
+              </FieldBlock>
 
-              <div className="mt-4 rounded-[12px] border border-[#e8e8e8] px-5 py-4">
-                <div className="mb-1 text-sm font-semibold text-foreground">Invia ora per domani</div>
-                <div className="mb-3 text-[13px] font-medium text-[#929292]">
+              <div className="mt-7 rounded-[12px] border border-[#e8e8e8] px-6 py-5">
+                <div className="text-base font-semibold text-foreground">Invia ora per domani</div>
+                <div className="mt-1 text-[15px] font-normal text-[#6a6a6a]">
                   Invia subito la notifica di guide disponibili per domani a tutti gli allievi idonei.
                 </div>
                 <button
@@ -857,43 +648,34 @@ export default function StudentsTab({
                       setTriggeringNotification(false);
                     }
                   }}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-[8px] border-[1.5px] border-[#dddddd] px-4 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
+                  className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] border-[#dddddd] px-5 py-3 text-[15px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
                 >
                   {triggeringNotification ? (
-                    <Loader2 className="size-[13px] animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                   ) : (
-                    <Send className="size-[13px]" strokeWidth={1.7} />
+                    <Send className="size-4" strokeWidth={1.7} />
                   )}
                   {triggeringNotification ? "Invio in corso..." : "Invia notifica"}
                 </button>
               </div>
             </>
           )}
-        </GestioneCard>
+        </div>
 
-        <GestioneCard
-          icon={UserRoundCheck}
-          title="Preferenza istruttore"
-          description="Consenti agli allievi di scegliere l'istruttore quando prenotano una guida."
-          expanded={expandedSection === "instructorPreference"}
-          onToggle={() => toggleSection("instructorPreference")}
-        >
-          <GestioneRow
+        <div className="py-8">
+          <SettingRow
             title="Consenti scelta istruttore"
             description="Gli allievi potranno selezionare un istruttore specifico durante la prenotazione. Se non ne selezionano uno, vedranno le proposte di tutti gli istruttori."
             checked={instructorPreferenceEnabled}
             onToggle={() => setInstructorPreferenceEnabled((prev) => !prev)}
           />
-        </GestioneCard>
+        </div>
 
-        <RegistrationCard
-          expanded={expandedSection === "registration"}
-          onToggle={() => toggleSection("registration")}
-        />
+        <RegistrationSection />
       </div>
 
       {/* Save */}
-      <div className="mt-8 flex justify-end">
+      <div className="mt-4 flex justify-end border-t border-[#ebebeb] pt-6">
         <Button
           onClick={handleSaveSettings}
           disabled={savingSettings}

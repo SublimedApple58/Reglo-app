@@ -217,19 +217,18 @@ test.describe("Autoscuole smoke", () => {
     const pane = page.getByTestId("gestione-allievi-pane");
     await expect(pane).toBeVisible({ timeout: 60000 });
 
-    // Sub-tab Prenotazioni (default): card accordion con riga toggle
-    await pane.getByText("Limite prenotazione", { exact: true }).click();
+    // Sub-tab Prenotazioni (default): righe flat visibili subito
     await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
+    await expect(pane.getByText("Massimo di guide a settimana")).toBeVisible();
 
     // Sub-tab Guide
     await pane.getByRole("button", { name: "Guide", exact: true }).click();
-    await expect(pane.getByText("Sostituiscimi", { exact: true })).toBeVisible();
-    await pane.getByText("Guide di gruppo", { exact: true }).click();
+    await expect(pane.getByText("Consenti scambi tra allievi")).toBeVisible();
     await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
 
     // Sub-tab App allievi
     await pane.getByRole("button", { name: "App allievi", exact: true }).click();
-    await expect(pane.getByText("Notifica slot vuoti", { exact: true })).toBeVisible();
-    await expect(pane.getByText("Preferenza istruttore", { exact: true })).toBeVisible();
+    await expect(pane.getByText("Notifica slot disponibili domani")).toBeVisible();
+    await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
   });
 });
