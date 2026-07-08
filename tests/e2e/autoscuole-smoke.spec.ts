@@ -144,6 +144,30 @@ test.describe("Autoscuole smoke", () => {
     }
   });
 
+  test("area personale e centro assistenza @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    // Area personale: overlay + navigazione pane
+    await page.goto("/it/user/autoscuole/area-personale");
+    await expect(page.getByTestId("autoscuole-area-personale-page")).toBeVisible({ timeout: 60000 });
+    await page.getByRole("button", { name: "Contratto e fattura" }).click();
+    await expect(page.getByText("Nessuna fattura disponibile")).toBeVisible();
+
+    // Centro assistenza (mock): chat con messaggio di benvenuto
+    await page.goto("/it/user/autoscuole/assistenza");
+    await expect(page.getByTestId("autoscuole-assistenza-page")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText("Ciao! Sono Giulia").first()).toBeVisible();
+  });
+
   test("segretaria: pagina e pannello impostazioni @smoke", async ({ page }) => {
     test.setTimeout(180_000);
     const emailInput = page.locator('input[name="email"], input[type="email"]');

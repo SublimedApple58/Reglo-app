@@ -14,6 +14,9 @@ import {
   Check,
   Menu,
   Clock,
+  BellRing,
+  MessageCircleQuestion,
+  Star,
 } from "lucide-react";
 
 import { companyAtom, companyListAtom, companyRefreshAtom } from "@/atoms/company.store";
@@ -34,6 +37,8 @@ import {
   NovitaDialog,
   type NovitaEntryKey,
 } from "@/components/Layout/NovitaDialog";
+import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
+import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
@@ -70,6 +75,8 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   }, [isAgenda]);
   const isWideLayout = isAgenda && agendaStoredMode !== "classic";
   const [novitaEntry, setNovitaEntry] = React.useState<NovitaEntryKey | null>(null);
+  const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   const handleCompanySwitch = React.useCallback(
     async (companyId: string) => {
@@ -225,6 +232,13 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                   className="w-72 rounded-2xl border-border p-2 shadow-dropdown"
                 >
                   <DropdownMenuItem
+                    onClick={() => router.push("/user/autoscuole/area-personale")}
+                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                  >
+                    <CircleUserRound className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <span className="text-[15px] font-medium">Area personale</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole?tab=settings")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
@@ -251,6 +265,27 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                   >
                     <CircleUserRound className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Profilo</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setComunicatoOpen(true)}
+                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                  >
+                    <BellRing className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <span className="text-[15px] font-medium">Invia comunicato</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/user/autoscuole/assistenza")}
+                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                  >
+                    <MessageCircleQuestion className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <span className="text-[15px] font-medium">Centro assistenza</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setFeedbackOpen(true)}
+                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                  >
+                    <Star className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <span className="text-[15px] font-medium">Lascia un feedback</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
                   {/* Teaser referral (statico, come il proto) */}
@@ -322,6 +357,8 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
       {/* Dialog dal menu hamburger */}
       <NovitaDialog entry={novitaEntry} onClose={() => setNovitaEntry(null)} />
+      <ComunicatoDialog open={comunicatoOpen} onOpenChange={setComunicatoOpen} />
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </div>
   );
 }
