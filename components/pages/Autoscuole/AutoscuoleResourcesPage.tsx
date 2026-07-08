@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import dynamic from "next/dynamic";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -27,17 +26,15 @@ import {
 } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 
-const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
-const InstructorsTab = dynamic(() => import("./tabs/InstructorsTab"));
-const StudentsTab = dynamic(() => import("./tabs/StudentsTab"));
-const VehiclesTab = dynamic(() => import("./tabs/VehiclesTab"));
-const AutoscuolePaymentsPage = dynamic(() =>
-  import("./AutoscuolePaymentsPage").then((m) => m.AutoscuolePaymentsPage),
-);
-const BusinessInfoPane = dynamic(() =>
-  import("./tabs/BusinessInfoPane").then((m) => m.BusinessInfoPane),
-);
-import type { SettingsSectionKey } from "./tabs/SettingsTab";
+// Import statici: i pane dell'overlay restano montati (keep-alive) e non
+// devono scaricare chunk al cambio sezione — il lazy-loading qui causava lo
+// "scatto" bianco a ogni switch.
+import SettingsTab, { type SettingsSectionKey } from "./tabs/SettingsTab";
+import InstructorsTab from "./tabs/InstructorsTab";
+import StudentsTab from "./tabs/StudentsTab";
+import VehiclesTab from "./tabs/VehiclesTab";
+import { AutoscuolePaymentsPage } from "./AutoscuolePaymentsPage";
+import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -89,7 +86,6 @@ import {
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { SettingsSkeleton } from "@/components/ui/page-skeleton";
 
 type ResourceOption = { id: string; name: string };
@@ -274,6 +270,27 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
   ],
 ];
 
+/**
+ * Keep-alive dei pannelli dell'overlay: monta il contenuto al primo accesso
+ * (o subito, se `eager`) e poi lo nasconde via CSS invece di smontarlo. Così
+ * le fetch interne di ogni pannello girano UNA volta e il cambio sezione è
+ * istantaneo, senza flash bianchi né loader ripetuti.
+ */
+function KeepAlivePane({
+  active,
+  eager,
+  children,
+}: {
+  active: boolean;
+  eager?: boolean;
+  children: React.ReactNode;
+}) {
+  const mountedRef = React.useRef(false);
+  if (active || eager) mountedRef.current = true;
+  if (!mountedRef.current) return null;
+  return <div className={active ? undefined : "hidden"}>{children}</div>;
+}
+
 const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   business: "Informazioni aziendali",
   locations: "Sede e luoghi",
@@ -305,6 +322,16 @@ export function AutoscuoleResourcesPage({
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
+  // true dopo il primo caricamento: da lì in poi niente più skeleton globale
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
+  // dopo il primo paint, monta anche i pannelli non ancora visitati (prefetch)
+  const [mountAllPanes, setMountAllPanes] = React.useState(false);
+  const contentScrollRef = React.useRef<HTMLDivElement>(null);
+
+  const goToPane = React.useCallback((pane: ConfigPane) => {
+    setConfigTab(pane);
+    contentScrollRef.current?.scrollTo({ top: 0 });
+  }, []);
   const [savingSettings, setSavingSettings] = React.useState(false);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
@@ -548,6 +575,10 @@ export function AutoscuoleResourcesPage({
       }
 
       setLoading(false);
+      setHasLoadedOnce(true);
+      // Dal frame successivo monta anche i pannelli non visitati, così le loro
+      // fetch partono in background e il cambio sezione è istantaneo.
+      setTimeout(() => setMountAllPanes(true), 150);
     },
     [toast],
   );
@@ -1667,7 +1698,7 @@ export function AutoscuoleResourcesPage({
                       <button
                         key={pane.key}
                         type="button"
-                        onClick={() => setConfigTab(pane.key)}
+                        onClick={() => goToPane(pane.key)}
                         className={cn(
                           "flex shrink-0 cursor-pointer select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
                           active
@@ -1686,22 +1717,28 @@ export function AutoscuoleResourcesPage({
           </div>
 
           {/* ── Content ── */}
-          <div className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
-            <LottieLoadingOverlay visible={loading} />
+          <div ref={contentScrollRef} className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
             {configTab !== "payments" && (
               <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
                 {CONFIG_PANE_TITLES[configTab]}
               </h2>
             )}
-            {loading ? (
+            {!hasLoadedOnce ? (
           <SettingsSkeleton />
-        ) : configTab === "business" ? (
+        ) : (
+          <>
+        <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
           <BusinessInfoPane />
-        ) : configTab === "bookings" || configTab === "policy" || configTab === "reminders" || configTab === "locations" ? (
-          renderSettingsSection(configTab)
-        ) : configTab === "payments" ? (
+        </KeepAlivePane>
+        {(["bookings", "policy", "reminders", "locations"] as const).map((section) => (
+          <KeepAlivePane key={section} active={configTab === section} eager={mountAllPanes}>
+            {renderSettingsSection(section)}
+          </KeepAlivePane>
+        ))}
+        <KeepAlivePane active={configTab === "payments"} eager={mountAllPanes}>
           <AutoscuolePaymentsPage tabs={null} />
-        ) : configTab === "instructors" ? (
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
             instructors={instructors}
             instructorWeeklyAvailability={instructorWeeklyAvailability}
@@ -1769,7 +1806,8 @@ export function AutoscuoleResourcesPage({
             saveClusterSettings={saveClusterSettings}
             clusterSaving={clusterSaving}
           />
-        ) : configTab === "students" ? (
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "students"} eager={mountAllPanes}>
           <div className="space-y-10">
           <StudentsTab
             expandedSection={expandedSection}
@@ -1824,9 +1862,11 @@ export function AutoscuoleResourcesPage({
           />
           {renderSettingsSection("registration")}
           </div>
-        ) : configTab === "hours" ? (
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "hours"} eager={mountAllPanes}>
           <InstructorHoursDashboard />
-        ) : (
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "vehicles"} eager={mountAllPanes}>
           <VehiclesTab
             vehicles={vehicles}
             vehicleWeeklyAvailability={vehicleWeeklyAvailability}
@@ -1846,6 +1886,8 @@ export function AutoscuoleResourcesPage({
             handleSaveSettings={handleSaveSettings}
             savingSettings={savingSettings}
           />
+        </KeepAlivePane>
+          </>
         )}
           </div>
         </div>
