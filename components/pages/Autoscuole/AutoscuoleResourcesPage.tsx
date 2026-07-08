@@ -910,6 +910,54 @@ export function AutoscuoleResourcesPage({
     toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
 
+  // Auto-save della pane Veicoli: applica subito il cambiamento in UI,
+  // persiste il solo campo toccato e ripristina i valori precedenti se il
+  // salvataggio fallisce (la pane non ha più il bottone "Salva configurazione").
+  const updateVehicleSettings = async (patch: {
+    vehiclesEnabled?: boolean;
+    defaultLicenseCategory?: string;
+    defaultTransmission?: string;
+    followCarMotoEnabled?: boolean;
+  }) => {
+    const prev = {
+      vehiclesEnabled,
+      defaultLicenseCategory,
+      defaultTransmission,
+      followCarMotoEnabled,
+    };
+    if (patch.vehiclesEnabled !== undefined) setVehiclesEnabled(patch.vehiclesEnabled);
+    if (patch.defaultLicenseCategory !== undefined)
+      setDefaultLicenseCategory(patch.defaultLicenseCategory);
+    if (patch.defaultTransmission !== undefined)
+      setDefaultTransmission(patch.defaultTransmission);
+    if (patch.followCarMotoEnabled !== undefined)
+      setFollowCarMotoEnabled(patch.followCarMotoEnabled);
+
+    const res = await updateAutoscuolaSettings({
+      ...(patch.vehiclesEnabled !== undefined
+        ? { vehiclesEnabled: patch.vehiclesEnabled }
+        : {}),
+      ...(patch.defaultLicenseCategory !== undefined
+        ? { defaultLicenseCategory: patch.defaultLicenseCategory as LicenseCategory }
+        : {}),
+      ...(patch.defaultTransmission !== undefined
+        ? { defaultTransmission: patch.defaultTransmission as "manual" | "automatic" }
+        : {}),
+      ...(patch.followCarMotoEnabled !== undefined
+        ? { followCarMotoEnabled: patch.followCarMotoEnabled }
+        : {}),
+    });
+    if (!res.success) {
+      setVehiclesEnabled(prev.vehiclesEnabled);
+      setDefaultLicenseCategory(prev.defaultLicenseCategory);
+      setDefaultTransmission(prev.defaultTransmission);
+      setFollowCarMotoEnabled(prev.followCarMotoEnabled);
+      toast.error({
+        description: res.message ?? "Impossibile salvare le impostazioni veicoli.",
+      });
+    }
+  };
+
   const toggleChannel = (
     channel: ChannelValue,
     setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>,
@@ -1907,18 +1955,13 @@ export function AutoscuoleResourcesPage({
             vehicleAvailability={vehicleAvailability}
             loading={loading}
             vehiclesEnabled={vehiclesEnabled}
-            setVehiclesEnabled={setVehiclesEnabled}
             defaultLicenseCategory={defaultLicenseCategory}
-            setDefaultLicenseCategory={setDefaultLicenseCategory}
             defaultTransmission={defaultTransmission}
-            setDefaultTransmission={setDefaultTransmission}
             followCarMotoEnabled={followCarMotoEnabled}
-            setFollowCarMotoEnabled={setFollowCarMotoEnabled}
+            updateVehicleSettings={updateVehicleSettings}
             openCreateVehicle={openCreateVehicle}
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
           />
         </KeepAlivePane>
           </FadeIn>

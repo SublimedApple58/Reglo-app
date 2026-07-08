@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import { Plus, Clock, Pencil, Car } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
 import {
@@ -40,18 +39,19 @@ export type VehiclesTabProps = {
   vehicleAvailability: Record<string, AvailabilityRange[]>;
   loading: boolean;
   vehiclesEnabled: boolean;
-  setVehiclesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   defaultLicenseCategory: string;
-  setDefaultLicenseCategory: React.Dispatch<React.SetStateAction<string>>;
   defaultTransmission: string;
-  setDefaultTransmission: React.Dispatch<React.SetStateAction<string>>;
   followCarMotoEnabled: boolean;
-  setFollowCarMotoEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  /** Auto-save: applica e persiste subito il campo modificato. */
+  updateVehicleSettings: (patch: {
+    vehiclesEnabled?: boolean;
+    defaultLicenseCategory?: string;
+    defaultTransmission?: string;
+    followCarMotoEnabled?: boolean;
+  }) => void;
   openCreateVehicle: () => void;
   openEditVehicle: (vehicle: VehicleDetail) => void;
   openAvailabilityDialog: (vehicle: VehicleDetail) => void;
-  handleSaveSettings: () => Promise<void>;
-  savingSettings: boolean;
 };
 
 const WEEKDAY_OPTIONS = [
@@ -220,18 +220,13 @@ export default function VehiclesTab({
   vehicleAvailability,
   loading,
   vehiclesEnabled,
-  setVehiclesEnabled,
   defaultLicenseCategory,
-  setDefaultLicenseCategory,
   defaultTransmission,
-  setDefaultTransmission,
   followCarMotoEnabled,
-  setFollowCarMotoEnabled,
+  updateVehicleSettings,
   openCreateVehicle,
   openEditVehicle,
   openAvailabilityDialog,
-  handleSaveSettings,
-  savingSettings,
 }: VehiclesTabProps) {
   return (
     <div className="space-y-4">
@@ -244,7 +239,11 @@ export default function VehiclesTab({
               : "Disattivo — le guide non richiedono un veicolo"}
           </div>
         </div>
-        <InlineToggle checked={vehiclesEnabled} onChange={() => setVehiclesEnabled((prev) => !prev)} size="lg" />
+        <InlineToggle
+          checked={vehiclesEnabled}
+          onChange={() => updateVehicleSettings({ vehiclesEnabled: !vehiclesEnabled })}
+          size="lg"
+        />
       </div>
       {vehiclesEnabled && (
         <div className="rounded-[14px] border border-[#e8e8e8] px-6 py-5">
@@ -256,7 +255,10 @@ export default function VehiclesTab({
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div>
               <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
-              <Select value={defaultLicenseCategory} onValueChange={setDefaultLicenseCategory}>
+              <Select
+                value={defaultLicenseCategory}
+                onValueChange={(v) => updateVehicleSettings({ defaultLicenseCategory: v })}
+              >
                 <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -269,7 +271,10 @@ export default function VehiclesTab({
             </div>
             <div>
               <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
-              <Select value={defaultTransmission} onValueChange={setDefaultTransmission}>
+              <Select
+                value={defaultTransmission}
+                onValueChange={(v) => updateVehicleSettings({ defaultTransmission: v })}
+              >
                 <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
                   <SelectValue />
                 </SelectTrigger>
@@ -292,7 +297,11 @@ export default function VehiclesTab({
               entrambi i veicoli risultano occupati in agenda.
             </div>
           </div>
-          <InlineToggle checked={followCarMotoEnabled} onChange={() => setFollowCarMotoEnabled((prev) => !prev)} size="lg" />
+          <InlineToggle
+            checked={followCarMotoEnabled}
+            onChange={() => updateVehicleSettings({ followCarMotoEnabled: !followCarMotoEnabled })}
+            size="lg"
+          />
         </div>
       )}
       {vehiclesEnabled && (
@@ -306,15 +315,6 @@ export default function VehiclesTab({
           openAvailabilityDialog={openAvailabilityDialog}
         />
       )}
-      <div className="flex justify-end">
-        <Button
-          onClick={handleSaveSettings}
-          disabled={savingSettings}
-          className="min-w-[180px]"
-        >
-          {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-        </Button>
-      </div>
     </div>
   );
 }

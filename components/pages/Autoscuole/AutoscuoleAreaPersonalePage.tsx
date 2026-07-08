@@ -5,23 +5,35 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useSession } from "next-auth/react";
-import { Camera, CircleUserRound, CreditCard, FileText, KeyRound, Loader2, Lock, Receipt } from "lucide-react";
+import {
+  Camera,
+  Check,
+  CircleUserRound,
+  Copy,
+  CreditCard,
+  Eye,
+  EyeOff,
+  FileText,
+  Loader2,
+  Lock,
+  Receipt,
+} from "lucide-react";
 
 import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 
-type PaneKey = "profilo" | "credenziali" | "documenti" | "abbonamento";
+type PaneKey = "profilo" | "documenti" | "abbonamento";
 
 const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
   { key: "profilo", label: "Il tuo profilo", icon: <CircleUserRound className="size-6" strokeWidth={1.9} /> },
-  { key: "credenziali", label: "Credenziali", icon: <KeyRound className="size-6" strokeWidth={1.9} /> },
   { key: "documenti", label: "Contratto e fattura", icon: <FileText className="size-6" strokeWidth={1.9} /> },
   { key: "abbonamento", label: "Abbonamento", icon: <CreditCard className="size-6" strokeWidth={1.9} /> },
 ];
 
-/** Foto profilo personale: cerchio 132px con badge Modifica (stesso pattern
- * della foto autoscuola in Informazioni aziendali). */
+/** Pane unica "Il tuo profilo": foto personale (cerchio 132px con badge
+ * Modifica, stesso pattern della foto autoscuola) + sezione Credenziali con
+ * il vault in stile proto (righe mascherate, Rivela/Copia, nota custodia). */
 function ProfiloPane() {
   const toast = useFeedbackToast();
   const { data: sessionData, update: updateSession } = useSession();
@@ -30,8 +42,22 @@ function ProfiloPane() {
   const setUserRefresh = useSetAtom(userRefreshAtom);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = React.useState(false);
+  const [credRevealed, setCredRevealed] = React.useState(false);
+  const [credCopied, setCredCopied] = React.useState(false);
 
   const name = session?.user?.name ?? "";
+  const email = session?.user?.email ?? "";
+
+  const handleCopyCredentials = async () => {
+    if (!email) return;
+    try {
+      await navigator.clipboard.writeText(email);
+      setCredCopied(true);
+      setTimeout(() => setCredCopied(false), 1800);
+    } catch {
+      toast.error({ description: "Copia non riuscita." });
+    }
+  };
   const initials =
     name
       .trim()
@@ -117,6 +143,81 @@ function ProfiloPane() {
           </p>
         </div>
       </div>
+
+      {/* ── Credenziali (vault, stile proto #ap-tab-credenziali) ── */}
+      <div className="mt-12 max-w-[680px]">
+        <h3 className="mb-[18px] text-lg font-bold tracking-[-0.3px] text-foreground">
+          Credenziali
+        </h3>
+        <div className="mb-4 overflow-hidden rounded-2xl border border-[#ebebeb]">
+          <div className="flex items-center gap-3 border-b border-[#ebebeb] bg-[#f7f9ff] px-[22px] py-[13px]">
+            <Lock className="size-[18px] text-[#2a6fdb]" strokeWidth={1.8} />
+            <span className="text-[13.5px] font-semibold text-[#2a6fdb]">
+              Vault sicuro · cifrato end-to-end
+            </span>
+          </div>
+          <div className="px-[22px] py-[18px]">
+            <div className="border-b border-[#f2f2f2] py-[11px]">
+              <div className="mb-[5px] text-xs font-semibold text-[#929292]">
+                Email / Username
+              </div>
+              <div className="truncate font-mono text-base font-semibold tracking-[0.5px] text-foreground">
+                {credRevealed ? email || "—" : "••••••••••••••••••••"}
+              </div>
+            </div>
+            <div className="py-[11px]">
+              <div className="mb-[5px] text-xs font-semibold text-[#929292]">Password</div>
+              {credRevealed ? (
+                <div className="text-[13px] font-medium italic text-[#929292]">
+                  Custodita dal team Reglo — non ancora caricata nel vault.
+                </div>
+              ) : (
+                <div className="font-mono text-base font-semibold tracking-[0.5px] text-foreground">
+                  ••••••••••••
+                </div>
+              )}
+            </div>
+            <div className="mt-3.5 flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => setCredRevealed((prev) => !prev)}
+                className="flex flex-1 cursor-pointer select-none items-center justify-center gap-2 rounded-[10px] border border-[#dddddd] p-3 text-sm font-semibold text-foreground transition-colors hover:bg-[#f7f7f7]"
+              >
+                {credRevealed ? (
+                  <EyeOff className="size-4" strokeWidth={1.7} />
+                ) : (
+                  <Eye className="size-4" strokeWidth={1.7} />
+                )}
+                {credRevealed ? "Nascondi" : "Rivela"}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyCredentials}
+                className="flex flex-1 cursor-pointer select-none items-center justify-center gap-2 rounded-[10px] bg-[#222222] p-3 text-sm font-semibold text-white transition-colors hover:bg-black"
+              >
+                {credCopied ? (
+                  <Check className="size-[15px]" strokeWidth={2} />
+                ) : (
+                  <Copy className="size-[15px]" strokeWidth={1.7} />
+                )}
+                {credCopied ? "Copiato" : "Copia"}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-[18px] py-[13px]">
+          <div className="mb-1.5 text-xs font-bold text-[#7a6a00]">
+            Custodia delle credenziali
+          </div>
+          <div className="text-xs font-medium leading-relaxed text-[#7a6a00]">
+            Reglo conserva e gestisce le credenziali di accesso. La condivisione avviene
+            esclusivamente tramite link protetti e temporanei:{" "}
+            <strong>non inviare mai le credenziali via email, chat o documenti condivisi</strong>.
+            In caso di sospetto accesso non autorizzato, il team Reglo interviene
+            tempestivamente per assisterti.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -184,41 +285,6 @@ export function AutoscuoleAreaPersonalePage() {
           {/* ── Content ── */}
           <div className="min-h-0 min-w-0 overflow-y-auto px-6 py-8 md:px-10 md:py-12 lg:pl-12 lg:pr-0">
             {pane === "profilo" && <ProfiloPane />}
-
-            {pane === "credenziali" && (
-              <div>
-                <h2 className="mb-[18px] text-2xl font-bold tracking-[-0.3px] text-foreground">
-                  Credenziali
-                </h2>
-                <div className="mb-4 max-w-[680px] overflow-hidden rounded-2xl border border-[#ebebeb]">
-                  <div className="flex items-center gap-3 border-b border-[#ebebeb] bg-[#f7f9ff] px-[22px] py-[13px]">
-                    <Lock className="size-[18px] text-[#2a6fdb]" strokeWidth={1.8} />
-                    <span className="text-[13.5px] font-semibold text-[#2a6fdb]">
-                      Vault sicuro · cifrato end-to-end
-                    </span>
-                  </div>
-                  <div className="px-[22px] py-8 text-center">
-                    <p className="mx-auto max-w-[420px] text-sm font-medium leading-relaxed text-[#6a6a6a]">
-                      Il vault credenziali della tua autoscuola verrà attivato dal team Reglo.
-                      Qui troverai le credenziali custodite in modo sicuro, con condivisione
-                      tramite link protetti e a scadenza.
-                    </p>
-                  </div>
-                </div>
-                <div className="max-w-[680px] rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-[18px] py-[13px]">
-                  <div className="mb-1.5 text-xs font-bold text-[#7a6a00]">
-                    Custodia delle credenziali
-                  </div>
-                  <div className="text-xs font-medium leading-relaxed text-[#7a6a00]">
-                    Reglo conserva e gestisce le credenziali di accesso. La condivisione avviene
-                    esclusivamente tramite link protetti e temporanei:{" "}
-                    <strong>non inviare mai le credenziali via email, chat o documenti condivisi</strong>.
-                    In caso di sospetto accesso non autorizzato, il team Reglo interviene
-                    tempestivamente per assisterti.
-                  </div>
-                </div>
-              </div>
-            )}
 
             {pane === "documenti" && (
               <div>
