@@ -506,6 +506,8 @@ export function AutoscuoleResourcesPage({
   const [createVehicleOpen, setCreateVehicleOpen] = React.useState(false);
   const [newVehicleName, setNewVehicleName] = React.useState("");
   const [newVehiclePlate, setNewVehiclePlate] = React.useState("");
+  const [newVehicleCategory, setNewVehicleCategory] = React.useState("B");
+  const [newVehicleTransmission, setNewVehicleTransmission] = React.useState("manual");
   const [creatingVehicle, setCreatingVehicle] = React.useState(false);
 
   // ── Edit vehicle dialog
@@ -1303,6 +1305,8 @@ export function AutoscuoleResourcesPage({
   const openCreateVehicle = () => {
     setNewVehicleName("");
     setNewVehiclePlate("");
+    setNewVehicleCategory(defaultLicenseCategory || "B");
+    setNewVehicleTransmission(defaultTransmission || "manual");
     setCreateVehicleOpen(true);
   };
 
@@ -1316,6 +1320,8 @@ export function AutoscuoleResourcesPage({
     const res = await createAutoscuolaVehicle({
       name,
       plate: newVehiclePlate.trim() || undefined,
+      licenseCategory: newVehicleCategory as (typeof LICENSE_CATEGORIES)[number],
+      transmission: newVehicleTransmission as (typeof TRANSMISSIONS)[number],
     });
     setCreatingVehicle(false);
     if (!res.success || !res.data) {
@@ -1332,8 +1338,8 @@ export function AutoscuoleResourcesPage({
         assignedInstructorId: res.data!.assignedInstructorId ?? null,
         poolInstructorIds: [],
         followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
-        licenseCategory: res.data!.licenseCategory ?? "B",
-        transmission: res.data!.transmission ?? "manual",
+        licenseCategory: res.data!.licenseCategory ?? newVehicleCategory,
+        transmission: res.data!.transmission ?? newVehicleTransmission,
       },
     ]);
     setCreateVehicleOpen(false);
@@ -2163,6 +2169,36 @@ export function AutoscuoleResourcesPage({
                   onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
                   onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <FieldGroup label="Categoria patente">
+                  <Select value={newVehicleCategory} onValueChange={setNewVehicleCategory}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LICENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {LICENSE_CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
+                <FieldGroup label="Cambio">
+                  <Select value={newVehicleTransmission} onValueChange={setNewVehicleTransmission}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TRANSMISSIONS.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {TRANSMISSION_LABELS[t]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FieldGroup>
               </div>
             </div>
             <DialogFooter>
