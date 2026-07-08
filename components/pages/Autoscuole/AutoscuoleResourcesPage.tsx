@@ -1808,7 +1808,6 @@ export function AutoscuoleResourcesPage({
           />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "students"} eager={mountAllPanes}>
-          <div className="space-y-10">
           <StudentsTab
             expandedSection={expandedSection}
             toggleSection={toggleSection}
@@ -1860,8 +1859,6 @@ export function AutoscuoleResourcesPage({
             savingSettings={savingSettings}
             toast={toast}
           />
-          {renderSettingsSection("registration")}
-          </div>
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "hours"} eager={mountAllPanes}>
           <InstructorHoursDashboard />

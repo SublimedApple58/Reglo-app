@@ -200,4 +200,36 @@ test.describe("Autoscuole smoke", () => {
       await expect(panel).not.toBeVisible();
     }
   });
+
+  test("impostazioni: gestione allievi con sub-tab @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole?tab=settings&pane=students");
+    const pane = page.getByTestId("gestione-allievi-pane");
+    await expect(pane).toBeVisible({ timeout: 60000 });
+
+    // Sub-tab Prenotazioni (default): card accordion con riga toggle
+    await pane.getByText("Limite prenotazione", { exact: true }).click();
+    await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
+
+    // Sub-tab Guide
+    await pane.getByRole("button", { name: "Guide", exact: true }).click();
+    await expect(pane.getByText("Sostituiscimi", { exact: true })).toBeVisible();
+    await pane.getByText("Guide di gruppo", { exact: true }).click();
+    await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
+
+    // Sub-tab App allievi
+    await pane.getByRole("button", { name: "App allievi", exact: true }).click();
+    await expect(pane.getByText("Notifica slot vuoti", { exact: true })).toBeVisible();
+    await expect(pane.getByText("Preferenza istruttore", { exact: true })).toBeVisible();
+  });
 });

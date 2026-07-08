@@ -117,6 +117,15 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
 
 - Rework fase 7 su feedback utente (2026-07-08): **pane Integrazioni RIMOSSA** (IntegrationsPane eliminata; la UI per connettere Fatture in Cloud non è più esposta — gli endpoint /api/integrations/* restano); **foto profilo personale spostata** da Informazioni aziendali all'**Area personale** → nuova voce sidebar "Il tuo profilo" (default, cerchio 132px + badge Modifica, upload /api/uploads/avatar + update sessione); /user/settings redirect semplificato → pane=business.
 
+- Revisione pezzo-pezzo #1 — **Gestione allievi** (2026-07-08, FATTA, in attesa di verifica utente). `tabs/StudentsTab.tsx` RISCRITTO sul proto `#config-tab-gestione` (riga 832):
+  - **Sub-tab underline** Prenotazioni / Guide / App allievi (attivo 600 #222 border-b 2.5px, inattivo 500 #6a6a6a); contenuti nascosti via CSS (state e accordion condivisi restano montati).
+  - **Card accordion separate** per setting (rounded-[14px] border #dddddd mb-2, icona 36px navy su #eef0f6 border #cfcfdc, titolo 15/600 + desc 13/500 #929292, chevron ruotante, contenuto border-t #f5f5f5) al posto della vecchia card unica rounded-2xl.
+  - **Righe toggle** bg #f8f8f8 rounded-[10px] p-4 con InlineToggle lg; sotto-setting come righe piatte annidate (priorità esame → giorni → riserva → pausa). Bottone pausa = pill proto ("Pausa fino a stasera" bianco / "Riattiva ora" nero quando attiva).
+  - **Copy proto adottata** (tono amichevole): "Stop alle prenotazioni last-minute", "Massimo di guide a settimana", "Precedenza a chi ha l'esame vicino", "Riserva i posti a chi ha l'esame", "Sospendi la riserva per oggi", "Riempi le fasce più vuote". Tooltip (i) nero sul titolo "Attiva guide di gruppo" con la nota "Non scala crediti…" (prima era paragrafo sotto).
+  - Input numerici 120px border-1.5 focus #222; select Radix con trigger proto (200/180/320px); **chips orari di invio con selezione AZZURRA** (#cfe0fb/#9fc3f0/#1a2b45) come il proto (unico punto blu del design); card "Invia ora per domani" con bottone outline reale (triggerEmptySlotNotification).
+  - **Sezione "Modalità registrazione allievi" SPOSTATA dentro StudentsTab** (card proto in coda al sub-tab App allievi, salvataggio immediato col toggle; nascosta senza fase TEORIA — su Reglo E2E non appare perché ha solo PRATICA). Rimossa da SettingsTab.tsx (RegistrationModeSection eliminata, "registration" tolto da SettingsSectionKey) e dal render del pane in AutoscuoleResourcesPage.
+  - Nessun setting perso: tutti i 12 gruppi esistenti presenti (cutoff, weekly limit+esame+pausa, fascia, swap+modalità, annullamento, presenza, gruppo, note, notifica slot+destinatari+orari+invia ora, preferenza istruttore, registrazione). Nuovo e2e "impostazioni: gestione allievi con sub-tab". Suite 9/9 verde.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
