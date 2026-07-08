@@ -260,13 +260,6 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <span className="text-[15px] font-medium">Ore guida</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push("/user/settings")}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <CircleUserRound className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Profilo</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
                     onClick={() => setComunicatoOpen(true)}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >

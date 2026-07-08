@@ -108,9 +108,16 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - Asset in `public/images/menu/`: bell-gold, assistente-giulia, feedback-mid, feedback-low (da uploads/ del proto, ridimensionati).
   - e2e: nuovo smoke "area personale e centro assistenza". Suite 8/8 verde.
 
+- Fase 7 Profilo → Impostazioni FATTA (in attesa di verifica utente) — la vecchia pagina Profilo (`/user/settings`, SettingsPage stile glass) è stata RITIRATA e migrata nell'overlay:
+  - **Nuova pane "Integrazioni"** (`tabs/IntegrationsPane.tsx`, voce sidebar nel gruppo Fatturazione): card Fatture in Cloud stile proto (pill Connessa/Non collegata, Connetti→OAuth in nuova tab, Disconnetti, select Azienda FIC con fallback ID manuale — endpoint response shape `{success,data:[{value,label}],selectedId}`). Gestisce `?integrationSuccess/?integrationError` (toast + pulizia URL via `history.replaceState` — col router.replace la pulizia NON funzionava).
+  - **BusinessInfoPane**: nuova riga "La tua foto" = avatar personale utente (upload `/api/uploads/avatar` + update sessione next-auth + userRefresh atom) — era l'unica funzione del vecchio tab Account non già coperta.
+  - `/user/settings` ora è un **redirect server** a `?tab=settings&pane=business` (o `pane=integrations` se arrivano i param della callback OAuth: la callback usa il referer, ma /user/settings resta il fallback hardcoded del connect route).
+  - Menu hamburger: voce "Profilo" RIMOSSA. `components/pages/Settings/` eliminata. Nota: sezioni legacy pratiche/scadenze/documents erano GIÀ dismesse (route notFound) — nessun restyle necessario.
+  - Suite e2e 8/8 verde.
+
 ## Next steps
 
-1. **⇒ PROSSIMO dopo verifica 6c: fine redesign** — restano solo i restyle "sezioni non coperte dal proto" se ancora attuali (pratiche, documenti, scadenze, comunicazioni: regola = token nuovi mantenendo il layout) e l'eventuale riempimento dell'Area personale quando ci sarà il backend.
+1. **⇒ PROSSIMO dopo verifica fase 7: fine redesign web** — poi QA su staging (serve portare il branch su staging, da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
 2. **Fine progetto**: QA completo su staging clone (dev DB ha 1 solo allievo), poi rilascio concordato.
 3. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 

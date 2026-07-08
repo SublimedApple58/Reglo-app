@@ -1,13 +1,15 @@
 "use client";
 
 import React from "react";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue, useSetAtom } from "jotai";
+import { useSession } from "next-auth/react";
 import { Camera, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { companyAtom } from "@/atoms/company.store";
+import { userAvatarUrlAtom, userRefreshAtom } from "@/atoms/user.store";
 import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
 import { getMyProfile, updateProfile } from "@/lib/actions/user.actions";
 
@@ -46,6 +48,42 @@ export function BusinessInfoPane() {
   const [saving, setSaving] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Foto personale dell'utente (ex tab Account della pagina Profilo)
+  const { data: sessionData, update: updateSession } = useSession();
+  const avatarUrl = useAtomValue(userAvatarUrlAtom);
+  const setUserRefresh = useSetAtom(userRefreshAtom);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = React.useState(false);
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || avatarUploading) return;
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads/avatar", { method: "POST", body: formData });
+      const json = (await res.json()) as { success: boolean; data?: { key: string }; message?: string };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error({ description: json.message ?? "Caricamento non riuscito." });
+        return;
+      }
+      if (sessionData) {
+        await updateSession({
+          ...sessionData,
+          user: { ...sessionData.user, image: json.data.key },
+        });
+      }
+      setUserRefresh(true);
+      toast.success({ description: "Foto personale aggiornata." });
+    } catch {
+      toast.error({ description: "Caricamento non riuscito." });
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
 
   React.useEffect(() => {
     let active = true;
@@ -292,7 +330,7 @@ export function BusinessInfoPane() {
         })}
 
         {/* Email — sola lettura (il cambio email passa dall'assistenza) */}
-        <div className="py-5">
+        <div className="border-b border-[#ebebeb] py-5">
           <div className="flex w-full items-start justify-between">
             <div>
               <p className="text-base font-semibold text-foreground">Indirizzo email</p>
@@ -303,6 +341,48 @@ export function BusinessInfoPane() {
                 L&apos;email è il tuo identificativo di accesso: per modificarla contatta l&apos;assistenza Reglo.
               </p>
             </div>
+          </div>
+        </div>
+
+        {/* Foto personale (ex Profilo → Account) */}
+        <div className="py-5">
+          <div className="flex w-full items-start justify-between">
+            <div className="flex items-start gap-4">
+              {avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={avatarUrl}
+                  alt="La tua foto"
+                  className="size-14 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="flex size-14 shrink-0 items-center justify-center rounded-full bg-[#f2f2f2] text-base font-bold text-[#6a6a6a]">
+                  {(profile?.name ?? "R").charAt(0).toUpperCase()}
+                </span>
+              )}
+              <div>
+                <p className="text-base font-semibold text-foreground">La tua foto</p>
+                <p className="mt-1 max-w-[460px] text-[13px] font-medium leading-relaxed text-[#929292]">
+                  Foto personale del tuo account, separata da quella dell&apos;autoscuola.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={avatarUploading}
+              className="ml-6 flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2 disabled:opacity-60"
+            >
+              {avatarUploading && <Loader2 className="size-3.5 animate-spin" />}
+              {avatarUrl ? "Modifica" : "Aggiungi"}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
           </div>
         </div>
       </div>
