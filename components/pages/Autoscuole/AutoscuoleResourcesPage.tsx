@@ -49,7 +49,7 @@ import {
   updateAutoscuolaInstructor,
   getAutoscuolaStudentsWithProgress,
 } from "@/lib/actions/autoscuole.actions";
-import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
+import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
 import {
   getAvailabilitySlots,
   setWeeklyAvailabilityOverride,
@@ -2129,11 +2129,14 @@ export function AutoscuoleResourcesPage({
           </DialogContent>
         </Dialog>
 
-        {/* ── Invite instructor dialog */}
-        <AdminUsersInviteDialog
+        {/* ── Aggiungi istruttore: crea direttamente l'account (niente invito) */}
+        <AdminUsersCreateDialog
           open={inviteInstructorOpen}
           onOpenChange={setInviteInstructorOpen}
-          initialAutoscuolaRole="INSTRUCTOR"
+          fixedAutoscuolaRole="INSTRUCTOR"
+          title="Aggiungi istruttore"
+          description="Crea l'account dell'istruttore: potrà accedere subito con email e password."
+          onCreated={() => void loadResources()}
         />
 
         {/* ── Create vehicle dialog */}

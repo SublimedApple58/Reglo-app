@@ -357,7 +357,7 @@ export default function InstructorsTab({
             />
           );
         })}
-        {/* Card dashed "Invita istruttore" (stile proto) */}
+        {/* Card dashed "Aggiungi istruttore" (stile proto): crea l'account direttamente */}
         <button
           type="button"
           onClick={() => setInviteInstructorOpen(true)}
@@ -375,7 +375,7 @@ export default function InstructorsTab({
               <Plus className="size-3 text-white" strokeWidth={2.4} />
             </span>
           </span>
-          <span className="text-sm font-semibold text-navy-900">Invita istruttore</span>
+          <span className="text-sm font-semibold text-navy-900">Aggiungi istruttore</span>
         </button>
       </div>
 
