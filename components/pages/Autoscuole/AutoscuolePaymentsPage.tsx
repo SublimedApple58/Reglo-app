@@ -30,8 +30,8 @@ import {
   getAutoscuolaStudentsList,
   generateTestPaymentReceipt,
 } from "@/lib/actions/autoscuole.actions";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
-import { PaymentsSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
 import { SectionCard } from "@/components/ui/section-card";
 import { StatMetric } from "@/components/ui/stat-metric";
 import { FieldGroup } from "@/components/ui/field-group";
@@ -183,6 +183,7 @@ export function AutoscuolePaymentsPage({
   const hasHandledStripeReturn = React.useRef(false);
 
   const [loading, setLoading] = React.useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [stripeLoading, setStripeLoading] = React.useState(false);
   const [stripeOnboardingLoading, setStripeOnboardingLoading] = React.useState(false);
@@ -351,6 +352,7 @@ export function AutoscuolePaymentsPage({
       });
     } finally {
       setLoading(false);
+      setHasLoadedOnce(true);
     }
   }, [toast]);
 
@@ -617,12 +619,13 @@ export function AutoscuolePaymentsPage({
       subTitle="Gestisci incassi, crediti guida e fatturazione"
     >
       <div className="relative w-full space-y-5" data-testid="autoscuole-payments-page">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
-        {loading ? (
-          <PaymentsSkeleton />
-        ) : !stripeConfigured ? (
+        {loading && !hasLoadedOnce ? (
+          <PaymentsPageSkeleton />
+        ) : (
+          <FadeIn className={cn("space-y-5 transition-opacity", loading && "opacity-60")}>
+        {!stripeConfigured ? (
           /* ── Stripe NOT configured: empty state ── */
           <>
         <div className="rounded-2xl border border-border bg-white p-8 shadow-card">
@@ -993,6 +996,8 @@ export function AutoscuolePaymentsPage({
         </SectionCard>
           </>
         )}
+          </FadeIn>
+        )}
       </div>
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -1243,6 +1248,101 @@ export function AutoscuolePaymentsPage({
         </DialogContent>
       </Dialog>
     </PageWrapper>
+  );
+}
+
+/**
+ * Skeleton locale fedele al layout reale della sezione Pagamenti:
+ * barra stato Stripe, accordion impostazioni, card riepilogo (StatMetric)
+ * e tabella operativa con righe di barre/pill.
+ */
+function PaymentsPageSkeleton() {
+  return (
+    <div className="space-y-5" aria-hidden="true">
+      {/* Stripe status bar */}
+      <div className="flex items-center justify-between rounded-2xl border border-border bg-white px-5 py-3 shadow-card">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-2.5 w-2.5 rounded-full" />
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-3 w-36" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-20 rounded-lg" />
+          <Skeleton className="h-8 w-28 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Settings accordion */}
+      <div className="rounded-2xl border border-border bg-white shadow-card">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex items-center justify-between gap-3 px-5 py-4",
+              i > 0 && "border-t border-border",
+            )}
+          >
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-36" />
+              <Skeleton className="h-3 w-64" />
+            </div>
+            <Skeleton className="h-4 w-4" />
+          </div>
+        ))}
+      </div>
+
+      {/* Save button */}
+      <div className="flex justify-end">
+        <Skeleton className="h-10 w-44 rounded-lg" />
+      </div>
+
+      {/* Stat metrics */}
+      <div className="grid gap-3 md:grid-cols-5">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-l-[3px] border-border bg-white p-4 shadow-card"
+          >
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-2.5 h-7 w-14" />
+          </div>
+        ))}
+      </div>
+
+      {/* Table card */}
+      <div className="rounded-2xl border border-border bg-white p-5 shadow-card">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <Skeleton className="h-4 w-48" />
+          <Skeleton className="h-8 w-28 rounded-lg" />
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="flex items-center gap-6 border-b border-border px-3 py-3">
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <Skeleton key={i} className="h-3 w-16" />
+            ))}
+          </div>
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-6 px-3 py-3.5",
+                i > 0 && "border-t border-border",
+              )}
+            >
+              <Skeleton className="h-3.5 w-20" />
+              <div className="space-y-1.5">
+                <Skeleton className="h-3.5 w-32" />
+                <Skeleton className="h-3 w-40" />
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-3.5 w-14" />
+              <Skeleton className="h-3.5 w-14" />
+              <Skeleton className="ml-auto h-8 w-20 rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

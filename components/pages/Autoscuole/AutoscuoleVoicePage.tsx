@@ -22,7 +22,8 @@ import {
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { VoiceSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { cn } from "@/lib/utils";
 import {
@@ -281,6 +282,101 @@ function SegAccordion({
   );
 }
 
+// ─── Skeletons (fedeli al layout reale) ──────────────────────────────────────
+
+/** Righe richiamate: avatar tondo + due righe testo + pill azioni. */
+function CallbackRowsSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div>
+      {Array.from({ length: rows }).map((_, i) => (
+        <div
+          key={i}
+          className={cn(
+            "flex items-center gap-4 px-6 py-4",
+            i < rows - 1 && "border-b border-[#f5f5f5]",
+          )}
+        >
+          <Skeleton className="h-[42px] w-[42px] shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="mb-2 h-4 w-40 max-w-full" />
+            <Skeleton className="h-3.5 w-64 max-w-full" />
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Skeleton className="h-[34px] w-[84px] rounded-[20px]" />
+            <Skeleton className="h-[34px] w-[84px] rounded-[20px]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Skeleton primo load: status bar, preview saluto + quick info, lista richiamate. */
+function VoicePageSkeleton() {
+  return (
+    <>
+      {/* Status bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dddddd] bg-white px-6 py-[18px]">
+        <div className="flex flex-wrap items-center gap-3.5">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-2 w-2 rounded-full" />
+            <Skeleton className="h-5 w-28" />
+          </div>
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-6 w-24 rounded-[20px]" />
+        </div>
+        <div className="flex shrink-0 items-center gap-2.5">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-7 w-12 rounded-full" />
+        </div>
+      </div>
+
+      {/* Two-column: greeting preview + quick info */}
+      <div className="grid items-start gap-5 lg:grid-cols-[1fr_288px]">
+        <div className="rounded-2xl border border-[#dddddd] bg-white p-6">
+          <Skeleton className="mb-4 h-3 w-48" />
+          <Skeleton className="mb-2.5 h-4 w-full" />
+          <Skeleton className="mb-2.5 h-4 w-4/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <div className="mt-5 flex justify-end">
+            <Skeleton className="h-3.5 w-20" />
+          </div>
+        </div>
+        <div className="flex flex-col gap-[18px] rounded-2xl border border-[#dddddd] bg-white p-[22px]">
+          <div>
+            <Skeleton className="mb-2.5 h-3 w-24" />
+            <Skeleton className="mb-1.5 h-4 w-28" />
+            <Skeleton className="h-3.5 w-24" />
+          </div>
+          <div className="border-t border-[#f0f0f0] pt-4">
+            <Skeleton className="mb-2.5 h-3 w-16" />
+            <Skeleton className="h-3.5 w-32" />
+          </div>
+          <div className="border-t border-[#f0f0f0] pt-4">
+            <Skeleton className="mb-2.5 h-3 w-24" />
+            <div className="flex flex-wrap gap-1.5">
+              <Skeleton className="h-6 w-28 rounded-[20px]" />
+              <Skeleton className="h-6 w-20 rounded-[20px]" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Richiamate in sospeso */}
+      <div className="overflow-hidden rounded-2xl border border-[#dddddd] bg-white">
+        <div className="flex items-center justify-between border-b border-[#ebebeb] px-6 py-5">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-[18px] w-[18px] rounded-full" />
+            <Skeleton className="h-5 w-48" />
+          </div>
+          <Skeleton className="h-9 w-28 rounded-[20px]" />
+        </div>
+        <CallbackRowsSkeleton />
+      </div>
+    </>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function AutoscuoleVoicePage() {
@@ -319,6 +415,7 @@ export function AutoscuoleVoicePage() {
 
   // Callbacks state
   const [callbackTasks, setCallbackTasks] = React.useState<CallbackTask[]>([]);
+  const [callbacksLoaded, setCallbacksLoaded] = React.useState(false);
   const [loadingCallbacks, setLoadingCallbacks] = React.useState(false);
   const [markingDone, setMarkingDone] = React.useState<string | null>(null);
 
@@ -377,6 +474,7 @@ export function AutoscuoleVoicePage() {
     if (res.success && res.data) {
       setCallbackTasks(res.data as CallbackTask[]);
     }
+    setCallbacksLoaded(true);
     setLoadingCallbacks(false);
   }, []);
 
@@ -499,12 +597,31 @@ export function AutoscuoleVoicePage() {
     <PageWrapper title="Segretaria AI" subTitle="Assistente vocale AI inbound" hideHero>
       <div className="relative w-full" data-testid="autoscuole-voice-page">
         <div className="mx-auto max-w-7xl space-y-5">
+          {/* Header: rende subito, skeleton solo sotto */}
+          <PageHeader
+            title="Segretaria AI"
+            subtitle="Assistente vocale AI inbound"
+            actions={
+              loading ? (
+                <Skeleton className="h-10 w-[150px] rounded-3xl" />
+              ) : voiceFeatureEnabled ? (
+                <button
+                  type="button"
+                  onClick={() => openSettings()}
+                  className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-3xl border border-[#dddddd] bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-[#222222]"
+                >
+                  <Settings className="size-4" strokeWidth={1.8} />
+                  Impostazioni
+                </button>
+              ) : undefined
+            }
+          />
+
           {loading ? (
-            <VoiceSkeleton />
+            <VoicePageSkeleton />
           ) : !voiceFeatureEnabled ? (
             /* ── Feature NOT enabled: empty state ── */
-            <>
-              <PageHeader title="Segretaria AI" subtitle="Assistente vocale AI inbound" />
+            <FadeIn>
               <div className="rounded-2xl border border-[#dddddd] bg-white p-10">
                 <div className="mx-auto flex max-w-md flex-col items-center text-center">
                   <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#eef0f6]">
@@ -517,25 +634,10 @@ export function AutoscuoleVoicePage() {
                   </p>
                 </div>
               </div>
-            </>
+            </FadeIn>
           ) : (
             /* ── Feature enabled ── */
-            <>
-              <PageHeader
-                title="Segretaria AI"
-                subtitle="Assistente vocale AI inbound"
-                actions={
-                  <button
-                    type="button"
-                    onClick={() => openSettings()}
-                    className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-3xl border border-[#dddddd] bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-[#222222]"
-                  >
-                    <Settings className="size-4" strokeWidth={1.8} />
-                    Impostazioni
-                  </button>
-                }
-              />
-
+            <FadeIn className="space-y-5">
               {/* Status bar */}
               <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dddddd] bg-white px-6 py-[18px]">
                 <div className="flex flex-wrap items-center gap-3.5">
@@ -696,12 +798,12 @@ export function AutoscuoleVoicePage() {
                     Aggiorna
                   </button>
                 </div>
-                {callbackTasks.length === 0 ? (
+                {!callbacksLoaded ? (
+                  <CallbackRowsSkeleton />
+                ) : callbackTasks.length === 0 ? (
                   <div className="px-6 py-12 text-center">
                     <Phone className="mx-auto mb-2 size-6 text-[#c1c1c1]" strokeWidth={1.5} />
-                    <p className="text-sm font-medium text-[#929292]">
-                      {loadingCallbacks ? "Caricamento..." : "Nessuna richiamata in sospeso"}
-                    </p>
+                    <p className="text-sm font-medium text-[#929292]">Nessuna richiamata in sospeso</p>
                   </div>
                 ) : (
                   <div>
@@ -764,7 +866,7 @@ export function AutoscuoleVoicePage() {
                   </div>
                 )}
               </div>
-            </>
+            </FadeIn>
           )}
         </div>
 

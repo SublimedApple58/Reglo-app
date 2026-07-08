@@ -3,9 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import Lottie from "lottie-react";
 import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle, Car, Bike } from "lucide-react";
-import carAnimation from "@/assets/Car.json";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
@@ -40,7 +38,8 @@ import {
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
-import { AgendaSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +49,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
@@ -1135,7 +1133,6 @@ export function AutoscuoleAgendaPage({
       hideHero
     >
       <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
-        <LottieLoadingOverlay visible={loading} />
         <div className="mx-auto max-w-7xl space-y-5">
           <PageHeader
             title="Agenda"
@@ -1153,8 +1150,6 @@ export function AutoscuoleAgendaPage({
             })()}
           />
           {tabs}
-          {loading && <AgendaSkeleton />}
-          {!loading && (<>
         <div className="flex items-center gap-3">
           {/* Date nav */}
           <div className="flex items-center gap-1">
@@ -1484,13 +1479,14 @@ export function AutoscuoleAgendaPage({
           })(),
           document.body,
         )}
-          </>)}
         </div>
 
-        {!loading && (<>
+        {loading ? (
+          <AgendaGridSkeleton columns={viewMode === "week" ? 7 : agendaMode === "instructor" ? 4 : 1} />
+        ) : (<FadeIn>
         {/* ── CLASSIC VIEW ── */}
         {agendaMode === "classic" && (
-          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
             <div ref={calendarScrollRef} className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card" style={{ height: "100%" }}>
               {/* Sticky day headers */}
               <div
@@ -1749,18 +1745,7 @@ export function AutoscuoleAgendaPage({
           const totalCols = instrCount * 7; // instructor sub-columns across 7 days
 
           return (
-          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <AnimatePresence>
-              {refreshing && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-                  className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50">
-                  <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
-                    <Lottie animationData={carAnimation} loop style={{ width: 100, height: 100 }} />
-                    <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
             <div className="flex flex-col bg-white" style={{ height: "100%" }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
@@ -2138,7 +2123,7 @@ export function AutoscuoleAgendaPage({
 
         {/* ── INSTRUCTOR DAY VIEW ── */}
         {agendaMode === "instructor" && viewMode === "day" && (
-        <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+        <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
           {/* Holiday banner */}
           {holidaySet.has(formatYmd(dayFocus)) && (
             <div className="flex items-center justify-between gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 mb-2">
@@ -2160,23 +2145,6 @@ export function AutoscuoleAgendaPage({
               </Button>
             </div>
           )}
-          {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
-          <AnimatePresence>
-            {refreshing && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50"
-              >
-                <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
-                  <Lottie animationData={carAnimation} loop style={{ width: 140, height: 140 }} />
-                  <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
           <div
             ref={calendarScrollRef}
             className="overflow-y-auto bg-white"
@@ -2497,7 +2465,7 @@ export function AutoscuoleAgendaPage({
         </div>
         </div>
         )}
-        </>)}
+        </FadeIn>)}
       </div>
 
       <Dialog
@@ -4198,6 +4166,80 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
  * Intestazione colonna giorno del redesign Airbnb: DOW 10px uppercase +
  * numero in cerchio 34px (oggi = pieno scuro), festivo con sole ambra.
  */
+// Blocchi-guida finti per colonna (minuti dall'inizio della finestra visibile):
+// pattern deterministico che ricalca la densità reale dell'agenda.
+const SKELETON_GRID_BLOCKS: Array<Array<{ start: number; duration: number }>> = [
+  [{ start: 75, duration: 60 }, { start: 250, duration: 90 }],
+  [{ start: 30, duration: 90 }, { start: 210, duration: 60 }, { start: 350, duration: 60 }],
+  [{ start: 130, duration: 60 }, { start: 290, duration: 120 }],
+  [{ start: 55, duration: 60 }, { start: 190, duration: 90 }, { start: 390, duration: 60 }],
+  [{ start: 105, duration: 90 }, { start: 320, duration: 60 }],
+  [{ start: 45, duration: 60 }, { start: 240, duration: 60 }],
+  [{ start: 160, duration: 90 }, { start: 370, duration: 60 }],
+];
+
+/**
+ * Skeleton locale della griglia agenda: header giorni + gutter orario +
+ * colonne con blocchi-guida shimmer. Mostrato SOLO al primissimo caricamento
+ * (i refetch tengono la griglia reale montata, solo attenuata).
+ */
+function AgendaGridSkeleton({ columns }: { columns: number }) {
+  const hourRows = Array.from({ length: 10 }, (_, i) => i);
+  const gridTemplateColumns = `56px repeat(${columns}, 1fr)`;
+  return (
+    <div
+      className="overflow-hidden rounded-2xl border border-border bg-white shadow-card"
+      style={{ height: "calc(100vh - 240px)", minHeight: 400 }}
+    >
+      {/* Day headers */}
+      <div className="grid border-b border-[#eeeeee]" style={{ gridTemplateColumns }}>
+        <div className="border-r border-[#eeeeee] bg-[#fafafa]" />
+        {Array.from({ length: columns }).map((_, index) => (
+          <div key={index} className="flex flex-col items-center gap-1.5 border-l border-[#eeeeee] py-2">
+            <Skeleton className="h-2 w-7 rounded-full" />
+            <Skeleton className="size-[34px] rounded-full" />
+          </div>
+        ))}
+      </div>
+      {/* Body: time gutter + columns */}
+      <div className="relative grid h-full" style={{ gridTemplateColumns }}>
+        <div className="relative border-r border-[#eeeeee] bg-[#fafafa]">
+          {hourRows.map((row) => (
+            <div
+              key={row}
+              className="absolute left-0 right-0 flex justify-end pr-2"
+              style={{ top: row * 60 * PIXELS_PER_MINUTE + 4 }}
+            >
+              <Skeleton className="h-2.5 w-8 rounded-full" />
+            </div>
+          ))}
+        </div>
+        {Array.from({ length: columns }).map((_, colIndex) => (
+          <div key={colIndex} className="relative border-l border-[#eeeeee] bg-white">
+            {hourRows.map((row) => (
+              <div
+                key={row}
+                className="absolute left-0 right-0 h-px bg-[#f5f5f5]"
+                style={{ top: row * 60 * PIXELS_PER_MINUTE }}
+              />
+            ))}
+            {SKELETON_GRID_BLOCKS[colIndex % SKELETON_GRID_BLOCKS.length].map((block, blockIndex) => (
+              <Skeleton
+                key={blockIndex}
+                className="absolute left-[3px] right-[3px] rounded-[10px]"
+                style={{
+                  top: block.start * PIXELS_PER_MINUTE,
+                  height: block.duration * PIXELS_PER_MINUTE - 2,
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AgendaDayHeader({
   day,
   isToday,

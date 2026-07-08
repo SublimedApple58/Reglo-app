@@ -60,9 +60,8 @@ import {
 import { createCompanyUser } from "@/lib/actions/user.actions";
 import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
-import { TableSkeleton } from "@/components/ui/page-skeleton";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { FadeIn } from "@/components/ui/fade-in";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 
 type StudentProfile = {
@@ -291,6 +290,44 @@ const blueLinkClass =
   "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
 
 const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
+
+/** Skeleton primo caricamento: rispecchia la vera lista allievi (toolbar + righe hairline con avatar, testo, pill e bottone) */
+function StudentListSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2.5">
+        <Skeleton className="h-9 w-64 rounded-full" />
+        <div className="flex-1" />
+        <Skeleton className="size-9 rounded-full" />
+        <Skeleton className="size-9 rounded-full" />
+      </div>
+      {/* Righe lista */}
+      <div>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-[2fr_1.5fr_1fr_1fr_110px] items-center gap-3 border-t border-[#ebebeb] px-6 py-5"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <Skeleton className="size-10 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-36 max-w-full rounded" />
+                <Skeleton className="h-3 w-24 max-w-full rounded" />
+              </div>
+            </div>
+            <Skeleton className="h-3.5 w-40 max-w-full rounded" />
+            <Skeleton className="h-3.5 w-24 max-w-full rounded" />
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <div className="flex justify-end">
+              <Skeleton className="h-[34px] w-[86px] rounded-[8px]" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const getTheoryCountdown = (theoryExamAt: string | null | undefined) => {
   if (!theoryExamAt) return null;
@@ -1799,9 +1836,9 @@ export function AutoscuoleStudentsPage({
           />
 
           {loading ? (
-            <TableSkeleton rows={6} cols={5} />
+            <StudentListSkeleton />
           ) : (
-            <>
+            <FadeIn className="space-y-6">
               {/* ── Toolbar ── */}
               <div className="flex flex-wrap items-center gap-2.5">
                 <SegmentedPill
@@ -1937,8 +1974,7 @@ export function AutoscuoleStudentsPage({
 
               {/* ── Content ── */}
               <div className="relative">
-                {searching && <LottieLoadingOverlay visible />}
-                <div className={cn(searching && "pointer-events-none opacity-40")}>
+                <div className={cn("transition-opacity", searching && "pointer-events-none opacity-60")}>
                   {phaseTab === "attesa" && renderAttesaRows()}
                   {phaseTab === "teoria" && renderTeoriaRows()}
                   {phaseTab === "pratica" && praticaSubTab === "lista" && renderPraticaRows()}
@@ -1948,7 +1984,7 @@ export function AutoscuoleStudentsPage({
                   {phaseTab === "patentati" && renderPatentatiRows()}
                 </div>
               </div>
-            </>
+            </FadeIn>
           )}
         </div>
       </div>

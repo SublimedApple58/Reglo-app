@@ -24,7 +24,6 @@ import {
   updateAutoscuolaCaseStatus,
 } from "@/lib/actions/autoscuole.actions";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type StudentOption = { id: string; firstName: string; lastName: string };
 type CaseRow = {
@@ -136,7 +135,6 @@ export function AutoscuoleCasesPage({
       subTitle="Gestisci le pratiche e gli stati degli allievi."
     >
       <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
         <div className="glass-panel glass-strong flex flex-wrap items-center justify-between gap-3 p-4">

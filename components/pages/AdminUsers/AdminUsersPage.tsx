@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAtomValue } from "jotai";
 
 import { companyAtom } from "@/atoms/company.store";
+import { FadeIn } from "@/components/ui/fade-in";
 import { PageHeader } from "@/components/ui/page-header";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
@@ -167,6 +168,7 @@ export function AdminUsersPage({
   const toast = useFeedbackToast();
   const company = useAtomValue(companyAtom);
   const isAdmin = company?.role === "admin";
+  const [isRefetching, startRefetch] = React.useTransition();
 
   // Toolbar state
   const [searchOpen, setSearchOpen] = React.useState(Boolean(initialQuery));
@@ -195,7 +197,11 @@ export function AdminUsersPage({
     (mutate: (params: URLSearchParams) => void) => {
       const params = new URLSearchParams(searchParams.toString());
       mutate(params);
-      router.push(`${pathname}?${params.toString()}`);
+      // startTransition: la lista corrente resta visibile (opacity ridotta)
+      // durante il refetch server, senza far scattare il loading.tsx di route.
+      startRefetch(() => {
+        router.push(`${pathname}?${params.toString()}`);
+      });
     },
     [searchParams, router, pathname],
   );
@@ -239,7 +245,7 @@ export function AdminUsersPage({
 
   return (
     <div className="w-full" data-testid="admin-users-page">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <FadeIn className="mx-auto max-w-7xl space-y-5">
         <PageHeader
           title="Utenti"
           subtitle={`Sono registrati in autoscuola un totale di ${total} ${total === 1 ? "utente" : "utenti"}`}
@@ -403,8 +409,13 @@ export function AdminUsersPage({
           )}
         </div>
 
-        {/* Rows */}
-        <div className="border-t border-[#f0f0f0]">
+        {/* Rows — restano visibili (attenuate) durante il refetch */}
+        <div
+          className={cn(
+            "border-t border-[#f0f0f0] transition-opacity duration-200",
+            isRefetching && "pointer-events-none opacity-60",
+          )}
+        >
           {users.length ? (
             users.map((user) => (
               <div
@@ -455,7 +466,7 @@ export function AdminUsersPage({
             </div>
           )}
         </div>
-      </div>
+      </FadeIn>
 
       {/* ── Detail panel utente ── */}
       <DetailPanel

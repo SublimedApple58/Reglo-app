@@ -8,7 +8,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { getAutoscuolaDeadlines } from "@/lib/actions/autoscuole.actions";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type DeadlineItem = {
   id: string;
@@ -70,7 +69,6 @@ export function AutoscuoleDeadlinesPage({
       subTitle="Scadenze critiche e promemoria automatici."
     >
       <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
         <section className="space-y-5">

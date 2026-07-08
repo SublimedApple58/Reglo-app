@@ -6,6 +6,7 @@ import { Camera, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { companyAtom } from "@/atoms/company.store";
 import { getCurrentCompany, updateCompanyName } from "@/lib/actions/company.actions";
@@ -162,13 +163,27 @@ export function BusinessInfoPane() {
 
   if (loading) {
     return (
-      <div className="max-w-[640px] space-y-8">
-        <div className="flex justify-center">
+      <div className="max-w-[640px]">
+        <div className="mb-10 flex justify-center">
           <Skeleton className="size-[132px] rounded-full" />
         </div>
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
+        <div className="flex flex-col">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className={cn(
+                "flex items-start justify-between gap-6 py-5",
+                i < 3 && "border-b border-[#ebebeb]",
+              )}
+            >
+              <div className="min-w-0 flex-1">
+                <Skeleton className="h-4 w-40 max-w-full" />
+                <Skeleton className="mt-2.5 h-3.5 w-56 max-w-full" />
+              </div>
+              <Skeleton className="h-4 w-16 shrink-0" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -185,7 +200,7 @@ export function BusinessInfoPane() {
   ];
 
   return (
-    <div className="max-w-[640px]">
+    <FadeIn className="max-w-[640px]">
       {/* ── Foto profilo ── */}
       <div className="mb-10 flex justify-center">
         <button
@@ -306,6 +321,6 @@ export function BusinessInfoPane() {
           </div>
         </div>
       </div>
-    </div>
+    </FadeIn>
   );
 }

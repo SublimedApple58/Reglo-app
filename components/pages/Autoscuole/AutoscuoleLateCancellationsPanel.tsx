@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { FadeIn } from "@/components/ui/fade-in";
 import {
   getLateCancellations,
   resolveLateCancellation,
@@ -128,22 +128,39 @@ export function AutoscuoleLateCancellationsPanel({
 
   if (loading) {
     return (
-      <div className="relative space-y-4">
-        <LottieLoadingOverlay visible />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
+      <div className="flex flex-col gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-[14px] border border-[#dddddd] bg-white p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <Skeleton className="h-5 w-44 rounded" />
+              <Skeleton className="h-6 w-32 rounded-full" />
+            </div>
+            <div className="mb-5 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, j) => (
+                <div key={j}>
+                  <Skeleton className="mb-1.5 h-3 w-24 rounded" />
+                  <Skeleton className="h-3.5 w-44 max-w-full rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2.5 border-t border-[#f2f2f2] pt-5">
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-32 rounded-md" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!items.length) {
     return (
-      <div className="flex min-h-[280px] flex-col items-center justify-center border-t border-[#ebebeb] text-center">
+      <FadeIn className="flex min-h-[280px] flex-col items-center justify-center border-t border-[#ebebeb] text-center">
         <p className="text-sm font-semibold text-foreground">Tutto in ordine</p>
         <p className="mt-1 text-[13px] font-medium text-[#929292]">
           Nessuna cancellazione tardiva o no-show da gestire.
         </p>
-      </div>
+      </FadeIn>
     );
   }
 
@@ -155,7 +172,7 @@ export function AutoscuoleLateCancellationsPanel({
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <FadeIn className="flex flex-col gap-4">
       {items.map((item) => (
         <div key={item.id} className="rounded-[14px] border border-[#dddddd] bg-white p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
@@ -212,6 +229,6 @@ export function AutoscuoleLateCancellationsPanel({
           </div>
         </div>
       ))}
-    </div>
+    </FadeIn>
   );
 }

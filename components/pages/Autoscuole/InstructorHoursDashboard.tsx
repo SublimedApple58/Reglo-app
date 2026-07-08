@@ -3,6 +3,8 @@
 import React from "react";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FadeIn } from "@/components/ui/fade-in";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { InstructorHoursEntry } from "@/lib/actions/autoscuole.actions";
 
@@ -83,13 +85,12 @@ export function InstructorHoursDashboard() {
         </Button>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-40 animate-pulse rounded-2xl bg-gray-100"
-            />
+      {data === null && loading ? (
+        // First load: faithful skeleton of the instructor cards (name, weekly
+        // total, column chart, monthly footer).
+        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
+          {[0, 1, 2].map((i) => (
+            <InstructorHoursCardSkeleton key={i} />
           ))}
         </div>
       ) : !data?.length ? (
@@ -97,12 +98,46 @@ export function InstructorHoursDashboard() {
           Nessun istruttore trovato.
         </div>
       ) : (
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]">
-          {data.map((entry) => (
-            <InstructorHoursCard key={entry.instructorId} entry={entry} />
-          ))}
-        </div>
+        // Refetch (week navigation): keep the content visible, just dimmed.
+        <FadeIn>
+          <div
+            className={cn(
+              "grid gap-4 transition-opacity [grid-template-columns:repeat(auto-fit,minmax(340px,1fr))]",
+              loading && "opacity-60",
+            )}
+          >
+            {data.map((entry) => (
+              <InstructorHoursCard key={entry.instructorId} entry={entry} />
+            ))}
+          </div>
+        </FadeIn>
       )}
+    </div>
+  );
+}
+
+/** Skeleton fedele a InstructorHoursCard: header, totale, grafico a colonne, footer mese. */
+function InstructorHoursCardSkeleton() {
+  const barHeights = [45, 70, 55, 90, 60, 30, 18];
+  return (
+    <div className="space-y-4 rounded-2xl border border-border bg-white p-5 shadow-card">
+      <Skeleton className="h-5 w-40" />
+      <div className="flex items-end gap-3">
+        <Skeleton className="h-8 w-16" />
+        <Skeleton className="mb-1 h-3.5 w-28" />
+      </div>
+      <div className="flex h-28 items-end justify-between gap-1.5 pt-2">
+        {barHeights.map((height, i) => (
+          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+            <Skeleton className="w-full rounded-b-none rounded-t-md" style={{ height: `${height}%` }} />
+            <Skeleton className="mt-0.5 h-2.5 w-6" />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between border-t border-border/60 pt-3">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-12" />
+      </div>
     </div>
   );
 }

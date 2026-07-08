@@ -422,3 +422,13 @@
     transform: translateY(12px) translateX(-8px);
   }
 }
+
+/* Skeleton shimmer — sweep di luce sui placeholder (skeleton "vivi") */
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}

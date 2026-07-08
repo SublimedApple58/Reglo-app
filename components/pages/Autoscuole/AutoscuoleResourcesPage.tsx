@@ -86,7 +86,38 @@ import {
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
-import { SettingsSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
+
+/**
+ * Skeleton locale del contenuto pane dell'overlay Impostazioni: righe flat
+ * "titolo + descrizione + toggle tondo" separate da hairline, fedeli alle
+ * liste reali delle pane (header/sidebar/titolo restano visibili).
+ */
+function SettingsPaneSkeleton() {
+  return (
+    <div className="max-w-[640px]">
+      <Skeleton className="mb-8 h-4 w-[420px] max-w-full" />
+      <div className="flex flex-col">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex items-start justify-between gap-6 py-5",
+              i < 4 && "border-b border-[#ebebeb]",
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-44 max-w-full" />
+              <Skeleton className="mt-2.5 h-3.5 w-72 max-w-full" />
+            </div>
+            <Skeleton className="mt-0.5 h-5 w-9 shrink-0 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type ResourceOption = { id: string; name: string };
 type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; color?: string | null; inviteCode?: string | null; _count?: { assignedStudents: number } };
@@ -1724,9 +1755,9 @@ export function AutoscuoleResourcesPage({
               </h2>
             )}
             {!hasLoadedOnce ? (
-          <SettingsSkeleton />
+          <SettingsPaneSkeleton />
         ) : (
-          <>
+          <FadeIn>
         <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
           <BusinessInfoPane />
         </KeepAlivePane>
@@ -1884,7 +1915,7 @@ export function AutoscuoleResourcesPage({
             savingSettings={savingSettings}
           />
         </KeepAlivePane>
-          </>
+          </FadeIn>
         )}
           </div>
         </div>
