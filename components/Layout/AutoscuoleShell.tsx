@@ -8,12 +8,12 @@ import { useAtomValue, useSetAtom } from "jotai";
 import {
   LogOut,
   Settings,
-  CreditCard,
   Users,
   CircleUserRound,
   Plus,
   Check,
   Menu,
+  Clock,
 } from "lucide-react";
 
 import { companyAtom, companyListAtom, companyRefreshAtom } from "@/atoms/company.store";
@@ -29,7 +29,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/animate-ui/radix/dropdown-menu";
 import { AutoscuoleNav } from "@/components/pages/Autoscuole/AutoscuoleNav";
+import {
+  NOVITA_ENTRIES,
+  NovitaDialog,
+  type NovitaEntryKey,
+} from "@/components/Layout/NovitaDialog";
 import { isServiceActive } from "@/lib/services";
+import { cn } from "@/lib/utils";
 
 function companyInitials(name: string | null | undefined) {
   const trimmed = (name ?? "").trim();
@@ -63,6 +69,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
     return () => { window.removeEventListener("storage", handler); clearInterval(interval); };
   }, [isAgenda]);
   const isWideLayout = isAgenda && agendaStoredMode !== "classic";
+  const [novitaEntry, setNovitaEntry] = React.useState<NovitaEntryKey | null>(null);
 
   const handleCompanySwitch = React.useCallback(
     async (companyId: string) => {
@@ -225,18 +232,18 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <span className="text-[15px] font-medium">Impostazioni dell&apos;account</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push("/user/autoscuole?tab=settings&pane=payments")}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <CreditCard className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Pagamenti</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
                     onClick={() => router.push("/admin/users")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
                     <Users className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Utenti</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/user/autoscuole?tab=settings&pane=hours")}
+                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                  >
+                    <Clock className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <span className="text-[15px] font-medium">Ore guida</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/user/settings")}
@@ -245,6 +252,54 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <CircleUserRound className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Profilo</span>
                   </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
+                  {/* Teaser referral (statico, come il proto) */}
+                  <div className="flex cursor-default items-center justify-between gap-3 rounded-xl px-3 py-2.5">
+                    <div>
+                      <div className="mb-0.5 text-[15px] font-bold text-foreground">
+                        Inizia a guadagnare
+                      </div>
+                      <div className="text-[12.5px] font-medium leading-snug text-[#6a6a6a]">
+                        Fai conoscere Reglo ad un&apos;altra autoscuola e ricevi il 10%.
+                      </div>
+                    </div>
+                    <Image
+                      src="/images/menu/inizia-guadagnare.png"
+                      alt=""
+                      width={64}
+                      height={64}
+                      className="h-16 w-16 shrink-0 object-contain"
+                    />
+                  </div>
+                  <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
+                  {/* Novità: timeline changelog */}
+                  <div className="px-3 pb-1 pt-1.5">
+                    <div className="mb-2.5 text-[13px] font-semibold tracking-[0.2px] text-[#929292]">
+                      Novità
+                    </div>
+                    <div className="relative flex flex-col">
+                      <div className="absolute bottom-[15px] left-[6px] top-[15px] w-0 border-l-[1.5px] border-dotted border-[#d4d4d4]" />
+                      {NOVITA_ENTRIES.map((item) => (
+                        <DropdownMenuItem
+                          key={item.key}
+                          onClick={() => setNovitaEntry(item.key)}
+                          className="-mx-1.5 flex cursor-pointer items-start gap-3 rounded-[9px] px-1.5 py-[7px]"
+                        >
+                          <span
+                            className={cn(
+                              "relative z-[1] mt-0.5 h-[13px] w-[13px] shrink-0 rounded-full border-2",
+                              item.latest
+                                ? "border-navy-900 bg-[#eef0f6]"
+                                : "border-[#c4c4c4] bg-white",
+                            )}
+                          />
+                          <span className="text-[14px] font-semibold leading-tight text-foreground">
+                            {item.title}
+                          </span>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </div>
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
                   <DropdownMenuItem
                     onClick={() => signOutUser()}
@@ -264,6 +319,9 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
       <main className={`mx-auto flex w-full flex-1 flex-col gap-6 px-4 pt-6 pb-10 lg:gap-8 lg:px-10 lg:pt-8 lg:pb-12 ${isWideLayout ? "max-w-[1920px]" : "max-w-[1440px]"}`}>
         {children}
       </main>
+
+      {/* Dialog dal menu hamburger */}
+      <NovitaDialog entry={novitaEntry} onClose={() => setNovitaEntry(null)} />
     </div>
   );
 }

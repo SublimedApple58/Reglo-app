@@ -91,9 +91,17 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - NIENTE PERSO: crea/invita utente, broadcast push, reset token, test push per utente, edit nome+ruolo, delete, resend/cancel invito, ricerca server-side, paginazione. UNICA rimozione consapevole: le checkbox multi-selezione della vecchia tabella (erano puramente cosmetiche, nessuna azione bulk collegata).
   - e2e: nuovo test "utenti: lista, filtro ruoli e detail panel" in autoscuole-smoke. Suite 7 test: verde (vehicles.auth flake noto sotto carico parallelo, passa da solo).
 
+- Fase 6a APPROVATA dall'utente (2026-07-08, "ok dai, ci sta").
+- Fase 6b Menu hamburger FATTA (in attesa di verifica utente):
+  - Nuove voci in ordine proto: **Ore guida** (`?tab=settings&pane=hours`), banner statico **"Inizia a guadagnare"** (asset proto in `public/images/menu/`), sezione **Novità** con timeline puntinata (Modulo veicoli · Gestione autonoma istruttori · Guide di gruppo, dot navy sull'ultima uscita).
+  - **"Chiave di accesso" RIMOSSA dal menu su richiesta utente** — resta solo nella sezione Allievi (modal codici). "Pagamenti" ritirato dal menu (vive in Impostazioni). "Profilo" (/user/settings) TENUTO: ha ancora integrazioni/upload non migrati — candidato a futura migrazione dentro Impostazioni.
+  - NUOVO `components/Layout/NovitaDialog.tsx`: modal changelog z-600 stile proto (640px, header Novità+X, entry con testi/date del proto — Robatto incluso; video guide-gruppo.mp4 compresso 19.7MB→490KB in `public/images/novita/`; CTA "Attiva le guide di gruppo" → pane Gestione allievi).
+  - GOTCHA test Playwright: dopo il login la redirect è client-side → `userSessionAtom` resta null (SessionProvider rifetcha solo su hard navigation o window focus) → l'hamburger non c'è. Negli script fare sempre `page.goto()` dopo `waitForURL`. Quirk latente anche in reale ma mascherato dal refetch-on-focus.
+- **Voci del menu proto ANCORA MANCANTI (da fare, richiesta utente 2026-07-08)**: **Area personale** (proto `#section-areapersonale` riga 1420: overlay tipo Impostazioni con Credenziali vault / Contratto e fattura / Abbonamento — NESSUN backend reale oggi: da decidere se mock o attendere backend), **Invia comunicato** (proto `#comunicato-modal` riga 1906 — possibile aggancio a sendBroadcastPush), **Centro assistenza** (proto `#section-assistenza` riga 1269 — DA MOCKARE per ora), **Lascia un feedback** (proto `#feedback-modal` riga 1957 — DA MOCKARE per ora).
+
 ## Next steps
 
-1. **⇒ PROSSIMO dopo verifica 6a: Fase 6b — Area personale** (proto `#section-areapersonale`, riga 1420: vault credenziali/contratto/abbonamento — decidere cosa è implementabile ora) e **6c — referral + Novità nel menu hamburger** (proto `#referral-modal` riga 1876 + voce Novità). (Ore guida già raggiungibile dall'overlay Impostazioni.)
+1. **⇒ PROSSIMO dopo verifica 6b: Fase 6c — voci menu mancanti**: Area personale (mock/parziale, decidere con l'utente il livello), Invia comunicato, Centro assistenza (mock), Lascia un feedback (mock). Studiare le sezioni proto indicate sopra.
 2. **Fine progetto**: QA completo su staging clone (dev DB ha 1 solo allievo), poi rilascio concordato.
 3. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 
