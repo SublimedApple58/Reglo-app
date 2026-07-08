@@ -81,9 +81,19 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - e2e: nuovo test "segretaria: pagina e pannello impostazioni" in `autoscuole-smoke.spec.ts` (robusto: gestisce feature attiva o spenta). 3/3 smoke + 5/5 suite verdi in locale.
   - NOTA DEV: i settings passano da cache Redis TTL 5 min (`getCachedCompanyServiceLimits`) — scritture dirette al DB si vedono dopo ~5 min. Per il QA ho abilitato la voice su **Reglo E2E** in dev (feature+ready+numero+greeting demo); "Reglo srl" ripristinata com'era.
 
+- Fase 5 APPROVATA dall'utente (2026-07-08).
+- Fase 6a Utenti FATTA (in attesa di verifica utente):
+  - `/admin/users` riscritta come proto `#section-users`: nuova `AdminUsersPage.tsx` (sostituisce AdminUsersToolbar + AdminUsersTable + UpdateUserForm, file RIMOSSI — UpdateUserForm era usato solo lì); route `page.tsx` ora usa `PageWrapper hideHero` (il ClientPageWrapper mostrava il breadcrumb legacy) e passa `role` searchParam.
+  - Layout proto: PageHeader "Utenti" + "Sono registrati in autoscuola un totale di N utenti"; toolbar con **paginazione compatta ‹ 01 / N ›** (server-side via ?page=), **Filtri ruolo** dropdown (dot navy attivo + Rimuovi filtri, server-side via ?role=), icona **crea utente** (dialog esistente), **search icona→pillola** con Annulla (?query=), menu **"..."** con Invita utente / Invia notifica push / Reset push token (conferma AlertDialog al posto del window.confirm).
+  - Righe hairline #f0f0f0 grid 1.3fr/1.6fr/150/100/100: avatar pieno hash-color, nome, email, pill Ruolo (navy per staff, grigia per Allievo), pill Attivo/Invitato, bottone Dettaglio radius 8. Empty state "Nessun risultato". Su schermi <lg l'email scende sotto il nome.
+  - **Detail panel utente** (`user-detail-panel`, DetailPanel 520px, sostituisce il Drawer vaul): header centrato avatar+nome+email+pill; attivi = Anagrafica (Nome input, Email sola lettura, Ruolo select, Salva modifiche navy attivo solo se dirty) + Azioni (Invia notifica di prova blu, Elimina utente rosso con conferma); invitati = Reinvia invito / Annulla invito con conferma. Read-only per non-admin.
+  - Backend: `getCompanyUsers` esteso con `role?` (filtro su autoscuolaRole, membri+inviti) e `total` esatto nel return (prima il conteggio era stimato `totalPages*PAGE_SIZE`).
+  - NIENTE PERSO: crea/invita utente, broadcast push, reset token, test push per utente, edit nome+ruolo, delete, resend/cancel invito, ricerca server-side, paginazione. UNICA rimozione consapevole: le checkbox multi-selezione della vecchia tabella (erano puramente cosmetiche, nessuna azione bulk collegata).
+  - e2e: nuovo test "utenti: lista, filtro ruoli e detail panel" in autoscuole-smoke. Suite 7 test: verde (vehicles.auth flake noto sotto carico parallelo, passa da solo).
+
 ## Next steps
 
-1. **⇒ PROSSIMO dopo verifica fase 5: Fase 6 — Minori**: Utenti (/admin/users restyle), Area personale (nuova), referral + Novità nel menu hamburger. (Ore guida già raggiungibile dall'overlay Impostazioni.)
+1. **⇒ PROSSIMO dopo verifica 6a: Fase 6b — Area personale** (proto `#section-areapersonale`, riga 1420: vault credenziali/contratto/abbonamento — decidere cosa è implementabile ora) e **6c — referral + Novità nel menu hamburger** (proto `#referral-modal` riga 1876 + voce Novità). (Ore guida già raggiungibile dall'overlay Impostazioni.)
 2. **Fine progetto**: QA completo su staging clone (dev DB ha 1 solo allievo), poi rilascio concordato.
 3. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 

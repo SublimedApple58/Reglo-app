@@ -111,6 +111,39 @@ test.describe("Autoscuole smoke", () => {
     ).toBeVisible({ timeout: 30000 });
   });
 
+  test("utenti: lista, filtro ruoli e detail panel @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/admin/users");
+    await expect(page.getByTestId("admin-users-page")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/Sono registrati in autoscuola/)).toBeVisible();
+
+    // Filtro ruoli
+    await page.getByRole("button", { name: "Filtri" }).click();
+    await page.getByRole("menuitem", { name: "Allievo" }).click();
+    await page.waitForURL(/role=STUDENT/, { timeout: 30000 });
+
+    // Detail panel dal primo Dettaglio (se ci sono utenti)
+    const firstDetail = page.getByRole("button", { name: "Dettaglio" }).first();
+    if (await firstDetail.isVisible({ timeout: 10000 }).catch(() => false)) {
+      await firstDetail.click();
+      const panel = page.getByTestId("user-detail-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      await page.keyboard.press("Escape");
+      await expect(panel).not.toBeVisible();
+    }
+  });
+
   test("segretaria: pagina e pannello impostazioni @smoke", async ({ page }) => {
     test.setTimeout(180_000);
     const emailInput = page.locator('input[name="email"], input[type="email"]');

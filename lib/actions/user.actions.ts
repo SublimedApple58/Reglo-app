@@ -204,6 +204,8 @@ export async function updateProfile(user: { name: string; email: string; phone?:
 type PaginatedUsers<T> = {
   data: T[];
   totalPages: number;
+  /** Conteggio complessivo (post filtri) — presente solo per getCompanyUsers. */
+  total?: number;
 };
 
 type CompanyUserRow = {
@@ -240,10 +242,12 @@ export async function getCompanyUsers({
   limit = PAGE_SIZE,
   page,
   query = '',
+  role,
 }: {
   limit?: number;
   page: number;
   query?: string;
+  role?: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
 }): Promise<PaginatedUsers<CompanyUserRow>> {
   const context = await requireCompanyAdminContext();
 
@@ -320,9 +324,9 @@ export async function getCompanyUsers({
     createdAt: member.createdAt,
   }));
 
-  const rows = [...inviteRows, ...memberRows].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-  );
+  const rows = [...inviteRows, ...memberRows]
+    .filter((row) => !role || (row.autoscuolaRole ?? 'STUDENT') === role)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const dataCount = rows.length;
   const paged = rows.slice((page - 1) * limit, page * limit);
@@ -332,6 +336,7 @@ export async function getCompanyUsers({
       ({ createdAt, ...rest }) => rest as CompanyUserRow
     ),
     totalPages: Math.ceil(dataCount / limit),
+    total: dataCount,
   };
 }
 
