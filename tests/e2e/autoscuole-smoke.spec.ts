@@ -165,7 +165,7 @@ test.describe("Autoscuole smoke", () => {
     // Centro assistenza (mock): chat con messaggio di benvenuto
     await page.goto("/it/user/autoscuole/assistenza");
     await expect(page.getByTestId("autoscuole-assistenza-page")).toBeVisible({ timeout: 60000 });
-    await expect(page.getByText("Ciao! Sono Giulia").first()).toBeVisible();
+    await expect(page.getByText("Ciao! Qui parli direttamente").first()).toBeVisible();
   });
 
   test("segretaria: pagina e pannello impostazioni @smoke", async ({ page }) => {

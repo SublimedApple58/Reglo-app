@@ -92,6 +92,8 @@ model User {
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
   quizSessions                         QuizSession[]
   autoscuolaLocationsCreated           AutoscuolaLocation[]                   @relation("AutoscuolaLocationCreatedBy")
+  supportMessages                      SupportMessage[]
+  productFeedback                      ProductFeedback[]
 
   @@index([phone])
 }
@@ -234,6 +236,8 @@ model Company {
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
   quizSessions                         QuizSession[]
   autoscuolaLocations                  AutoscuolaLocation[]
+  supportThread                        SupportThread?
+  productFeedback                      ProductFeedback[]
 }
 
 model CompanyService {
@@ -1373,4 +1377,61 @@ model AulaLesson {
   @@index([companyId])
   @@index([chapterId])
   @@index([isTemplate])
+}
+
+// ── Centro assistenza + feedback ─────────────────────────────────────────────
+// Chat di supporto tra l'autoscuola (web app) e il team Reglo (backoffice):
+// un thread per company, messaggi bidirezionali con contatori non-letti per
+// lato. ProductFeedback = valutazioni dalla dialog "Lascia un feedback".
+// Vedi docs/features/support-center.md.
+model SupportThread {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String   @unique @db.Uuid
+  status             String   @default("open")
+  lastMessageAt      DateTime @default(now()) @db.Timestamp(6)
+  lastMessagePreview String?
+  unreadForAdmin     Int      @default(0)
+  unreadForCompany   Int      @default(0)
+  createdAt          DateTime @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model SupportMessage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId     String   @db.Uuid
+  /// "company" (autoscuola) | "reglo" (team, dal backoffice)
+  sender       String
+  senderUserId String?  @db.Uuid
+  /// Snapshot del nome al momento dell'invio (sopravvive alla cancellazione utente)
+  senderName   String?
+  body         String
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+
+  thread     SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderUser User?         @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+}
+
+model ProductFeedback {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String?  @db.Uuid
+  userId    String?  @db.Uuid
+  /// Snapshot del nome al momento dell'invio
+  userName  String?
+  rating    Int
+  tags      String[] @default([])
+  message   String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([createdAt])
 }

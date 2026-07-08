@@ -23,6 +23,7 @@ import { companyAtom, companyListAtom, companyRefreshAtom } from "@/atoms/compan
 import { userSessionAtom } from "@/atoms/user.store";
 import { signOutUser } from "@/lib/actions/user.actions";
 import { setActiveCompany } from "@/lib/actions/company.actions";
+import { getSupportUnreadCount } from "@/lib/actions/support.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   DropdownMenu,
@@ -77,6 +78,24 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   const [novitaEntry, setNovitaEntry] = React.useState<NovitaEntryKey | null>(null);
   const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  // Risposte del team Reglo non ancora lette: pallino sull'hamburger + conteggio
+  // sulla voce "Centro assistenza". Si azzera aprendo la chat (mark-read server).
+  const [supportUnread, setSupportUnread] = React.useState(0);
+  React.useEffect(() => {
+    if (!session) return;
+    let active = true;
+    const load = async () => {
+      const res = await getSupportUnreadCount();
+      if (active && res.success && res.data) setSupportUnread(res.data.unread);
+    };
+    void load();
+    const interval = setInterval(() => void load(), 60_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+    // pathname: rientrando dalla chat il badge si aggiorna subito.
+  }, [session, pathname]);
 
   const handleCompanySwitch = React.useCallback(
     async (companyId: string) => {
@@ -220,10 +239,13 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f0f0f0] transition-colors hover:bg-[#e6e6e6]"
+                    className="relative flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f0f0f0] transition-colors hover:bg-[#e6e6e6]"
                     aria-label="Menu"
                   >
                     <Menu className="h-[17px] w-[17px] text-foreground" strokeWidth={1.9} />
+                    {supportUnread > 0 && (
+                      <span className="absolute -right-px -top-px h-2.5 w-2.5 rounded-full border-2 border-white bg-[#c13515]" />
+                    )}
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -271,7 +293,12 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
                     <MessageCircleQuestion className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Centro assistenza</span>
+                    <span className="flex-1 text-[15px] font-medium">Centro assistenza</span>
+                    {supportUnread > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#c13515] px-1.5 text-[11px] font-bold text-white">
+                        {supportUnread > 9 ? "9+" : supportUnread}
+                      </span>
+                    )}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setFeedbackOpen(true)}

@@ -79,6 +79,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email
 - → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
 
+### Support Center + Feedback
+- → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
+- → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti
+- → **Shell web**: `AutoscuoleShell` polla `getSupportUnreadCount` (badge hamburger + voce menu)
+- → **Email**: avvisi al team via `sendDynamicEmail` (no-op staging)
+
 ### Instructor Colors
 - → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
 - → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)

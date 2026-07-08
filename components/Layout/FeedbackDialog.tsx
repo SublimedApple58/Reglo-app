@@ -2,9 +2,11 @@
 
 import React from "react";
 import Image from "next/image";
-import { Play, Upload } from "lucide-react";
+import { Loader2, Play, Upload } from "lucide-react";
 
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { submitProductFeedback } from "@/lib/actions/support.actions";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 
 const RATING_LABELS: Record<number, string> = {
@@ -38,8 +40,10 @@ function WhatsAppIcon({ className }: { className?: string }) {
 }
 
 /**
- * "Lascia un feedback" dal menu hamburger (stile proto). Per ora è un MOCK:
- * il feedback non viene salvato — gli esiti indirizzano al supporto WhatsApp.
+ * "Lascia un feedback" dal menu hamburger (stile proto). Il feedback viene
+ * salvato (ProductFeedback) e notificato al team Reglo: si consulta dal
+ * backoffice in /backoffice/feedback. Gli esiti post-invio indirizzano anche
+ * al supporto WhatsApp.
  */
 export function FeedbackDialog({
   open,
@@ -48,11 +52,32 @@ export function FeedbackDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const toast = useFeedbackToast();
   const [rating, setRating] = React.useState(0);
   const [hover, setHover] = React.useState(0);
   const [tags, setTags] = React.useState<string[]>([]);
   const [message, setMessage] = React.useState("");
   const [sent, setSent] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const submit = async () => {
+    if (rating === 0 || submitting) return;
+    setSubmitting(true);
+    try {
+      const res = await submitProductFeedback({
+        rating,
+        tags,
+        message: message.trim() || undefined,
+      });
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Invio del feedback non riuscito." });
+        return;
+      }
+      setSent(true);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const shown = hover || rating;
 
@@ -151,10 +176,11 @@ export function FeedbackDialog({
             </div>
             <button
               type="button"
-              onClick={() => rating > 0 && setSent(true)}
-              disabled={rating === 0}
-              className="flex w-full cursor-pointer items-center justify-center rounded-[12px] bg-gradient-to-br from-[#2d2d4a] to-[#1a1a2e] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(26,26,46,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
+              onClick={() => void submit()}
+              disabled={rating === 0 || submitting}
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-gradient-to-br from-[#2d2d4a] to-[#1a1a2e] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(26,26,46,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
             >
+              {submitting && <Loader2 className="size-4 animate-spin" />}
               Invia feedback
             </button>
           </>
