@@ -1,6 +1,6 @@
 # Redesign web app in chiave Airbnb
 
-**Branch:** `feat/airbnb-redesign` · **Avviato:** 2026-07-07 · **Stato:** in corso (step 0-1)
+**Branch:** `feat/airbnb-redesign` · **Avviato:** 2026-07-07 · **Stato:** fasi 0-4 FATTE e approvate (ultimo commit `331eac3`) — prossima: fase 5 Segretaria
 
 Fonte di verità: prototipo `~/Downloads/dashboard/Dashboard.dc.html` (renderizzare via http server + browser; gli screenshot nella cartella sono iterazioni vecchie — il corallo #ff385c NON vale, l'accento attuale è navy #1a1a2e).
 
@@ -74,9 +74,9 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
 
 ## Next steps
 
-1. **Verifica utente fase 3 (Allievi) + fase 4 (Impostazioni)** — il dev DB ha 1 solo allievo, QA vero su staging clone.
-2. **Fase 5 — Segretaria** (pagina voice: linea attiva card, script, orario, richiamate).
-3. **Fase 6 — Minori**: Utenti (/admin/users restyle), Area personale (nuova), referral + Novità nel menu. (Ore guida già raggiungibile dall'overlay Impostazioni.)
-4. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification.
+1. **⇒ PROSSIMO: Fase 5 — Segretaria** (`AutoscuoleVoicePage`, tab `voice`): studiare la sezione `#section-segretaria` del proto (renderizzarlo!) e ridisegnare la pagina voice — nel proto: card linea attiva, script/istruzioni, orario, richiamate. Come sempre: implementa → typecheck+lint+Playwright → e2e se serve → verifica utente.
+2. **Fase 6 — Minori**: Utenti (/admin/users restyle), Area personale (nuova), referral + Novità nel menu hamburger. (Ore guida già raggiungibile dall'overlay Impostazioni.)
+3. **Fine progetto**: QA completo su staging clone (dev DB ha 1 solo allievo), poi rilascio concordato.
+4. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 
 Promemoria operativi: dev server è dell'utente (NO pnpm build con dev attivo); verificare con typecheck+lint+Playwright (login titolare@reglo.it/RegloTest2026!, aspettare hydration 3.5s prima del fill); commit su feat/airbnb-redesign, NIENTE staging/prod fino a fine progetto; proto renderizzabile con `python3 -m http.server 8899` in ~/Downloads/dashboard + Playwright.
