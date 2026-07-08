@@ -42,10 +42,21 @@ export function DetailPanel({
   React.useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onOpenChange(false);
+      if (event.key !== "Escape") return;
+      // Con un layer Radix aperto (Select/Dialog/Dropdown) l'Escape chiude
+      // quello, non il pannello: il layer è ancora nel DOM in questo tick.
+      if (
+        document.querySelector(
+          "[data-radix-popper-content-wrapper], [role='listbox'], [role='menu'], [role='dialog'][data-state='open']",
+        )
+      )
+        return;
+      onOpenChange(false);
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    // capture: va eseguito PRIMA del listener document di Radix, quando il
+    // layer aperto è ancora nel DOM.
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+    return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [open, onOpenChange]);
 
   if (!mounted || typeof document === "undefined") return null;

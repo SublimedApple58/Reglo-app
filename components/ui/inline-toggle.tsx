@@ -15,13 +15,18 @@ export function InlineToggle({
   checked: boolean;
   onChange?: () => void;
   disabled?: boolean;
-  size?: "sm" | "default";
+  size?: "sm" | "default" | "lg";
 }) {
-  const trackSize = size === "sm" ? "h-4 w-7" : "h-5 w-9";
-  const thumbSize = size === "sm" ? "h-3 w-3" : "h-4 w-4";
-  const translate = size === "sm"
-    ? checked ? "translate-x-[13px]" : "translate-x-[2px]"
-    : checked ? "translate-x-[18px]" : "translate-x-[2px]";
+  const trackSize =
+    size === "sm" ? "h-4 w-7" : size === "lg" ? "h-[26px] w-11" : "h-5 w-9";
+  const thumbSize =
+    size === "sm" ? "h-3 w-3" : size === "lg" ? "h-5 w-5" : "h-4 w-4";
+  const translate =
+    size === "sm"
+      ? checked ? "translate-x-[13px]" : "translate-x-[2px]"
+      : size === "lg"
+        ? checked ? "translate-x-[21px]" : "translate-x-[3px]"
+        : checked ? "translate-x-[18px]" : "translate-x-[2px]";
 
   return (
     <button

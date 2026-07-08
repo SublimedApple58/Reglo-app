@@ -110,4 +110,37 @@ test.describe("Autoscuole smoke", () => {
         .first(),
     ).toBeVisible({ timeout: 30000 });
   });
+
+  test("segretaria: pagina e pannello impostazioni @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole/voice");
+    await expect(page.getByTestId("autoscuole-voice-page")).toBeVisible({ timeout: 60000 });
+
+    // La feature può essere attiva o meno sull'ambiente target
+    const featureOff = page.getByText("Segretaria AI non attiva");
+    const callbacks = page.getByText("Richiamate in sospeso");
+    await expect(featureOff.or(callbacks).first()).toBeVisible({ timeout: 60000 });
+
+    if (await callbacks.isVisible().catch(() => false)) {
+      // Pannello impostazioni: apertura, accordion, chiusura con Escape
+      await page.getByRole("button", { name: "Impostazioni" }).click();
+      const panel = page.getByTestId("voice-settings-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Comportamento e azioni")).toBeVisible();
+      await panel.getByText("Orari e registrazione", { exact: true }).click();
+      await expect(panel.getByText("Giorni attivi")).toBeVisible({ timeout: 10000 });
+      await page.keyboard.press("Escape");
+      await expect(panel).not.toBeVisible();
+    }
+  });
 });

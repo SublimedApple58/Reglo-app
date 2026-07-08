@@ -4,7 +4,8 @@ import React from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
-import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { DetailPanel } from "@/components/ui/detail-panel";
 import {
   Select,
   SelectContent,
@@ -21,22 +22,19 @@ import {
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { VoiceSkeleton } from "@/components/ui/page-skeleton";
-import { SectionCard } from "@/components/ui/section-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
-import { FieldGroup } from "@/components/ui/field-group";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { cn } from "@/lib/utils";
 import {
   PhoneCall,
-  FileText,
-  RefreshCw,
   Phone,
+  RefreshCw,
   CheckCircle2,
   Loader2,
   ChevronDown,
   HelpCircle,
+  Settings,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -50,6 +48,23 @@ import {
 
 type VoiceProvisioningStatus = "not_started" | "provisioning" | "ready" | "error";
 type VoiceAllowedAction = "faq" | "lesson_info" | "booking";
+
+/** Sotto-insieme voice dei settings, comune a get e update. */
+type VoiceSettingsData = {
+  voiceAssistantEnabled?: boolean | null;
+  voiceBookingEnabled?: boolean | null;
+  voiceLegalGreetingEnabled?: boolean | null;
+  voiceRecordingEnabled?: boolean | null;
+  voiceTranscriptionEnabled?: boolean | null;
+  voiceHandoffPhone?: string | null;
+  voiceHandoffDuringCallEnabled?: boolean | null;
+  voiceHandoffDuringCallInstructions?: string | null;
+  voiceOfficeHours?: { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null;
+  voiceInstructions?: string | null;
+  voiceAssistantVoice?: string | null;
+  voiceCustomGreeting?: string | null;
+  voiceAllowedActions?: string[] | null;
+};
 
 type CallbackTask = {
   id: string;
@@ -83,6 +98,8 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
 const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
 const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 30);
 
+const AVATAR_COLORS = ["#222222", "#3f3f3f", "#6a6a6a", "#460479", "#428bff", "#1a7f50", "#c13515", "#b45309"];
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -97,48 +114,81 @@ const normalizeDays = (days: number[]) =>
     (a, b) => a - b,
   );
 
-// ─── Status helpers ───────────────────────────────────────────────────────────
+/** "Lun – Ven", "Lun – Mer, Sab", "Tutti i giorni" (ordine Lun→Dom). */
+function formatDaysSummary(days: number[]) {
+  const order = WEEKDAY_OPTIONS.map((d) => d.value);
+  const active = order.filter((v) => days.includes(v));
+  if (!active.length) return "Nessun giorno";
+  if (active.length === 7) return "Tutti i giorni";
+  const labelOf = (v: number) => WEEKDAY_OPTIONS.find((d) => d.value === v)?.label ?? "";
+  const runs: string[] = [];
+  let start = 0;
+  for (let i = 1; i <= active.length; i++) {
+    const contiguous =
+      i < active.length && order.indexOf(active[i]) === order.indexOf(active[i - 1]) + 1;
+    if (!contiguous) {
+      const from = active[start];
+      const to = active[i - 1];
+      runs.push(from === to ? labelOf(from) : `${labelOf(from)} – ${labelOf(to)}`);
+      start = i;
+    }
+  }
+  return runs.join(", ");
+}
+
+const avatarColor = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+};
+
+const initialsFromName = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
+};
+
+function formatCallbackTime(iso: string) {
+  const date = new Date(iso);
+  const now = new Date();
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (sameDay(date, now)) return `oggi ${time}`;
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (sameDay(date, yesterday)) return `ieri ${time}`;
+  return `${date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" })} ${time}`;
+}
+
+// ─── Small primitives (stile proto) ──────────────────────────────────────────
+
+const sectionLabelClass =
+  "text-[11px] font-bold uppercase tracking-[0.6px] text-[#929292]";
+
+const inputClass =
+  "w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-2.5 text-sm font-semibold text-foreground outline-none transition focus:border-[#222222]";
+
+const textareaClass =
+  "w-full resize-y rounded-[12px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-3 text-sm font-medium leading-relaxed text-foreground outline-none transition focus:border-[#222222]";
 
 function ProvisioningBadge({ status }: { status: VoiceProvisioningStatus }) {
   const config = {
-    not_started: {
-      dot: "bg-slate-400",
-      text: "text-slate-600",
-      bg: "bg-slate-50 border-slate-200",
-      label: "Non configurato",
-    },
-    provisioning: {
-      dot: "bg-amber-400 animate-pulse",
-      text: "text-amber-700",
-      bg: "bg-amber-50 border-amber-200",
-      label: "In configurazione",
-    },
-    ready: {
-      dot: "bg-emerald-400",
-      text: "text-emerald-700",
-      bg: "bg-emerald-50 border-emerald-200",
-      label: "Operativa",
-    },
-    error: {
-      dot: "bg-red-400",
-      text: "text-red-700",
-      bg: "bg-red-50 border-red-200",
-      label: "Errore",
-    },
+    not_started: { className: "bg-[#f2f2f2] text-[#6a6a6a]", label: "Non configurata" },
+    provisioning: { className: "bg-[#fef3c7] text-[#b45309]", label: "In configurazione" },
+    ready: { className: "bg-[#dcfce7] text-[#16a34a]", label: "Operativa" },
+    error: { className: "bg-[#fee2e2] text-[#dc2626]", label: "Errore" },
   }[status];
 
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold ${config.bg} ${config.text}`}
-    >
-      <span className={`size-1.5 rounded-full ${config.dot}`} />
+    <span className={cn("rounded-[20px] px-3 py-1 text-xs font-semibold", config.className)}>
       {config.label}
     </span>
   );
 }
 
-// ─── Toggle Row ───────────────────────────────────────────────────────────────
-
+/** Riga con toggle: attiva → sfondo #eeeef4 come il proto. */
 function ToggleRow({
   label,
   description,
@@ -160,18 +210,73 @@ function ToggleRow({
       onClick={() => !disabled && onCheckedChange(!checked)}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (!disabled) onCheckedChange(!checked); } }}
       className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-left transition",
-        checked ? "border-yellow-200 bg-yellow-50" : "border-border bg-white hover:bg-gray-50",
+        "flex w-full cursor-pointer items-start justify-between gap-4 rounded-[12px] px-4 py-3.5 text-left transition-colors",
+        checked ? "bg-[#eeeef4]" : "bg-transparent hover:bg-[#fafafa]",
         disabled && "pointer-events-none opacity-50",
       )}
     >
       <div className="min-w-0">
-        <div className="text-xs font-medium text-foreground">{label}</div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
         {description ? (
-          <div className="mt-0.5 text-[11px] text-muted-foreground">{description}</div>
+          <div className="mt-0.5 text-xs font-medium leading-normal text-[#929292]">{description}</div>
         ) : null}
       </div>
-      <InlineToggle checked={checked} size="sm" />
+      <div className="mt-0.5 shrink-0">
+        <InlineToggle checked={checked} size="lg" />
+      </div>
+    </div>
+  );
+}
+
+/** Accordion del pannello impostazioni (stile proto: hairline, chevron). */
+function SegAccordion({
+  title,
+  description,
+  expanded,
+  onToggle,
+  isLast,
+  children,
+}: {
+  title: string;
+  description: string;
+  expanded: boolean;
+  onToggle: () => void;
+  isLast?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={cn(!isLast && "border-b border-[#ebebeb]")}>
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onToggle}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
+        className="flex w-full cursor-pointer items-center justify-between gap-3 px-6 py-5 transition-colors hover:bg-[#fafafa]"
+      >
+        <div>
+          <h3 className="text-[15px] font-bold text-foreground">{title}</h3>
+          <p className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</p>
+        </div>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-[#929292] transition-transform duration-200",
+            expanded && "rotate-180",
+          )}
+        />
+      </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="content"
+            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
+            animate={{ height: "auto", opacity: 1, transitionEnd: { overflow: "visible" } }}
+            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
+            transition={{ duration: 0.22, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <div className="px-6 pb-5">{children}</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -182,7 +287,9 @@ export function AutoscuoleVoicePage() {
   const toast = useFeedbackToast();
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
-  const [voiceSection, setVoiceSection] = React.useState<string | null>("behavior");
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [segAccordion, setSegAccordion] = React.useState<string | null>("behavior");
+  const [togglingAssistant, setTogglingAssistant] = React.useState(false);
 
   // Voice state
   const [voiceFeatureEnabled, setVoiceFeatureEnabled] = React.useState(false);
@@ -215,6 +322,30 @@ export function AutoscuoleVoicePage() {
   const [loadingCallbacks, setLoadingCallbacks] = React.useState(false);
   const [markingDone, setMarkingDone] = React.useState<string | null>(null);
 
+  const applySettings = React.useCallback((d: VoiceSettingsData | null | undefined) => {
+    if (!d) return;
+    setVoiceAssistantEnabled(Boolean(d.voiceAssistantEnabled));
+    setVoiceBookingEnabled(Boolean(d.voiceBookingEnabled));
+    setVoiceLegalGreetingEnabled(d.voiceLegalGreetingEnabled !== false);
+    setVoiceRecordingEnabled(d.voiceRecordingEnabled !== false);
+    setVoiceTranscriptionEnabled(d.voiceTranscriptionEnabled !== false);
+    setVoiceHandoffPhone(d.voiceHandoffPhone ?? null);
+    setVoiceHandoffDuringCallEnabled(d.voiceHandoffDuringCallEnabled ?? false);
+    setVoiceHandoffDuringCallInstructions(d.voiceHandoffDuringCallInstructions ?? "");
+    setVoiceOfficeDays(normalizeDays(Array.from(d.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])));
+    setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
+    setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
+    setVoiceInstructions(d.voiceInstructions ?? "");
+    setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
+    setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
+    setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
+    const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
+    const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
+      VALID_ACTIONS.includes(a as VoiceAllowedAction),
+    );
+    setVoiceAllowedActions(loaded.length ? loaded : ["faq", "lesson_info"]);
+  }, []);
+
   // Load settings on mount
   React.useEffect(() => {
     let active = true;
@@ -233,31 +364,12 @@ export function AutoscuoleVoicePage() {
       );
       setVoiceLineRef(d.voiceLineRef ?? null);
       setVoiceDisplayNumber(d.voiceDisplayNumber ?? null);
-      setVoiceAssistantEnabled(Boolean(d.voiceAssistantEnabled));
-      setVoiceBookingEnabled(Boolean(d.voiceBookingEnabled));
-      setVoiceLegalGreetingEnabled(d.voiceLegalGreetingEnabled !== false);
-      setVoiceRecordingEnabled(d.voiceRecordingEnabled !== false);
-      setVoiceTranscriptionEnabled(d.voiceTranscriptionEnabled !== false);
-      setVoiceHandoffPhone(d.voiceHandoffPhone ?? null);
-      setVoiceHandoffDuringCallEnabled(d.voiceHandoffDuringCallEnabled ?? false);
-      setVoiceHandoffDuringCallInstructions(d.voiceHandoffDuringCallInstructions ?? "");
-      setVoiceOfficeDays(normalizeDays(Array.from(d.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])));
-      setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
-      setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
-      setVoiceInstructions(d.voiceInstructions ?? "");
-      setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
-      setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
-      setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
-      const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
-      const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
-        VALID_ACTIONS.includes(a as VoiceAllowedAction),
-      );
-      setVoiceAllowedActions(loaded.length ? loaded : ["faq", "lesson_info"]);
+      applySettings(d);
       setLoading(false);
     };
     load();
     return () => { active = false; };
-  }, []);
+  }, [applySettings]);
 
   const loadCallbacks = React.useCallback(async () => {
     setLoadingCallbacks(true);
@@ -289,31 +401,51 @@ export function AutoscuoleVoicePage() {
     );
   };
 
-  const handleSave = async () => {
-    if (voiceFeatureEnabled && voiceAssistantEnabled) {
-      if (voiceProvisioningStatus !== "ready" || !voiceLineRef) {
-        toast.error({
-          description: "Linea voce non pronta. Contatta il backoffice Reglo per completare il provisioning.",
-        });
-        return;
-      }
-      if (!voiceHandoffPhone?.trim()) {
-        toast.error({ description: "Inserisci il numero di handoff per il trasferimento chiamata." });
-        return;
-      }
-      if (!voiceOfficeDays.length || voiceOfficeEndMinutes <= voiceOfficeStartMinutes) {
-        toast.error({ description: "Orari segreteria voce non validi." });
-        return;
-      }
-      if (!voiceAllowedActions.length) {
-        toast.error({ description: "Seleziona almeno un'azione consentita." });
-        return;
-      }
-      if (voiceBookingEnabled && !voiceAllowedActions.includes("booking")) {
-        toast.error({ description: "Per le prenotazioni voce devi abilitare l'azione 'Prenota guida'." });
-        return;
-      }
+  const validateForEnable = React.useCallback(() => {
+    if (voiceProvisioningStatus !== "ready" || !voiceLineRef) {
+      toast.error({
+        description: "Linea voce non pronta. Contatta il backoffice Reglo per completare il provisioning.",
+      });
+      return false;
     }
+    if (!voiceHandoffPhone?.trim()) {
+      toast.error({ description: "Inserisci il numero di handoff per il trasferimento chiamata." });
+      return false;
+    }
+    if (!voiceOfficeDays.length || voiceOfficeEndMinutes <= voiceOfficeStartMinutes) {
+      toast.error({ description: "Orari segreteria voce non validi." });
+      return false;
+    }
+    if (!voiceAllowedActions.length) {
+      toast.error({ description: "Seleziona almeno un'azione consentita." });
+      return false;
+    }
+    if (voiceBookingEnabled && !voiceAllowedActions.includes("booking")) {
+      toast.error({ description: "Per le prenotazioni voce devi abilitare l'azione 'Prenota guida'." });
+      return false;
+    }
+    return true;
+  }, [voiceProvisioningStatus, voiceLineRef, voiceHandoffPhone, voiceOfficeDays, voiceOfficeEndMinutes, voiceOfficeStartMinutes, voiceAllowedActions, voiceBookingEnabled, toast]);
+
+  /** Toggle nella status bar: salva subito (solo il flag). */
+  const handleToggleAssistant = async () => {
+    const next = !voiceAssistantEnabled;
+    if (next && !validateForEnable()) return;
+    setTogglingAssistant(true);
+    const res = await updateAutoscuolaSettings({ voiceAssistantEnabled: next });
+    setTogglingAssistant(false);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare l'assistente vocale." });
+      return;
+    }
+    setVoiceAssistantEnabled(Boolean(res.data.voiceAssistantEnabled));
+    toast.success({
+      description: next ? "Assistente vocale attivato." : "Assistente vocale disattivato.",
+    });
+  };
+
+  const handleSave = async () => {
+    if (voiceFeatureEnabled && voiceAssistantEnabled && !validateForEnable()) return;
 
     setSaving(true);
     const res = await updateAutoscuolaSettings({
@@ -345,122 +477,328 @@ export function AutoscuoleVoicePage() {
       return;
     }
 
-    const d = res.data;
-    setVoiceAssistantEnabled(Boolean(d.voiceAssistantEnabled));
-    setVoiceBookingEnabled(Boolean(d.voiceBookingEnabled));
-    setVoiceLegalGreetingEnabled(d.voiceLegalGreetingEnabled !== false);
-    setVoiceRecordingEnabled(d.voiceRecordingEnabled !== false);
-    setVoiceTranscriptionEnabled(d.voiceTranscriptionEnabled !== false);
-    setVoiceHandoffPhone(d.voiceHandoffPhone ?? null);
-    setVoiceOfficeDays(normalizeDays(Array.from(d.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])));
-    setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
-    setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
-    setVoiceInstructions(d.voiceInstructions ?? "");
-    setVoiceAssistantVoice(d.voiceAssistantVoice || "Minimax.speech-2.8-turbo.Wandering_Sorcerer");
-    setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
-    setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
-    const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
-    const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
-      VALID_ACTIONS.includes(a as VoiceAllowedAction),
-    );
-    setVoiceAllowedActions(loaded.length ? loaded : ["faq", "lesson_info"]);
+    applySettings(res.data);
+    setSettingsOpen(false);
     toast.success({ description: "Impostazioni segretaria salvate." });
   };
 
   const isReady = voiceProvisioningStatus === "ready";
-  const toggleVoiceSection = (key: string) =>
-    setVoiceSection((prev) => (prev === key ? null : key));
+  const toggleSegAccordion = (key: string) =>
+    setSegAccordion((prev) => (prev === key ? null : key));
+
+  const openSettings = (accordion?: string) => {
+    if (accordion) setSegAccordion(accordion);
+    setSettingsOpen(true);
+  };
+
+  const activeActionLabels = VOICE_ALLOWED_ACTION_OPTIONS
+    .filter((o) => voiceAllowedActions.includes(o.value))
+    .map((o) => o.label);
 
   return (
-    <PageWrapper
-      title="Segretaria Virtuale"
-      subTitle="Assistente vocale AI inbound"
-    >
-      <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
+    <PageWrapper title="Segretaria AI" subTitle="Assistente vocale AI inbound" hideHero>
+      <div className="relative w-full" data-testid="autoscuole-voice-page">
+        <div className="mx-auto max-w-7xl space-y-5">
+          {loading ? (
+            <VoiceSkeleton />
+          ) : !voiceFeatureEnabled ? (
+            /* ── Feature NOT enabled: empty state ── */
+            <>
+              <PageHeader title="Segretaria AI" subtitle="Assistente vocale AI inbound" />
+              <div className="rounded-2xl border border-[#dddddd] bg-white p-10">
+                <div className="mx-auto flex max-w-md flex-col items-center text-center">
+                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#eef0f6]">
+                    <PhoneCall className="h-7 w-7 text-navy-900" />
+                  </span>
+                  <h3 className="mt-4 text-base font-bold text-foreground">Segretaria AI non attiva</h3>
+                  <p className="mt-1.5 text-[13px] font-medium leading-relaxed text-[#6a6a6a]">
+                    L&apos;assistente vocale AI risponde alle chiamate, informa gli allievi e gestisce prenotazioni guide.
+                    Contatta il team Reglo per attivarla sulla tua autoscuola.
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ── Feature enabled ── */
+            <>
+              <PageHeader
+                title="Segretaria AI"
+                subtitle="Assistente vocale AI inbound"
+                actions={
+                  <button
+                    type="button"
+                    onClick={() => openSettings()}
+                    className="flex cursor-pointer items-center gap-2 whitespace-nowrap rounded-3xl border border-[#dddddd] bg-white px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:border-[#222222]"
+                  >
+                    <Settings className="size-4" strokeWidth={1.8} />
+                    Impostazioni
+                  </button>
+                }
+              />
 
-        {loading ? (
-          <VoiceSkeleton />
-        ) : !voiceFeatureEnabled ? (
-          /* ── Feature NOT enabled: empty state ── */
-          <div className="rounded-2xl border border-border bg-white p-8 shadow-card">
-            <div className="mx-auto flex max-w-md flex-col items-center text-center">
-              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-yellow-50">
-                <PhoneCall className="h-7 w-7 text-yellow-600" />
-              </span>
-              <h3 className="mt-4 text-base font-semibold text-foreground">Segretaria Virtuale non attiva</h3>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                L&apos;assistente vocale AI risponde alle chiamate, informa gli allievi e gestisce prenotazioni guide.
-                Contatta il team Reglo per attivarla sulla tua autoscuola.
-              </p>
-            </div>
-          </div>
-        ) : (
-          /* ── Feature enabled ── */
-          <>
-        {/* Status bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-white px-5 py-3 shadow-card">
-          <div className="flex items-center gap-3">
-            <span className={cn("inline-block h-2.5 w-2.5 rounded-full", isReady ? "bg-positive" : "bg-yellow-400 animate-pulse")} />
-            <span className={cn("text-sm font-semibold", isReady ? "text-emerald-700" : "text-amber-700")}>
-              {isReady ? "Linea attiva" : "Linea in configurazione"}
-            </span>
-            {voiceDisplayNumber && (
-              <span className="font-mono text-xs text-muted-foreground">{voiceDisplayNumber}</span>
-            )}
-            <ProvisioningBadge status={voiceProvisioningStatus} />
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Assistente vocale</span>
-            <InlineToggle
-              checked={voiceAssistantEnabled}
-              onChange={() => setVoiceAssistantEnabled((v) => !v)}
-            />
-          </div>
+              {/* Status bar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dddddd] bg-white px-6 py-[18px]">
+                <div className="flex flex-wrap items-center gap-3.5">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-block h-2 w-2 rounded-full",
+                        isReady ? "bg-[#22c55e]" : "animate-pulse bg-[#f59e0b]",
+                      )}
+                    />
+                    <span className="text-[15px] font-bold text-foreground">
+                      {isReady ? "Linea attiva" : "Linea in configurazione"}
+                    </span>
+                  </div>
+                  {voiceDisplayNumber && (
+                    <span className="text-[15px] font-medium text-[#6a6a6a]">{voiceDisplayNumber}</span>
+                  )}
+                  <ProvisioningBadge status={voiceProvisioningStatus} />
+                </div>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <span className="text-[13px] font-medium text-[#6a6a6a]">Assistente vocale</span>
+                  {togglingAssistant ? (
+                    <Loader2 className="size-5 animate-spin text-[#929292]" />
+                  ) : (
+                    <InlineToggle checked={voiceAssistantEnabled} size="lg" onChange={handleToggleAssistant} />
+                  )}
+                </div>
+              </div>
+
+              {!isReady && (
+                <div className="rounded-[10px] border border-[#f0e060] bg-[#fffce0] px-4 py-3">
+                  <p className="text-xs font-medium text-[#7a6a00]">
+                    Linea non ancora pronta. Contatta il backoffice Reglo per completare il provisioning.
+                  </p>
+                </div>
+              )}
+
+              {/* Help link */}
+              {isReady && voiceDisplayNumber && (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex cursor-pointer items-center gap-1.5 pl-0.5 text-[13px] font-medium text-navy-900 transition-colors hover:underline"
+                    >
+                      <HelpCircle className="size-3.5" strokeWidth={1.8} />
+                      Come collegare il numero della segretaria al tuo telefono
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Collega il numero della segretaria</DialogTitle>
+                    </DialogHeader>
+                    <VoiceSetupGuide phoneNumber={voiceDisplayNumber} />
+                  </DialogContent>
+                </Dialog>
+              )}
+
+              {/* Two-column: greeting preview + quick info */}
+              <div className="grid items-start gap-5 lg:grid-cols-[1fr_288px]">
+                {/* Greeting preview */}
+                <div className="rounded-2xl border border-[#dddddd] bg-white p-6">
+                  <div className={cn(sectionLabelClass, "mb-3.5 tracking-[0.8px]")}>
+                    Letto all&apos;inizio di ogni chiamata
+                  </div>
+                  {voiceCustomGreetingEnabled && voiceCustomGreeting.trim() ? (
+                    <>
+                      <div className="text-[15px] italic leading-[1.75] text-[#444444]">
+                        &ldquo;{voiceCustomGreeting.trim()}&rdquo;
+                      </div>
+                      <div className="mt-4 flex items-center justify-between">
+                        <div className="text-xs font-medium text-[#929292]">
+                          {voiceCustomGreeting.length}/500 caratteri
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openSettings("behavior")}
+                          className="cursor-pointer text-xs font-semibold text-navy-900 hover:underline"
+                        >
+                          Modifica
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-[15px] italic leading-[1.75] text-[#929292]">
+                        Nessun messaggio personalizzato: la segretaria si presenta con il saluto standard.
+                      </div>
+                      <div className="mt-4 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openSettings("behavior")}
+                          className="cursor-pointer text-xs font-semibold text-navy-900 hover:underline"
+                        >
+                          Personalizza
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Quick info card */}
+                <div className="flex flex-col gap-[18px] rounded-2xl border border-[#dddddd] bg-white p-[22px]">
+                  <div>
+                    <div className={cn(sectionLabelClass, "mb-2 tracking-[0.8px]")}>Orario attivo</div>
+                    <div className="text-sm font-bold text-foreground">
+                      {formatDaysSummary(voiceOfficeDays)}
+                    </div>
+                    <div className="mt-0.5 text-[13px] font-medium text-[#6a6a6a]">
+                      {formatMinutes(voiceOfficeStartMinutes)} &rarr; {formatMinutes(voiceOfficeEndMinutes)}
+                    </div>
+                  </div>
+                  <div className="border-t border-[#f0f0f0] pt-4">
+                    <div className={cn(sectionLabelClass, "mb-2 tracking-[0.8px]")}>Handoff</div>
+                    <div className="text-[13px] font-semibold text-foreground">
+                      {voiceHandoffPhone?.trim() || "—"}
+                    </div>
+                  </div>
+                  <div className="border-t border-[#f0f0f0] pt-4">
+                    <div className={cn(sectionLabelClass, "mb-2 tracking-[0.8px]")}>Azioni attive</div>
+                    {activeActionLabels.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {activeActionLabels.map((label) => (
+                          <span
+                            key={label}
+                            className="rounded-[20px] bg-[#eeeef4] px-2.5 py-1 text-xs font-semibold text-navy-900"
+                          >
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-[13px] font-medium text-[#929292]">Nessuna azione attiva</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Richiamate in sospeso */}
+              <div className="overflow-hidden rounded-2xl border border-[#dddddd] bg-white">
+                <div className="flex items-center justify-between border-b border-[#ebebeb] px-6 py-5">
+                  <div className="flex items-center gap-2.5">
+                    <Phone className="size-[18px] text-foreground" strokeWidth={1.6} />
+                    <span className="text-base font-bold text-foreground">Richiamate in sospeso</span>
+                    {callbackTasks.length > 0 && (
+                      <span className="rounded-[20px] bg-navy-900 px-2 py-0.5 text-[11px] font-bold text-white">
+                        {callbackTasks.length}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadCallbacks}
+                    disabled={loadingCallbacks}
+                    className="flex cursor-pointer items-center gap-2 rounded-[20px] border border-[#ebebeb] bg-[#f7f7f7] px-4 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-[#f0f0f0] disabled:opacity-60"
+                  >
+                    <RefreshCw className={cn("size-3.5", loadingCallbacks && "animate-spin")} strokeWidth={1.6} />
+                    Aggiorna
+                  </button>
+                </div>
+                {callbackTasks.length === 0 ? (
+                  <div className="px-6 py-12 text-center">
+                    <Phone className="mx-auto mb-2 size-6 text-[#c1c1c1]" strokeWidth={1.5} />
+                    <p className="text-sm font-medium text-[#929292]">
+                      {loadingCallbacks ? "Caricamento..." : "Nessuna richiamata in sospeso"}
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    {callbackTasks.map((task, index) => {
+                      const displayName = task.student?.name ?? task.phoneNumber;
+                      return (
+                        <div
+                          key={task.id}
+                          className={cn(
+                            "flex items-center gap-4 px-6 py-4 transition-colors hover:bg-[#fafafa]",
+                            index < callbackTasks.length - 1 && "border-b border-[#f5f5f5]",
+                          )}
+                        >
+                          <div
+                            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
+                            style={{ backgroundColor: avatarColor(task.student?.id ?? task.phoneNumber) }}
+                          >
+                            <span className="text-sm font-bold text-white">{initialsFromName(displayName)}</span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-0.5 flex items-center gap-2">
+                              <span className="text-sm font-bold text-foreground">{displayName}</span>
+                              <span className="text-xs font-medium text-[#929292]">
+                                • {formatCallbackTime(task.createdAt)}
+                              </span>
+                              {task.student?.name ? (
+                                <span className="hidden text-xs font-medium text-[#929292] sm:inline">
+                                  {task.phoneNumber}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[13px] font-medium text-[#6a6a6a]">
+                              {task.reason}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleMarkDone(task.id)}
+                              disabled={markingDone === task.id}
+                              className="flex cursor-pointer items-center gap-1.5 rounded-[20px] border border-[#ebebeb] bg-[#f7f7f7] px-4 py-[7px] text-[13px] font-semibold text-foreground transition-colors hover:bg-[#f0f0f0] disabled:opacity-60"
+                            >
+                              {markingDone === task.id ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="size-3 text-[#1a7f50]" />
+                              )}
+                              Fatto
+                            </button>
+                            <a
+                              href={`tel:${task.phoneNumber.replace(/\s/g, "")}`}
+                              className="cursor-pointer rounded-[20px] bg-[#222222] px-4 py-[7px] text-[13px] font-semibold text-white transition-colors hover:bg-[#3a3a3a]"
+                            >
+                              Chiama
+                            </a>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {!isReady && (
-          <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-4 py-3">
-            <p className="text-xs text-yellow-800">
-              Linea non ancora pronta. Contatta il backoffice Reglo per completare il provisioning.
-            </p>
+        {/* ── Pannello Impostazioni segretaria ── */}
+        <DetailPanel
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          testId="voice-settings-panel"
+          className="flex w-[min(520px,92vw)] flex-col overflow-hidden p-0"
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-[#dddddd] bg-white px-6 py-5">
+            <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">
+              Impostazioni segretaria
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(false)}
+              aria-label="Chiudi"
+              className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
+            >
+              <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
+            </button>
           </div>
-        )}
 
-        {/* Setup guide link */}
-        {isReady && voiceDisplayNumber && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <button
-                type="button"
-                className="flex items-center gap-1.5 text-xs text-pink-600 hover:text-pink-700 transition-colors cursor-pointer"
-              >
-                <HelpCircle className="size-3.5" />
-                Come collegare il numero della segretaria al tuo telefono
-              </button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Collega il numero della segretaria</DialogTitle>
-              </DialogHeader>
-              <VoiceSetupGuide phoneNumber={voiceDisplayNumber} />
-            </DialogContent>
-          </Dialog>
-        )}
-
-        {/* Settings accordion */}
-        <div className="rounded-2xl border border-border bg-white shadow-card">
-          {/* Comportamento e azioni */}
-          <VoiceAccordion
-            title="Comportamento e azioni"
-            description="Azioni consentite, prenotazioni voce e greeting"
-            expanded={voiceSection === "behavior"}
-            onToggle={() => toggleVoiceSection("behavior")}
-            isFirst
-          >
-            <div className="space-y-4">
-              {/* Action cards */}
-              <div className="grid gap-3 sm:grid-cols-3">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Accordion 1: Comportamento e azioni */}
+            <SegAccordion
+              title="Comportamento e azioni"
+              description="Azioni consentite, prenotazioni voce e greeting"
+              expanded={segAccordion === "behavior"}
+              onToggle={() => toggleSegAccordion("behavior")}
+            >
+              <div className={cn(sectionLabelClass, "mb-2.5")}>Azioni consentite</div>
+              <div className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
                 {VOICE_ALLOWED_ACTION_OPTIONS.map((option) => {
                   const active = voiceAllowedActions.includes(option.value);
                   return (
@@ -469,56 +807,81 @@ export function AutoscuoleVoicePage() {
                       type="button"
                       onClick={() => toggleAction(option.value)}
                       className={cn(
-                        "cursor-pointer rounded-xl border px-4 py-3 text-left transition",
-                        active ? "border-yellow-200 bg-yellow-50 shadow-sm" : "border-border bg-white hover:bg-gray-50",
+                        "cursor-pointer rounded-[12px] border-[1.5px] px-3.5 py-3 text-left transition-all",
+                        active
+                          ? "border-navy-900 bg-[#eeeef4]"
+                          : "border-[#dddddd] bg-white hover:border-[#c1c1c1]",
                       )}
                     >
-                      <div className={cn("text-xs font-semibold", active ? "text-yellow-700" : "text-foreground")}>
+                      <div className={cn("mb-0.5 text-[13px] font-bold", active ? "text-navy-900" : "text-foreground")}>
                         {option.label}
                       </div>
-                      <div className="mt-0.5 text-[11px] text-muted-foreground">{option.description}</div>
+                      <div className="text-[11px] font-medium text-[#929292]">{option.description}</div>
                     </button>
                   );
                 })}
               </div>
-              {/* Toggle rows */}
               <div className="space-y-2">
-                <ToggleRow label="Prenotazioni voce" description="L'assistente può prenotare guide sull'agenda" checked={voiceBookingEnabled} onCheckedChange={setVoiceBookingEnabled} />
-                <ToggleRow label="Greeting legale" description="Avvisa il chiamante che la chiamata è gestita da un AI" checked={voiceLegalGreetingEnabled} onCheckedChange={setVoiceLegalGreetingEnabled} />
-                <ToggleRow label="Greeting personalizzato" description="Messaggio iniziale personalizzato prima della conversazione" checked={voiceCustomGreetingEnabled} onCheckedChange={(checked) => { setVoiceCustomGreetingEnabled(checked); if (!checked) setVoiceCustomGreeting(""); }} />
+                <ToggleRow
+                  label="Prenotazioni voce"
+                  description="L'assistente può prenotare guide sull'agenda"
+                  checked={voiceBookingEnabled}
+                  onCheckedChange={setVoiceBookingEnabled}
+                />
+                <ToggleRow
+                  label="Greeting legale"
+                  description="Avvisa il chiamante che la chiamata è gestita da un AI"
+                  checked={voiceLegalGreetingEnabled}
+                  onCheckedChange={setVoiceLegalGreetingEnabled}
+                />
+                <ToggleRow
+                  label="Greeting personalizzato"
+                  description="Messaggio iniziale personalizzato prima della conversazione"
+                  checked={voiceCustomGreetingEnabled}
+                  onCheckedChange={(checked) => {
+                    setVoiceCustomGreetingEnabled(checked);
+                    if (!checked) setVoiceCustomGreeting("");
+                  }}
+                />
               </div>
               {voiceCustomGreetingEnabled && (
-                <FieldGroup label="Testo del greeting" description="La segretaria leggerà questo messaggio all'inizio di ogni chiamata, dopo il greeting legale (se attivo).">
+                <div className="mt-3 px-0.5">
+                  <div className="mb-2 text-[13px] font-semibold text-foreground">Testo del greeting</div>
                   <textarea
                     value={voiceCustomGreeting}
                     onChange={(e) => setVoiceCustomGreeting(e.target.value)}
                     maxLength={500}
-                    rows={3}
-                    className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none transition focus:border-primary resize-none"
+                    rows={4}
+                    className={cn(textareaClass, "min-h-[120px]")}
                     placeholder="Es: Benvenuto all'autoscuola Rossi. Sono la segretaria virtuale, come posso aiutarti?"
                   />
-                  <p className="mt-1 text-[11px] text-muted-foreground">{voiceCustomGreeting.length}/500 caratteri</p>
-                </FieldGroup>
+                  <div className="mt-1.5 flex items-start justify-between gap-2">
+                    <div className="shrink-0 text-xs font-medium text-[#929292]">
+                      {voiceCustomGreeting.length}/500 caratteri
+                    </div>
+                    <div className="text-right text-[11px] font-medium leading-normal text-[#b2b2b2]">
+                      La segretaria leggerà questo messaggio all&apos;inizio di ogni chiamata, dopo il greeting legale (se attivo).
+                    </div>
+                  </div>
+                </div>
               )}
-            </div>
-          </VoiceAccordion>
+            </SegAccordion>
 
-          {/* Orari e registrazione */}
-          <VoiceAccordion
-            title="Orari e registrazione"
-            description="Orari segreteria, registrazione e trascrizione chiamate"
-            expanded={voiceSection === "hours"}
-            onToggle={() => toggleVoiceSection("hours")}
-          >
-            <div className="space-y-5">
-              {/* Office hours */}
-              <div className="space-y-3">
-                <div className="text-xs font-medium text-foreground">Giorni attivi</div>
-                <div className="flex flex-wrap gap-2">
-                  {WEEKDAY_OPTIONS.map((day) => (
-                    <ToggleChip
+            {/* Accordion 2: Orari e registrazione */}
+            <SegAccordion
+              title="Orari e registrazione"
+              description="Orari segreteria, registrazione e trascrizione chiamate"
+              expanded={segAccordion === "hours"}
+              onToggle={() => toggleSegAccordion("hours")}
+            >
+              <div className={cn(sectionLabelClass, "mb-2.5")}>Giorni attivi</div>
+              <div className="mb-5 flex flex-wrap gap-1.5">
+                {WEEKDAY_OPTIONS.map((day) => {
+                  const active = voiceOfficeDays.includes(day.value);
+                  return (
+                    <button
                       key={`voice-day-${day.value}`}
-                      active={voiceOfficeDays.includes(day.value)}
+                      type="button"
                       onClick={() =>
                         setVoiceOfficeDays((current) =>
                           current.includes(day.value)
@@ -526,36 +889,65 @@ export function AutoscuoleVoicePage() {
                             : normalizeDays([...current, day.value]),
                         )
                       }
+                      className={cn(
+                        "cursor-pointer rounded-[20px] border-[1.5px] px-3.5 py-1.5 text-[13px] font-semibold transition-all",
+                        active
+                          ? "border-[#222222] bg-[#222222] text-white"
+                          : "border-[#dddddd] bg-white text-foreground hover:border-[#c1c1c1]",
+                      )}
                     >
                       {day.label}
-                    </ToggleChip>
-                  ))}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mb-5 grid grid-cols-2 gap-3">
+                <div>
+                  <div className={cn(sectionLabelClass, "mb-2")}>Inizio</div>
+                  <Select
+                    value={String(voiceOfficeStartMinutes)}
+                    onValueChange={(v) => setVoiceOfficeStartMinutes(Number(v))}
+                  >
+                    <SelectTrigger className="h-10 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {START_TIME_OPTIONS.map((m) => (
+                        <SelectItem key={`vs-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div className="grid grid-cols-2 gap-3 max-w-xs">
-                  <FieldGroup label="Inizio">
-                    <Select value={String(voiceOfficeStartMinutes)} onValueChange={(v) => setVoiceOfficeStartMinutes(Number(v))}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`vs-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </FieldGroup>
-                  <FieldGroup label="Fine">
-                    <Select value={String(voiceOfficeEndMinutes)} onValueChange={(v) => setVoiceOfficeEndMinutes(Number(v))}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ve-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                    </Select>
-                  </FieldGroup>
+                <div>
+                  <div className={cn(sectionLabelClass, "mb-2")}>Fine</div>
+                  <Select
+                    value={String(voiceOfficeEndMinutes)}
+                    onValueChange={(v) => setVoiceOfficeEndMinutes(Number(v))}
+                  >
+                    <SelectTrigger className="h-10 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {END_TIME_OPTIONS.map((m) => (
+                        <SelectItem key={`ve-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              {/* Handoff phone */}
-              <FieldGroup label="Numero handoff" description="Numero a cui trasferire la chiamata fuori orario" className="max-w-xs">
+              <div className="mb-5">
+                <div className={cn(sectionLabelClass, "mb-2")}>Numero handoff</div>
                 <input
+                  type="tel"
                   value={voiceHandoffPhone ?? ""}
                   onChange={(e) => setVoiceHandoffPhone(e.target.value || null)}
-                  className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm outline-none transition focus:border-primary"
+                  className={inputClass}
                   placeholder="+39..."
                 />
-              </FieldGroup>
-              {/* Handoff during call */}
+                <div className="mt-1.5 text-xs font-medium text-[#929292]">
+                  Numero a cui trasferire la chiamata fuori orario
+                </div>
+              </div>
               <ToggleRow
                 label="Trasferimento durante chiamata"
                 description="Consenti alla segretaria AI di trasferire la chiamata al numero handoff in base a regole personalizzate"
@@ -563,151 +955,75 @@ export function AutoscuoleVoicePage() {
                 onCheckedChange={setVoiceHandoffDuringCallEnabled}
               />
               {voiceHandoffDuringCallEnabled && (
-                <FieldGroup label="Regole di trasferimento" description="Descrivi quando la segretaria deve trasferire la chiamata. Es: &laquo;Se chiedono insistentemente i prezzi&raquo; oppure &laquo;Se vogliono parlare con una persona fisica&raquo;">
+                <div className="mt-3 px-0.5">
+                  <div className="mb-2 text-[13px] font-semibold text-foreground">Regole di trasferimento</div>
                   <textarea
                     value={voiceHandoffDuringCallInstructions}
                     onChange={(e) => setVoiceHandoffDuringCallInstructions(e.target.value)}
                     maxLength={1000}
                     rows={3}
-                    className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none transition focus:border-primary resize-none"
+                    className={cn(textareaClass, "min-h-[80px]")}
                     placeholder="Es: Se il chiamante chiede insistentemente di parlare con una persona, trasferisci la chiamata."
                   />
-                </FieldGroup>
-              )}
-              {/* Recording toggles */}
-              <div className="space-y-2">
-                <ToggleRow label="Registra audio" description="Salva una registrazione audio della chiamata" checked={voiceRecordingEnabled} onCheckedChange={setVoiceRecordingEnabled} />
-                <ToggleRow label="Trascrivi chiamate" description="Genera trascrizione testuale della conversazione" checked={voiceTranscriptionEnabled} onCheckedChange={setVoiceTranscriptionEnabled} />
-              </div>
-            </div>
-          </VoiceAccordion>
-
-          {/* Istruzioni personalizzate */}
-          <VoiceAccordion
-            title="Istruzioni personalizzate"
-            description="Policy, tono comunicativo e regole operative"
-            expanded={voiceSection === "instructions"}
-            onToggle={() => toggleVoiceSection("instructions")}
-            isLast
-          >
-            <textarea
-              value={voiceInstructions}
-              onChange={(e) => setVoiceInstructions(e.target.value)}
-              rows={4}
-              className="w-full resize-none rounded-lg border border-border bg-white p-3.5 text-xs leading-relaxed outline-none transition focus:border-primary"
-              placeholder="Es: Questa autoscuola offre guide a Milano. Il numero per urgenze è +39 02 123456. Usa un tono cordiale ma professionale."
-            />
-          </VoiceAccordion>
-        </div>
-
-        <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? (<><Loader2 className="size-4 animate-spin mr-2" />Salvataggio...</>) : "Salva configurazione"}
-          </Button>
-        </div>
-
-        {/* Callbacks */}
-        <SectionCard
-          icon={Phone}
-          title="Richiamate in sospeso"
-          description="Chiamanti che hanno richiesto di essere ricontattati"
-          headerRight={
-            <Button variant="ghost" size="sm" onClick={loadCallbacks} disabled={loadingCallbacks} className="gap-2 text-xs">
-              <RefreshCw className={cn("size-3.5", loadingCallbacks && "animate-spin")} />
-              Aggiorna
-            </Button>
-          }
-        >
-          {callbackTasks.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border bg-gray-50/50 px-4 py-8 text-center">
-              <Phone className="mx-auto mb-2 size-6 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">
-                {loadingCallbacks ? "Caricamento..." : "Nessuna richiamata in sospeso"}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {callbackTasks.map((task) => (
-                <div key={task.id} className="flex items-center justify-between gap-3 rounded-xl border border-border bg-white px-4 py-3 transition hover:bg-gray-50">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{task.student?.name ?? task.phoneNumber}</span>
-                      {task.student?.name ? <span className="text-xs text-muted-foreground">{task.phoneNumber}</span> : null}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{task.reason}</span>
-                      <span className="text-muted-foreground/40">·</span>
-                      <span>{new Date(task.createdAt).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                    </div>
+                  <div className="mt-1.5 text-[11px] font-medium leading-normal text-[#b2b2b2]">
+                    Es: &laquo;Se chiedono insistentemente i prezzi&raquo; oppure &laquo;Se vogliono parlare con una persona fisica&raquo;
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => handleMarkDone(task.id)} disabled={markingDone === task.id} className="shrink-0 gap-1.5 text-xs">
-                    {markingDone === task.id ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3 text-emerald-600" />}
-                    {markingDone === task.id ? "..." : "Fatto"}
-                  </Button>
                 </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-          </>
-        )}
+              )}
+              <div className="mt-2 space-y-2">
+                <ToggleRow
+                  label="Registra audio"
+                  description="Salva una registrazione audio della chiamata"
+                  checked={voiceRecordingEnabled}
+                  onCheckedChange={setVoiceRecordingEnabled}
+                />
+                <ToggleRow
+                  label="Trascrivi chiamate"
+                  description="Genera trascrizione testuale della conversazione"
+                  checked={voiceTranscriptionEnabled}
+                  onCheckedChange={setVoiceTranscriptionEnabled}
+                />
+              </div>
+            </SegAccordion>
+
+            {/* Accordion 3: Istruzioni personalizzate */}
+            <SegAccordion
+              title="Istruzioni personalizzate"
+              description="Policy, tono comunicativo e regole operative"
+              expanded={segAccordion === "instructions"}
+              onToggle={() => toggleSegAccordion("instructions")}
+              isLast
+            >
+              <textarea
+                value={voiceInstructions}
+                onChange={(e) => setVoiceInstructions(e.target.value)}
+                rows={8}
+                className={cn(textareaClass, "min-h-[200px] leading-[1.7]")}
+                placeholder="Es: Questa autoscuola offre guide a Milano. Il numero per urgenze è +39 02 123456. Usa un tono cordiale ma professionale."
+              />
+            </SegAccordion>
+          </div>
+
+          <div className="shrink-0 border-t border-[#dddddd] bg-white px-6 py-4">
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[12px] bg-navy-900 py-3.5 text-[15px] font-bold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Salvataggio...
+                </>
+              ) : (
+                "Salva configurazione"
+              )}
+            </button>
+          </div>
+        </DetailPanel>
       </div>
     </PageWrapper>
-  );
-}
-
-function VoiceAccordion({
-  title,
-  description,
-  expanded,
-  onToggle,
-  isFirst,
-  isLast,
-  children,
-}: {
-  title: string;
-  description: string;
-  expanded: boolean;
-  onToggle: () => void;
-  isFirst?: boolean;
-  isLast?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn(!isFirst && "border-t border-border")}>
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggle(); } }}
-        className={cn(
-          "flex w-full cursor-pointer items-center justify-between gap-3 px-5 py-4 transition-colors hover:bg-gray-50/50",
-          isFirst && "rounded-t-2xl",
-          isLast && !expanded && "rounded-b-2xl",
-        )}
-      >
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <p className="text-xs text-muted-foreground">{description}</p>
-        </div>
-        <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-200", expanded && "rotate-180")} />
-      </div>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="content"
-            initial={{ height: 0, opacity: 0, overflow: "hidden" }}
-            animate={{ height: "auto", opacity: 1, overflow: "visible", transitionEnd: { overflow: "visible" } }}
-            exit={{ height: 0, opacity: 0, overflow: "hidden" }}
-            transition={{ duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-          >
-            <div className={cn("px-5 pb-5", isLast && "rounded-b-2xl")}>
-              {children}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   );
 }
 
