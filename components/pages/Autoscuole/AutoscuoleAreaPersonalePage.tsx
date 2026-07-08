@@ -3,17 +3,123 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { CreditCard, FileText, KeyRound, Lock, Receipt } from "lucide-react";
+import { useAtomValue, useSetAtom } from "jotai";
+import { useSession } from "next-auth/react";
+import { Camera, CircleUserRound, CreditCard, FileText, KeyRound, Loader2, Lock, Receipt } from "lucide-react";
 
+import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 
-type PaneKey = "credenziali" | "documenti" | "abbonamento";
+type PaneKey = "profilo" | "credenziali" | "documenti" | "abbonamento";
 
 const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
+  { key: "profilo", label: "Il tuo profilo", icon: <CircleUserRound className="size-6" strokeWidth={1.9} /> },
   { key: "credenziali", label: "Credenziali", icon: <KeyRound className="size-6" strokeWidth={1.9} /> },
   { key: "documenti", label: "Contratto e fattura", icon: <FileText className="size-6" strokeWidth={1.9} /> },
   { key: "abbonamento", label: "Abbonamento", icon: <CreditCard className="size-6" strokeWidth={1.9} /> },
 ];
+
+/** Foto profilo personale: cerchio 132px con badge Modifica (stesso pattern
+ * della foto autoscuola in Informazioni aziendali). */
+function ProfiloPane() {
+  const toast = useFeedbackToast();
+  const { data: sessionData, update: updateSession } = useSession();
+  const session = useAtomValue(userSessionAtom);
+  const avatarUrl = useAtomValue(userAvatarUrlAtom);
+  const setUserRefresh = useSetAtom(userRefreshAtom);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = React.useState(false);
+
+  const name = session?.user?.name ?? "";
+  const initials =
+    name
+      .trim()
+      .split(/\s+/)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "R";
+
+  const handleAvatarChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || uploading) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads/avatar", { method: "POST", body: formData });
+      const json = (await res.json()) as { success: boolean; data?: { key: string }; message?: string };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error({ description: json.message ?? "Caricamento non riuscito." });
+        return;
+      }
+      if (sessionData) {
+        await updateSession({
+          ...sessionData,
+          user: { ...sessionData.user, image: json.data.key },
+        });
+      }
+      setUserRefresh(true);
+      toast.success({ description: "Foto profilo aggiornata." });
+    } catch {
+      toast.error({ description: "Caricamento non riuscito." });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="mb-8 text-2xl font-bold tracking-[-0.3px] text-foreground">
+        Il tuo profilo
+      </h2>
+      <div className="flex max-w-[680px] flex-col items-center">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="relative size-[132px] cursor-pointer"
+          title="Modifica foto"
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt="Foto profilo"
+              className="size-[132px] rounded-full object-cover"
+            />
+          ) : (
+            <span className="flex size-[132px] items-center justify-center rounded-full bg-[#f2f2f2] text-[30px] font-bold tracking-[-1px] text-[#6a6a6a]">
+              {initials}
+            </span>
+          )}
+          <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+            {uploading ? (
+              <Loader2 className="size-4 animate-spin text-foreground" />
+            ) : (
+              <Camera className="size-4 text-foreground" strokeWidth={1.7} />
+            )}
+            <span className="text-sm font-semibold text-foreground">Modifica</span>
+          </span>
+        </button>
+        <div className="mt-5 text-center">
+          {name && <div className="text-base font-bold text-foreground">{name}</div>}
+          <p className="mt-1 max-w-[380px] text-[13px] font-medium leading-relaxed text-[#929292]">
+            Foto personale del tuo account, separata da quella dell&apos;autoscuola.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Area personale (overlay full-screen stile Impostazioni, dal proto
@@ -23,7 +129,7 @@ const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
  */
 export function AutoscuoleAreaPersonalePage() {
   const router = useRouter();
-  const [pane, setPane] = React.useState<PaneKey>("credenziali");
+  const [pane, setPane] = React.useState<PaneKey>("profilo");
 
   return (
     <div
@@ -77,6 +183,8 @@ export function AutoscuoleAreaPersonalePage() {
 
           {/* ── Content ── */}
           <div className="min-h-0 min-w-0 overflow-y-auto px-6 py-8 md:px-10 md:py-12 lg:pl-12 lg:pr-0">
+            {pane === "profilo" && <ProfiloPane />}
+
             {pane === "credenziali" && (
               <div>
                 <h2 className="mb-[18px] text-2xl font-bold tracking-[-0.3px] text-foreground">

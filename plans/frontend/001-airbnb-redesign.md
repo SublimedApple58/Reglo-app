@@ -115,9 +115,11 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - Menu hamburger: voce "Profilo" RIMOSSA. `components/pages/Settings/` eliminata. Nota: sezioni legacy pratiche/scadenze/documents erano GIÀ dismesse (route notFound) — nessun restyle necessario.
   - Suite e2e 8/8 verde.
 
+- Rework fase 7 su feedback utente (2026-07-08): **pane Integrazioni RIMOSSA** (IntegrationsPane eliminata; la UI per connettere Fatture in Cloud non è più esposta — gli endpoint /api/integrations/* restano); **foto profilo personale spostata** da Informazioni aziendali all'**Area personale** → nuova voce sidebar "Il tuo profilo" (default, cerchio 132px + badge Modifica, upload /api/uploads/avatar + update sessione); /user/settings redirect semplificato → pane=business.
+
 ## Next steps
 
-1. **⇒ PROSSIMO dopo verifica fase 7: fine redesign web** — poi QA su staging (serve portare il branch su staging, da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
+1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
 2. **Fine progetto**: QA completo su staging clone (dev DB ha 1 solo allievo), poi rilascio concordato.
 3. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 

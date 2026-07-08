@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Plug, Users, UserRoundCog, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,6 @@ import StudentsTab from "./tabs/StudentsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
 import { AutoscuolePaymentsPage } from "./AutoscuolePaymentsPage";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
-import { IntegrationsPane } from "./tabs/IntegrationsPane";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -244,7 +243,6 @@ type ConfigPane =
   | "business"
   | "locations"
   | "payments"
-  | "integrations"
   | "bookings"
   | "policy"
   | "reminders"
@@ -258,7 +256,6 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
     { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
     { key: "locations", label: "Sede e luoghi", icon: MapPin },
     { key: "payments", label: "Fatturazione e pagamenti", icon: CreditCard },
-    { key: "integrations", label: "Integrazioni", icon: Plug },
   ],
   [
     { key: "bookings", label: "Prenotazioni", icon: CalendarDays },
@@ -298,7 +295,6 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   business: "Informazioni aziendali",
   locations: "Sede e luoghi",
   payments: "Fatturazione e pagamenti",
-  integrations: "Integrazioni",
   bookings: "Prenotazioni",
   policy: "Policy tipi guida",
   reminders: "Promemoria e notifiche",
@@ -1741,9 +1737,6 @@ export function AutoscuoleResourcesPage({
         ))}
         <KeepAlivePane active={configTab === "payments"} eager={mountAllPanes}>
           <AutoscuolePaymentsPage tabs={null} />
-        </KeepAlivePane>
-        <KeepAlivePane active={configTab === "integrations"} eager={mountAllPanes}>
-          <IntegrationsPane />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
