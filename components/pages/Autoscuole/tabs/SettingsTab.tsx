@@ -240,26 +240,14 @@ function PolicySwitch({
   description?: string;
 }) {
   return (
-    <div
-      role="switch"
-      tabIndex={0}
-      aria-checked={checked}
-      onClick={onChange}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(); } }}
-      className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-all duration-150",
-        checked
-          ? "border-[#cfcfdc] bg-[#eeeef4] hover:bg-[#e2e2e8]"
-          : "border-border bg-white hover:bg-gray-50",
-      )}
-    >
+    <div className="flex w-full items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4 text-left">
       <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
         {description && (
-          <div className="text-xs text-muted-foreground">{description}</div>
+          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
         )}
       </div>
-      <InlineToggle checked={checked} />
+      <InlineToggle checked={checked} onChange={onChange} size="lg" />
     </div>
   );
 }
@@ -633,12 +621,12 @@ function SettingsTab({
               />
             </div>
 
-            {/* Per-type cards — unified required + limit in one card */}
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
+            {/* Per-type cards — chip proto (check azzurra) + limite orario */}
+            <div>
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">
                 Configura per tipo di guida
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {LESSON_TYPE_OPTIONS.map((option) => {
                   const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
                   const isRequired = lessonRequiredTypes.includes(option.value);
@@ -647,24 +635,38 @@ function SettingsTab({
                     <div
                       key={option.value}
                       className={cn(
-                        "rounded-xl border bg-white p-3 transition-all duration-200",
-                        hasLimit ? "border-[#cfcfdc]" : "border-border",
+                        "rounded-[12px] border-[1.5px] p-[13px] transition-colors",
+                        isRequired ? "border-[#9fc3f0] bg-[#eaf2fd]" : "border-[#e8e8e8] bg-white",
                       )}
                     >
-                      {/* Header: name + pill actions */}
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="flex-1 text-sm font-semibold text-foreground">
+                      {/* Header proto: cerchio check + label, click = obbligatorio */}
+                      <div
+                        role="switch"
+                        tabIndex={0}
+                        aria-checked={isRequired}
+                        aria-label={`Segna ${option.label} come obbligatorio`}
+                        onClick={() => toggleRequiredType(option.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRequiredType(option.value); } }}
+                        className="flex cursor-pointer select-none items-center gap-2.5 px-0.5"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
+                            isRequired ? "bg-[#cfe0fb]" : "border-[1.5px] border-[#dcdcdc]",
+                          )}
+                        >
+                          {isRequired && (
+                            <Check className="size-3 text-[#1a2b45]" strokeWidth={2.4} />
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[13.5px] font-semibold",
+                            isRequired ? "text-[#1a2b45]" : "text-[#444444]",
+                          )}
+                        >
                           {option.label}
                         </span>
-                        <ToggleChip
-                          active={isRequired}
-                          onClick={() => toggleRequiredType(option.value)}
-                          size="sm"
-                          aria-label={`Segna ${option.label} come obbligatorio`}
-                        >
-                          {isRequired && <Check className="inline size-2.5 mr-0.5" />}
-                          Obbl.
-                        </ToggleChip>
                       </div>
 
                       {/* Limite orario toggle row */}
@@ -676,10 +678,11 @@ function SettingsTab({
                         onClick={() => toggleConstraintEnabled(option.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleConstraintEnabled(option.value); } }}
                         className={cn(
-                          "flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-all duration-150",
+                          "mt-3 flex w-full cursor-pointer items-center justify-between rounded-[8px] px-2.5 py-2 text-xs transition-colors",
                           hasLimit
-                            ? "bg-[#eeeef4] text-foreground"
-                            : "bg-gray-50 text-muted-foreground hover:bg-gray-100",
+                            ? "bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                            : "bg-[#f8f8f8] text-[#6a6a6a] hover:bg-[#f2f2f2]",
+                          isRequired && !hasLimit && "bg-white/60 hover:bg-white/80",
                         )}
                       >
                         <span className="font-medium">Limite orario</span>
@@ -688,7 +691,7 @@ function SettingsTab({
 
                       {/* Expanded: days + time window */}
                       {hasLimit && (
-                        <div className="mt-3 space-y-2.5 border-t border-border pt-2.5">
+                        <div className="mt-3 space-y-2.5 border-t border-black/[0.06] pt-2.5">
                           <div className="flex flex-wrap gap-1">
                             {WEEKDAY_OPTIONS.map((day) => (
                               <ToggleChip

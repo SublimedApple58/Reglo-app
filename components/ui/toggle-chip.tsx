@@ -4,7 +4,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * ToggleChip — pill-shaped toggle button (active = near-black, redesign Airbnb).
+ * ToggleChip — pill-shaped toggle button (active = azzurro proto, redesign Airbnb).
  * Used for day selectors, duration selectors, filter chips.
  */
 export function ToggleChip({
@@ -38,8 +38,8 @@ export function ToggleChip({
           ? "px-2 py-0.5 text-[11px]"
           : "px-3 py-1.5 text-xs",
         active
-          ? "border-[#222222] bg-[#222222] text-white"
-          : "border-border bg-white text-muted-foreground hover:bg-gray-50 hover:text-foreground",
+          ? "border-[#9fc3f0] bg-[#cfe0fb] font-semibold text-[#1a2b45]"
+          : "border-border bg-white text-muted-foreground hover:border-[#929292] hover:text-foreground",
         disabled && "pointer-events-none opacity-40",
         className,
       )}

@@ -95,11 +95,11 @@ export function ResourceCard({
 }
 
 /**
- * SlotPill — pill navy della fascia oraria dentro ResourceCard (stile proto).
+ * SlotPill — pill azzurra della fascia oraria dentro ResourceCard (stile proto).
  */
 export function SlotPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded-full border border-[#cfcfdc] bg-[#eef0f6] px-2.5 py-1 text-xs font-semibold text-navy-900">
+    <span className="rounded-full border border-[#cfe0fb] bg-[#eaf2fd] px-2.5 py-1 text-xs font-semibold text-[#1a2b45]">
       {children}
     </span>
   );

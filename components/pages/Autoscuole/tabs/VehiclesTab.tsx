@@ -125,11 +125,11 @@ function VehiclesTabContent({
                       vehicle.transmission}
                   </span>
                   {vehicle.assignedInstructorId ? (
-                    <span className="rounded-[6px] border border-[#cfcfdc] bg-[#eef0f6] px-[7px] py-0.5 text-[11px] font-semibold text-navy-900">
+                    <span className="rounded-[6px] border border-[#cfe0fb] bg-[#eaf2fd] px-[7px] py-0.5 text-[11px] font-semibold text-[#1a2b45]">
                       Esclusivo
                     </span>
                   ) : vehicle.poolInstructorIds.length ? (
-                    <span className="rounded-[6px] border border-[#cfcfdc] bg-[#eef0f6] px-[7px] py-0.5 text-[11px] font-semibold text-navy-900">
+                    <span className="rounded-[6px] border border-[#cfe0fb] bg-[#eaf2fd] px-[7px] py-0.5 text-[11px] font-semibold text-[#1a2b45]">
                       Pool · {vehicle.poolInstructorIds.length}
                     </span>
                   ) : (
@@ -234,37 +234,32 @@ export default function VehiclesTab({
   savingSettings,
 }: VehiclesTabProps) {
   return (
-    <>
-      <div className="rounded-2xl border border-border bg-white shadow-card p-4">
-        <div
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setVehiclesEnabled((prev) => !prev)}
-        >
-          <div className="flex flex-col gap-0.5">
-            <span className="text-sm font-semibold">Modulo veicoli</span>
-            <span className="text-xs text-muted-foreground">
-              {vehiclesEnabled
-                ? "Attivo — i veicoli vengono tracciati e assegnati alle guide"
-                : "Disattivo — le guide non richiedono un veicolo"}
-            </span>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-6 rounded-[14px] border border-[#e8e8e8] px-6 py-5">
+        <div>
+          <div className="text-[15px] font-semibold text-foreground">Modulo veicoli</div>
+          <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
+            {vehiclesEnabled
+              ? "Attivo — i veicoli vengono tracciati e assegnati alle guide"
+              : "Disattivo — le guide non richiedono un veicolo"}
           </div>
-          <InlineToggle checked={vehiclesEnabled} size="sm" />
         </div>
+        <InlineToggle checked={vehiclesEnabled} onChange={() => setVehiclesEnabled((prev) => !prev)} size="lg" />
       </div>
       {vehiclesEnabled && (
-        <div className="rounded-2xl border border-border bg-white shadow-card p-4">
-          <div className="flex flex-col gap-0.5 mb-3">
-            <span className="text-sm font-semibold">Percorso patente di default</span>
-            <span className="text-xs text-muted-foreground">
-              Assegnato ai nuovi allievi alla registrazione. Le autoscuole moto
-              possono impostarlo una volta sola (es. A1 · Manuale).
-            </span>
+        <div className="rounded-[14px] border border-[#e8e8e8] px-6 py-5">
+          <div className="text-[15px] font-semibold text-foreground">Percorso patente di default</div>
+          <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
+            Assegnato ai nuovi allievi alla registrazione. Le autoscuole moto
+            possono impostarlo una volta sola (es. A1 · Manuale).
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Categoria</label>
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
               <Select value={defaultLicenseCategory} onValueChange={setDefaultLicenseCategory}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {LICENSE_CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
@@ -272,10 +267,12 @@ export default function VehiclesTab({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Cambio</label>
+            <div>
+              <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
               <Select value={defaultTransmission} onValueChange={setDefaultTransmission}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   {TRANSMISSIONS.map((t) => (
                     <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
@@ -287,20 +284,15 @@ export default function VehiclesTab({
         </div>
       )}
       {vehiclesEnabled && (
-        <div className="rounded-2xl border border-border bg-white shadow-card p-4">
-          <div
-            className="flex items-center justify-between gap-3 cursor-pointer"
-            onClick={() => setFollowCarMotoEnabled((prev) => !prev)}
-          >
-            <div className="flex flex-col gap-0.5">
-              <span className="text-sm font-semibold">Auto al seguito (moto)</span>
-              <span className="text-xs text-muted-foreground">
-                Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
-                entrambi i veicoli risultano occupati in agenda.
-              </span>
+        <div className="flex items-center justify-between gap-6 rounded-[14px] border border-[#e8e8e8] px-6 py-5">
+          <div>
+            <div className="text-[15px] font-semibold text-foreground">Auto al seguito (moto)</div>
+            <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
+              Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
+              entrambi i veicoli risultano occupati in agenda.
             </div>
-            <InlineToggle checked={followCarMotoEnabled} size="sm" />
           </div>
+          <InlineToggle checked={followCarMotoEnabled} onChange={() => setFollowCarMotoEnabled((prev) => !prev)} size="lg" />
         </div>
       )}
       {vehiclesEnabled && (
@@ -323,6 +315,6 @@ export default function VehiclesTab({
           {savingSettings ? "Salvataggio..." : "Salva configurazione"}
         </Button>
       </div>
-    </>
+    </div>
   );
 }
