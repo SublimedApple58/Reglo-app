@@ -548,6 +548,9 @@ function AbbonamentoPane() {
       ? "Rinnovo mensile"
       : "Rinnovo annuale";
 
+  // Nella card del piano stanno SOLO le voci ricorrenti: la licenza
+  // formazione (una tantum) vive in un blocco separato sotto, fuori dal
+  // totale — così non sembra parte del costo annuale/mensile.
   const rows = plan
     ? [
         plan.instructorSeats > 0
@@ -565,23 +568,6 @@ function AbbonamentoPane() {
               label: "Posti istruttore",
               detail: `${plan.instructorSeats} × ${formatEuroCents(plan.instructorSeatPriceCents)}`,
               amount: formatEuroCents(plan.instructorSeats * plan.instructorSeatPriceCents),
-            }
-          : null,
-        plan.teoriaEnabled
-          ? {
-              key: "teoria",
-              icon: (
-                <Image
-                  src="/images/plan/icon-licenza.png"
-                  alt=""
-                  width={34}
-                  height={34}
-                  className="block size-[34px] object-contain"
-                />
-              ),
-              label: "Licenza formazione",
-              detail: `${plan.teoriaSeats} × ${formatEuroCents(plan.teoriaSeatPriceCents)} · una tantum`,
-              amount: formatEuroCents(plan.teoriaTotalCents),
             }
           : null,
         plan.voiceEnabled
@@ -689,14 +675,44 @@ function AbbonamentoPane() {
                   {BILLING_PERIOD_SUFFIX[plan.billingPeriod]}
                 </div>
               </div>
-              {plan.teoriaEnabled && (
-                <p className="mt-2.5 text-[12.5px] font-medium leading-relaxed text-[#929292]">
-                  Il totale non include la Licenza formazione (
-                  {formatEuroCents(plan.teoriaTotalCents)}): è un acquisto una tantum — quando
-                  le licenze si esauriscono, se ne acquistano altre.
-                </p>
-              )}
             </div>
+
+            {/* ── Acquisti una tantum (fuori dal piano ricorrente) ── */}
+            {plan.teoriaEnabled && (
+              <div className="mt-4 rounded-[14px] border border-[#ebebeb] p-[22px]">
+                <div className="text-[15px] font-bold text-foreground">Acquisti una tantum</div>
+                <div className="mt-1 text-[12.5px] font-medium text-[#929292]">
+                  Fuori dal totale ricorrente: quando le licenze si esauriscono, se ne
+                  acquistano altre.
+                </div>
+                <div className="my-4 h-px bg-[#efefef]" />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex min-w-0 items-center gap-[13px]">
+                    <div className="flex size-9 shrink-0 items-center justify-center">
+                      <Image
+                        src="/images/plan/icon-licenza.png"
+                        alt=""
+                        width={34}
+                        height={34}
+                        className="block size-[34px] object-contain"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-foreground">
+                        Licenza formazione
+                      </div>
+                      <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                        {plan.teoriaSeats} × {formatEuroCents(plan.teoriaSeatPriceCents)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
+                    {formatEuroCents(plan.teoriaTotalCents)}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <p className="mt-4 text-[13px] font-medium leading-relaxed text-[#929292]">
               Per modifiche al piano, posti istruttore, nuove licenze formazione o disdette
               contatta il team Reglo: ti rispondiamo in giornata.
