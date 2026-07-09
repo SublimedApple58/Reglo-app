@@ -160,7 +160,9 @@ test.describe("Autoscuole smoke", () => {
     await page.goto("/it/user/autoscuole/area-personale");
     await expect(page.getByTestId("autoscuole-area-personale-page")).toBeVisible({ timeout: 60000 });
     await page.getByRole("button", { name: "Contratto e fattura" }).click();
-    await expect(page.getByText("Nessuna fattura disponibile")).toBeVisible();
+    // Indipendente dai dati: la sezione Fatture c'è sia vuota che popolata.
+    await expect(page.getByRole("heading", { name: "Contratto e fattura" })).toBeVisible();
+    await expect(page.getByText("Fatture", { exact: true })).toBeVisible();
 
     // Centro assistenza (mock): chat con messaggio di benvenuto
     await page.goto("/it/user/autoscuole/assistenza");
