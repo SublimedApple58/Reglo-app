@@ -240,6 +240,7 @@ model Company {
   productFeedback                      ProductFeedback[]
   documents                            CompanyDocument[]
   plan                                 CompanyPlan?
+  licensePurchases                     CompanyLicensePurchase[]
 }
 
 model CompanyService {
@@ -1472,14 +1473,29 @@ model CompanyPlan {
   renewsAt                 DateTime? @db.Timestamp(6)
   instructorSeats          Int       @default(1)
   instructorSeatPriceCents Int       @default(0)
-  teoriaEnabled            Boolean   @default(false)
-  teoriaSeats              Int       @default(0)
-  /// Prezzo PER LICENZA: il totale una tantum è teoriaSeats × questo valore
-  teoriaSeatPriceCents     Int       @default(0)
   voiceEnabled             Boolean   @default(false)
   voicePriceCents          Int       @default(0)
   createdAt                DateTime  @default(now()) @db.Timestamp(6)
   updatedAt                DateTime  @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Registro degli acquisti UNA TANTUM di licenze formazione (teoria): ogni
+// acquisto è una riga con data, numero licenze e prezzo per licenza. Il team
+// Reglo li registra dal backoffice (dialog Piano); il titolare li vede in
+// Area personale → Abbonamento → "Acquisti una tantum". Fuori dal totale
+// ricorrente del CompanyPlan.
+model CompanyLicensePurchase {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  seats          Int
+  /// Prezzo PER LICENZA in centesimi (totale = seats × seatPriceCents)
+  seatPriceCents Int
+  purchasedAt    DateTime @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, purchasedAt])
 }

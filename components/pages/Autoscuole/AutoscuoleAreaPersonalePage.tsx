@@ -24,7 +24,11 @@ import {
   getCompanyDocuments,
 } from "@/lib/actions/company-documents.actions";
 import { formatDocumentSize, type CompanyDocumentDto } from "@/lib/company-documents";
-import { getCompanyPlan, type CompanyPlanDto } from "@/lib/actions/company-plan.actions";
+import {
+  getCompanyPlan,
+  type CompanyPlanDto,
+  type LicensePurchaseDto,
+} from "@/lib/actions/company-plan.actions";
 import { BILLING_PERIOD_SUFFIX, formatEuroCents } from "@/lib/company-plan";
 import { cn } from "@/lib/utils";
 
@@ -522,6 +526,7 @@ function DocumentiPane() {
 function AbbonamentoPane() {
   const router = useRouter();
   const [plan, setPlan] = React.useState<CompanyPlanDto | null>(null);
+  const [purchases, setPurchases] = React.useState<LicensePurchaseDto[]>([]);
   const [loaded, setLoaded] = React.useState(false);
   const [restricted, setRestricted] = React.useState(false);
 
@@ -529,8 +534,10 @@ function AbbonamentoPane() {
     let active = true;
     getCompanyPlan().then((res) => {
       if (!active) return;
-      if (res.success && res.data) setPlan(res.data.plan);
-      else setRestricted(true);
+      if (res.success && res.data) {
+        setPlan(res.data.plan);
+        setPurchases(res.data.licensePurchases);
+      } else setRestricted(true);
       setLoaded(true);
     });
     return () => {
@@ -615,70 +622,69 @@ function AbbonamentoPane() {
               Il piano dell&apos;autoscuola è visibile solo all&apos;account del titolare.
             </div>
           </div>
-        ) : !plan ? (
-          <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
-            <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
-            <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
-              Il dettaglio del piano, con il riepilogo delle voci e il totale, sarà disponibile
-              qui non appena attivato dal team Reglo.
-            </div>
-            <div className="my-[18px] h-px bg-[#efefef]" />
-            <div className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
-              Per modifiche al piano, posti istruttore o disdette contatta il team Reglo: ti
-              rispondiamo in giornata.
-            </div>
-          </div>
         ) : (
           <>
-            <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
-                  <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
-                    {renewLabel}
-                  </div>
+            {!plan ? (
+              <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
+                <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
+                <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
+                  Il dettaglio del piano, con il riepilogo delle voci e il totale, sarà
+                  disponibile qui non appena attivato dal team Reglo.
                 </div>
-                <button
-                  type="button"
-                  onClick={() => router.push("/user/autoscuole/assistenza")}
-                  className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
-                >
-                  Gestisci
-                </button>
               </div>
-              <div className="my-[18px] h-px bg-[#efefef]" />
-              <div className="flex flex-col gap-[11px]">
-                {rows.map((row) => (
-                  <div key={row.key} className="flex items-center justify-between gap-4">
-                    <div className="flex min-w-0 items-center gap-[13px]">
-                      <div className="flex size-9 shrink-0 items-center justify-center">
-                        {row.icon}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-sm font-semibold text-foreground">{row.label}</div>
-                        <div className="mt-px text-[12.5px] font-medium text-[#929292]">
-                          {row.detail}
+            ) : (
+              <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
+                    <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
+                      {renewLabel}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.push("/user/autoscuole/assistenza")}
+                    className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
+                  >
+                    Gestisci
+                  </button>
+                </div>
+                <div className="my-[18px] h-px bg-[#efefef]" />
+                <div className="flex flex-col gap-[11px]">
+                  {rows.map((row) => (
+                    <div key={row.key} className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-[13px]">
+                        <div className="flex size-9 shrink-0 items-center justify-center">
+                          {row.icon}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">
+                            {row.label}
+                          </div>
+                          <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                            {row.detail}
+                          </div>
                         </div>
                       </div>
+                      <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
+                        {row.amount}
+                      </div>
                     </div>
-                    <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
-                      {row.amount}
-                    </div>
+                  ))}
+                </div>
+                <div className="my-[18px] h-px bg-[#efefef]" />
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-[15px] font-bold text-foreground">Totale</div>
+                  <div className="shrink-0 whitespace-nowrap text-[17px] font-bold text-foreground">
+                    {formatEuroCents(plan.totalCents)}
+                    {BILLING_PERIOD_SUFFIX[plan.billingPeriod]}
                   </div>
-                ))}
-              </div>
-              <div className="my-[18px] h-px bg-[#efefef]" />
-              <div className="flex items-center justify-between gap-4">
-                <div className="text-[15px] font-bold text-foreground">Totale</div>
-                <div className="shrink-0 whitespace-nowrap text-[17px] font-bold text-foreground">
-                  {formatEuroCents(plan.totalCents)}
-                  {BILLING_PERIOD_SUFFIX[plan.billingPeriod]}
                 </div>
               </div>
-            </div>
+            )}
 
-            {/* ── Acquisti una tantum (fuori dal piano ricorrente) ── */}
-            {plan.teoriaEnabled && (
+            {/* ── Acquisti una tantum: registro degli acquisti licenze ── */}
+            {purchases.length > 0 && (
               <div className="mt-4 rounded-[14px] border border-[#ebebeb] p-[22px]">
                 <div className="text-[15px] font-bold text-foreground">Acquisti una tantum</div>
                 <div className="mt-1 text-[12.5px] font-medium text-[#929292]">
@@ -686,29 +692,38 @@ function AbbonamentoPane() {
                   acquistano altre.
                 </div>
                 <div className="my-4 h-px bg-[#efefef]" />
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex min-w-0 items-center gap-[13px]">
-                    <div className="flex size-9 shrink-0 items-center justify-center">
-                      <Image
-                        src="/images/plan/icon-licenza.png"
-                        alt=""
-                        width={34}
-                        height={34}
-                        className="block size-[34px] object-contain"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-foreground">
-                        Licenza formazione
+                <div className="flex flex-col gap-[11px]">
+                  {purchases.map((purchase) => (
+                    <div key={purchase.id} className="flex items-center justify-between gap-4">
+                      <div className="flex min-w-0 items-center gap-[13px]">
+                        <div className="flex size-9 shrink-0 items-center justify-center">
+                          <Image
+                            src="/images/plan/icon-licenza.png"
+                            alt=""
+                            width={34}
+                            height={34}
+                            className="block size-[34px] object-contain"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-foreground">
+                            Licenza formazione
+                          </div>
+                          <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                            {purchase.seats} × {formatEuroCents(purchase.seatPriceCents)} ·{" "}
+                            {new Date(purchase.purchasedAt).toLocaleDateString("it-IT", {
+                              day: "numeric",
+                              month: "long",
+                              year: "numeric",
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-px text-[12.5px] font-medium text-[#929292]">
-                        {plan.teoriaSeats} × {formatEuroCents(plan.teoriaSeatPriceCents)}
+                      <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
+                        {formatEuroCents(purchase.totalCents)}
                       </div>
                     </div>
-                  </div>
-                  <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
-                    {formatEuroCents(plan.teoriaTotalCents)}
-                  </div>
+                  ))}
                 </div>
               </div>
             )}

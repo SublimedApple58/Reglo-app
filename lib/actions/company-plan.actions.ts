@@ -12,6 +12,10 @@ import { requireServiceAccess } from "@/lib/service-access";
  * personale → Abbonamento. È la composizione COMMERCIALE (prezzi, periodo):
  * l'attivazione operativa di teoria/segretaria resta nei CompanyService
  * limits gestiti dal drawer "Gestisci" del backoffice.
+ *
+ * Gli acquisti di licenze formazione sono UNA TANTUM e vivono in un registro
+ * separato (CompanyLicensePurchase): ogni acquisto è una riga con data,
+ * licenze e prezzo per licenza — fuori dal totale ricorrente del piano.
  */
 
 const planInputSchema = z.object({
@@ -20,11 +24,15 @@ const planInputSchema = z.object({
   renewsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   instructorSeats: z.number().int().min(0).max(99),
   instructorSeatPriceCents: z.number().int().min(0).max(10_000_000),
-  teoriaEnabled: z.boolean(),
-  teoriaSeats: z.number().int().min(0).max(100_000),
-  teoriaSeatPriceCents: z.number().int().min(0).max(10_000_000),
   voiceEnabled: z.boolean(),
   voicePriceCents: z.number().int().min(0).max(10_000_000),
+});
+
+const licensePurchaseInputSchema = z.object({
+  companyId: z.string().uuid(),
+  seats: z.number().int().min(1).max(100_000),
+  seatPriceCents: z.number().int().min(0).max(10_000_000),
+  purchasedAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 export type CompanyPlanDto = {
@@ -32,28 +40,25 @@ export type CompanyPlanDto = {
   renewsAt: string | null;
   instructorSeats: number;
   instructorSeatPriceCents: number;
-  teoriaEnabled: boolean;
-  teoriaSeats: number;
-  /** Prezzo PER LICENZA */
-  teoriaSeatPriceCents: number;
-  /** Totale una tantum licenze = teoriaSeats × teoriaSeatPriceCents */
-  teoriaTotalCents: number;
   voiceEnabled: boolean;
   voicePriceCents: number;
-  /** Totale RICORRENTE (€/mese o €/anno): posti istruttore + Segretaria.
-   * La licenza formazione è esclusa: è un acquisto UNA TANTUM (esaurite le
-   * licenze se ne acquistano altre). */
+  /** Totale RICORRENTE (€/mese o €/anno): posti istruttore + Segretaria. */
   totalCents: number;
 };
 
-function toDto(plan: {
+export type LicensePurchaseDto = {
+  id: string;
+  seats: number;
+  seatPriceCents: number;
+  totalCents: number;
+  purchasedAt: string;
+};
+
+function toPlanDto(plan: {
   billingPeriod: string;
   renewsAt: Date | null;
   instructorSeats: number;
   instructorSeatPriceCents: number;
-  teoriaEnabled: boolean;
-  teoriaSeats: number;
-  teoriaSeatPriceCents: number;
   voiceEnabled: boolean;
   voicePriceCents: number;
 }): CompanyPlanDto {
@@ -62,16 +67,32 @@ function toDto(plan: {
     renewsAt: plan.renewsAt ? plan.renewsAt.toISOString() : null,
     instructorSeats: plan.instructorSeats,
     instructorSeatPriceCents: plan.instructorSeatPriceCents,
-    teoriaEnabled: plan.teoriaEnabled,
-    teoriaSeats: plan.teoriaSeats,
-    teoriaSeatPriceCents: plan.teoriaSeatPriceCents,
-    teoriaTotalCents: plan.teoriaSeats * plan.teoriaSeatPriceCents,
     voiceEnabled: plan.voiceEnabled,
     voicePriceCents: plan.voicePriceCents,
     totalCents:
       plan.instructorSeats * plan.instructorSeatPriceCents +
       (plan.voiceEnabled ? plan.voicePriceCents : 0),
   };
+}
+
+function toPurchaseDto(purchase: {
+  id: string;
+  seats: number;
+  seatPriceCents: number;
+  purchasedAt: Date;
+}): LicensePurchaseDto {
+  return {
+    id: purchase.id,
+    seats: purchase.seats,
+    seatPriceCents: purchase.seatPriceCents,
+    totalCents: purchase.seats * purchase.seatPriceCents,
+    purchasedAt: purchase.purchasedAt.toISOString(),
+  };
+}
+
+// Mezzogiorno UTC: la data resta quella scelta in ogni fuso ragionevole.
+function dateAtNoonUtc(date: string) {
+  return new Date(`${date}T12:00:00.000Z`);
 }
 
 // ── Lato company (Area personale → Abbonamento, riservato al titolare) ──────
@@ -83,10 +104,22 @@ export async function getCompanyPlan() {
     if (role !== "OWNER" && role !== "INSTRUCTOR_OWNER") {
       throw new Error("Sezione riservata al titolare dell'autoscuola.");
     }
-    const plan = await prisma.companyPlan.findUnique({
-      where: { companyId: context.membership.companyId },
-    });
-    return { success: true, data: { plan: plan ? toDto(plan) : null } };
+    const [plan, purchases] = await Promise.all([
+      prisma.companyPlan.findUnique({
+        where: { companyId: context.membership.companyId },
+      }),
+      prisma.companyLicensePurchase.findMany({
+        where: { companyId: context.membership.companyId },
+        orderBy: { purchasedAt: "desc" },
+      }),
+    ]);
+    return {
+      success: true,
+      data: {
+        plan: plan ? toPlanDto(plan) : null,
+        licensePurchases: purchases.map(toPurchaseDto),
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -98,8 +131,20 @@ export async function getBackofficeCompanyPlan(companyId: string) {
   try {
     await requireGlobalAdmin();
     const id = z.string().uuid().parse(companyId);
-    const plan = await prisma.companyPlan.findUnique({ where: { companyId: id } });
-    return { success: true, data: { plan: plan ? toDto(plan) : null } };
+    const [plan, purchases] = await Promise.all([
+      prisma.companyPlan.findUnique({ where: { companyId: id } }),
+      prisma.companyLicensePurchase.findMany({
+        where: { companyId: id },
+        orderBy: { purchasedAt: "desc" },
+      }),
+    ]);
+    return {
+      success: true,
+      data: {
+        plan: plan ? toPlanDto(plan) : null,
+        licensePurchases: purchases.map(toPurchaseDto),
+      },
+    };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -112,15 +157,14 @@ export async function saveBackofficeCompanyPlan(input: z.infer<typeof planInputS
     const { companyId, renewsAt, ...fields } = parsed;
     const data = {
       ...fields,
-      // Mezzogiorno UTC: la data resta quella scelta in ogni fuso ragionevole.
-      renewsAt: renewsAt ? new Date(`${renewsAt}T12:00:00.000Z`) : null,
+      renewsAt: renewsAt ? dateAtNoonUtc(renewsAt) : null,
     };
     const plan = await prisma.companyPlan.upsert({
       where: { companyId },
       create: { companyId, ...data },
       update: data,
     });
-    return { success: true, data: { plan: toDto(plan) } };
+    return { success: true, data: { plan: toPlanDto(plan) } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -131,6 +175,38 @@ export async function deleteBackofficeCompanyPlan(companyId: string) {
     await requireGlobalAdmin();
     const id = z.string().uuid().parse(companyId);
     await prisma.companyPlan.deleteMany({ where: { companyId: id } });
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** Registra un acquisto una tantum di licenze formazione. */
+export async function addBackofficeLicensePurchase(
+  input: z.infer<typeof licensePurchaseInputSchema>,
+) {
+  try {
+    await requireGlobalAdmin();
+    const parsed = licensePurchaseInputSchema.parse(input);
+    const purchase = await prisma.companyLicensePurchase.create({
+      data: {
+        companyId: parsed.companyId,
+        seats: parsed.seats,
+        seatPriceCents: parsed.seatPriceCents,
+        purchasedAt: dateAtNoonUtc(parsed.purchasedAt),
+      },
+    });
+    return { success: true, data: { purchase: toPurchaseDto(purchase) } };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function deleteBackofficeLicensePurchase(purchaseId: string) {
+  try {
+    await requireGlobalAdmin();
+    const id = z.string().uuid().parse(purchaseId);
+    await prisma.companyLicensePurchase.deleteMany({ where: { id } });
     return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
@@ -24,9 +24,12 @@ import {
 } from "@/components/ui/select";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
+  addBackofficeLicensePurchase,
   deleteBackofficeCompanyPlan,
+  deleteBackofficeLicensePurchase,
   getBackofficeCompanyPlan,
   saveBackofficeCompanyPlan,
+  type LicensePurchaseDto,
 } from "@/lib/actions/company-plan.actions";
 import {
   BILLING_PERIOD_LABELS,
@@ -41,9 +44,6 @@ type FormState = {
   renewsAt: string; // yyyy-mm-dd | ""
   instructorSeats: string;
   instructorSeatPrice: string;
-  teoriaEnabled: boolean;
-  teoriaSeats: string;
-  teoriaPrice: string;
   voiceEnabled: boolean;
   voicePrice: string;
 };
@@ -53,9 +53,6 @@ const EMPTY_FORM: FormState = {
   renewsAt: "",
   instructorSeats: "1",
   instructorSeatPrice: "0,00",
-  teoriaEnabled: false,
-  teoriaSeats: "100",
-  teoriaPrice: "0,00",
   voiceEnabled: false,
   voicePrice: "0,00",
 };
@@ -67,12 +64,28 @@ const VOICE_DEFAULT_PRICE: Record<"monthly" | "annual", string> = {
   monthly: "39,00",
 };
 
+function todayLocal() {
+  const now = new Date();
+  const pad = (v: number) => v.toString().padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+function purchaseDateLabel(iso: string) {
+  return new Date(iso).toLocaleDateString("it-IT", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /**
- * Assegnazione del piano commerciale di una autoscuola dal backoffice: periodo
- * (mensile/annuale), rinnovo, posti istruttore × prezzo, licenza formazione
- * (teoria) con posti, Segretaria AI. Il titolare lo vede in Area personale →
- * Abbonamento. NB: qui si definisce solo la composizione/prezzo — l'attivazione
- * operativa di teoria/voce resta nel drawer "Gestisci".
+ * Assegnazione del piano commerciale di una autoscuola dal backoffice:
+ * periodo (mensile/annuale), rinnovo, posti istruttore × prezzo, Segretaria
+ * AI. Sotto, il REGISTRO degli acquisti una tantum di licenze formazione:
+ * ogni acquisto (anche futuri riacquisti) è una riga con data, licenze e
+ * prezzo per licenza — il titolare li vede in Area personale → Abbonamento.
+ * NB: qui si definisce solo la composizione/prezzo — l'attivazione operativa
+ * dei servizi resta nel drawer "Gestisci".
  */
 export function BackofficeCompanyPlanDialog({
   company,
@@ -83,10 +96,17 @@ export function BackofficeCompanyPlanDialog({
 }) {
   const toast = useFeedbackToast();
   const [form, setForm] = React.useState<FormState>(EMPTY_FORM);
+  const [purchases, setPurchases] = React.useState<LicensePurchaseDto[]>([]);
   const [hasPlan, setHasPlan] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
+  // form nuovo acquisto licenze
+  const [purchaseSeats, setPurchaseSeats] = React.useState("100");
+  const [purchaseSeatPrice, setPurchaseSeatPrice] = React.useState("2,50");
+  const [purchaseDate, setPurchaseDate] = React.useState(todayLocal());
+  const [addingPurchase, setAddingPurchase] = React.useState(false);
+  const [deletingPurchaseId, setDeletingPurchaseId] = React.useState<string | null>(null);
 
   const companyId = company?.id ?? null;
 
@@ -95,23 +115,27 @@ export function BackofficeCompanyPlanDialog({
     let active = true;
     setLoading(true);
     setForm(EMPTY_FORM);
+    setPurchases([]);
     setHasPlan(false);
+    setPurchaseSeats("100");
+    setPurchaseSeatPrice("2,50");
+    setPurchaseDate(todayLocal());
     getBackofficeCompanyPlan(companyId).then((res) => {
       if (!active) return;
-      if (res.success && res.data?.plan) {
-        const plan = res.data.plan;
-        setHasPlan(true);
-        setForm({
-          billingPeriod: plan.billingPeriod,
-          renewsAt: plan.renewsAt ? plan.renewsAt.slice(0, 10) : "",
-          instructorSeats: String(plan.instructorSeats),
-          instructorSeatPrice: centsToEuroInput(plan.instructorSeatPriceCents),
-          teoriaEnabled: plan.teoriaEnabled,
-          teoriaSeats: String(plan.teoriaSeats),
-          teoriaPrice: centsToEuroInput(plan.teoriaSeatPriceCents),
-          voiceEnabled: plan.voiceEnabled,
-          voicePrice: centsToEuroInput(plan.voicePriceCents),
-        });
+      if (res.success && res.data) {
+        setPurchases(res.data.licensePurchases);
+        if (res.data.plan) {
+          const plan = res.data.plan;
+          setHasPlan(true);
+          setForm({
+            billingPeriod: plan.billingPeriod,
+            renewsAt: plan.renewsAt ? plan.renewsAt.slice(0, 10) : "",
+            instructorSeats: String(plan.instructorSeats),
+            instructorSeatPrice: centsToEuroInput(plan.instructorSeatPriceCents),
+            voiceEnabled: plan.voiceEnabled,
+            voicePrice: centsToEuroInput(plan.voicePriceCents),
+          });
+        }
       }
       setLoading(false);
     });
@@ -123,16 +147,12 @@ export function BackofficeCompanyPlanDialog({
   const parsed = React.useMemo(() => {
     const instructorSeats = Number(form.instructorSeats);
     const instructorSeatPriceCents = parseEuroToCents(form.instructorSeatPrice);
-    const teoriaSeats = Number(form.teoriaSeats || "0");
-    const teoriaPriceCents = parseEuroToCents(form.teoriaPrice);
     const voicePriceCents = parseEuroToCents(form.voicePrice);
     const valid =
       Number.isInteger(instructorSeats) &&
       instructorSeats >= 0 &&
       instructorSeatPriceCents !== null &&
-      (!form.teoriaEnabled || (Number.isInteger(teoriaSeats) && teoriaSeats >= 0 && teoriaPriceCents !== null)) &&
       (!form.voiceEnabled || voicePriceCents !== null);
-    // Ricorrente = posti + Segretaria. La licenza formazione è UNA TANTUM.
     const totalCents = valid
       ? instructorSeats * (instructorSeatPriceCents ?? 0) +
         (form.voiceEnabled ? (voicePriceCents ?? 0) : 0)
@@ -140,17 +160,24 @@ export function BackofficeCompanyPlanDialog({
     return {
       valid,
       totalCents,
-      oneOffCents:
-        form.teoriaEnabled && Number.isInteger(teoriaSeats) && teoriaSeats >= 0
-          ? teoriaSeats * (teoriaPriceCents ?? 0)
-          : 0,
       instructorSeats,
       instructorSeatPriceCents: instructorSeatPriceCents ?? 0,
-      teoriaSeats: Number.isInteger(teoriaSeats) && teoriaSeats >= 0 ? teoriaSeats : 0,
-      teoriaPriceCents: teoriaPriceCents ?? 0,
       voicePriceCents: voicePriceCents ?? 0,
     };
   }, [form]);
+
+  const parsedPurchase = React.useMemo(() => {
+    const seats = Number(purchaseSeats);
+    const seatPriceCents = parseEuroToCents(purchaseSeatPrice);
+    const valid =
+      Number.isInteger(seats) && seats > 0 && seatPriceCents !== null && Boolean(purchaseDate);
+    return {
+      valid,
+      seats,
+      seatPriceCents: seatPriceCents ?? 0,
+      totalCents: valid ? seats * (seatPriceCents ?? 0) : null,
+    };
+  }, [purchaseSeats, purchaseSeatPrice, purchaseDate]);
 
   const setPeriod = (period: "monthly" | "annual") => {
     setForm((p) => ({
@@ -186,9 +213,6 @@ export function BackofficeCompanyPlanDialog({
         renewsAt: form.renewsAt || null,
         instructorSeats: parsed.instructorSeats,
         instructorSeatPriceCents: parsed.instructorSeatPriceCents,
-        teoriaEnabled: form.teoriaEnabled,
-        teoriaSeats: parsed.teoriaSeats,
-        teoriaSeatPriceCents: parsed.teoriaPriceCents,
         voiceEnabled: form.voiceEnabled,
         voicePriceCents: parsed.voicePriceCents,
       });
@@ -217,6 +241,43 @@ export function BackofficeCompanyPlanDialog({
       onOpenChange(false);
     } finally {
       setRemoving(false);
+    }
+  };
+
+  const addPurchase = async () => {
+    if (!companyId || !parsedPurchase.valid || addingPurchase) return;
+    setAddingPurchase(true);
+    try {
+      const res = await addBackofficeLicensePurchase({
+        companyId,
+        seats: parsedPurchase.seats,
+        seatPriceCents: parsedPurchase.seatPriceCents,
+        purchasedAt: purchaseDate,
+      });
+      if (!res.success || !res.data) {
+        toast.error({ description: res.message ?? "Registrazione non riuscita." });
+        return;
+      }
+      setPurchases((prev) =>
+        [res.data.purchase, ...prev].sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt)),
+      );
+      toast.success({ description: "Acquisto registrato." });
+    } finally {
+      setAddingPurchase(false);
+    }
+  };
+
+  const removePurchase = async (purchaseId: string) => {
+    setDeletingPurchaseId(purchaseId);
+    try {
+      const res = await deleteBackofficeLicensePurchase(purchaseId);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Eliminazione non riuscita." });
+        return;
+      }
+      setPurchases((prev) => prev.filter((p) => p.id !== purchaseId));
+    } finally {
+      setDeletingPurchaseId(null);
     }
   };
 
@@ -296,54 +357,6 @@ export function BackofficeCompanyPlanDialog({
               </div>
             </div>
 
-            {/* Licenza formazione (teoria) — acquisto UNA TANTUM */}
-            <div className="rounded-lg border border-border/60 p-4">
-              <button
-                type="button"
-                onClick={() =>
-                  setForm((p) => ({ ...p, teoriaEnabled: !p.teoriaEnabled }))
-                }
-                className="flex cursor-pointer items-center gap-2.5"
-              >
-                <Checkbox checked={form.teoriaEnabled} className="pointer-events-none" />
-                <span className="text-sm font-semibold text-foreground">
-                  Licenza formazione (teoria)
-                </span>
-              </button>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Acquisto una tantum (allievi × prezzo per licenza), fuori dal totale ricorrente:
-                esaurite le licenze se ne acquistano altre.
-              </p>
-              {form.teoriaEnabled && (
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="plan-teoria-seats">Allievi attivi</Label>
-                    <Input
-                      id="plan-teoria-seats"
-                      inputMode="numeric"
-                      value={form.teoriaSeats}
-                      onChange={(e) =>
-                        setForm((p) => ({
-                          ...p,
-                          teoriaSeats: e.target.value.replace(/\D/g, "").slice(0, 6),
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="plan-teoria-price">Prezzo per licenza (€)</Label>
-                    <Input
-                      id="plan-teoria-price"
-                      inputMode="decimal"
-                      placeholder="2,50"
-                      value={form.teoriaPrice}
-                      onChange={(e) => setForm((p) => ({ ...p, teoriaPrice: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Segretaria AI */}
             <div className="rounded-lg border border-border/60 p-4">
               <button
@@ -373,22 +386,14 @@ export function BackofficeCompanyPlanDialog({
               )}
             </div>
 
-            {/* Totale + azioni */}
-            <div className="rounded-lg bg-gray-50 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-foreground">Totale ricorrente</span>
-                <span className="text-base font-bold tabular-nums text-foreground">
-                  {parsed.totalCents !== null
-                    ? `${formatEuroCents(parsed.totalCents)}${BILLING_PERIOD_SUFFIX[form.billingPeriod]}`
-                    : "—"}
-                </span>
-              </div>
-              {form.teoriaEnabled && parsed.oneOffCents > 0 && (
-                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Licenza formazione (una tantum)</span>
-                  <span className="tabular-nums">+ {formatEuroCents(parsed.oneOffCents)}</span>
-                </div>
-              )}
+            {/* Totale ricorrente + azioni piano */}
+            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
+              <span className="text-sm font-semibold text-foreground">Totale ricorrente</span>
+              <span className="text-base font-bold tabular-nums text-foreground">
+                {parsed.totalCents !== null
+                  ? `${formatEuroCents(parsed.totalCents)}${BILLING_PERIOD_SUFFIX[form.billingPeriod]}`
+                  : "—"}
+              </span>
             </div>
 
             <div className="flex items-center justify-between gap-3">
@@ -409,6 +414,101 @@ export function BackofficeCompanyPlanDialog({
                 {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 {hasPlan ? "Salva piano" : "Assegna piano"}
               </Button>
+            </div>
+
+            {/* ── Registro acquisti una tantum: licenze formazione ── */}
+            <div className="border-t border-border/60 pt-5">
+              <div className="text-sm font-semibold text-foreground">
+                Licenze formazione — acquisti una tantum
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Ogni acquisto è registrato a parte con la sua data (fuori dal totale
+                ricorrente): quando l&apos;autoscuola ricompra licenze, registralo qui e il
+                titolare lo vede in Area personale.
+              </p>
+
+              {purchases.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {purchases.map((purchase) => (
+                    <div
+                      key={purchase.id}
+                      className="flex items-center gap-3 rounded-lg border border-border/60 bg-white px-3.5 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-foreground">
+                          {purchase.seats} licenze × {formatEuroCents(purchase.seatPriceCents)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {purchaseDateLabel(purchase.purchasedAt)}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-sm font-semibold tabular-nums text-foreground">
+                        {formatEuroCents(purchase.totalCents)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void removePurchase(purchase.id)}
+                        disabled={deletingPurchaseId === purchase.id}
+                        title="Elimina acquisto"
+                        className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        {deletingPurchaseId === purchase.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Nuovo acquisto */}
+              <div className="mt-3 rounded-lg border border-dashed border-border/80 p-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label htmlFor="purchase-seats">Licenze</Label>
+                    <Input
+                      id="purchase-seats"
+                      inputMode="numeric"
+                      value={purchaseSeats}
+                      onChange={(e) =>
+                        setPurchaseSeats(e.target.value.replace(/\D/g, "").slice(0, 6))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="purchase-price">Prezzo per licenza (€)</Label>
+                    <Input
+                      id="purchase-price"
+                      inputMode="decimal"
+                      placeholder="2,50"
+                      value={purchaseSeatPrice}
+                      onChange={(e) => setPurchaseSeatPrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 items-end gap-3">
+                  <div className="space-y-2">
+                    <Label>Data acquisto</Label>
+                    <DatePickerInput value={purchaseDate} onChange={setPurchaseDate} />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => void addPurchase()}
+                    disabled={!parsedPurchase.valid || addingPurchase}
+                  >
+                    {addingPurchase ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="h-3.5 w-3.5" />
+                    )}
+                    Registra acquisto
+                    {parsedPurchase.totalCents !== null &&
+                      ` · ${formatEuroCents(parsedPurchase.totalCents)}`}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         )}

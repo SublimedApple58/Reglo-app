@@ -4,10 +4,12 @@ Il team Reglo assegna dal backoffice il piano commerciale di una autoscuola; il 
 
 ## Modello dati
 
-`CompanyPlan` (1:1 con Company, cascade): `billingPeriod` ("monthly"|"annual"), `renewsAt?`, `instructorSeats` + `instructorSeatPriceCents`, `teoriaEnabled` + `teoriaSeats` + `teoriaSeatPriceCents` (prezzo PER licenza), `voiceEnabled` + `voicePriceCents`. **Prezzi in centesimi.** Migration `20260709164921_company_plan`.
+`CompanyPlan` (1:1 con Company, cascade): `billingPeriod` ("monthly"|"annual"), `renewsAt?`, `instructorSeats` + `instructorSeatPriceCents`, `voiceEnabled` + `voicePriceCents`. **Prezzi in centesimi.** Migrations `company_plan` → `teoria_seat_price` → `license_purchases`.
+
+`CompanyLicensePurchase` (N per company, cascade): **registro degli acquisti una tantum** di licenze formazione — `seats`, `seatPriceCents` (per licenza), `purchasedAt`. Ogni riacquisto è una nuova riga registrata dal backoffice.
 
 **Regole di business:**
-- Il **totale del DTO è solo RICORRENTE** (posti×prezzo + Segretaria se attiva): la **Licenza formazione è UNA TANTUM** (`teoriaSeats × teoriaSeatPriceCents`, es. 30 × 2,50 € = 75 €) — esclusa dal totale, esaurite le licenze se ne acquistano altre. Nella card web la licenza vive in un blocco SEPARATO "Acquisti una tantum" sotto la card del piano (non tra le voci ricorrenti: sembrava parte del totale).
+- Il **totale del piano è solo RICORRENTE** (posti×prezzo + Segretaria se attiva). Le **licenze formazione sono acquisti UNA TANTUM registrati a parte** (`CompanyLicensePurchase`): nella dialog backoffice c'è il registro (lista + form licenze/prezzo per licenza/data, eliminabile); nella card web vivono nel blocco separato "Acquisti una tantum" con data per riga — mai nel totale del piano.
 - **Segretaria AI a listino**: 350 €/anno (+ consumi) o 39 €/mese — la dialog precompila all'attivazione e al cambio periodo (se il prezzo era ancora il listino dell'altro periodo), ma resta modificabile.
 
 ⚠️ È la composizione **commerciale/display**: l'attivazione operativa di teoria e Segretaria resta nei `CompanyService.limits` (drawer "Gestisci" del backoffice). Le due cose non si sincronizzano automaticamente.
