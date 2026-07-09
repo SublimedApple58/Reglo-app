@@ -22,7 +22,7 @@ const planInputSchema = z.object({
   instructorSeatPriceCents: z.number().int().min(0).max(10_000_000),
   teoriaEnabled: z.boolean(),
   teoriaSeats: z.number().int().min(0).max(100_000),
-  teoriaPriceCents: z.number().int().min(0).max(10_000_000),
+  teoriaSeatPriceCents: z.number().int().min(0).max(10_000_000),
   voiceEnabled: z.boolean(),
   voicePriceCents: z.number().int().min(0).max(10_000_000),
 });
@@ -34,7 +34,10 @@ export type CompanyPlanDto = {
   instructorSeatPriceCents: number;
   teoriaEnabled: boolean;
   teoriaSeats: number;
-  teoriaPriceCents: number;
+  /** Prezzo PER LICENZA */
+  teoriaSeatPriceCents: number;
+  /** Totale una tantum licenze = teoriaSeats × teoriaSeatPriceCents */
+  teoriaTotalCents: number;
   voiceEnabled: boolean;
   voicePriceCents: number;
   /** Totale RICORRENTE (€/mese o €/anno): posti istruttore + Segretaria.
@@ -50,7 +53,7 @@ function toDto(plan: {
   instructorSeatPriceCents: number;
   teoriaEnabled: boolean;
   teoriaSeats: number;
-  teoriaPriceCents: number;
+  teoriaSeatPriceCents: number;
   voiceEnabled: boolean;
   voicePriceCents: number;
 }): CompanyPlanDto {
@@ -61,7 +64,8 @@ function toDto(plan: {
     instructorSeatPriceCents: plan.instructorSeatPriceCents,
     teoriaEnabled: plan.teoriaEnabled,
     teoriaSeats: plan.teoriaSeats,
-    teoriaPriceCents: plan.teoriaPriceCents,
+    teoriaSeatPriceCents: plan.teoriaSeatPriceCents,
+    teoriaTotalCents: plan.teoriaSeats * plan.teoriaSeatPriceCents,
     voiceEnabled: plan.voiceEnabled,
     voicePriceCents: plan.voicePriceCents,
     totalCents:

@@ -580,8 +580,8 @@ function AbbonamentoPane() {
                 />
               ),
               label: "Licenza formazione",
-              detail: `${plan.teoriaSeats} allievi attivi · una tantum`,
-              amount: formatEuroCents(plan.teoriaPriceCents),
+              detail: `${plan.teoriaSeats} × ${formatEuroCents(plan.teoriaSeatPriceCents)} · una tantum`,
+              amount: formatEuroCents(plan.teoriaTotalCents),
             }
           : null,
         plan.voiceEnabled
@@ -692,7 +692,7 @@ function AbbonamentoPane() {
               {plan.teoriaEnabled && (
                 <p className="mt-2.5 text-[12.5px] font-medium leading-relaxed text-[#929292]">
                   Il totale non include la Licenza formazione (
-                  {formatEuroCents(plan.teoriaPriceCents)}): è un acquisto una tantum — quando
+                  {formatEuroCents(plan.teoriaTotalCents)}): è un acquisto una tantum — quando
                   le licenze si esauriscono, se ne acquistano altre.
                 </p>
               )}

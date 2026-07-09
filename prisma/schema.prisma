@@ -1474,7 +1474,8 @@ model CompanyPlan {
   instructorSeatPriceCents Int       @default(0)
   teoriaEnabled            Boolean   @default(false)
   teoriaSeats              Int       @default(0)
-  teoriaPriceCents         Int       @default(0)
+  /// Prezzo PER LICENZA: il totale una tantum è teoriaSeats × questo valore
+  teoriaSeatPriceCents     Int       @default(0)
   voiceEnabled             Boolean   @default(false)
   voicePriceCents          Int       @default(0)
   createdAt                DateTime  @default(now()) @db.Timestamp(6)

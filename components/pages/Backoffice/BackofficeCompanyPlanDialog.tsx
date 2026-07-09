@@ -108,7 +108,7 @@ export function BackofficeCompanyPlanDialog({
           instructorSeatPrice: centsToEuroInput(plan.instructorSeatPriceCents),
           teoriaEnabled: plan.teoriaEnabled,
           teoriaSeats: String(plan.teoriaSeats),
-          teoriaPrice: centsToEuroInput(plan.teoriaPriceCents),
+          teoriaPrice: centsToEuroInput(plan.teoriaSeatPriceCents),
           voiceEnabled: plan.voiceEnabled,
           voicePrice: centsToEuroInput(plan.voicePriceCents),
         });
@@ -140,7 +140,10 @@ export function BackofficeCompanyPlanDialog({
     return {
       valid,
       totalCents,
-      oneOffCents: form.teoriaEnabled ? (teoriaPriceCents ?? 0) : 0,
+      oneOffCents:
+        form.teoriaEnabled && Number.isInteger(teoriaSeats) && teoriaSeats >= 0
+          ? teoriaSeats * (teoriaPriceCents ?? 0)
+          : 0,
       instructorSeats,
       instructorSeatPriceCents: instructorSeatPriceCents ?? 0,
       teoriaSeats: Number.isInteger(teoriaSeats) && teoriaSeats >= 0 ? teoriaSeats : 0,
@@ -185,7 +188,7 @@ export function BackofficeCompanyPlanDialog({
         instructorSeatPriceCents: parsed.instructorSeatPriceCents,
         teoriaEnabled: form.teoriaEnabled,
         teoriaSeats: parsed.teoriaSeats,
-        teoriaPriceCents: parsed.teoriaPriceCents,
+        teoriaSeatPriceCents: parsed.teoriaPriceCents,
         voiceEnabled: form.voiceEnabled,
         voicePriceCents: parsed.voicePriceCents,
       });
@@ -308,8 +311,8 @@ export function BackofficeCompanyPlanDialog({
                 </span>
               </button>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Acquisto una tantum, fuori dal totale ricorrente: esaurite le licenze se ne
-                acquistano altre.
+                Acquisto una tantum (allievi × prezzo per licenza), fuori dal totale ricorrente:
+                esaurite le licenze se ne acquistano altre.
               </p>
               {form.teoriaEnabled && (
                 <div className="mt-3 grid grid-cols-2 gap-3">
@@ -328,11 +331,11 @@ export function BackofficeCompanyPlanDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="plan-teoria-price">Prezzo una tantum (€)</Label>
+                    <Label htmlFor="plan-teoria-price">Prezzo per licenza (€)</Label>
                     <Input
                       id="plan-teoria-price"
                       inputMode="decimal"
-                      placeholder="200,00"
+                      placeholder="2,50"
                       value={form.teoriaPrice}
                       onChange={(e) => setForm((p) => ({ ...p, teoriaPrice: e.target.value }))}
                     />
