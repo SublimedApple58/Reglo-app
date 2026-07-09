@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   Car,
+  FileText,
   Loader2,
   Phone,
   Search,
@@ -61,6 +62,7 @@ import {
   BackofficeResolveTeoriaDeactivationDialog,
   type TeoriaResolution,
 } from "@/components/pages/Backoffice/BackofficeResolveTeoriaDeactivationDialog";
+import { BackofficeCompanyDocumentsDialog } from "@/components/pages/Backoffice/BackofficeCompanyDocumentsDialog";
 import {
   DEFAULT_SERVICE_LIMITS,
   type CompanyServiceInfo,
@@ -805,6 +807,7 @@ export default function BackofficeCompaniesPage({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<BackofficeCompanyRow | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [docsCompany, setDocsCompany] = useState<{ id: string; name: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [localCompanies, setLocalCompanies] = useState(companies);
 
@@ -996,6 +999,14 @@ export default function BackofficeCompaniesPage({
                         <Button
                           size="sm"
                           variant="outline"
+                          title="Documenti (contratto, fatture)"
+                          onClick={() => setDocsCompany({ id: company.id, name: company.name })}
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
                           className="text-red-500 hover:bg-red-50 hover:text-red-600"
                           onClick={() => handleDelete(company)}
                           disabled={deletingId === company.id}
@@ -1053,6 +1064,12 @@ export default function BackofficeCompaniesPage({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* ── Documenti (contratto, fatture, altro) ── */}
+      <BackofficeCompanyDocumentsDialog
+        company={docsCompany}
+        onOpenChange={(open) => !open && setDocsCompany(null)}
+      />
     </div>
   );
 }

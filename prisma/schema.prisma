@@ -238,6 +238,7 @@ model Company {
   autoscuolaLocations                  AutoscuolaLocation[]
   supportThread                        SupportThread?
   productFeedback                      ProductFeedback[]
+  documents                            CompanyDocument[]
 }
 
 model CompanyService {
@@ -1434,4 +1435,25 @@ model ProductFeedback {
 
   @@index([companyId])
   @@index([createdAt])
+}
+
+// Documenti dell'autoscuola caricati dal team Reglo via backoffice (contratto
+// di servizio, fatture, altri documenti) e visibili al titolare in Area
+// personale → "Contratto e fattura". File su R2, download con URL firmati.
+// Vedi docs/features/company-documents.md.
+model CompanyDocument {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  /// "contract" (unico: un nuovo upload sostituisce il precedente) | "invoice" | "other"
+  kind      String
+  title     String
+  fileKey   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, kind])
 }

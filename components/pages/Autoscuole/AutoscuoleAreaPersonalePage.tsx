@@ -9,6 +9,7 @@ import {
   Camera,
   CircleUserRound,
   CreditCard,
+  Download,
   FileText,
   Loader2,
   Receipt,
@@ -16,6 +17,13 @@ import {
 
 import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { FadeIn } from "@/components/ui/fade-in";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  getCompanyDocumentDownloadUrl,
+  getCompanyDocuments,
+} from "@/lib/actions/company-documents.actions";
+import { formatDocumentSize, type CompanyDocumentDto } from "@/lib/company-documents";
 import { cn } from "@/lib/utils";
 
 type PaneKey = "profilo" | "documenti" | "abbonamento";
@@ -325,10 +333,189 @@ function ProfiloPane() {
 }
 
 /**
+ * Pane "Contratto e fattura": documenti caricati dal team Reglo via
+ * backoffice (CompanyDocument) — contratto di servizio, fatture, altri
+ * documenti — con download tramite URL firmato. Riservata al titolare
+ * (OWNER/INSTRUCTOR_OWNER): agli altri ruoli l'action risponde con errore
+ * e mostriamo la nota dedicata.
+ */
+function DocumentiPane() {
+  const toast = useFeedbackToast();
+  const [docs, setDocs] = React.useState<CompanyDocumentDto[]>([]);
+  const [loaded, setLoaded] = React.useState(false);
+  const [restricted, setRestricted] = React.useState(false);
+  const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    getCompanyDocuments().then((res) => {
+      if (!active) return;
+      if (res.success && res.data) setDocs(res.data);
+      else setRestricted(true);
+      setLoaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const download = async (doc: CompanyDocumentDto) => {
+    setDownloadingId(doc.id);
+    try {
+      const res = await getCompanyDocumentDownloadUrl(doc.id);
+      if (!res.success || !res.data) {
+        toast.error({ description: res.message ?? "Download non riuscito." });
+        return;
+      }
+      window.open(res.data.url, "_blank", "noopener");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const contract = docs.find((d) => d.kind === "contract") ?? null;
+  const invoices = docs.filter((d) => d.kind === "invoice");
+  const others = docs.filter((d) => d.kind === "other");
+
+  const dateLabel = (iso: string) =>
+    new Date(iso).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+
+  const DownloadButton = ({ doc }: { doc: CompanyDocumentDto }) => (
+    <button
+      type="button"
+      onClick={() => void download(doc)}
+      disabled={downloadingId === doc.id}
+      title="Scarica"
+      className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#929292] hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+    >
+      {downloadingId === doc.id ? (
+        <Loader2 className="size-4 animate-spin" />
+      ) : (
+        <Download className="size-4" strokeWidth={1.7} />
+      )}
+    </button>
+  );
+
+  const DocRow = ({ doc, icon }: { doc: CompanyDocumentDto; icon: React.ReactNode }) => (
+    <div className="flex items-center gap-3.5 rounded-[12px] border border-[#ebebeb] px-[18px] py-3.5">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f5f5f5]">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[14.5px] font-semibold text-foreground">{doc.title}</div>
+        <div className="mt-px truncate text-[12.5px] font-medium text-[#929292]">
+          {dateLabel(doc.createdAt)} · {formatDocumentSize(doc.sizeBytes)}
+        </div>
+      </div>
+      <DownloadButton doc={doc} />
+    </div>
+  );
+
+  if (!loaded) {
+    return (
+      <div>
+        <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+          Contratto e fattura
+        </h2>
+        <div className="max-w-[680px] space-y-3">
+          <Skeleton className="h-[88px] rounded-[14px]" />
+          <Skeleton className="h-[66px] rounded-[12px]" />
+          <Skeleton className="h-[66px] rounded-[12px]" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+        Contratto e fattura
+      </h2>
+      <FadeIn className="max-w-[680px]">
+        {restricted ? (
+          <div className="flex flex-col items-center rounded-[14px] border border-dashed border-[#dddddd] px-6 py-10 text-center">
+            <FileText className="mb-3 size-7 text-[#c1c1c1]" strokeWidth={1.5} />
+            <div className="mb-1 text-sm font-semibold text-foreground">
+              Sezione riservata al titolare
+            </div>
+            <div className="text-[13px] font-medium text-[#929292]">
+              Contratto e fatture sono visibili solo all&apos;account del titolare.
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* ── Contratto ── */}
+            <div className="mb-8 flex items-center gap-[18px] rounded-[14px] border border-[#ebebeb] px-[22px] py-5">
+              <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-[#eef4ff]">
+                <FileText className="size-[22px] text-[#2a6fdb]" strokeWidth={1.7} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-base font-semibold text-foreground">
+                  {contract?.title ?? "Contratto di servizio Reglo"}
+                </div>
+                <div className="mt-0.5 truncate text-[13px] font-medium text-[#929292]">
+                  {contract
+                    ? `${dateLabel(contract.createdAt)} · ${formatDocumentSize(contract.sizeBytes)}`
+                    : "Sarà disponibile qui non appena caricato dal team Reglo."}
+                </div>
+              </div>
+              {contract && <DownloadButton doc={contract} />}
+            </div>
+
+            {/* ── Fatture ── */}
+            <div className="mb-3 text-[15px] font-bold text-foreground">Fatture</div>
+            {invoices.length > 0 ? (
+              <div className="space-y-2.5">
+                {invoices.map((doc) => (
+                  <DocRow
+                    key={doc.id}
+                    doc={doc}
+                    icon={<Receipt className="size-[18px] text-[#6a6a6a]" strokeWidth={1.7} />}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center rounded-[14px] border border-dashed border-[#dddddd] px-6 py-10 text-center">
+                <Receipt className="mb-3 size-7 text-[#c1c1c1]" strokeWidth={1.5} />
+                <div className="mb-1 text-sm font-semibold text-foreground">
+                  Nessuna fattura disponibile
+                </div>
+                <div className="text-[13px] font-medium text-[#929292]">
+                  Le fatture del tuo abbonamento compariranno qui.
+                </div>
+              </div>
+            )}
+
+            {/* ── Altri documenti (solo se presenti) ── */}
+            {others.length > 0 && (
+              <>
+                <div className="mb-3 mt-8 text-[15px] font-bold text-foreground">
+                  Altri documenti
+                </div>
+                <div className="space-y-2.5">
+                  {others.map((doc) => (
+                    <DocRow
+                      key={doc.id}
+                      doc={doc}
+                      icon={<FileText className="size-[18px] text-[#6a6a6a]" strokeWidth={1.7} />}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </FadeIn>
+    </div>
+  );
+}
+
+/**
  * Area personale (overlay full-screen stile Impostazioni, dal proto
- * #section-areapersonale). Profilo e credenziali (email + reset password OTP)
- * sono funzionanti; contratto/fatture e abbonamento non hanno ancora backend —
- * quelle pane mostrano lo scaffold del design con stati onesti.
+ * #section-areapersonale). Profilo/credenziali (reset password OTP) e
+ * "Contratto e fattura" (documenti dal backoffice) sono funzionanti;
+ * l'abbonamento non ha ancora backend — quella pane mostra lo scaffold
+ * del design con stati onesti.
  */
 export function AutoscuoleAreaPersonalePage() {
   const router = useRouter();
@@ -388,37 +575,7 @@ export function AutoscuoleAreaPersonalePage() {
           <div className="min-h-0 min-w-0 overflow-y-auto px-6 py-8 md:px-10 md:py-12 lg:pl-12 lg:pr-0">
             {pane === "profilo" && <ProfiloPane />}
 
-            {pane === "documenti" && (
-              <div>
-                <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
-                  Contratto e fattura
-                </h2>
-                <div className="mb-8 flex max-w-[680px] items-center gap-[18px] rounded-[14px] border border-[#ebebeb] px-[22px] py-5">
-                  <div className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-[10px] bg-[#eef4ff]">
-                    <FileText className="size-[22px] text-[#2a6fdb]" strokeWidth={1.7} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-base font-semibold text-foreground">
-                      Contratto di servizio Reglo
-                    </div>
-                    <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                      Sarà disponibile qui non appena caricato dal team Reglo.
-                    </div>
-                  </div>
-                </div>
-                <div className="max-w-[680px]">
-                  <div className="flex flex-col items-center rounded-[14px] border border-dashed border-[#dddddd] px-6 py-10 text-center">
-                    <Receipt className="mb-3 size-7 text-[#c1c1c1]" strokeWidth={1.5} />
-                    <div className="mb-1 text-sm font-semibold text-foreground">
-                      Nessuna fattura disponibile
-                    </div>
-                    <div className="text-[13px] font-medium text-[#929292]">
-                      Le fatture del tuo abbonamento compariranno qui.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {pane === "documenti" && <DocumentiPane />}
 
             {pane === "abbonamento" && (
               <div>
