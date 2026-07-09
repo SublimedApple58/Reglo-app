@@ -293,9 +293,9 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
                     <MessageCircleQuestion className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="flex-1 text-[15px] font-medium">Centro assistenza</span>
+                    <span className="text-[15px] font-medium">Centro assistenza</span>
                     {supportUnread > 0 && (
-                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#c13515] px-1.5 text-[11px] font-bold text-white">
+                      <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#c13515] px-1.5 text-[11px] font-bold text-white">
                         {supportUnread > 9 ? "9+" : supportUnread}
                       </span>
                     )}

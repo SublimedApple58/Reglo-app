@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowUp, ChevronDown, Loader2, MessageCircle, Phone } from "lucide-react";
+import { ArrowUp, Loader2, MessageCircle, Phone } from "lucide-react";
 
 import {
   getSupportConversation,
@@ -64,18 +64,20 @@ function ContactCards() {
   );
 }
 
+/** Avatar del team = logo Reglo (lo stesso della top bar) in un cerchio bianco. */
 function AssistantAvatar({ size }: { size: number }) {
+  const logoSize = Math.round(size * 0.52);
   return (
     <div
-      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#222222]"
+      className="flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-[#e6e6e6] bg-white"
       style={{ width: size, height: size }}
     >
       <Image
-        src="/images/menu/assistente-giulia.png"
+        src="/images/nav/logo-reglo-tight.png"
         alt="Team Reglo"
-        width={size}
-        height={size}
-        className="block h-full w-full object-cover"
+        width={logoSize}
+        height={logoSize}
+        className="block select-none object-contain"
       />
     </div>
   );
@@ -179,7 +181,6 @@ export function AutoscuoleAssistenzaPage() {
     }
   };
 
-  const lastMessage = messages[messages.length - 1];
   const groups = groupByDay(messages);
 
   return (
@@ -205,67 +206,24 @@ export function AutoscuoleAssistenzaPage() {
         </button>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[380px_1fr]">
-        {/* ── Lista conversazioni ── */}
-        <div className="hidden min-h-0 overflow-y-auto border-r border-[#ebebeb] px-5 py-[30px] lg:block">
-          <div className="mx-1.5 mb-[18px]">
-            <div className="mb-5 flex h-11 items-center justify-between gap-2.5">
-              <div className="text-[32px] font-bold tracking-[-0.6px] text-foreground">Messaggi</div>
-            </div>
-            <div className="flex gap-2.5">
-              <button
-                type="button"
-                className="flex cursor-default items-center gap-1.5 rounded-[20px] bg-[#222222] px-4 py-2 text-sm font-semibold text-white"
-              >
-                Tutti
-                <ChevronDown className="size-3.5" strokeWidth={1.7} />
-              </button>
-              <button
-                type="button"
-                className="cursor-default rounded-[20px] border border-[#e3e3e3] bg-white px-4 py-2 text-sm font-semibold text-[#6a6a6a]"
-              >
-                Non letti
-              </button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <div className="flex cursor-default items-center gap-3.5 rounded-2xl bg-[#f3f3f3] p-3.5">
-              <AssistantAvatar size={56} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <div className="truncate text-[15.5px] font-bold text-foreground">Team Reglo</div>
-                  {lastMessage && (
-                    <div className="shrink-0 text-xs font-medium text-[#929292]">
-                      {timeLabel(lastMessage.createdAt)}
-                    </div>
-                  )}
+      {/* ── Chat unica, centrata (niente lista conversazioni) ── */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
+          <div className="shrink-0 border-b border-[#f0f0f0]">
+            <div className="mx-auto flex w-full max-w-[860px] items-center gap-3 px-6 py-[18px]">
+              <AssistantAvatar size={44} />
+              <div>
+                <div className="text-[19px] font-bold tracking-[-0.3px] text-foreground">
+                  Team Reglo
                 </div>
-                <div className="mt-0.5 truncate text-[15px] font-medium text-[#929292]">
-                  {lastMessage?.body ?? WELCOME_TEXT}
+                <div className="text-[12.5px] font-medium text-[#929292]">
+                  Ti rispondiamo in giornata, direttamente qui
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ── Chat ── */}
-        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-white">
-          <div className="flex shrink-0 items-center gap-3 border-b border-[#f0f0f0] px-6 py-[18px]">
-            <AssistantAvatar size={44} />
-            <div>
-              <div className="text-[19px] font-bold tracking-[-0.3px] text-foreground">
-                Team Reglo
-              </div>
-              <div className="text-[12.5px] font-medium text-[#929292]">
-                Ti rispondiamo in giornata, direttamente qui
-              </div>
-            </div>
-          </div>
-
-          <div
-            ref={messagesRef}
-            className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto bg-[#fafafa] px-6 py-6"
-          >
+          <div ref={messagesRef} className="min-h-0 flex-1 overflow-y-auto bg-[#fafafa]">
+            <div className="mx-auto flex w-full max-w-[860px] flex-col gap-3.5 px-6 py-6">
             {!loaded ? (
               <div className="flex flex-col gap-3.5">
                 <div className="flex items-end gap-2.5">
@@ -343,11 +301,12 @@ export function AutoscuoleAssistenzaPage() {
                 ))}
               </FadeIn>
             )}
+            </div>
           </div>
 
           {/* Quick replies + input */}
           {loaded && messages.length === 0 && (
-            <div className="flex shrink-0 flex-wrap gap-2 px-6 pt-3.5">
+            <div className="mx-auto flex w-full max-w-[860px] shrink-0 flex-wrap gap-2 px-6 pt-3.5">
               {QUICK_REPLIES.map((qr) => (
                 <button
                   key={qr}
@@ -360,7 +319,7 @@ export function AutoscuoleAssistenzaPage() {
               ))}
             </div>
           )}
-          <div className="shrink-0 px-6 pb-5 pt-3.5">
+          <div className="mx-auto w-full max-w-[860px] shrink-0 px-6 pb-5 pt-3.5">
             <div className="flex items-center gap-2 rounded-[26px] border-[1.5px] border-[#dddddd] bg-white py-1.5 pl-5 pr-1.5 transition-colors focus-within:border-[#222222]">
               <input
                 value={input}
@@ -386,7 +345,6 @@ export function AutoscuoleAssistenzaPage() {
               </button>
             </div>
           </div>
-        </div>
       </div>
     </div>
   );
