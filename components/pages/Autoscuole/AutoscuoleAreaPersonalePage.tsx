@@ -580,7 +580,7 @@ function AbbonamentoPane() {
                 />
               ),
               label: "Licenza formazione",
-              detail: `${plan.teoriaSeats} allievi attivi`,
+              detail: `${plan.teoriaSeats} allievi attivi · una tantum`,
               amount: formatEuroCents(plan.teoriaPriceCents),
             }
           : null,
@@ -689,10 +689,17 @@ function AbbonamentoPane() {
                   {BILLING_PERIOD_SUFFIX[plan.billingPeriod]}
                 </div>
               </div>
+              {plan.teoriaEnabled && (
+                <p className="mt-2.5 text-[12.5px] font-medium leading-relaxed text-[#929292]">
+                  Il totale non include la Licenza formazione (
+                  {formatEuroCents(plan.teoriaPriceCents)}): è un acquisto una tantum — quando
+                  le licenze si esauriscono, se ne acquistano altre.
+                </p>
+              )}
             </div>
             <p className="mt-4 text-[13px] font-medium leading-relaxed text-[#929292]">
-              Per modifiche al piano, posti istruttore o disdette contatta il team Reglo: ti
-              rispondiamo in giornata.
+              Per modifiche al piano, posti istruttore, nuove licenze formazione o disdette
+              contatta il team Reglo: ti rispondiamo in giornata.
             </p>
           </>
         )}

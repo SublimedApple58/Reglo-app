@@ -37,6 +37,9 @@ export type CompanyPlanDto = {
   teoriaPriceCents: number;
   voiceEnabled: boolean;
   voicePriceCents: number;
+  /** Totale RICORRENTE (€/mese o €/anno): posti istruttore + Segretaria.
+   * La licenza formazione è esclusa: è un acquisto UNA TANTUM (esaurite le
+   * licenze se ne acquistano altre). */
   totalCents: number;
 };
 
@@ -63,7 +66,6 @@ function toDto(plan: {
     voicePriceCents: plan.voicePriceCents,
     totalCents:
       plan.instructorSeats * plan.instructorSeatPriceCents +
-      (plan.teoriaEnabled ? plan.teoriaPriceCents : 0) +
       (plan.voiceEnabled ? plan.voicePriceCents : 0),
   };
 }

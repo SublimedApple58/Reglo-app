@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { DatePickerInput } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,6 +58,13 @@ const EMPTY_FORM: FormState = {
   teoriaPrice: "0,00",
   voiceEnabled: false,
   voicePrice: "0,00",
+};
+
+// Listino Segretaria AI: precompilato all'attivazione / cambio periodo
+// (annuale 350 € + consumi, mensile 39 €/mese) — resta modificabile.
+const VOICE_DEFAULT_PRICE: Record<"monthly" | "annual", string> = {
+  annual: "350,00",
+  monthly: "39,00",
 };
 
 /**
@@ -124,14 +132,15 @@ export function BackofficeCompanyPlanDialog({
       instructorSeatPriceCents !== null &&
       (!form.teoriaEnabled || (Number.isInteger(teoriaSeats) && teoriaSeats >= 0 && teoriaPriceCents !== null)) &&
       (!form.voiceEnabled || voicePriceCents !== null);
+    // Ricorrente = posti + Segretaria. La licenza formazione è UNA TANTUM.
     const totalCents = valid
       ? instructorSeats * (instructorSeatPriceCents ?? 0) +
-        (form.teoriaEnabled ? (teoriaPriceCents ?? 0) : 0) +
         (form.voiceEnabled ? (voicePriceCents ?? 0) : 0)
       : null;
     return {
       valid,
       totalCents,
+      oneOffCents: form.teoriaEnabled ? (teoriaPriceCents ?? 0) : 0,
       instructorSeats,
       instructorSeatPriceCents: instructorSeatPriceCents ?? 0,
       teoriaSeats: Number.isInteger(teoriaSeats) && teoriaSeats >= 0 ? teoriaSeats : 0,
@@ -139,6 +148,30 @@ export function BackofficeCompanyPlanDialog({
       voicePriceCents: voicePriceCents ?? 0,
     };
   }, [form]);
+
+  const setPeriod = (period: "monthly" | "annual") => {
+    setForm((p) => ({
+      ...p,
+      billingPeriod: period,
+      // se il prezzo Segretaria è ancora il listino dell'altro periodo, aggiornalo
+      voicePrice:
+        p.voiceEnabled && p.voicePrice === VOICE_DEFAULT_PRICE[p.billingPeriod]
+          ? VOICE_DEFAULT_PRICE[period]
+          : p.voicePrice,
+    }));
+  };
+
+  const toggleVoice = () => {
+    setForm((p) => ({
+      ...p,
+      voiceEnabled: !p.voiceEnabled,
+      // all'attivazione precompila il listino se il campo è vuoto/zero
+      voicePrice:
+        !p.voiceEnabled && (!p.voicePrice || p.voicePrice === "0,00")
+          ? VOICE_DEFAULT_PRICE[p.billingPeriod]
+          : p.voicePrice,
+    }));
+  };
 
   const save = async () => {
     if (!companyId || !parsed.valid || saving) return;
@@ -206,9 +239,7 @@ export function BackofficeCompanyPlanDialog({
                 <Label>Periodo</Label>
                 <Select
                   value={form.billingPeriod}
-                  onValueChange={(v) =>
-                    setForm((p) => ({ ...p, billingPeriod: v as "monthly" | "annual" }))
-                  }
+                  onValueChange={(v) => setPeriod(v as "monthly" | "annual")}
                 >
                   <SelectTrigger className="cursor-pointer">
                     <SelectValue />
@@ -220,12 +251,11 @@ export function BackofficeCompanyPlanDialog({
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="plan-renews">Si rinnova il</Label>
-                <Input
-                  id="plan-renews"
-                  type="date"
+                <Label>Si rinnova il</Label>
+                <DatePickerInput
                   value={form.renewsAt}
-                  onChange={(e) => setForm((p) => ({ ...p, renewsAt: e.target.value }))}
+                  onChange={(value) => setForm((p) => ({ ...p, renewsAt: value }))}
+                  placeholder="Seleziona data"
                 />
               </div>
             </div>
@@ -263,19 +293,24 @@ export function BackofficeCompanyPlanDialog({
               </div>
             </div>
 
-            {/* Licenza formazione (teoria) */}
+            {/* Licenza formazione (teoria) — acquisto UNA TANTUM */}
             <div className="rounded-lg border border-border/60 p-4">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <Checkbox
-                  checked={form.teoriaEnabled}
-                  onCheckedChange={(checked) =>
-                    setForm((p) => ({ ...p, teoriaEnabled: checked === true }))
-                  }
-                />
+              <button
+                type="button"
+                onClick={() =>
+                  setForm((p) => ({ ...p, teoriaEnabled: !p.teoriaEnabled }))
+                }
+                className="flex cursor-pointer items-center gap-2.5"
+              >
+                <Checkbox checked={form.teoriaEnabled} className="pointer-events-none" />
                 <span className="text-sm font-semibold text-foreground">
                   Licenza formazione (teoria)
                 </span>
-              </label>
+              </button>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Acquisto una tantum, fuori dal totale ricorrente: esaurite le licenze se ne
+                acquistano altre.
+              </p>
               {form.teoriaEnabled && (
                 <div className="mt-3 grid grid-cols-2 gap-3">
                   <div className="space-y-2">
@@ -293,7 +328,7 @@ export function BackofficeCompanyPlanDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="plan-teoria-price">Prezzo (€)</Label>
+                    <Label htmlFor="plan-teoria-price">Prezzo una tantum (€)</Label>
                     <Input
                       id="plan-teoria-price"
                       inputMode="decimal"
@@ -308,22 +343,26 @@ export function BackofficeCompanyPlanDialog({
 
             {/* Segretaria AI */}
             <div className="rounded-lg border border-border/60 p-4">
-              <label className="flex cursor-pointer items-center gap-2.5">
-                <Checkbox
-                  checked={form.voiceEnabled}
-                  onCheckedChange={(checked) =>
-                    setForm((p) => ({ ...p, voiceEnabled: checked === true }))
-                  }
-                />
+              <button
+                type="button"
+                onClick={toggleVoice}
+                className="flex cursor-pointer items-center gap-2.5"
+              >
+                <Checkbox checked={form.voiceEnabled} className="pointer-events-none" />
                 <span className="text-sm font-semibold text-foreground">Segretaria AI</span>
-              </label>
+              </button>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Listino: 350,00 €/anno (+ consumi) · 39,00 €/mese. Precompilato, modificabile.
+              </p>
               {form.voiceEnabled && (
                 <div className="mt-3 space-y-2">
-                  <Label htmlFor="plan-voice-price">Prezzo (€)</Label>
+                  <Label htmlFor="plan-voice-price">
+                    Prezzo ({form.billingPeriod === "annual" ? "€/anno" : "€/mese"})
+                  </Label>
                   <Input
                     id="plan-voice-price"
                     inputMode="decimal"
-                    placeholder="354,80"
+                    placeholder={VOICE_DEFAULT_PRICE[form.billingPeriod]}
                     value={form.voicePrice}
                     onChange={(e) => setForm((p) => ({ ...p, voicePrice: e.target.value }))}
                   />
@@ -332,13 +371,21 @@ export function BackofficeCompanyPlanDialog({
             </div>
 
             {/* Totale + azioni */}
-            <div className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-3">
-              <span className="text-sm font-semibold text-foreground">Totale</span>
-              <span className="text-base font-bold tabular-nums text-foreground">
-                {parsed.totalCents !== null
-                  ? `${formatEuroCents(parsed.totalCents)}${BILLING_PERIOD_SUFFIX[form.billingPeriod]}`
-                  : "—"}
-              </span>
+            <div className="rounded-lg bg-gray-50 px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-foreground">Totale ricorrente</span>
+                <span className="text-base font-bold tabular-nums text-foreground">
+                  {parsed.totalCents !== null
+                    ? `${formatEuroCents(parsed.totalCents)}${BILLING_PERIOD_SUFFIX[form.billingPeriod]}`
+                    : "—"}
+                </span>
+              </div>
+              {form.teoriaEnabled && parsed.oneOffCents > 0 && (
+                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>Licenza formazione (una tantum)</span>
+                  <span className="tabular-nums">+ {formatEuroCents(parsed.oneOffCents)}</span>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3">

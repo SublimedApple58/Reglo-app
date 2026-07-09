@@ -4,7 +4,11 @@ Il team Reglo assegna dal backoffice il piano commerciale di una autoscuola; il 
 
 ## Modello dati
 
-`CompanyPlan` (1:1 con Company, cascade): `billingPeriod` ("monthly"|"annual"), `renewsAt?`, `instructorSeats` + `instructorSeatPriceCents`, `teoriaEnabled` + `teoriaSeats` + `teoriaPriceCents`, `voiceEnabled` + `voicePriceCents`. **Prezzi in centesimi.** Totale = posti×prezzo + teoria (se attiva) + voce (se attiva), calcolato nel DTO. Migration `20260709164921_company_plan`.
+`CompanyPlan` (1:1 con Company, cascade): `billingPeriod` ("monthly"|"annual"), `renewsAt?`, `instructorSeats` + `instructorSeatPriceCents`, `teoriaEnabled` + `teoriaSeats` + `teoriaPriceCents`, `voiceEnabled` + `voicePriceCents`. **Prezzi in centesimi.** Migration `20260709164921_company_plan`.
+
+**Regole di business:**
+- Il **totale del DTO è solo RICORRENTE** (posti×prezzo + Segretaria se attiva): la **Licenza formazione è UNA TANTUM** — esclusa dal totale, esaurite le licenze se ne acquistano altre. Esplicitato sia nella dialog backoffice sia nella card web (riga "· una tantum" + nota sotto il Totale).
+- **Segretaria AI a listino**: 350 €/anno (+ consumi) o 39 €/mese — la dialog precompila all'attivazione e al cambio periodo (se il prezzo era ancora il listino dell'altro periodo), ma resta modificabile.
 
 ⚠️ È la composizione **commerciale/display**: l'attivazione operativa di teoria e Segretaria resta nei `CompanyService.limits` (drawer "Gestisci" del backoffice). Le due cose non si sincronizzano automaticamente.
 
@@ -14,7 +18,7 @@ Il team Reglo assegna dal backoffice il piano commerciale di una autoscuola; il 
 |------|-------|
 | `lib/company-plan.ts` | Helper condivisi: `formatEuroCents` (it-IT), `parseEuroToCents`/`centsToEuroInput` (input "264,00"), label/suffissi periodo |
 | `lib/actions/company-plan.actions.ts` | `getCompanyPlan` (owner-only), `getBackofficeCompanyPlan`, `saveBackofficeCompanyPlan` (upsert, renewsAt salvato a mezzogiorno UTC), `deleteBackofficeCompanyPlan` |
-| `components/pages/Backoffice/BackofficeCompanyPlanDialog.tsx` | Form: periodo, data rinnovo, posti istruttore×prezzo, teoria (toggle+posti+prezzo), Segretaria (toggle+prezzo), totale live, salva/rimuovi |
+| `components/pages/Backoffice/BackofficeCompanyPlanDialog.tsx` | Form: periodo, data rinnovo (DatePickerInput custom, niente calendario nativo), posti istruttore×prezzo, teoria (toggle+posti+prezzo una tantum), Segretaria (toggle+prezzo precompilato), totale ricorrente live + riga una tantum, salva/rimuovi. NB toggle = button con Checkbox `pointer-events-none` (il label-wrap doppio-scattava) |
 | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` | Bottone CreditCard nella riga → dialog |
 | `components/pages/Autoscuole/AutoscuoleAreaPersonalePage.tsx` | `AbbonamentoPane`: card proto con "Si rinnova il …", righe attive, Totale €/anno\|€/mese; "Gestisci" → chat assistenza; empty state se senza piano; riservata OWNER/INSTRUCTOR_OWNER |
 
