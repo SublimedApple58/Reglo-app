@@ -239,6 +239,7 @@ model Company {
   supportThread                        SupportThread?
   productFeedback                      ProductFeedback[]
   documents                            CompanyDocument[]
+  plan                                 CompanyPlan?
 }
 
 model CompanyService {
@@ -1456,4 +1457,28 @@ model CompanyDocument {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, kind])
+}
+
+// Piano/abbonamento dell'autoscuola, assegnato dal team Reglo via backoffice
+// e mostrato al titolare in Area personale → Abbonamento. Prezzi in centesimi.
+// È la composizione COMMERCIALE del piano (display): l'attivazione operativa
+// di teoria/segretaria resta nei CompanyService limits ("Gestisci" nel
+// backoffice). Vedi docs/features/company-plan.md.
+model CompanyPlan {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                String    @unique @db.Uuid
+  /// "monthly" | "annual"
+  billingPeriod            String    @default("annual")
+  renewsAt                 DateTime? @db.Timestamp(6)
+  instructorSeats          Int       @default(1)
+  instructorSeatPriceCents Int       @default(0)
+  teoriaEnabled            Boolean   @default(false)
+  teoriaSeats              Int       @default(0)
+  teoriaPriceCents         Int       @default(0)
+  voiceEnabled             Boolean   @default(false)
+  voicePriceCents          Int       @default(0)
+  createdAt                DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt                DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }

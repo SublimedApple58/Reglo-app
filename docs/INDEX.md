@@ -30,6 +30,7 @@
 | Reglo Aula | [reglo-aula.md](features/reglo-aula.md) | `aula.actions.ts`, `lib/aula/{slides,package-store,live-state}.ts`, `app/aula-live/[code]/`, `app/[locale]/aula/` |
 | Support Center + Feedback | [support-center.md](features/support-center.md) | `support.actions.ts`, `AutoscuoleAssistenzaPage.tsx`, `FeedbackDialog.tsx`, `Backoffice{Support,Feedback}Page.tsx` |
 | Company Documents (contratto/fatture) | [company-documents.md](features/company-documents.md) | `company-documents.actions.ts`, `api/backoffice/company-documents`, `BackofficeCompanyDocumentsDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
+| Company Plan (abbonamento) | [company-plan.md](features/company-plan.md) | `company-plan.actions.ts`, `BackofficeCompanyPlanDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
 
 ## Design System
 

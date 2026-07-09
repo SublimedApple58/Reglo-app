@@ -79,6 +79,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email
 - → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
 
+### Company Plan
+- → **Backoffice**: dialog piano nella lista companies (auth cookie); NON sincronizza i CompanyService.limits (attivazione operativa separata in "Gestisci")
+- → **Support Center**: "Gestisci" della card porta alla chat assistenza
+- → **Area personale**: pane Abbonamento (riservata OWNER/INSTRUCTOR_OWNER)
+
 ### Company Documents
 - → **Backoffice**: dialog documenti nella lista companies (stessa auth cookie); upload via API route dedicata
 - → **Storage R2**: stesso client di avatar/aula; download solo con URL firmati (mai public base)

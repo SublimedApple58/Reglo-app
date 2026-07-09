@@ -24,6 +24,8 @@ import {
   getCompanyDocuments,
 } from "@/lib/actions/company-documents.actions";
 import { formatDocumentSize, type CompanyDocumentDto } from "@/lib/company-documents";
+import { getCompanyPlan, type CompanyPlanDto } from "@/lib/actions/company-plan.actions";
+import { BILLING_PERIOD_SUFFIX, formatEuroCents } from "@/lib/company-plan";
 import { cn } from "@/lib/utils";
 
 type PaneKey = "profilo" | "documenti" | "abbonamento";
@@ -511,11 +513,199 @@ function DocumentiPane() {
 }
 
 /**
+ * Pane "Abbonamento" (proto #ap-tab-abbonamento): il piano assegnato dal team
+ * Reglo via backoffice (CompanyPlan) — card "Il tuo piano" con rinnovo, righe
+ * con icone 3D (posti istruttore, licenza formazione, Segretaria AI) e totale
+ * per periodo. "Gestisci" porta alla chat del centro assistenza (le modifiche
+ * al piano passano dal team). Riservata al titolare.
+ */
+function AbbonamentoPane() {
+  const router = useRouter();
+  const [plan, setPlan] = React.useState<CompanyPlanDto | null>(null);
+  const [loaded, setLoaded] = React.useState(false);
+  const [restricted, setRestricted] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    getCompanyPlan().then((res) => {
+      if (!active) return;
+      if (res.success && res.data) setPlan(res.data.plan);
+      else setRestricted(true);
+      setLoaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const renewLabel = plan?.renewsAt
+    ? `Si rinnova il ${new Date(plan.renewsAt).toLocaleDateString("it-IT", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })}`
+    : plan?.billingPeriod === "monthly"
+      ? "Rinnovo mensile"
+      : "Rinnovo annuale";
+
+  const rows = plan
+    ? [
+        plan.instructorSeats > 0
+          ? {
+              key: "seats",
+              icon: (
+                <Image
+                  src="/images/settings/istruttore-nuovo.png"
+                  alt=""
+                  width={34}
+                  height={34}
+                  className="block size-[34px] rounded-full object-cover"
+                />
+              ),
+              label: "Posti istruttore",
+              detail: `${plan.instructorSeats} × ${formatEuroCents(plan.instructorSeatPriceCents)}`,
+              amount: formatEuroCents(plan.instructorSeats * plan.instructorSeatPriceCents),
+            }
+          : null,
+        plan.teoriaEnabled
+          ? {
+              key: "teoria",
+              icon: (
+                <Image
+                  src="/images/plan/icon-licenza.png"
+                  alt=""
+                  width={34}
+                  height={34}
+                  className="block size-[34px] object-contain"
+                />
+              ),
+              label: "Licenza formazione",
+              detail: `${plan.teoriaSeats} allievi attivi`,
+              amount: formatEuroCents(plan.teoriaPriceCents),
+            }
+          : null,
+        plan.voiceEnabled
+          ? {
+              key: "voice",
+              icon: (
+                <Image
+                  src="/images/plan/icon-segretaria.png"
+                  alt=""
+                  width={34}
+                  height={34}
+                  className="block size-[34px] object-contain"
+                />
+              ),
+              label: "Segretaria AI",
+              detail: "Assistente automatica",
+              amount: formatEuroCents(plan.voicePriceCents),
+            }
+          : null,
+      ].filter((row): row is NonNullable<typeof row> => row !== null)
+    : [];
+
+  if (!loaded) {
+    return (
+      <div>
+        <h2 className="mb-8 text-2xl font-bold tracking-[-0.3px] text-foreground">
+          Abbonamento
+        </h2>
+        <Skeleton className="h-[280px] max-w-[680px] rounded-[14px]" />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h2 className="mb-8 text-2xl font-bold tracking-[-0.3px] text-foreground">Abbonamento</h2>
+      <FadeIn className="max-w-[680px]">
+        {restricted ? (
+          <div className="flex flex-col items-center rounded-[14px] border border-dashed border-[#dddddd] px-6 py-10 text-center">
+            <CreditCard className="mb-3 size-7 text-[#c1c1c1]" strokeWidth={1.5} />
+            <div className="mb-1 text-sm font-semibold text-foreground">
+              Sezione riservata al titolare
+            </div>
+            <div className="text-[13px] font-medium text-[#929292]">
+              Il piano dell&apos;autoscuola è visibile solo all&apos;account del titolare.
+            </div>
+          </div>
+        ) : !plan ? (
+          <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
+            <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
+            <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
+              Il dettaglio del piano, con il riepilogo delle voci e il totale, sarà disponibile
+              qui non appena attivato dal team Reglo.
+            </div>
+            <div className="my-[18px] h-px bg-[#efefef]" />
+            <div className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+              Per modifiche al piano, posti istruttore o disdette contatta il team Reglo: ti
+              rispondiamo in giornata.
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-[14px] border border-[#ebebeb] p-[22px]">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
+                  <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
+                    {renewLabel}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push("/user/autoscuole/assistenza")}
+                  className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
+                >
+                  Gestisci
+                </button>
+              </div>
+              <div className="my-[18px] h-px bg-[#efefef]" />
+              <div className="flex flex-col gap-[11px]">
+                {rows.map((row) => (
+                  <div key={row.key} className="flex items-center justify-between gap-4">
+                    <div className="flex min-w-0 items-center gap-[13px]">
+                      <div className="flex size-9 shrink-0 items-center justify-center">
+                        {row.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground">{row.label}</div>
+                        <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                          {row.detail}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground">
+                      {row.amount}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="my-[18px] h-px bg-[#efefef]" />
+              <div className="flex items-center justify-between gap-4">
+                <div className="text-[15px] font-bold text-foreground">Totale</div>
+                <div className="shrink-0 whitespace-nowrap text-[17px] font-bold text-foreground">
+                  {formatEuroCents(plan.totalCents)}
+                  {BILLING_PERIOD_SUFFIX[plan.billingPeriod]}
+                </div>
+              </div>
+            </div>
+            <p className="mt-4 text-[13px] font-medium leading-relaxed text-[#929292]">
+              Per modifiche al piano, posti istruttore o disdette contatta il team Reglo: ti
+              rispondiamo in giornata.
+            </p>
+          </>
+        )}
+      </FadeIn>
+    </div>
+  );
+}
+
+/**
  * Area personale (overlay full-screen stile Impostazioni, dal proto
- * #section-areapersonale). Profilo/credenziali (reset password OTP) e
- * "Contratto e fattura" (documenti dal backoffice) sono funzionanti;
- * l'abbonamento non ha ancora backend — quella pane mostra lo scaffold
- * del design con stati onesti.
+ * #section-areapersonale). Profilo/credenziali (reset password OTP),
+ * "Contratto e fattura" (documenti dal backoffice) e Abbonamento (piano
+ * dal backoffice) sono funzionanti.
  */
 export function AutoscuoleAreaPersonalePage() {
   const router = useRouter();
@@ -577,25 +767,7 @@ export function AutoscuoleAreaPersonalePage() {
 
             {pane === "documenti" && <DocumentiPane />}
 
-            {pane === "abbonamento" && (
-              <div>
-                <h2 className="mb-8 text-2xl font-bold tracking-[-0.3px] text-foreground">
-                  Abbonamento
-                </h2>
-                <div className="max-w-[680px] rounded-[14px] border border-[#ebebeb] p-[22px]">
-                  <div className="text-[17px] font-bold text-foreground">Il tuo piano</div>
-                  <div className="mt-1.5 text-[13.5px] font-medium text-[#929292]">
-                    Il dettaglio del piano, con il riepilogo delle voci e il totale mensile, sarà
-                    disponibile qui a breve.
-                  </div>
-                  <div className="my-[18px] h-px bg-[#efefef]" />
-                  <div className="text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
-                    Per modifiche al piano, posti istruttore o disdette contatta il team Reglo:
-                    ti rispondiamo in giornata.
-                  </div>
-                </div>
-              </div>
-            )}
+            {pane === "abbonamento" && <AbbonamentoPane />}
           </div>
         </div>
       </div>
