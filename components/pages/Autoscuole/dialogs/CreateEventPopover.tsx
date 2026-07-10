@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useDragControls } from "motion/react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,7 @@ export function CreateEventPopover({
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
+  const dragControls = useDragControls();
   React.useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -63,13 +64,30 @@ export function CreateEventPopover({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -4 }}
           transition={{ duration: 0.16, ease: "easeOut" }}
-          className="fixed z-[70] flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
+          drag
+          dragControls={dragControls}
+          dragListener={false}
+          dragMomentum={false}
+          dragElastic={0}
+          dragConstraints={{
+            left: -(left - margin),
+            right: vw - margin - width - left,
+            top: -(top - margin),
+            bottom: vh - 72 - top,
+          }}
+          className="fixed z-40 flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
           style={{ left, top, width, maxHeight }}
           role="dialog"
           aria-label={title}
         >
-          {/* Header */}
-          <div className="flex shrink-0 items-start justify-between gap-3 px-5 pb-3 pt-[18px]">
+          {/* Header — maniglia di trascinamento della card */}
+          <div
+            className="flex shrink-0 cursor-grab select-none items-start justify-between gap-3 px-5 pb-3 pt-[18px] active:cursor-grabbing"
+            onPointerDown={(event) => {
+              if ((event.target as HTMLElement).closest("button")) return;
+              dragControls.start(event);
+            }}
+          >
             <div className="min-w-0">
               <div className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">{title}</div>
               {subtitle ? (

@@ -828,6 +828,57 @@ export function AutoscuoleAgendaPage({
     );
   };
 
+  // Sposta il draft attivo su un nuovo slot (click su griglia o drag del ghost).
+  const moveDraftTo = React.useCallback((ymd: string, time: string, instructorId: string | null) => {
+    if (createOpen) {
+      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+    } else if (examDialogOpen) {
+      setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
+    } else if (blockDialogOpen) {
+      setBlockForm((prev) => ({ ...prev, date: ymd, startTime: time, instructorId: instructorId ?? prev.instructorId }));
+    } else if (createGroupLessonOpen) {
+      setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    }
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen]);
+
+  // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
+  // colonna istruttore (hit-test su [data-agenda-col-day]).
+  const ghostDragRef = React.useRef(false);
+  const onGhostPointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const node = event.currentTarget;
+    const grabOffsetY = event.clientY - node.getBoundingClientRect().top;
+    ghostDragRef.current = true;
+    node.style.pointerEvents = "none";
+    document.body.style.cursor = "grabbing";
+    let lastKey = "";
+    const onMove = (ev: PointerEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const col = el?.closest?.("[data-agenda-col-day]") as HTMLElement | null;
+      if (!col) return;
+      const ymd = col.dataset.agendaColDay as string;
+      const instr = col.dataset.agendaColInstructor || null;
+      const rect = col.getBoundingClientRect();
+      const rawMinutes = (ev.clientY - grabOffsetY - rect.top) / PIXELS_PER_MINUTE;
+      const snapped = Math.max(0, Math.min(totalMinutes - 15, Math.round(rawMinutes / 15) * 15)) + DAY_START_HOUR * 60;
+      const time = `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`;
+      const key = `${ymd}|${time}|${instr ?? ""}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      moveDraftTo(ymd, time, instr);
+    };
+    const onUp = () => {
+      ghostDragRef.current = false;
+      node.style.pointerEvents = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [moveDraftTo]);
+
   // ── Draft ghost: anteprima live dell'evento in creazione ──
   // Derivato dal form del popover attivo; mostra in griglia il blocco che si
   // creerà, già del colore giusto (durata per le guide, viola esame, grigio
@@ -906,7 +957,7 @@ export function AutoscuoleAgendaPage({
   // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
   // sola, e scrolla verticalmente fino all'orario del ghost.
   React.useEffect(() => {
-    if (!draftGhost) return;
+    if (!draftGhost || ghostDragRef.current) return;
     const target = toDate(`${draftGhost.ymd}T00:00:00`);
     const normalized = normalizeDay(target);
     if (viewMode === "week") {
@@ -945,10 +996,12 @@ export function AutoscuoleAgendaPage({
         animate={{ opacity: unassigned ? 0.45 : 1, scale: 1 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
         className={cn(
-          "pointer-events-none absolute left-1 right-1 z-30 overflow-hidden rounded-lg border-[1.5px] border-dashed px-2 py-1 shadow-[0_6px_22px_rgba(16,24,40,0.16)]",
+          "absolute left-1 right-1 z-30 cursor-grab touch-none select-none overflow-hidden rounded-lg border-[1.5px] border-dashed px-2 py-1 shadow-[0_6px_22px_rgba(16,24,40,0.16)] active:cursor-grabbing",
           draftGhost.cardClass,
         )}
         style={{ top: startMin * PIXELS_PER_MINUTE, height }}
+        onPointerDown={onGhostPointerDown}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[#222222]">
           <span className={cn("size-1.5 shrink-0 rounded-full", draftGhost.dotClass)} />
@@ -1741,6 +1794,7 @@ export function AutoscuoleAgendaPage({
                   const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                   return (
                     <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-[#eeeeee]", isWeekendDay ? "bg-[#fafafa]" : "bg-white")} style={{ height: calendarHeight }}
+                      data-agenda-col-day={formatYmd(day)}
                       onClick={(event) => openSlotMenu(event, day)}
                     >
                       {renderSlotGhost(day, null)}
@@ -2112,6 +2166,8 @@ export function AutoscuoleAgendaPage({
                         key={`${day.toISOString()}-${instr.instructorId}`}
                         className={cn("relative cursor-pointer overflow-hidden border-l", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
+                        data-agenda-col-day={dateKey}
+                        data-agenda-col-instructor={instr.instructorId}
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {renderSlotGhost(day, instr.instructorId)}
@@ -2461,6 +2517,8 @@ export function AutoscuoleAgendaPage({
                     key={instr.id}
                     className="relative cursor-pointer border-l border-[#eeeeee] bg-white"
                     style={{ height: calendarHeight }}
+                    data-agenda-col-day={formatYmd(day)}
+                    data-agenda-col-instructor={instr.id}
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {renderSlotGhost(day, instr.id)}
