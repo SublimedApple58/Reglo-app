@@ -154,7 +154,11 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - **Support center** (chat vera web↔backoffice + feedback salvati + badge non letti): `docs/features/support-center.md`, piano `plans/assistenza/001`.
   - **Documenti company** (contratto/fatture/altri da backoffice → "Contratto e fattura"): `docs/features/company-documents.md`, piano `plans/backoffice/001`.
   - **Piano/abbonamento** (dialog backoffice + card proto "Il tuo piano"; licenze formazione = REGISTRO acquisti una tantum `CompanyLicensePurchase`, fuori dal ricorrente): `docs/features/company-plan.md`. Reset password OTP nella pane profilo (via vault). DatePickerInput rifatto su Radix Popover (neutro, mai tagliato, modal per le Dialog).
-  - **⇒ PENDENTE al 2026-07-10**: dopo riavvio `pnpm dev` dell'utente (migration `license_purchases`), girare `/tmp/playwright-test-plan.js` (giro piano+acquisto→card titolare) e poi `pnpm ship:staging` + `pnpm migrate:staging` (migration `license_purchases` NON ancora su staging; `company_plan`+`teoria_seat_price` già applicate). Branch: tutto committato/pushato fino a `41b6c47`.
+  - ~~⇒ PENDENTE~~ **FATTO (2026-07-10)**: giro `/tmp/playwright-test-plan.js` tutto verde (piano+acquisto→card titolare), e2e 9/9, `ship:staging` + `migrate:staging` eseguiti (migration `license_purchases` ora anche su staging).
+
+- Revisione #9 — **Promemoria e notifiche allineata al proto** (2026-07-10, screenshot utente):
+  - `tabs/SettingsTab.tsx` sezione reminders rifatta 1:1 dal proto (`config-tab-reminder`): 2 select proto affiancate (label 12/600 #555, trigger border 1.5px #dddddd radius 10), banner grigi `ReminderBanner` (#f8f8f8, icona Coffee/Moon, toggle lg, riga "Orario di invio" rivelata quando attivo), sezione "Modalità di invio" con 3 card `ChannelCard` (check circolari 22px near-black, canali **Notifica**/WhatsApp/Email; "Slot fill"→"**Cancellazioni**" con tooltip info dark come nel proto), banner finale "Per inviare un comunicato personalizzato… → Invia comunicato". Niente descrizione sotto il titolo (come proto).
+  - **Auto-save** come la pane Veicoli: `updateReminderSettings(patch)` in `AutoscuoleResourcesPage.tsx` (optimistic + rollback + guardia "almeno un canale"), bottone "Salva configurazione" rimosso dalla pane. Verificato con Playwright: persistenza canale dopo reload OK (attenzione nei test: aspettare ~6s dopo il goto — i settings arrivano async e prima mostrano i default).
 
 ## Next steps
 

@@ -2,12 +2,21 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Check, ChevronDown, ClipboardList, MapPin } from "lucide-react";
+import {
+  ArrowRight,
+  Bell,
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  Coffee,
+  MapPin,
+  Moon,
+} from "lucide-react";
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
 
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Select,
   SelectContent,
@@ -41,11 +50,15 @@ const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
 ] as const;
 const CHANNEL_OPTIONS = [
-  { value: "push", label: "Push" },
+  { value: "push", label: "Notifica" },
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "Email" },
 ] as const;
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+
+/** Trigger select in stile proto (bordo 1.5px #dddddd, radius 10). */
+const PROTO_SELECT_TRIGGER =
+  "h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-[#222222] shadow-none transition-colors hover:border-[#929292] focus-visible:border-[#222222] focus-visible:bg-white";
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },
@@ -112,26 +125,27 @@ export type SettingsTabProps = {
   toggleBookingDuration: (d: number) => void;
   roundedHoursOnly: boolean;
   setRoundedHoursOnly: React.Dispatch<React.SetStateAction<boolean>>;
-  // Reminders
+  // Reminders (pane auto-save: ogni modifica persiste subito il campo toccato)
   studentReminderMinutes: string;
-  setStudentReminderMinutes: (v: string) => void;
   studentReminderMorningEnabled: boolean;
-  setStudentReminderMorningEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentReminderMorningTime: string;
-  setStudentReminderMorningTime: (v: string) => void;
   studentReminderDayBeforeEnabled: boolean;
-  setStudentReminderDayBeforeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentReminderDayBeforeTime: string;
-  setStudentReminderDayBeforeTime: (v: string) => void;
   instructorReminderMinutes: string;
-  setInstructorReminderMinutes: (v: string) => void;
   slotFillChannels: ChannelValue[];
   studentReminderChannels: ChannelValue[];
   instructorReminderChannels: ChannelValue[];
-  toggleChannel: (channel: ChannelValue, setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>) => void;
-  setSlotFillChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
-  setStudentReminderChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
-  setInstructorReminderChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
+  updateReminderSettings: (patch: {
+    studentReminderMinutes?: number;
+    instructorReminderMinutes?: number;
+    studentReminderMorningEnabled?: boolean;
+    studentReminderMorningTime?: string;
+    studentReminderDayBeforeEnabled?: boolean;
+    studentReminderDayBeforeTime?: string;
+    slotFillChannels?: ChannelValue[];
+    studentReminderChannels?: ChannelValue[];
+    instructorReminderChannels?: ChannelValue[];
+  }) => Promise<void>;
   // Policy
   lessonPolicyEnabled: boolean;
   setLessonPolicyEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -175,7 +189,9 @@ function AccordionSection({
   if (standalone) {
     return (
       <div>
-        <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">{description}</p>
+        {description && (
+          <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">{description}</p>
+        )}
         {children}
       </div>
     );
@@ -252,32 +268,128 @@ function PolicySwitch({
   );
 }
 
-function ChannelGroup({
+/** Card "Modalità di invio" del proto: canali con check circolari near-black. */
+function ChannelCard({
   title,
+  info,
   value,
-  onToggle,
+  onChange,
 }: {
   title: string;
+  /** Testo del tooltip info accanto al titolo (stile proto, dark). */
+  info?: string;
   value: ChannelValue[];
-  onToggle: (channel: ChannelValue) => void;
+  onChange: (next: ChannelValue[]) => void;
+}) {
+  const [infoOpen, setInfoOpen] = React.useState(false);
+  return (
+    <div className="rounded-[12px] border border-[#e8e8e8] bg-white p-4">
+      <div className="mb-3 flex items-center gap-1.5">
+        <span className="text-[13px] font-semibold text-[#222222]">{title}</span>
+        {info && (
+          <span
+            className="relative inline-flex items-center"
+            onMouseEnter={() => setInfoOpen(true)}
+            onMouseLeave={() => setInfoOpen(false)}
+            onClick={() => setInfoOpen((prev) => !prev)}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-none cursor-pointer">
+              <circle cx="7" cy="7" r="6" stroke="#b0b0b0" strokeWidth="1.2" />
+              <path d="M7 6.2v3.3" stroke="#b0b0b0" strokeWidth="1.4" strokeLinecap="round" />
+              <circle cx="7" cy="4.2" r="0.85" fill="#b0b0b0" />
+            </svg>
+            {infoOpen && (
+              <div className="absolute bottom-[calc(100%+8px)] left-1/2 z-[300] w-[210px] -translate-x-1/2 rounded-[8px] bg-[#222222] px-[11px] py-[9px] text-[11.5px] font-normal leading-[1.45] text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]">
+                {info}
+                <span className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-[#222222]" />
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {CHANNEL_OPTIONS.map((channel) => {
+          const checked = value.includes(channel.value);
+          return (
+            <div key={channel.value} className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-[#555555]">{channel.label}</span>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                aria-label={`${channel.label} — ${title}`}
+                onClick={() =>
+                  onChange(
+                    checked
+                      ? value.filter((item) => item !== channel.value)
+                      : [...value, channel.value],
+                  )
+                }
+                className={cn(
+                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors",
+                  checked
+                    ? "bg-[#222222]"
+                    : "border-[1.5px] border-[#d6d6d6] bg-white hover:border-[#929292]",
+                )}
+              >
+                {checked && <Check className="size-3 text-white" strokeWidth={2.6} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Banner grigio del proto (Promemoria mattutino / giorno prima) con toggle e
+ *  orario di invio rivelato quando attivo. */
+function ReminderBanner({
+  icon: Icon,
+  title,
+  description,
+  checked,
+  onToggle,
+  timeValue,
+  timeOptions,
+  onTimeChange,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
+  title: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+  timeValue: string;
+  timeOptions: string[];
+  onTimeChange: (v: string) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
-      <div className="text-xs font-medium text-foreground">{title}</div>
-      <div className="space-y-2">
-        {CHANNEL_OPTIONS.map((channel) => (
-          <label
-            key={channel.value}
-            className="flex cursor-pointer items-center justify-between gap-2 text-xs text-foreground"
-          >
-            <span>{channel.label}</span>
-            <Checkbox
-              checked={value.includes(channel.value)}
-              onCheckedChange={() => onToggle(channel.value)}
-            />
-          </label>
-        ))}
+    <div className="rounded-[10px] bg-[#f8f8f8] p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#222222]">
+            <Icon className="size-4 shrink-0" strokeWidth={2} />
+            {title}
+          </div>
+          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
+        </div>
+        <InlineToggle checked={checked} onChange={onToggle} size="lg" />
       </div>
+      {checked && (
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3">
+          <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
+          <Select value={timeValue} onValueChange={onTimeChange}>
+            <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[130px] py-2")}>
+              <SelectValue placeholder="Orario" />
+            </SelectTrigger>
+            <SelectContent>
+              {timeOptions.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
     </div>
   );
 }
@@ -300,24 +412,15 @@ function SettingsTab({
   roundedHoursOnly,
   setRoundedHoursOnly,
   studentReminderMinutes,
-  setStudentReminderMinutes,
   studentReminderMorningEnabled,
-  setStudentReminderMorningEnabled,
   studentReminderMorningTime,
-  setStudentReminderMorningTime,
   studentReminderDayBeforeEnabled,
-  setStudentReminderDayBeforeEnabled,
   studentReminderDayBeforeTime,
-  setStudentReminderDayBeforeTime,
   instructorReminderMinutes,
-  setInstructorReminderMinutes,
   slotFillChannels,
   studentReminderChannels,
   instructorReminderChannels,
-  toggleChannel,
-  setSlotFillChannels,
-  setStudentReminderChannels,
-  setInstructorReminderChannels,
+  updateReminderSettings,
   lessonPolicyEnabled,
   setLessonPolicyEnabled,
   lessonRequiredTypesEnabled,
@@ -334,7 +437,8 @@ function SettingsTab({
 }: SettingsTabProps) {
   const standalone = Boolean(section);
   const show = (key: SettingsSectionKey) => !section || section === key;
-  const showSaveButton = !section || section === "bookings" || section === "reminders" || section === "policy";
+  // La pane Promemoria è auto-save (come Veicoli): niente bottone Salva.
+  const showSaveButton = !section || section === "bookings" || section === "policy";
   return (
     <>
       {/* Accordion settings card (chrome solo in modalità tab legacy) */}
@@ -463,24 +567,28 @@ function SettingsTab({
         </AccordionSection>
         )}
 
-        {/* ── Reminder e notifiche ── */}
+        {/* ── Promemoria e notifiche (layout proto, auto-save) ── */}
         {show("reminders") && (
         <AccordionSection
           icon={Bell}
-          title="Reminder e notifiche"
-          description="Quando e su quali canali inviare promemoria a allievi e istruttori."
+          title="Promemoria e notifiche"
+          description={standalone ? "" : "Quando e su quali canali inviare promemoria a allievi e istruttori."}
           expanded={expandedSection === "reminders"}
           onToggle={() => toggleSection("reminders")}
           standalone={standalone}
         >
-          <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-              <FieldGroup label="Reminder allievo">
+          <div>
+            {/* Preavviso a minuti */}
+            <div className="mb-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria allievo</div>
                 <Select
                   value={studentReminderMinutes}
-                  onValueChange={setStudentReminderMinutes}
+                  onValueChange={(value) =>
+                    updateReminderSettings({ studentReminderMinutes: Number(value) })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
                     <SelectValue placeholder="Minuti" />
                   </SelectTrigger>
                   <SelectContent>
@@ -491,13 +599,16 @@ function SettingsTab({
                     ))}
                   </SelectContent>
                 </Select>
-              </FieldGroup>
-              <FieldGroup label="Reminder istruttore">
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria istruttore</div>
                 <Select
                   value={instructorReminderMinutes}
-                  onValueChange={setInstructorReminderMinutes}
+                  onValueChange={(value) =>
+                    updateReminderSettings({ instructorReminderMinutes: Number(value) })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
                     <SelectValue placeholder="Minuti" />
                   </SelectTrigger>
                   <SelectContent>
@@ -508,87 +619,84 @@ function SettingsTab({
                     ))}
                   </SelectContent>
                 </Select>
-              </FieldGroup>
-            </div>
-
-            {/* Morning reminder */}
-            <div className="max-w-2xl space-y-3">
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setStudentReminderMorningEnabled((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Reminder mattina del giorno</span>
-                  <span className="text-xs text-muted-foreground">
-                    Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti.
-                  </span>
-                </div>
-                <InlineToggle checked={studentReminderMorningEnabled} size="sm" />
               </div>
-              {studentReminderMorningEnabled && (
-                <FieldGroup label="Orario invio">
-                  <Select value={studentReminderMorningTime} onValueChange={setStudentReminderMorningTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
             </div>
 
-            {/* Day-before reminder */}
-            <div className="max-w-2xl space-y-3">
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setStudentReminderDayBeforeEnabled((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Reminder il giorno prima</span>
-                  <span className="text-xs text-muted-foreground">
-                    Invia un promemoria il giorno prima della guida, all&apos;orario scelto.
-                  </span>
-                </div>
-                <InlineToggle checked={studentReminderDayBeforeEnabled} size="sm" />
+            {/* Banner promemoria extra */}
+            <div className="space-y-3">
+              <ReminderBanner
+                icon={Coffee}
+                title="Promemoria mattutino"
+                description="Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti."
+                checked={studentReminderMorningEnabled}
+                onToggle={() =>
+                  updateReminderSettings({
+                    studentReminderMorningEnabled: !studentReminderMorningEnabled,
+                  })
+                }
+                timeValue={studentReminderMorningTime}
+                timeOptions={["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"]}
+                onTimeChange={(value) =>
+                  updateReminderSettings({ studentReminderMorningTime: value })
+                }
+              />
+              <ReminderBanner
+                icon={Moon}
+                title="Promemoria il giorno prima"
+                description="Invia un promemoria il giorno prima della guida, all'orario scelto."
+                checked={studentReminderDayBeforeEnabled}
+                onToggle={() =>
+                  updateReminderSettings({
+                    studentReminderDayBeforeEnabled: !studentReminderDayBeforeEnabled,
+                  })
+                }
+                timeValue={studentReminderDayBeforeTime}
+                timeOptions={["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"]}
+                onTimeChange={(value) =>
+                  updateReminderSettings({ studentReminderDayBeforeTime: value })
+                }
+              />
+            </div>
+
+            {/* Modalità di invio */}
+            <div className="mb-2.5 mt-5">
+              <div className="text-[13px] font-semibold text-[#222222]">Modalità di invio</div>
+              <div className="mt-0.5 text-xs font-medium text-[#929292]">
+                Sconsigliamo l&apos;email per la scarsa leggibilità.
               </div>
-              {studentReminderDayBeforeEnabled && (
-                <FieldGroup label="Orario invio">
-                  <Select value={studentReminderDayBeforeTime} onValueChange={setStudentReminderDayBeforeTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
             </div>
-
             <div className="grid gap-3 sm:grid-cols-3">
-              <ChannelGroup
-                title="Slot fill"
-                value={slotFillChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setSlotFillChannels)
-                }
-              />
-              <ChannelGroup
-                title="Reminder allievo"
+              <ChannelCard
+                title="Promemoria allievo"
                 value={studentReminderChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setStudentReminderChannels)
-                }
+                onChange={(next) => updateReminderSettings({ studentReminderChannels: next })}
               />
-              <ChannelGroup
-                title="Reminder istruttore"
+              <ChannelCard
+                title="Promemoria istruttore"
                 value={instructorReminderChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setInstructorReminderChannels)
-                }
+                onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
               />
+              <ChannelCard
+                title="Cancellazioni"
+                info="Quando un allievo annulla una guida, invia una notifica per riempire lo slot rimasto libero."
+                value={slotFillChannels}
+                onChange={(next) => updateReminderSettings({ slotFillChannels: next })}
+              />
+            </div>
+
+            {/* Rimando a Invia comunicato */}
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-[10px] bg-[#f8f8f8] px-4 py-[13px] text-[13px] font-medium text-[#6a6a6a]">
+              <span>Per inviare un comunicato personalizzato vai su</span>
+              <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#e0e0e0] bg-white">
+                <svg width="14" height="11" viewBox="0 0 18 13" fill="none">
+                  <path d="M1 1h16M1 6.5h16M1 12h16" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </span>
+              <ArrowRight className="size-[15px] text-[#bbbbbb]" strokeWidth={2} />
+              <span className="inline-flex items-center gap-[5px] font-semibold text-[#222222]">
+                <Bell className="size-[15px]" strokeWidth={2} />
+                Invia comunicato
+              </span>
             </div>
           </div>
         </AccordionSection>

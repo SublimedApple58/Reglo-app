@@ -958,15 +958,98 @@ export function AutoscuoleResourcesPage({
     }
   };
 
-  const toggleChannel = (
-    channel: ChannelValue,
-    setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>,
-  ) => {
-    setter((current) =>
-      current.includes(channel)
-        ? current.filter((item) => item !== channel)
-        : [...current, channel],
-    );
+  // Auto-save della pane Promemoria e notifiche (stesso pattern della pane
+  // Veicoli): applica subito il cambiamento in UI, persiste il solo campo
+  // toccato e ripristina i valori precedenti se il salvataggio fallisce.
+  const updateReminderSettings = async (patch: {
+    studentReminderMinutes?: number;
+    instructorReminderMinutes?: number;
+    studentReminderMorningEnabled?: boolean;
+    studentReminderMorningTime?: string;
+    studentReminderDayBeforeEnabled?: boolean;
+    studentReminderDayBeforeTime?: string;
+    slotFillChannels?: ChannelValue[];
+    studentReminderChannels?: ChannelValue[];
+    instructorReminderChannels?: ChannelValue[];
+  }) => {
+    if (
+      (patch.slotFillChannels && !patch.slotFillChannels.length) ||
+      (patch.studentReminderChannels && !patch.studentReminderChannels.length) ||
+      (patch.instructorReminderChannels && !patch.instructorReminderChannels.length)
+    ) {
+      toast.error({ description: "Seleziona almeno un canale di invio." });
+      return;
+    }
+    const prev = {
+      studentReminderMinutes,
+      instructorReminderMinutes,
+      studentReminderMorningEnabled,
+      studentReminderMorningTime,
+      studentReminderDayBeforeEnabled,
+      studentReminderDayBeforeTime,
+      slotFillChannels,
+      studentReminderChannels,
+      instructorReminderChannels,
+    };
+    if (patch.studentReminderMinutes !== undefined)
+      setStudentReminderMinutes(String(patch.studentReminderMinutes));
+    if (patch.instructorReminderMinutes !== undefined)
+      setInstructorReminderMinutes(String(patch.instructorReminderMinutes));
+    if (patch.studentReminderMorningEnabled !== undefined)
+      setStudentReminderMorningEnabled(patch.studentReminderMorningEnabled);
+    if (patch.studentReminderMorningTime !== undefined)
+      setStudentReminderMorningTime(patch.studentReminderMorningTime);
+    if (patch.studentReminderDayBeforeEnabled !== undefined)
+      setStudentReminderDayBeforeEnabled(patch.studentReminderDayBeforeEnabled);
+    if (patch.studentReminderDayBeforeTime !== undefined)
+      setStudentReminderDayBeforeTime(patch.studentReminderDayBeforeTime);
+    if (patch.slotFillChannels !== undefined) setSlotFillChannels(patch.slotFillChannels);
+    if (patch.studentReminderChannels !== undefined)
+      setStudentReminderChannels(patch.studentReminderChannels);
+    if (patch.instructorReminderChannels !== undefined)
+      setInstructorReminderChannels(patch.instructorReminderChannels);
+
+    const res = await updateAutoscuolaSettings({
+      ...(patch.studentReminderMinutes !== undefined
+        ? { studentReminderMinutes: patch.studentReminderMinutes as (typeof REMINDER_OPTIONS)[number] }
+        : {}),
+      ...(patch.instructorReminderMinutes !== undefined
+        ? { instructorReminderMinutes: patch.instructorReminderMinutes as (typeof REMINDER_OPTIONS)[number] }
+        : {}),
+      ...(patch.studentReminderMorningEnabled !== undefined
+        ? { studentReminderMorningEnabled: patch.studentReminderMorningEnabled }
+        : {}),
+      ...(patch.studentReminderMorningTime !== undefined
+        ? { studentReminderMorningTime: patch.studentReminderMorningTime }
+        : {}),
+      ...(patch.studentReminderDayBeforeEnabled !== undefined
+        ? { studentReminderDayBeforeEnabled: patch.studentReminderDayBeforeEnabled }
+        : {}),
+      ...(patch.studentReminderDayBeforeTime !== undefined
+        ? { studentReminderDayBeforeTime: patch.studentReminderDayBeforeTime }
+        : {}),
+      ...(patch.slotFillChannels !== undefined ? { slotFillChannels: patch.slotFillChannels } : {}),
+      ...(patch.studentReminderChannels !== undefined
+        ? { studentReminderChannels: patch.studentReminderChannels }
+        : {}),
+      ...(patch.instructorReminderChannels !== undefined
+        ? { instructorReminderChannels: patch.instructorReminderChannels }
+        : {}),
+    });
+    if (!res.success) {
+      setStudentReminderMinutes(prev.studentReminderMinutes);
+      setInstructorReminderMinutes(prev.instructorReminderMinutes);
+      setStudentReminderMorningEnabled(prev.studentReminderMorningEnabled);
+      setStudentReminderMorningTime(prev.studentReminderMorningTime);
+      setStudentReminderDayBeforeEnabled(prev.studentReminderDayBeforeEnabled);
+      setStudentReminderDayBeforeTime(prev.studentReminderDayBeforeTime);
+      setSlotFillChannels(prev.slotFillChannels);
+      setStudentReminderChannels(prev.studentReminderChannels);
+      setInstructorReminderChannels(prev.instructorReminderChannels);
+      toast.error({
+        description: res.message ?? "Impossibile salvare le impostazioni promemoria.",
+      });
+    }
   };
 
   const toggleRequiredType = (type: LessonTypeValue) => {
@@ -1709,24 +1792,15 @@ export function AutoscuoleResourcesPage({
             roundedHoursOnly={roundedHoursOnly}
             setRoundedHoursOnly={setRoundedHoursOnly}
             studentReminderMinutes={studentReminderMinutes}
-            setStudentReminderMinutes={setStudentReminderMinutes}
             studentReminderMorningEnabled={studentReminderMorningEnabled}
-            setStudentReminderMorningEnabled={setStudentReminderMorningEnabled}
             studentReminderMorningTime={studentReminderMorningTime}
-            setStudentReminderMorningTime={setStudentReminderMorningTime}
             studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
-            setStudentReminderDayBeforeEnabled={setStudentReminderDayBeforeEnabled}
             studentReminderDayBeforeTime={studentReminderDayBeforeTime}
-            setStudentReminderDayBeforeTime={setStudentReminderDayBeforeTime}
             instructorReminderMinutes={instructorReminderMinutes}
-            setInstructorReminderMinutes={setInstructorReminderMinutes}
             slotFillChannels={slotFillChannels}
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
-            toggleChannel={toggleChannel}
-            setSlotFillChannels={setSlotFillChannels}
-            setStudentReminderChannels={setStudentReminderChannels}
-            setInstructorReminderChannels={setInstructorReminderChannels}
+            updateReminderSettings={updateReminderSettings}
             lessonPolicyEnabled={lessonPolicyEnabled}
             setLessonPolicyEnabled={setLessonPolicyEnabled}
             lessonRequiredTypesEnabled={lessonRequiredTypesEnabled}
