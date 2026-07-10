@@ -60,7 +60,6 @@ import {
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
 import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
-import { InstructorHoursDashboard } from "@/components/pages/Autoscuole/InstructorHoursDashboard";
 
 /** Availability mode from the instructor settings JSON ("default" unless explicitly "publication"). */
 const readAvailabilityMode = (settings: unknown): "default" | "publication" =>
@@ -279,8 +278,7 @@ type ConfigPane =
   | "reminders"
   | "students"
   | "instructors"
-  | "vehicles"
-  | "hours";
+  | "vehicles";
 
 const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
   [
@@ -297,7 +295,6 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
   [
     { key: "instructors", label: "Istruttori", icon: Users },
     { key: "vehicles", label: "Veicoli", icon: Car },
-    { key: "hours", label: "Ore guida", icon: Clock },
   ],
 ];
 
@@ -332,7 +329,6 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   students: "Gestione allievi",
   instructors: "Istruttori",
   vehicles: "Veicoli",
-  hours: "Ore guida",
 };
 
 export function AutoscuoleResourcesPage({
@@ -2043,9 +2039,6 @@ export function AutoscuoleResourcesPage({
             savingSettings={savingSettings}
             toast={toast}
           />
-        </KeepAlivePane>
-        <KeepAlivePane active={configTab === "hours"} eager={mountAllPanes}>
-          <InstructorHoursDashboard />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "vehicles"} eager={mountAllPanes}>
           <VehiclesTab

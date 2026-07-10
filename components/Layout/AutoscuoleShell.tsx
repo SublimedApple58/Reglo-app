@@ -275,7 +275,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <span className="text-[15px] font-medium">Utenti</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => router.push("/user/autoscuole?tab=settings&pane=hours")}
+                    onClick={() => router.push("/user/autoscuole/ore-guida")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
                     <Clock className="h-[18px] w-[18px]" strokeWidth={1.8} />
