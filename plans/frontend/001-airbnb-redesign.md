@@ -185,6 +185,22 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - **Logo** (99cc0ac): RegloMark → logo nuovo (backoffice + sign-in/up); header overlay (impostazioni/assistenza/area personale) ora usano lo stesso container max-w-[1440px] della shell → logo mai più saltellante. GOTCHA test: l'hamburger appare solo dopo un FULL page load (session atom) — dopo il login fare page.goto().
   - **Ore guida**: rimossa dalla sidebar Impostazioni, ora overlay standalone `/user/autoscuole/ore-guida` (voce solo hamburger) allineato al proto section-ore: titolo + "Totale ore · Xh", nav settimana ‹›, card istruttore (nome, totale 30px, barre navy #1a1a2e scala 2h30=52px, Lun-Dom, riga mese) + card "Cancellazioni tardive" separata con tooltip (rosso #c0444a). `InstructorHoursDashboard` eliminato. NB: gli indicatori "fuori orario" (amber) NON sono nel proto e sono stati tolti dalla web (restano su mobile) — segnalato all'utente.
 
+## ⇒ STATO AL COMPACT 2026-07-10 (pomeriggio)
+
+**Dove siamo**: revisione pezzo-pezzo col titolare, tutto committato/pushato su `feat/airbnb-redesign` fino a `7eb2358`. Fatte oggi (oltre alle revisioni #9-#13 sopra): dialog istruttore restyled, TimePicker/DatePicker (fix freeze pointer-events), festività nazionali VERIFICATE end-to-end, pane Fatturazione=solo settings agenda, Ore guida standalone, auth sign-in/sign-up rifatte, logo nuovo ovunque (backoffice+favicon, posizione uniforme header), logo vettorizzato (SVG+HD sul Desktop dell'utente).
+
+**Staging**: contiene SOLO fino a `aa219ac` (ship di stamattina + migration license_purchases). TUTTO il resto della giornata NON è ancora su staging. Al prossimo ship: `git fetch && git merge origin/staging` nel branch → `pnpm ship:staging` → `pnpm migrate:staging` (manca `national_holiday_preset`).
+
+**CHECKLIST RILASCIO PROD (solo con OK utente)**:
+1. Merge → main (feature branch, mai a freddo).
+2. `pnpm migrate:prod` — migration nuove del branch: support_center, company_documents, company_plan, teoria_seat_price, license_purchases, **national_holiday_preset**.
+3. `pnpm trigger:deploy:prod` — OBBLIGATORIO: nuovo cron `autoscuole-national-holidays` (rolling festività) + skip promemoria istruttore in communications.ts.
+4. Vercel auto-deploya da main; niente OTA mobile per questo branch (solo web/backend).
+
+**Direzione confermata dall'utente**: pagamento digitale guide + tutta la parte Stripe DA RIMUOVERE dal prodotto (progetto separato futuro: pagina Pagamenti nav, payments.ts, mobile).
+
+**Gotcha Playwright accumulati**: login `/it/sign-in` + `button:has-text("Accedi")`; DOPO il login fare `page.goto()` pieno (session atom/hamburger); pane settings = aspettare ~6s (settings async, prima mostrano default); `node run.js` SEMPRE con `cd .../.claude/skills/playwright-skill` prima (la cwd non persiste); toggle idempotenti leggendo `[data-state]`/`aria-checked`; ripristinare SEMPRE lo stato dev dopo i test (verificare con `pnpm db:dev:query`).
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
