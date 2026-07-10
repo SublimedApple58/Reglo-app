@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { FieldGroup } from "@/components/ui/field-group";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import {
   ResourceCard,
   SlotPill,
@@ -390,62 +392,62 @@ export default function InstructorsTab({
           <div className="px-6 py-5 space-y-5">
             {/* ── Orario di lavoro ── */}
             <div className="space-y-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Orario di lavoro</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Orario di lavoro</span>
               <p className="text-xs text-muted-foreground -mt-1">Definisci la fascia lavorativa per identificare ore extra.</p>
               <div className="grid grid-cols-2 gap-3">
-                <FieldGroup label="Inizio">
-                  <Select value={clusterWorkingHoursStart ?? ""} onValueChange={(v) => setClusterWorkingHoursStart(v || undefined)}>
-                    <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 35 }, (_, i) => {
-                        const h = Math.floor(i / 2) + 6;
-                        const m = (i % 2) * 30;
-                        const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-                        return <SelectItem key={val} value={val}>{val}</SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-                <FieldGroup label="Fine">
-                  <Select value={clusterWorkingHoursEnd ?? ""} onValueChange={(v) => setClusterWorkingHoursEnd(v || undefined)}>
-                    <SelectTrigger><SelectValue placeholder="Non impostato" /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 35 }, (_, i) => {
-                        const h = Math.floor(i / 2) + 6;
-                        const m = (i % 2) * 30;
-                        const val = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-                        return <SelectItem key={val} value={val}>{val}</SelectItem>;
-                      })}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-[#555555]">Inizio</div>
+                  <TimePickerInput
+                    value={clusterWorkingHoursStart ?? null}
+                    onChange={(v) => setClusterWorkingHoursStart(v)}
+                    minTime="06:00"
+                    maxTime="23:00"
+                    placeholder="Non impostato"
+                    onClear={() => setClusterWorkingHoursStart(undefined)}
+                    clearLabel="Non impostato"
+                    className="w-full justify-between"
+                  />
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-[#555555]">Fine</div>
+                  <TimePickerInput
+                    value={clusterWorkingHoursEnd ?? null}
+                    onChange={(v) => setClusterWorkingHoursEnd(v)}
+                    minTime="06:00"
+                    maxTime="23:00"
+                    placeholder="Non impostato"
+                    onClear={() => setClusterWorkingHoursEnd(undefined)}
+                    clearLabel="Non impostato"
+                    className="w-full justify-between"
+                  />
+                </div>
               </div>
             </div>
 
             <FieldGroup label="Modalità disponibilità">
               <Select value={clusterAvailabilityMode} onValueChange={(v) => setClusterAvailabilityMode(v as "default" | "publication")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">Predefinita</SelectItem>
                   <SelectItem value="publication">A pubblicazione</SelectItem>
                 </SelectContent>
               </Select>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-[13px] font-medium text-[#929292]">
                 In modalità pubblicazione, l&apos;istruttore imposta la disponibilità settimana per settimana.
               </span>
             </FieldGroup>
 
             <div
-              className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+              className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
               onClick={() => setClusterAutonomous((prev) => !prev)}
             >
               <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">Modalità autonoma</span>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-sm font-semibold text-[#222222]">Modalità autonoma</span>
+                <span className="text-[13px] font-medium text-[#929292]">
                   L&apos;istruttore gestisce i propri allievi e impostazioni.
                 </span>
               </div>
-              <InlineToggle checked={clusterAutonomous} size="sm" />
+              <InlineToggle checked={clusterAutonomous} size="lg" />
             </div>
 
             {clusterAutonomous ? (
@@ -459,7 +461,7 @@ export default function InstructorsTab({
                     </span>
                     <button
                       type="button"
-                      className="ml-auto text-xs font-medium text-pink-500 hover:text-pink-600 transition"
+                      className="ml-auto cursor-pointer text-xs font-semibold text-[#222222] transition-opacity hover:opacity-70"
                       onClick={() => {
                         navigator.clipboard.writeText(clusterInstructor.inviteCode ?? "");
                       }}
@@ -489,24 +491,24 @@ export default function InstructorsTab({
                 </FieldGroup>
 
                 <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                   onClick={() => setClusterRoundedHours((prev) => !prev)}
                 >
                   <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">Solo orari tondi</span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-sm font-semibold text-[#222222]">Solo orari tondi</span>
+                    <span className="text-[13px] font-medium text-[#929292]">
                       Proponi solo slot che iniziano a ore piene.
                     </span>
                   </div>
-                  <InlineToggle checked={clusterRoundedHours} size="sm" />
+                  <InlineToggle checked={clusterRoundedHours} size="lg" />
                 </div>
 
                 {/* ── Governance prenotazione (override cluster) ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Governance prenotazione</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Governance prenotazione</span>
                   <FieldGroup label="Chi prenota">
                     <Select value={clusterAppBookingActors ?? ""} onValueChange={(v) => setClusterAppBookingActors((v || undefined) as "students" | "instructors" | "both" | undefined)}>
-                      <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="students">Solo allievi</SelectItem>
                         <SelectItem value="instructors">Solo istruttori</SelectItem>
@@ -516,7 +518,7 @@ export default function InstructorsTab({
                   </FieldGroup>
                   <FieldGroup label="Modalità prenotazione istruttore">
                     <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | undefined)}>
-                      <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="manual_full">Manuale totale</SelectItem>
                         <SelectItem value="manual_engine">Manuale + motore annullamenti</SelectItem>
@@ -527,21 +529,21 @@ export default function InstructorsTab({
 
                 {/* ── Scambio guide ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scambio guide</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Scambio guide</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterSwapEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Scambio guide</span>
-                      <span className="text-xs text-muted-foreground">{clusterSwapEnabled === undefined ? "Default azienda" : clusterSwapEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Scambio guide</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterSwapEnabled === undefined ? "Default azienda" : clusterSwapEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterSwapEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterSwapEnabled ?? false} size="lg" />
                   </div>
                   {clusterSwapEnabled && (
                     <FieldGroup label="Notifica scambio">
                       <Select value={clusterSwapNotifyMode ?? ""} onValueChange={(v) => setClusterSwapNotifyMode((v || undefined) as "all" | "available_only" | undefined)}>
-                        <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                        <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">Tutti gli allievi</SelectItem>
                           <SelectItem value="available_only">Solo disponibili</SelectItem>
@@ -553,58 +555,61 @@ export default function InstructorsTab({
 
                 {/* ── Annullamento guide ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Annullamento guide</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Annullamento guide</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterStudentCancellationEnabled((prev) => prev === undefined ? false : prev ? undefined : true)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Annullamento guide allievi</span>
-                      <span className="text-xs text-muted-foreground">{clusterStudentCancellationEnabled === undefined ? "Default azienda" : clusterStudentCancellationEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Annullamento guide allievi</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterStudentCancellationEnabled === undefined ? "Default azienda" : clusterStudentCancellationEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterStudentCancellationEnabled ?? true} size="sm" />
+                    <InlineToggle checked={clusterStudentCancellationEnabled ?? true} size="lg" />
                   </div>
                 </div>
 
                 {/* ── Cutoff prenotazione ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cutoff prenotazione</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Cutoff prenotazione</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterBookingCutoffEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Cutoff prenotazione</span>
-                      <span className="text-xs text-muted-foreground">{clusterBookingCutoffEnabled === undefined ? "Default azienda" : clusterBookingCutoffEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Cutoff prenotazione</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterBookingCutoffEnabled === undefined ? "Default azienda" : clusterBookingCutoffEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterBookingCutoffEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterBookingCutoffEnabled ?? false} size="lg" />
                   </div>
                   {clusterBookingCutoffEnabled && (
                     <FieldGroup label="Orario limite">
-                      <Select value={clusterBookingCutoffTime ?? ""} onValueChange={(v) => setClusterBookingCutoffTime(v || undefined)}>
-                        <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                        <SelectContent>
-                          {["12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00","22:00"].map((t) => (
-                            <SelectItem key={t} value={t}>{t}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <TimePickerInput
+                        value={clusterBookingCutoffTime ?? null}
+                        onChange={(v) => setClusterBookingCutoffTime(v)}
+                        minTime="12:00"
+                        maxTime="22:00"
+                        minuteStep={30}
+                        placeholder="Default azienda"
+                        onClear={() => setClusterBookingCutoffTime(undefined)}
+                        clearLabel="Default azienda"
+                        className="w-full justify-between"
+                      />
                     </FieldGroup>
                   )}
                 </div>
 
                 {/* ── Limite settimanale ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Limite guide settimanali</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Limite guide settimanali</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterWeeklyLimitEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Limite settimanale</span>
-                      <span className="text-xs text-muted-foreground">{clusterWeeklyLimitEnabled === undefined ? "Default azienda" : clusterWeeklyLimitEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Limite settimanale</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterWeeklyLimitEnabled === undefined ? "Default azienda" : clusterWeeklyLimitEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterWeeklyLimitEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterWeeklyLimitEnabled ?? false} size="lg" />
                   </div>
                   {clusterWeeklyLimitEnabled && (
                     <FieldGroup label="Max guide a settimana">
@@ -612,7 +617,7 @@ export default function InstructorsTab({
                         type="number"
                         min={1}
                         max={50}
-                        className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
+                        className={PROTO_INPUT}
                         value={clusterWeeklyLimit ?? ""}
                         onChange={(e) => setClusterWeeklyLimit(e.target.value ? Number(e.target.value) : undefined)}
                       />
@@ -622,22 +627,22 @@ export default function InstructorsTab({
 
                 {/* ── Notifiche slot vuoti ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Notifiche slot vuoti</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Notifiche slot vuoti</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterEmptySlotEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Notifiche slot vuoti</span>
-                      <span className="text-xs text-muted-foreground">{clusterEmptySlotEnabled === undefined ? "Default azienda" : clusterEmptySlotEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Notifiche slot vuoti</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterEmptySlotEnabled === undefined ? "Default azienda" : clusterEmptySlotEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterEmptySlotEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterEmptySlotEnabled ?? false} size="lg" />
                   </div>
                   {clusterEmptySlotEnabled && (
                     <>
                       <FieldGroup label="Destinatari">
                         <Select value={clusterEmptySlotTarget ?? ""} onValueChange={(v) => setClusterEmptySlotTarget((v || undefined) as "all" | "availability_matching" | undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
+                          <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Tutti gli allievi</SelectItem>
                             <SelectItem value="availability_matching">Solo con disponibilità</SelectItem>
@@ -667,38 +672,44 @@ export default function InstructorsTab({
 
                 {/* ── Fascia oraria ristretta ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Fascia oraria ristretta</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Fascia oraria ristretta</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterRestrictedTimeEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Fascia oraria ristretta</span>
-                      <span className="text-xs text-muted-foreground">{clusterRestrictedTimeEnabled === undefined ? "Default azienda" : clusterRestrictedTimeEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Fascia oraria ristretta</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterRestrictedTimeEnabled === undefined ? "Default azienda" : clusterRestrictedTimeEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterRestrictedTimeEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterRestrictedTimeEnabled ?? false} size="lg" />
                   </div>
                   {clusterRestrictedTimeEnabled && (
                     <div className="grid gap-3 sm:grid-cols-2">
                       <FieldGroup label="Inizio fascia">
-                        <Select value={clusterRestrictedTimeStart ?? ""} onValueChange={(v) => setClusterRestrictedTimeStart(v || undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            {["06:00","07:00","08:00","09:00","10:00","11:00","12:00","13:00","14:00"].map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <TimePickerInput
+                          value={clusterRestrictedTimeStart ?? null}
+                          onChange={(v) => setClusterRestrictedTimeStart(v)}
+                          minTime="06:00"
+                          maxTime="14:00"
+                          minuteStep={30}
+                          placeholder="Default azienda"
+                          onClear={() => setClusterRestrictedTimeStart(undefined)}
+                          clearLabel="Default azienda"
+                          className="w-full justify-between"
+                        />
                       </FieldGroup>
                       <FieldGroup label="Fine fascia">
-                        <Select value={clusterRestrictedTimeEnd ?? ""} onValueChange={(v) => setClusterRestrictedTimeEnd(v || undefined)}>
-                          <SelectTrigger><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            {["09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00"].map((t) => (
-                              <SelectItem key={t} value={t}>{t}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <TimePickerInput
+                          value={clusterRestrictedTimeEnd ?? null}
+                          onChange={(v) => setClusterRestrictedTimeEnd(v)}
+                          minTime="09:00"
+                          maxTime="16:00"
+                          minuteStep={30}
+                          placeholder="Default azienda"
+                          onClear={() => setClusterRestrictedTimeEnd(undefined)}
+                          clearLabel="Default azienda"
+                          className="w-full justify-between"
+                        />
                       </FieldGroup>
                     </div>
                   )}
@@ -706,16 +717,16 @@ export default function InstructorsTab({
 
                 {/* ── Assenza settimanale (Task 8) ── */}
                 <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Assenza settimanale</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Assenza settimanale</span>
                   <div
-                    className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                     onClick={() => setClusterWeeklyAbsenceEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
                   >
                     <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">Assenza settimanale allievi</span>
-                      <span className="text-xs text-muted-foreground">{clusterWeeklyAbsenceEnabled === undefined ? "Default azienda" : clusterWeeklyAbsenceEnabled ? "Attivo" : "Disattivo"}</span>
+                      <span className="text-sm font-semibold text-[#222222]">Assenza settimanale allievi</span>
+                      <span className="text-[13px] font-medium text-[#929292]">{clusterWeeklyAbsenceEnabled === undefined ? "Default azienda" : clusterWeeklyAbsenceEnabled ? "Attivo" : "Disattivo"}</span>
                     </div>
-                    <InlineToggle checked={clusterWeeklyAbsenceEnabled ?? false} size="sm" />
+                    <InlineToggle checked={clusterWeeklyAbsenceEnabled ?? false} size="lg" />
                   </div>
                 </div>
 

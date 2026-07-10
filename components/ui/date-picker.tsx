@@ -165,9 +165,11 @@ export function DatePickerInput({
   }, [value]);
 
   return (
-    // modal: dentro le Dialog (modali) il body ha pointer-events:none — il
-    // popover non-modale portalled erediterebbe none e sarebbe incliccabile.
-    <PopoverPrimitive.Root modal open={open} onOpenChange={setOpen}>
+    // NON-modale + pointer-events-auto sul content: dentro le Dialog modali il
+    // body ha pointer-events:none (che il content sovrascrive); la variante
+    // `modal` innescava una race di cleanup con la Dialog che lasciava il body
+    // congelato dopo la chiusura.
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
@@ -190,7 +192,7 @@ export function DatePickerInput({
           align="start"
           sideOffset={4}
           collisionPadding={8}
-          className="z-[200] w-[280px] rounded-xl border border-border bg-white p-3 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
+          className="pointer-events-auto z-[200] w-[280px] rounded-xl border border-border bg-white p-3 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
         >
           <CalendarGrid
             month={month}

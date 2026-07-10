@@ -29,6 +29,7 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
+import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -56,10 +57,6 @@ const CHANNEL_OPTIONS = [
   { value: "email", label: "Email" },
 ] as const;
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
-
-/** Trigger select in stile proto (bordo 1.5px #dddddd, radius 10). */
-const PROTO_SELECT_TRIGGER =
-  "h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-[#222222] shadow-none transition-colors hover:border-[#929292] focus-visible:border-[#222222] focus-visible:bg-white";
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },

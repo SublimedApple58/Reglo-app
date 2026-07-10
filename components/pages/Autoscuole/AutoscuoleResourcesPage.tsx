@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, X, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ import {
   type LicenseCategory,
 } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
 
 // Import statici: i pane dell'overlay restano montati (keep-alive) e non
 // devono scaricare chunk al cambio sezione — il lazy-loading qui causava lo
@@ -229,8 +231,6 @@ const WEEKDAY_OPTIONS = [
   { value: 0, label: "Dom" },
 ] as const;
 
-const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => index * 30);
-const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => (index + 1) * 30);
 
 type WeekOption = { label: string; weekStart: string }; // weekStart = YYYY-MM-DD of Monday
 
@@ -2063,13 +2063,13 @@ export function AutoscuoleResourcesPage({
               {/* Mode badge + switch (mirrors the mobile availability-mode setting) */}
               <div className="mt-2 flex items-center gap-2">
                 {availInstructorMode === "publication" ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                    <span className="size-1.5 rounded-full bg-blue-500" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#9fc3f0] bg-[#eaf2fd] px-2.5 py-1 text-[11px] font-semibold text-[#1a2b45]">
+                    <span className="size-1.5 rounded-full bg-[#1a2b45]" />
                     Modalità pubblicazione
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
-                    <span className="size-1.5 rounded-full bg-gray-400" />
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#6a6a6a]">
+                    <span className="size-1.5 rounded-full bg-[#b0b0b0]" />
                     Modalità predefinita
                   </span>
                 )}
@@ -2077,18 +2077,18 @@ export function AutoscuoleResourcesPage({
                   type="button"
                   onClick={handleSwitchAvailabilityMode}
                   disabled={availModeSwitching}
-                  className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground disabled:opacity-50"
+                  className="cursor-pointer text-[11px] font-medium text-[#6a6a6a] underline underline-offset-2 transition-colors hover:text-[#222222] disabled:opacity-50"
                 >
                   {availModeSwitching ? "Cambio..." : "Cambia modalità"}
                 </button>
               </div>
               {/* Tab switcher (default mode only) */}
               {availInstructorMode === "default" && (
-                <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                <div className="mt-3 flex max-w-[260px] items-center gap-1 rounded-full bg-[#f2f2f2] p-1">
+                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors", availDialogTab === "default" ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.08)]" : "font-medium text-[#6a6a6a] hover:text-[#222222]")}>
                     Predefinito
                   </button>
-                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors", availDialogTab === "calendar" ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.08)]" : "font-medium text-[#6a6a6a] hover:text-[#222222]")}>
                     Calendario
                   </button>
                 </div>
@@ -2117,28 +2117,16 @@ export function AutoscuoleResourcesPage({
                     </div>
                   </FieldGroup>
                   <FieldGroup label="Fasce orarie">
-                    <div className="space-y-2">
-                      {instrDefaultRanges.map((range, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setInstrStartMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`is-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          <span className="text-xs text-muted-foreground">–</span>
-                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setInstrEndMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ie-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          {instrDefaultRanges.length > 1 && (
-                            <button type="button" onClick={() => setInstrDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setInstrDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors">
-                        <Plus className="size-3" />
-                        Aggiungi fascia
-                      </button>
-                    </div>
+                    <TimeRangeRows
+                      ranges={instrDefaultRanges}
+                      onChange={(next) => {
+                        setInstrDefaultRanges(next);
+                        if (next.length) {
+                          setInstrStartMinutes(next[0].startMinutes);
+                          setInstrEndMinutes(next[0].endMinutes);
+                        }
+                      }}
+                    />
                   </FieldGroup>
                 </>
               ) : (
@@ -2157,7 +2145,7 @@ export function AutoscuoleResourcesPage({
                   />
                   {calendarSelectedDate && calendarDayEnabled && (
                     <div
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                      className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                       onClick={() => setRecurringOverride((prev) => !prev)}
                     >
                       <div className="flex flex-col gap-0.5">
@@ -2166,7 +2154,7 @@ export function AutoscuoleResourcesPage({
                           Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} dal {new Date(calendarSelectedDate).toLocaleDateString("it-IT", { day: "numeric", month: "short", timeZone: "UTC" })} in poi
                         </span>
                       </div>
-                      <InlineToggle checked={recurringOverride} size="sm" />
+                      <InlineToggle checked={recurringOverride} size="lg" />
                     </div>
                   )}
                 </>
@@ -2180,7 +2168,7 @@ export function AutoscuoleResourcesPage({
             ) : (
             <div className="flex items-center justify-between border-t border-border px-6 py-4">
               {availDialogTab === "default" ? (
-                <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
+                <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="cursor-pointer text-[13px] font-medium text-[#c13515] transition-colors hover:text-[#9a2810] disabled:opacity-40">
                   Rimuovi disponibilità
                 </button>
               ) : (
@@ -2497,7 +2485,7 @@ export function AutoscuoleResourcesPage({
 
               {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
                 <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
+                  className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
                   onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
                 >
                   <div className="flex flex-col gap-0.5 pr-3">
@@ -2510,7 +2498,7 @@ export function AutoscuoleResourcesPage({
                         : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
                     </span>
                   </div>
-                  <InlineToggle checked={editVehicleFollowsAvailability} size="sm" />
+                  <InlineToggle checked={editVehicleFollowsAvailability} size="lg" />
                 </div>
               ) : null}
 
@@ -2619,28 +2607,16 @@ export function AutoscuoleResourcesPage({
                     </div>
                   </FieldGroup>
                   <FieldGroup label="Fasce orarie">
-                    <div className="space-y-2">
-                      {vehDefaultRanges.map((range, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setAvailStartMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`vs-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          <span className="text-xs text-muted-foreground">–</span>
-                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setAvailEndMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ve-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          {vehDefaultRanges.length > 1 && (
-                            <button type="button" onClick={() => setVehDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setVehDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors">
-                        <Plus className="size-3" />
-                        Aggiungi fascia
-                      </button>
-                    </div>
+                    <TimeRangeRows
+                      ranges={vehDefaultRanges}
+                      onChange={(next) => {
+                        setVehDefaultRanges(next);
+                        if (next.length) {
+                          setAvailStartMinutes(next[0].startMinutes);
+                          setAvailEndMinutes(next[0].endMinutes);
+                        }
+                      }}
+                    />
                   </FieldGroup>
                 </>
               ) : (
@@ -2732,47 +2708,41 @@ export function AutoscuoleResourcesPage({
             </div>
             <div className="px-6 py-5 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
-                <FieldGroup label="Data inizio">
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
-                    value={sickLeaveStartDate}
-                    onChange={(e) => setSickLeaveStartDate(e.target.value)}
-                  />
-                </FieldGroup>
-                <FieldGroup label="Data fine">
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
-                    value={sickLeaveEndDate}
-                    onChange={(e) => setSickLeaveEndDate(e.target.value)}
-                  />
-                </FieldGroup>
-              </div>
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setSickLeaveHalfDay((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Mezza giornata</span>
-                  <span className="text-xs text-muted-foreground">
-                    La malattia inizia a un orario specifico del primo giorno.
-                  </span>
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-[#555555]">Data inizio</div>
+                  <DatePickerInput value={sickLeaveStartDate} onChange={setSickLeaveStartDate} />
                 </div>
-                <InlineToggle checked={sickLeaveHalfDay} size="sm" />
+                <div>
+                  <div className="mb-2 text-xs font-semibold text-[#555555]">Data fine</div>
+                  <DatePickerInput value={sickLeaveEndDate} onChange={setSickLeaveEndDate} />
+                </div>
               </div>
-              {sickLeaveHalfDay && (
-                <FieldGroup label="Orario inizio malattia">
-                  <Select value={sickLeaveStartTime} onValueChange={setSickLeaveStartTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
+              <div className="rounded-[10px] bg-[#f8f8f8] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-semibold text-[#222222]">Mezza giornata</div>
+                    <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                      La malattia inizia a un orario specifico del primo giorno.
+                    </div>
+                  </div>
+                  <InlineToggle
+                    checked={sickLeaveHalfDay}
+                    onChange={() => setSickLeaveHalfDay((prev) => !prev)}
+                    size="lg"
+                  />
+                </div>
+                {sickLeaveHalfDay && (
+                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3">
+                    <span className="text-[13px] font-medium text-[#555555]">Orario inizio malattia</span>
+                    <TimePickerInput
+                      value={sickLeaveStartTime}
+                      onChange={setSickLeaveStartTime}
+                      minTime="06:00"
+                      maxTime="20:00"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
               <Button variant="outline" onClick={() => setSickLeaveInstructor(null)}>
@@ -2869,6 +2839,61 @@ function formatMinutes(totalMinutes: number) {
 const CAL_DAY_NAMES = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 
 type TimeRange = { startMinutes: number; endMinutes: number };
+
+/** Editor fasce orarie (TimePicker inizio–fine, × per rimuovere, + per
+ *  aggiungere): usato dai dialog disponibilità istruttore/veicolo. */
+function TimeRangeRows({
+  ranges,
+  onChange,
+}: {
+  ranges: { startMinutes: number; endMinutes: number }[];
+  onChange: (next: { startMinutes: number; endMinutes: number }[]) => void;
+}) {
+  const toTime = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  return (
+    <div className="space-y-2">
+      {ranges.map((range, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <TimePickerInput
+            value={toTime(range.startMinutes)}
+            onChange={(t) =>
+              onChange(ranges.map((r, i) => (i === idx ? { ...r, startMinutes: toMinutes(t) } : r)))
+            }
+          />
+          <span className="text-sm font-medium text-[#929292]">–</span>
+          <TimePickerInput
+            value={toTime(range.endMinutes)}
+            onChange={(t) =>
+              onChange(ranges.map((r, i) => (i === idx ? { ...r, endMinutes: toMinutes(t) } : r)))
+            }
+          />
+          {ranges.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onChange(ranges.filter((_, i) => i !== idx))}
+              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#929292] transition-colors hover:bg-[#f2f2f2] hover:text-[#222222]"
+              aria-label="Rimuovi fascia"
+            >
+              <X className="size-3.5" strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...ranges, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
+        className="flex cursor-pointer items-center gap-1.5 pt-0.5 text-[13px] font-semibold text-[#222222] transition-opacity hover:opacity-70"
+      >
+        <Plus className="size-3.5" strokeWidth={2.2} />
+        Aggiungi fascia
+      </button>
+    </div>
+  );
+}
 
 function AvailabilityCalendar({
   calendarMonth,
@@ -3035,39 +3060,7 @@ function AvailabilityCalendar({
             <InlineToggle checked={dayEnabled} size="sm" />
           </div>
           {dayEnabled && (
-            <div className="space-y-2">
-              {ranges.map((range, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Select value={String(range.startMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: Number(v) } : r))}>
-                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-s-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <span className="text-xs text-muted-foreground">–</span>
-                  <Select value={String(range.endMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: Number(v) } : r))}>
-                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-e-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                  </Select>
-                  {ranges.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setRanges((prev) => prev.filter((_, i) => i !== idx))}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
-                      aria-label="Rimuovi fascia"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
-                className="flex items-center gap-1 text-xs font-medium text-navy-900 hover:text-navy-700 transition-colors"
-              >
-                <Plus className="size-3" />
-                Aggiungi fascia
-              </button>
-            </div>
+            <TimeRangeRows ranges={ranges} onChange={(next) => setRanges(() => next)} />
           )}
         </div>
       )}

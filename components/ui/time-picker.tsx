@@ -16,8 +16,10 @@ import { cn } from "@/lib/utils";
  * `onChange` scatta UNA volta sola alla chiusura (OK o click fuori): così le
  * pane con auto-save fanno un solo salvataggio per interazione.
  *
- * Come DatePickerInput è su Radix Popover `modal` (i popover non-modali
- * dentro le Dialog erediterebbero pointer-events:none dal body).
+ * Popover NON-modale + `pointer-events-auto` sul content: dentro le Dialog
+ * modali il body ha pointer-events:none (che il content sovrascrive), mentre
+ * il popover `modal` innescava una race di cleanup con la Dialog che lasciava
+ * il body congelato dopo la chiusura (Escape chiudeva entrambi in un colpo).
  */
 
 function pad(value: number) {
@@ -107,10 +109,13 @@ export function TimePickerInput({
   minTime,
   maxTime,
   minuteStep = 15,
+  placeholder,
+  onClear,
+  clearLabel = "Azzera",
   className,
 }: {
-  /** Orario corrente "HH:MM". */
-  value: string;
+  /** Orario corrente "HH:MM" (null/undefined = non impostato, mostra placeholder). */
+  value?: string | null;
   /** Chiamato UNA volta alla chiusura del pannello, se l'orario è cambiato. */
   onChange: (value: string) => void;
   /** Limiti inclusivi "HH:MM" (es. "06:00"–"10:00"). */
@@ -118,10 +123,18 @@ export function TimePickerInput({
   maxTime?: string;
   /** Passo dei minuti (default 15: quarti d'ora). */
   minuteStep?: number;
+  /** Testo mostrato nel trigger quando value è null (es. "Non impostato"). */
+  placeholder?: string;
+  /** Se presente, il footer mostra un link che azzera il valore e chiude. */
+  onClear?: () => void;
+  clearLabel?: string;
   className?: string;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [draft, setDraft] = React.useState(() => parseTime(value));
+  const [draft, setDraft] = React.useState(() => parseTime(value ?? minTime ?? "09:00"));
+  // Con value null il pannello apre su un orario di comodo: senza interazione
+  // la chiusura NON deve committare quel default.
+  const touchedRef = React.useRef(false);
 
   const min = parseTime(minTime ?? "00:00");
   const max = parseTime(maxTime ?? "23:59");
@@ -155,16 +168,17 @@ export function TimePickerInput({
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
-      setDraft(parseTime(value));
+      touchedRef.current = false;
+      setDraft(parseTime(value ?? minTime ?? "09:00"));
     } else {
       const next = `${pad(draft.hour)}:${pad(draft.minute)}`;
-      if (next !== value) onChange(next);
+      if ((value != null || touchedRef.current) && next !== value) onChange(next);
     }
     setOpen(nextOpen);
   };
 
   return (
-    <PopoverPrimitive.Root modal open={open} onOpenChange={handleOpenChange}>
+    <PopoverPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
@@ -174,7 +188,13 @@ export function TimePickerInput({
             className,
           )}
         >
-          {open ? label : value}
+          {open ? (
+            label
+          ) : value != null ? (
+            value
+          ) : (
+            <span className="text-[#929292]">{placeholder ?? "—"}</span>
+          )}
           <Clock className="size-[15px] shrink-0 text-[#929292]" strokeWidth={1.8} />
         </button>
       </PopoverPrimitive.Trigger>
@@ -184,26 +204,48 @@ export function TimePickerInput({
           align="end"
           sideOffset={4}
           collisionPadding={8}
-          className="z-[200] rounded-xl border border-[#ebebeb] bg-white shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
+          className="pointer-events-auto z-[200] rounded-xl border border-[#ebebeb] bg-white shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
         >
           <div className="flex divide-x divide-[#ebebeb]">
             <TimeColumn
               values={hours}
               selected={draft.hour}
-              onSelect={(hour) =>
-                setDraft((prev) => ({ hour, minute: clampMinute(hour, prev.minute) }))
-              }
+              onSelect={(hour) => {
+                touchedRef.current = true;
+                setDraft((prev) => ({ hour, minute: clampMinute(hour, prev.minute) }));
+              }}
               format={pad}
             />
             <TimeColumn
               values={minutes}
               selected={draft.minute}
               disabledValues={disabledMinutes}
-              onSelect={(minute) => setDraft((prev) => ({ ...prev, minute }))}
+              onSelect={(minute) => {
+                touchedRef.current = true;
+                setDraft((prev) => ({ ...prev, minute }));
+              }}
               format={pad}
             />
           </div>
-          <div className="flex justify-end border-t border-[#ebebeb] px-2 py-1.5">
+          <div
+            className={cn(
+              "flex items-center border-t border-[#ebebeb] px-2 py-1.5",
+              onClear ? "justify-between" : "justify-end",
+            )}
+          >
+            {onClear && (
+              <button
+                type="button"
+                onClick={() => {
+                  touchedRef.current = false;
+                  setOpen(false);
+                  onClear();
+                }}
+                className="cursor-pointer px-1.5 text-xs font-medium text-[#6a6a6a] transition-colors hover:text-[#222222]"
+              >
+                {clearLabel}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleOpenChange(false)}

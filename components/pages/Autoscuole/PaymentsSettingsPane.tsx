@@ -16,6 +16,7 @@ import {
   getAutoscuolaSettings,
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
+import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 
 /**
  * Pane "Fatturazione e pagamenti" dell'overlay Impostazioni (redesign proto).
@@ -29,10 +30,6 @@ import {
 
 const CUTOFF_PRESETS = [1, 2, 4, 6, 12, 24, 48] as const;
 const PENALTY_PRESETS = [25, 50, 75, 100] as const;
-
-/** Trigger select in stile proto (bordo 1.5px #dddddd, radius 10). */
-const PROTO_SELECT_TRIGGER =
-  "h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-[#222222] shadow-none transition-colors hover:border-[#929292] focus-visible:border-[#222222] focus-visible:bg-white";
 
 type SettingsPatch = {
   lessonCreditFlowEnabled?: boolean;
