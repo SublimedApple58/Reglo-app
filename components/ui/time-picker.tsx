@@ -63,10 +63,18 @@ function TimeColumn({
     mountedRef.current = true;
   }, [selected]);
 
+  // Se tutti i valori ci stanno nel pannello (item h-8 = 32px + py-1 = 8px)
+  // la colonna si stringe sul contenuto: niente scroll né filler. Altezza
+  // fissa + filler solo quando serve scrollare (es. tutte le 24 ore).
+  const needsScroll = values.length * 32 + 8 > 224;
+
   return (
     <div
       ref={listRef}
-      className="h-[224px] overflow-y-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className={cn(
+        "overflow-y-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        needsScroll ? "h-[224px]" : "max-h-[224px]",
+      )}
     >
       {values.map((value) => {
         const isSelected = value === selected;
@@ -91,7 +99,7 @@ function TimeColumn({
         );
       })}
       {/* Filler: permette anche all'ultimo valore di scrollare in cima */}
-      <div className="h-[184px]" />
+      {needsScroll && <div className="h-[184px]" />}
     </div>
   );
 }
