@@ -1266,6 +1266,9 @@ export function AutoscuoleAgendaPage({
   };
 
   const handleOpenEdit = (item: AppointmentRow) => {
+    // Chiude il menu EVENTO del blocco (Radix, non si chiude da solo aprendo
+    // un popover non-modale) prima di mostrare la card di modifica.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     setEditAppointmentTarget({
       id: item.id,
       startsAt: item.startsAt,
