@@ -386,6 +386,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentReminderChannels !== undefined ||
       value.instructorReminderChannels !== undefined ||
       value.autoPaymentsEnabled !== undefined ||
+      value.lessonCreditFlowEnabled !== undefined ||
+      value.lessonCreditsRequired !== undefined ||
       value.lessonPrice30 !== undefined ||
       value.lessonPrice60 !== undefined ||
       value.penaltyCutoffHoursPreset !== undefined ||

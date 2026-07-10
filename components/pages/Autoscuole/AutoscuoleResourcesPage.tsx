@@ -33,7 +33,7 @@ import SettingsTab, { type SettingsSectionKey } from "./tabs/SettingsTab";
 import InstructorsTab from "./tabs/InstructorsTab";
 import StudentsTab from "./tabs/StudentsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
-import { AutoscuolePaymentsPage } from "./AutoscuolePaymentsPage";
+import PaymentsSettingsPane from "./PaymentsSettingsPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
@@ -1889,11 +1889,9 @@ export function AutoscuoleResourcesPage({
 
           {/* ── Content ── */}
           <div ref={contentScrollRef} className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
-            {configTab !== "payments" && (
-              <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
-                {CONFIG_PANE_TITLES[configTab]}
-              </h2>
-            )}
+            <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+              {CONFIG_PANE_TITLES[configTab]}
+            </h2>
             {!hasLoadedOnce ? (
           <SettingsPaneSkeleton />
         ) : (
@@ -1907,7 +1905,7 @@ export function AutoscuoleResourcesPage({
           </KeepAlivePane>
         ))}
         <KeepAlivePane active={configTab === "payments"} eager={mountAllPanes}>
-          <AutoscuolePaymentsPage tabs={null} />
+          <PaymentsSettingsPane />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
