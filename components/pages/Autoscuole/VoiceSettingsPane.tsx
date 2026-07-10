@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Loader2, PhoneCall, X } from "lucide-react";
+import { AlertTriangle, Loader2, X } from "lucide-react";
 
 import {
   getAutoscuolaSettings,
@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VoiceLineTutorialModal } from "./dialogs/VoiceLineTutorialModal";
+import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -405,20 +406,7 @@ export function VoiceSettingsPane() {
   if (loading) return <PaneSkeleton />;
 
   if (!voiceFeatureEnabled) {
-    return (
-      <div className="rounded-2xl border border-[#dddddd] bg-white p-10">
-        <div className="mx-auto flex max-w-md flex-col items-center text-center">
-          <span className="flex size-16 items-center justify-center rounded-full bg-[#eef0f6]">
-            <PhoneCall className="size-7 text-navy-900" />
-          </span>
-          <h3 className="mt-4 text-base font-bold text-foreground">Segretaria AI non attiva</h3>
-          <p className="mt-1.5 text-[13px] font-medium leading-relaxed text-[#6a6a6a]">
-            L&apos;assistente vocale AI risponde alle chiamate, informa gli allievi e gestisce
-            prenotazioni guide. Contatta il team Reglo per attivarla sulla tua autoscuola.
-          </p>
-        </div>
-      </div>
-    );
+    return <VoiceInactiveState />;
   }
 
   const lineaAttiva = voiceAssistantEnabled;

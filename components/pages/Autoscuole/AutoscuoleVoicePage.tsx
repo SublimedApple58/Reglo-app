@@ -13,9 +13,9 @@ import {
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
+import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
 import {
-  PhoneCall,
   Phone,
   RefreshCw,
   CheckCircle2,
@@ -475,20 +475,9 @@ export function AutoscuoleVoicePage() {
           {loading ? (
             <VoicePageSkeleton />
           ) : !voiceFeatureEnabled ? (
-            /* ── Feature NOT enabled: empty state ── */
+            /* ── Feature NOT enabled: pitch + richiesta attivazione ── */
             <FadeIn>
-              <div className="rounded-2xl border border-[#dddddd] bg-white p-10">
-                <div className="mx-auto flex max-w-md flex-col items-center text-center">
-                  <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#eef0f6]">
-                    <PhoneCall className="h-7 w-7 text-navy-900" />
-                  </span>
-                  <h3 className="mt-4 text-base font-bold text-foreground">Segretaria AI non attiva</h3>
-                  <p className="mt-1.5 text-[13px] font-medium leading-relaxed text-[#6a6a6a]">
-                    L&apos;assistente vocale AI risponde alle chiamate, informa gli allievi e gestisce
-                    prenotazioni guide. Contatta il team Reglo per attivarla sulla tua autoscuola.
-                  </p>
-                </div>
-              </div>
+              <VoiceInactiveState />
             </FadeIn>
           ) : (
             /* ── Feature enabled ── */
