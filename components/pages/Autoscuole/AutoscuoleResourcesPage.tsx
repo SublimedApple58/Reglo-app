@@ -624,108 +624,130 @@ export function AutoscuoleResourcesPage({
     [toast],
   );
 
-  React.useEffect(() => {
-    loadResources();
-  }, [loadResources]);
-
-  React.useEffect(() => {
-    let active = true;
-    const loadSettings = async () => {
-      const res = await getAutoscuolaSettings();
-      if (!active) return;
-      if (!res.success || !res.data) {
-        toast.error({
-          description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
-        });
-        // sblocca comunque lo skeleton: meglio i default con il toast d'errore
-        // che uno skeleton infinito
-        setSettingsLoaded(true);
-        return;
-      }
-      setAvailabilityWeeks(String(res.data.availabilityWeeks));
-      setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
-      setStudentReminderMinutes(String(res.data.studentReminderMinutes));
-      setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
-      setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
-      setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
-      setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
-      setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
-      setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
-      setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
-      setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
-      setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
-      const nextConstraints = createDefaultLessonConstraintMap();
-      for (const option of LESSON_TYPE_OPTIONS) {
-        const constraint = res.data.lessonTypeConstraints?.[option.value];
-        if (!constraint) continue;
-        nextConstraints[option.value] = {
-          enabled: true,
-          daysOfWeek: normalizeDays(constraint.daysOfWeek),
-          startMinutes: constraint.startMinutes,
-          endMinutes: constraint.endMinutes,
-        };
-      }
-      setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
-      setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
-      setLessonRequiredTypes(
-        (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
-          LESSON_TYPE_OPTIONS.some((option) => option.value === value),
-        ),
-      );
-      setLessonConstraints(nextConstraints);
-      setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
-      setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
-      setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
-      setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
-      setSwapEnabled(res.data.swapEnabled ?? false);
-      setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
-      setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
-      setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
-      setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
-      setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
-      setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
-      setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
-      setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
-      setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
-      setExamPriorityPausedUntil(res.data.examPriorityPausedUntil ?? null);
-      setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
-      setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
-      setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
-      setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
-      setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
-      setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
-      setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
-      setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
-      setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
-      setVehiclesEnabled(res.data.vehiclesEnabled !== false);
-      setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
-      setDefaultTransmission(res.data.defaultTransmission ?? "manual");
-      setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
-      setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
-
-      setAppBookingActors(
-        APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
-          ? (res.data.appBookingActors as AppBookingActorsValue)
-          : "students",
-      );
-      setInstructorBookingMode(
-        INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
-          (option) => option.value === res.data.instructorBookingMode,
-        )
-          ? (res.data.instructorBookingMode as InstructorBookingModeValue)
-          : "manual_engine",
-      );
+  const loadSettings = React.useCallback(async () => {
+    const res = await getAutoscuolaSettings();
+    if (!res.success || !res.data) {
+      toast.error({
+        description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
+      });
+      // sblocca comunque lo skeleton: meglio i default con il toast d'errore
+      // che uno skeleton infinito
       setSettingsLoaded(true);
-    };
-    loadSettings();
-    return () => {
-      active = false;
-    };
+      return;
+    }
+    setAvailabilityWeeks(String(res.data.availabilityWeeks));
+    setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
+    setStudentReminderMinutes(String(res.data.studentReminderMinutes));
+    setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
+    setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
+    setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
+    setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
+    setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
+    setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
+    setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
+    setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
+    const nextConstraints = createDefaultLessonConstraintMap();
+    for (const option of LESSON_TYPE_OPTIONS) {
+      const constraint = res.data.lessonTypeConstraints?.[option.value];
+      if (!constraint) continue;
+      nextConstraints[option.value] = {
+        enabled: true,
+        daysOfWeek: normalizeDays(constraint.daysOfWeek),
+        startMinutes: constraint.startMinutes,
+        endMinutes: constraint.endMinutes,
+      };
+    }
+    setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
+    setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
+    setLessonRequiredTypes(
+      (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
+        LESSON_TYPE_OPTIONS.some((option) => option.value === value),
+      ),
+    );
+    setLessonConstraints(nextConstraints);
+    setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
+    setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+    setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
+    setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
+    setSwapEnabled(res.data.swapEnabled ?? false);
+    setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
+    setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
+    setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
+    setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
+    setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
+    setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
+    setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
+    setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
+    setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
+    setExamPriorityPausedUntil(res.data.examPriorityPausedUntil ?? null);
+    setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
+    setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
+    setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
+    setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
+    setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
+    setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
+    setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
+    setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
+    setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
+    setVehiclesEnabled(res.data.vehiclesEnabled !== false);
+    setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
+    setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+    setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
+    setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
+
+    setAppBookingActors(
+      APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
+        ? (res.data.appBookingActors as AppBookingActorsValue)
+        : "students",
+    );
+    setInstructorBookingMode(
+      INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
+        (option) => option.value === res.data.instructorBookingMode,
+      )
+        ? (res.data.instructorBookingMode as InstructorBookingModeValue)
+        : "manual_engine",
+    );
+    setSettingsLoaded(true);
   }, [toast]);
 
+  // ── Orchestrazione caricamento ──
+  // Priorità alla pane aperta: al mount partono solo le fetch dei SUOI dati;
+  // il resto parte in background appena la primaria ha risposto. Se l'utente
+  // cambia pane prima che il background sia partito, la fetch mancante viene
+  // anticipata subito. Le ref memorizzano la promise in-flight (idempotenza).
+  const settingsPromiseRef = React.useRef<Promise<void> | null>(null);
+  const resourcesPromiseRef = React.useRef<Promise<void> | null>(null);
+
+  const ensureSettings = React.useCallback(() => {
+    settingsPromiseRef.current ??= loadSettings();
+    return settingsPromiseRef.current;
+  }, [loadSettings]);
+
+  const ensureResources = React.useCallback(() => {
+    resourcesPromiseRef.current ??= Promise.all([
+      loadResources(),
+      loadAvailability(date),
+    ]).then(() => undefined);
+    return resourcesPromiseRef.current;
+  }, [loadResources, loadAvailability, date]);
+
   React.useEffect(() => {
-    loadAvailability(date);
-  }, [date, loadAvailability]);
+    const primary: Array<Promise<void>> = [];
+    if (PANES_NEEDING_SETTINGS.includes(configTab)) primary.push(ensureSettings());
+    if (PANES_NEEDING_RESOURCES.includes(configTab)) primary.push(ensureResources());
+    Promise.allSettled(primary).then(() => {
+      ensureSettings();
+      ensureResources();
+    });
+    // solo al mount: configTab qui è la pane iniziale
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (PANES_NEEDING_SETTINGS.includes(configTab)) ensureSettings();
+    if (PANES_NEEDING_RESOURCES.includes(configTab)) ensureResources();
+  }, [configTab, ensureSettings, ensureResources]);
 
   const handleSaveSettings = async () => {
     const parsedWeeks = Number(availabilityWeeks);
