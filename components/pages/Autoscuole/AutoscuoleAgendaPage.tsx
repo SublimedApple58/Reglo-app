@@ -1261,24 +1261,36 @@ export function AutoscuoleAgendaPage({
 
           {/* Cerca (espandibile, proto) */}
           {searchOpen ? (
-            <div className="flex h-[38px] min-w-[220px] shrink-0 items-center gap-2 rounded-full border-[1.5px] border-[#1a1a2e] bg-white px-3.5 shadow-[0_2px_8px_rgba(26,26,46,0.15)]">
+            <motion.div
+              initial={{ width: 34, opacity: 0.5 }}
+              animate={{ width: 220, opacity: 1 }}
+              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+              className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full border-[1.5px] border-[#1a1a2e] bg-white px-3.5 shadow-[0_2px_8px_rgba(26,26,46,0.15)]"
+            >
               <Search className="size-[15px] shrink-0 text-[#1a1a2e]" strokeWidth={1.8} />
-              <input
-                autoFocus
-                placeholder="Cerca in agenda…"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                onKeyDown={(event) => { if (event.key === "Escape") { setSearch(""); setSearchOpen(false); } }}
-                className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-[#222222] outline-none placeholder:text-[#929292]"
-              />
-              <button
-                type="button"
-                onClick={() => { setSearch(""); setSearchOpen(false); }}
-                className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#ebebeb] transition-colors hover:bg-[#dddddd]"
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.18, delay: 0.12 }}
+                className="flex min-w-0 flex-1 items-center gap-2"
               >
-                <X className="size-2.5 text-[#555555]" strokeWidth={2} />
-              </button>
-            </div>
+                <input
+                  autoFocus
+                  placeholder="Cerca in agenda…"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Escape") { setSearch(""); setSearchOpen(false); } }}
+                  className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-[#222222] outline-none placeholder:text-[#929292]"
+                />
+                <button
+                  type="button"
+                  onClick={() => { setSearch(""); setSearchOpen(false); }}
+                  className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#ebebeb] transition-colors hover:bg-[#dddddd]"
+                >
+                  <X className="size-2.5 text-[#555555]" strokeWidth={2} />
+                </button>
+              </motion.div>
+            </motion.div>
           ) : (
             <button
               type="button"
