@@ -375,8 +375,8 @@ function AutoscuolaDrawerContent({
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-pink-50">
-              <Car className="h-4 w-4 text-pink-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f2f2f2]">
+              <Car className="h-4 w-4 text-[#222222]" />
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Servizio Autoscuole</p>
@@ -408,8 +408,8 @@ function AutoscuolaDrawerContent({
       {/* ── Segretaria vocale AI ── */}
       <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-50">
-            <Phone className="h-4 w-4 text-yellow-600" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#f2f2f2]">
+            <Phone className="h-4 w-4 text-[#222222]" />
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Segretaria Vocale AI</p>
@@ -523,7 +523,7 @@ function AutoscuolaDrawerContent({
                         className={cn(
                           "flex-1 cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
                           assignRoutingMode === mode
-                            ? "bg-pink-500 text-white shadow-sm"
+                            ? "bg-[#222222] text-white shadow-sm"
                             : "text-muted-foreground hover:text-foreground",
                         )}
                       >
@@ -844,7 +844,7 @@ export default function BackofficeCompaniesPage({
         <div className="space-y-1">
           <div className="flex items-center gap-2.5">
             <h1 className="text-2xl font-semibold text-foreground">Autoscuole</h1>
-            <span className="rounded-full bg-pink-100 px-2.5 py-0.5 text-xs font-semibold text-pink-700">
+            <span className="rounded-full bg-[#f2f2f2] px-2.5 py-0.5 text-xs font-semibold text-[#222222]">
               {localCompanies.length}
             </span>
           </div>
@@ -858,8 +858,8 @@ export default function BackofficeCompaniesPage({
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-50">
-              <GraduationCap className="h-5 w-5 text-pink-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f2f2]">
+              <GraduationCap className="h-5 w-5 text-[#222222]" />
             </div>
             <div>
               <p className="text-2xl font-semibold text-foreground">{localCompanies.length}</p>
@@ -869,8 +869,8 @@ export default function BackofficeCompaniesPage({
         </div>
         <div className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-50">
-              <Smartphone className="h-5 w-5 text-yellow-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f2f2]">
+              <Smartphone className="h-5 w-5 text-[#222222]" />
             </div>
             <div>
               <p className="text-2xl font-semibold text-foreground">{totalStudents}</p>
@@ -933,7 +933,7 @@ export default function BackofficeCompaniesPage({
                   <TableRow key={company.id} className="cursor-pointer hover:bg-gray-50/50" onClick={() => { setSelected(company); setDrawerOpen(true); }}>
                     <TableCell>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-pink-50 text-xs font-bold text-pink-600">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#f2f2f2] text-xs font-bold text-[#222222]">
                           {company.name.charAt(0).toUpperCase()}
                         </div>
                         <span className="font-medium text-foreground">{company.name}</span>
@@ -979,7 +979,7 @@ export default function BackofficeCompaniesPage({
                     </TableCell>
                     <TableCell>
                       {hasVoice ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-semibold text-yellow-700">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#eaf2fd] px-2 py-0.5 text-[10px] font-semibold text-[#1a2b45]">
                           <Phone className="h-3 w-3" />
                           Attiva
                         </span>
@@ -1049,7 +1049,7 @@ export default function BackofficeCompaniesPage({
         <DrawerContent className="data-[vaul-drawer-direction=right]:w-[min(100vw,600px)] data-[vaul-drawer-direction=right]:sm:max-w-xl h-full">
           <DrawerHeader className="border-b border-border bg-white">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pink-50 text-sm font-bold text-pink-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f2f2f2] text-sm font-bold text-[#222222]">
                 {(selected?.name ?? "A").charAt(0).toUpperCase()}
               </div>
               <div>

@@ -63,7 +63,7 @@ export function BackofficeHeader() {
             <span className="text-sm font-semibold text-foreground">
               Reglo Autoscuole
             </span>
-            <span className="rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-pink-700">
+            <span className="rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#444444]">
               Admin
             </span>
           </div>
