@@ -635,6 +635,8 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     const instructorMinutes = parseReminderMinutes(limits.instructorReminderMinutes);
     const studentChannels = parseReminderChannels(limits.studentReminderChannels);
     const instructorChannels = parseReminderChannels(limits.instructorReminderChannels);
+    // "Non inviare" nelle impostazioni promemoria: default true se assente.
+    const instructorReminderEnabled = limits.instructorReminderEnabled !== false;
 
     const targetStudent = new Date(now.getTime() + studentMinutes * 60 * 1000);
     targetStudent.setSeconds(0, 0);
@@ -664,25 +666,27 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
           vehicle: true,
         },
       }),
-      prisma.autoscuolaAppointment.findMany({
-        where: {
-          companyId: service.companyId,
-          status: { in: activeStatuses },
-          startsAt: { gte: targetInstructor, lt: targetInstructorEnd },
-        },
-        include: {
-          student: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
+      instructorReminderEnabled
+        ? prisma.autoscuolaAppointment.findMany({
+            where: {
+              companyId: service.companyId,
+              status: { in: activeStatuses },
+              startsAt: { gte: targetInstructor, lt: targetInstructorEnd },
             },
-          },
-          instructor: { include: { user: { select: { id: true, email: true } } } },
-          vehicle: true,
-        },
-      }),
+            include: {
+              student: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  phone: true,
+                },
+              },
+              instructor: { include: { user: { select: { id: true, email: true } } } },
+              vehicle: true,
+            },
+          })
+        : Promise.resolve([]),
     ]);
 
     for (const appointment of studentAppointments) {

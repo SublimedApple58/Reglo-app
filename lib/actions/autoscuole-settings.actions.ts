@@ -256,6 +256,7 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderDayBeforeEnabled: z.boolean().optional(),
     studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
+    instructorReminderEnabled: z.boolean().optional(),
     slotFillChannels: channelListSchema.optional(),
     studentReminderChannels: channelListSchema.optional(),
     instructorReminderChannels: channelListSchema.optional(),
@@ -380,6 +381,7 @@ const autoscuolaSettingsPatchSchema = z
       value.studentReminderDayBeforeEnabled !== undefined ||
       value.studentReminderDayBeforeTime !== undefined ||
       value.instructorReminderMinutes !== undefined ||
+      value.instructorReminderEnabled !== undefined ||
       value.slotFillChannels !== undefined ||
       value.studentReminderChannels !== undefined ||
       value.instructorReminderChannels !== undefined ||
@@ -543,6 +545,7 @@ export type AutoscuolaSettingsData = {
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
   instructorReminderMinutes: number;
+  instructorReminderEnabled: boolean;
   slotFillChannels: string[];
   studentReminderChannels: string[];
   instructorReminderChannels: string[];
@@ -662,6 +665,9 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
       : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
+  // Default true: il promemoria istruttore resta attivo finché non viene
+  // esplicitamente disattivato ("Non inviare" nella pane Promemoria).
+  const instructorReminderEnabled = limits.instructorReminderEnabled !== false;
   const slotFillChannels = asChannelList(
     limits.slotFillChannels,
     DEFAULT_SLOT_FILL_CHANNELS,
@@ -892,6 +898,7 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderDayBeforeEnabled,
     studentReminderDayBeforeTime,
     instructorReminderMinutes,
+    instructorReminderEnabled,
     slotFillChannels,
     studentReminderChannels,
     instructorReminderChannels,
@@ -1431,6 +1438,8 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
+      instructorReminderEnabled:
+        payload.instructorReminderEnabled ?? (limits.instructorReminderEnabled !== false),
       slotFillChannels: payload.slotFillChannels ?? previousSlotFillChannels,
       studentReminderChannels:
         payload.studentReminderChannels ?? previousStudentReminderChannels,
@@ -1549,6 +1558,7 @@ export async function updateAutoscuolaSettings(
         studentReminderDayBeforeEnabled: nextLimits.studentReminderDayBeforeEnabled,
         studentReminderDayBeforeTime: nextLimits.studentReminderDayBeforeTime,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
+        instructorReminderEnabled: nextLimits.instructorReminderEnabled,
         slotFillChannels: nextLimits.slotFillChannels,
         studentReminderChannels: nextLimits.studentReminderChannels,
         instructorReminderChannels: nextLimits.instructorReminderChannels,

@@ -371,6 +371,7 @@ export function AutoscuoleResourcesPage({
   const [studentReminderDayBeforeEnabled, setStudentReminderDayBeforeEnabled] = React.useState(false);
   const [studentReminderDayBeforeTime, setStudentReminderDayBeforeTime] = React.useState("19:00");
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
+  const [instructorReminderEnabled, setInstructorReminderEnabled] = React.useState(true);
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
     "push",
     "whatsapp",
@@ -639,6 +640,7 @@ export function AutoscuoleResourcesPage({
       setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
       setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
       setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+      setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
       setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
       setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
       setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
@@ -860,6 +862,7 @@ export function AutoscuoleResourcesPage({
     setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
     setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
     setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
     setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
@@ -964,6 +967,7 @@ export function AutoscuoleResourcesPage({
   const updateReminderSettings = async (patch: {
     studentReminderMinutes?: number;
     instructorReminderMinutes?: number;
+    instructorReminderEnabled?: boolean;
     studentReminderMorningEnabled?: boolean;
     studentReminderMorningTime?: string;
     studentReminderDayBeforeEnabled?: boolean;
@@ -983,6 +987,7 @@ export function AutoscuoleResourcesPage({
     const prev = {
       studentReminderMinutes,
       instructorReminderMinutes,
+      instructorReminderEnabled,
       studentReminderMorningEnabled,
       studentReminderMorningTime,
       studentReminderDayBeforeEnabled,
@@ -995,6 +1000,8 @@ export function AutoscuoleResourcesPage({
       setStudentReminderMinutes(String(patch.studentReminderMinutes));
     if (patch.instructorReminderMinutes !== undefined)
       setInstructorReminderMinutes(String(patch.instructorReminderMinutes));
+    if (patch.instructorReminderEnabled !== undefined)
+      setInstructorReminderEnabled(patch.instructorReminderEnabled);
     if (patch.studentReminderMorningEnabled !== undefined)
       setStudentReminderMorningEnabled(patch.studentReminderMorningEnabled);
     if (patch.studentReminderMorningTime !== undefined)
@@ -1015,6 +1022,9 @@ export function AutoscuoleResourcesPage({
         : {}),
       ...(patch.instructorReminderMinutes !== undefined
         ? { instructorReminderMinutes: patch.instructorReminderMinutes as (typeof REMINDER_OPTIONS)[number] }
+        : {}),
+      ...(patch.instructorReminderEnabled !== undefined
+        ? { instructorReminderEnabled: patch.instructorReminderEnabled }
         : {}),
       ...(patch.studentReminderMorningEnabled !== undefined
         ? { studentReminderMorningEnabled: patch.studentReminderMorningEnabled }
@@ -1039,6 +1049,7 @@ export function AutoscuoleResourcesPage({
     if (!res.success) {
       setStudentReminderMinutes(prev.studentReminderMinutes);
       setInstructorReminderMinutes(prev.instructorReminderMinutes);
+      setInstructorReminderEnabled(prev.instructorReminderEnabled);
       setStudentReminderMorningEnabled(prev.studentReminderMorningEnabled);
       setStudentReminderMorningTime(prev.studentReminderMorningTime);
       setStudentReminderDayBeforeEnabled(prev.studentReminderDayBeforeEnabled);
@@ -1797,6 +1808,7 @@ export function AutoscuoleResourcesPage({
             studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
             studentReminderDayBeforeTime={studentReminderDayBeforeTime}
             instructorReminderMinutes={instructorReminderMinutes}
+            instructorReminderEnabled={instructorReminderEnabled}
             slotFillChannels={slotFillChannels}
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}

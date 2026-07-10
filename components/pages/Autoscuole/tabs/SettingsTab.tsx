@@ -132,12 +132,14 @@ export type SettingsTabProps = {
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
   instructorReminderMinutes: string;
+  instructorReminderEnabled: boolean;
   slotFillChannels: ChannelValue[];
   studentReminderChannels: ChannelValue[];
   instructorReminderChannels: ChannelValue[];
   updateReminderSettings: (patch: {
     studentReminderMinutes?: number;
     instructorReminderMinutes?: number;
+    instructorReminderEnabled?: boolean;
     studentReminderMorningEnabled?: boolean;
     studentReminderMorningTime?: string;
     studentReminderDayBeforeEnabled?: boolean;
@@ -274,16 +276,24 @@ function ChannelCard({
   info,
   value,
   onChange,
+  disabled,
 }: {
   title: string;
   /** Testo del tooltip info accanto al titolo (stile proto, dark). */
   info?: string;
   value: ChannelValue[];
   onChange: (next: ChannelValue[]) => void;
+  /** Attenua la card quando il promemoria relativo è disattivato. */
+  disabled?: boolean;
 }) {
   const [infoOpen, setInfoOpen] = React.useState(false);
   return (
-    <div className="rounded-[12px] border border-[#e8e8e8] bg-white p-4">
+    <div
+      className={cn(
+        "rounded-[12px] border border-[#e8e8e8] bg-white p-4",
+        disabled && "pointer-events-none opacity-45",
+      )}
+    >
       <div className="mb-3 flex items-center gap-1.5">
         <span className="text-[13px] font-semibold text-[#222222]">{title}</span>
         {info && (
@@ -417,6 +427,7 @@ function SettingsTab({
   studentReminderDayBeforeEnabled,
   studentReminderDayBeforeTime,
   instructorReminderMinutes,
+  instructorReminderEnabled,
   slotFillChannels,
   studentReminderChannels,
   instructorReminderChannels,
@@ -603,9 +614,14 @@ function SettingsTab({
               <div>
                 <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria istruttore</div>
                 <Select
-                  value={instructorReminderMinutes}
+                  value={instructorReminderEnabled ? instructorReminderMinutes : "off"}
                   onValueChange={(value) =>
-                    updateReminderSettings({ instructorReminderMinutes: Number(value) })
+                    value === "off"
+                      ? updateReminderSettings({ instructorReminderEnabled: false })
+                      : updateReminderSettings({
+                          instructorReminderEnabled: true,
+                          instructorReminderMinutes: Number(value),
+                        })
                   }
                 >
                   <SelectTrigger className={PROTO_SELECT_TRIGGER}>
@@ -617,6 +633,7 @@ function SettingsTab({
                         {minutes} minuti prima
                       </SelectItem>
                     ))}
+                    <SelectItem value="off">Non inviare</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -675,6 +692,7 @@ function SettingsTab({
                 title="Promemoria istruttore"
                 value={instructorReminderChannels}
                 onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
+                disabled={!instructorReminderEnabled}
               />
               <ChannelCard
                 title="Cancellazioni"
