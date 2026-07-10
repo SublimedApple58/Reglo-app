@@ -1,12 +1,13 @@
 "use client";
 
 import React from "react";
-import { KeyRound, Loader2, Plus, Search, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
+import { KeyRound, Loader2, Plus, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
+import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import {
@@ -909,11 +910,6 @@ export function AutoscuoleStudentsPage({
     navigator.clipboard.writeText(code);
     setCopiedCode(code);
     setTimeout(() => setCopiedCode(null), 2000);
-  }, []);
-
-  const closeSearch = React.useCallback(() => {
-    setSearchOpen(false);
-    setSearch("");
   }, []);
 
   /* ── Rows ────────────────────────────────────────────────────────── */
@@ -1907,36 +1903,13 @@ export function AutoscuoleStudentsPage({
                 >
                   <UserRoundPlus className="size-[21px]" strokeWidth={1.8} />
                 </button>
-                {searchOpen ? (
-                  <div className="flex shrink-0 items-center gap-3">
-                    <div className="flex min-w-[220px] items-center gap-2 rounded-full border-[1.5px] border-[#222222] bg-white px-3.5 py-[8px]">
-                      <Search className="size-[15px] text-[#929292]" strokeWidth={2} />
-                      <input
-                        autoFocus
-                        placeholder="Cerca allievi"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-[#929292]"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={closeSearch}
-                      className="cursor-pointer select-none text-sm font-semibold text-foreground"
-                    >
-                      Annulla
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    title="Cerca allievi"
-                    onClick={() => setSearchOpen(true)}
-                    className="flex size-9 shrink-0 cursor-pointer items-center justify-center text-[#929292] transition-colors hover:text-foreground"
-                  >
-                    <Search className="size-[19px]" strokeWidth={2} />
-                  </button>
-                )}
+                <ExpandingSearch
+                  open={searchOpen}
+                  onOpenChange={setSearchOpen}
+                  value={search}
+                  onChange={setSearch}
+                  placeholder="Cerca allievi"
+                />
               </div>
 
               {/* ── Banner licenze quiz ── */}
