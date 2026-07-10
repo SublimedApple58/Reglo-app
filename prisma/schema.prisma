@@ -776,6 +776,9 @@ model AutoscuolaHoliday {
   companyId String   @db.Uuid
   date      DateTime @db.Date
   label     String?
+  /// Festivita nazionale materializzata dal preset "Festivita non prenotabili"
+  /// (es. "natale"): gestita dalla sync, distinta dai festivi manuali (null).
+  presetId  String?
   createdBy String?  @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamp(6)
 

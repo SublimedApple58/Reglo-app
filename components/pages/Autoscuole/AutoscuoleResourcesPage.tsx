@@ -393,6 +393,8 @@ export function AutoscuoleResourcesPage({
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
+  const [nationalHolidaysEnabled, setNationalHolidaysEnabled] = React.useState(false);
+  const [nationalHolidaysDisabled, setNationalHolidaysDisabled] = React.useState<string[]>([]);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
   const [studentCancellationEnabled, setStudentCancellationEnabled] = React.useState(true);
@@ -665,6 +667,8 @@ export function AutoscuoleResourcesPage({
       setLessonConstraints(nextConstraints);
       setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
       setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+      setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
+      setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
       setSwapEnabled(res.data.swapEnabled ?? false);
       setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
       setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
@@ -820,6 +824,8 @@ export function AutoscuoleResourcesPage({
       lessonTypeConstraints,
       bookingSlotDurations,
       roundedHoursOnly,
+      nationalHolidaysEnabled,
+      nationalHolidaysDisabled,
       swapEnabled,
       swapNotifyMode,
       studentCancellationEnabled,
@@ -887,6 +893,8 @@ export function AutoscuoleResourcesPage({
     setLessonConstraints(nextConstraints);
     setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+    setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
+    setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
     setSwapEnabled(res.data.swapEnabled ?? false);
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
     setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
@@ -1802,6 +1810,10 @@ export function AutoscuoleResourcesPage({
             toggleBookingDuration={toggleBookingDuration}
             roundedHoursOnly={roundedHoursOnly}
             setRoundedHoursOnly={setRoundedHoursOnly}
+            nationalHolidaysEnabled={nationalHolidaysEnabled}
+            setNationalHolidaysEnabled={setNationalHolidaysEnabled}
+            nationalHolidaysDisabled={nationalHolidaysDisabled}
+            setNationalHolidaysDisabled={setNationalHolidaysDisabled}
             studentReminderMinutes={studentReminderMinutes}
             studentReminderMorningEnabled={studentReminderMorningEnabled}
             studentReminderMorningTime={studentReminderMorningTime}

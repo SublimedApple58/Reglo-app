@@ -59,6 +59,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Booking Engine**: slot-matcher excludes holiday dates
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Mobile**: `TitolareHomeScreen`, `NotificationOverlay`
+- ← **Settings**: `updateAutoscuolaSettings` chiama `syncCompanyNationalHolidays` sui campi `nationalHolidaysEnabled/Disabled` (preset festività nazionali → righe con `presetId`)
+- ← **Trigger.dev**: cron giornaliero `autoscuole-national-holidays` (rolling window annuale del preset)
 
 ### Notifications
 - → **ALL features**: every feature sends push via `sendAutoscuolaPushToUsers()`

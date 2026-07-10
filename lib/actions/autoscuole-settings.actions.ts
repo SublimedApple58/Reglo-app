@@ -11,6 +11,11 @@ import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect"
 import { isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
+  NATIONAL_HOLIDAY_IDS,
+  parseNationalHolidaySettings,
+} from "@/lib/autoscuole/national-holidays";
+import { syncCompanyNationalHolidays } from "@/lib/autoscuole/national-holidays-sync";
+import {
   parseFollowCarRulesFromLimits,
   readFollowCarMotoEnabled,
   followCarRulesForEnabled,
@@ -353,6 +358,10 @@ const autoscuolaSettingsPatchSchema = z
     studentNotesEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
+    nationalHolidaysEnabled: z.boolean().optional(),
+    nationalHolidaysDisabled: z
+      .array(z.string().refine((id) => NATIONAL_HOLIDAY_IDS.includes(id), { message: "Festività sconosciuta." }))
+      .optional(),
     // Default license path assigned to a student at registration. Lets moto-only
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
@@ -438,6 +447,8 @@ const autoscuolaSettingsPatchSchema = z
       value.studentNotesEnabled !== undefined ||
       value.autoCheckinEnabled !== undefined ||
       value.vehiclesEnabled !== undefined ||
+      value.nationalHolidaysEnabled !== undefined ||
+      value.nationalHolidaysDisabled !== undefined ||
       value.defaultLicenseCategory !== undefined ||
       value.defaultTransmission !== undefined ||
       value.followCarMotoEnabled !== undefined ||
@@ -623,6 +634,8 @@ export type AutoscuolaSettingsData = {
   studentNotesEnabled: boolean;
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
+  nationalHolidaysEnabled: boolean;
+  nationalHolidaysDisabled: string[];
   defaultLicenseCategory: string;
   defaultTransmission: string;
   followCarMotoEnabled: boolean;
@@ -966,6 +979,8 @@ const resolveAutoscuolaSettingsData = async (
     studentNotesEnabled,
     autoCheckinEnabled,
     vehiclesEnabled: limits.vehiclesEnabled !== false,
+    nationalHolidaysEnabled: limits.nationalHolidaysEnabled === true,
+    nationalHolidaysDisabled: parseNationalHolidaySettings(limits).disabled,
     defaultLicenseCategory:
       typeof limits.defaultLicenseCategory === "string"
         ? limits.defaultLicenseCategory
@@ -1515,6 +1530,10 @@ export async function updateAutoscuolaSettings(
       studentNotesEnabled: nextStudentNotesEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
+      nationalHolidaysEnabled:
+        payload.nationalHolidaysEnabled ?? (limits.nationalHolidaysEnabled === true),
+      nationalHolidaysDisabled:
+        payload.nationalHolidaysDisabled ?? parseNationalHolidaySettings(limits).disabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
       followCarMotoEnabled: nextFollowCarMotoEnabled,
@@ -1537,6 +1556,19 @@ export async function updateAutoscuolaSettings(
           status: "ACTIVE",
           limits: nextLimits,
         },
+      });
+    }
+
+    // Festività nazionali: materializza/riallinea le righe AutoscuolaHoliday
+    // del preset quando il payload tocca quei campi.
+    if (
+      payload.nationalHolidaysEnabled !== undefined ||
+      payload.nationalHolidaysDisabled !== undefined
+    ) {
+      await syncCompanyNationalHolidays({
+        prisma,
+        companyId: membership.companyId,
+        limits: nextLimits as Record<string, unknown>,
       });
     }
 
@@ -1621,6 +1653,8 @@ export async function updateAutoscuolaSettings(
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
         voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
+        nationalHolidaysEnabled: nextLimits.nationalHolidaysEnabled,
+        nationalHolidaysDisabled: nextLimits.nationalHolidaysDisabled,
         groupLessonsEnabled: nextGroupLessonsEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
