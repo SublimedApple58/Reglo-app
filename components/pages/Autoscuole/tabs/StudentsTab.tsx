@@ -1,8 +1,9 @@
 "use client";
 
 import React from "react";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Plus, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
@@ -591,33 +592,61 @@ export default function StudentsTab({
               </FieldBlock>
 
               <FieldBlock label="Orari di invio">
-                <div className="flex flex-wrap gap-2">
-                  {NOTIFICATION_TIME_OPTIONS.map((time) => {
-                    const active = emptySlotNotificationTimes.includes(time);
-                    return (
-                      <button
-                        key={time}
-                        type="button"
-                        onClick={() => {
+                {/* Un TimePicker per ogni invio della giornata: la "x" toglie
+                    l'orario (min 1), il "+" ne aggiunge un altro. Il backend
+                    accetta solo mezz'ore tra 08:00 e 22:00. */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {emptySlotNotificationTimes.map((time) => (
+                    <div key={time} className="group relative">
+                      <TimePickerInput
+                        value={time}
+                        minTime="08:00"
+                        maxTime="22:00"
+                        minuteStep={30}
+                        onChange={(next) => {
                           setEmptySlotNotificationTimes((prev) => {
-                            if (prev.includes(time)) {
-                              if (prev.length <= 1) return prev;
-                              return prev.filter((t) => t !== time);
+                            if (prev.includes(next)) {
+                              toast.error({ description: `Le ${next} sono già tra gli orari di invio.` });
+                              return prev;
                             }
-                            return [...prev, time].sort();
+                            return prev.map((t) => (t === time ? next : t)).sort();
                           });
                         }}
-                        className={cn(
-                          "cursor-pointer select-none rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-                          active
-                            ? "border-[1.5px] border-[#9fc3f0] bg-[#cfe0fb] text-[#1a2b45]"
-                            : "border-[1.5px] border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]",
-                        )}
-                      >
-                        {time}
-                      </button>
-                    );
-                  })}
+                      />
+                      {emptySlotNotificationTimes.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Rimuovi orario ${time}`}
+                          onClick={() =>
+                            setEmptySlotNotificationTimes((prev) => prev.filter((t) => t !== time))
+                          }
+                          className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <X className="size-3" strokeWidth={2.4} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {emptySlotNotificationTimes.length < NOTIFICATION_TIME_OPTIONS.length && (
+                    <button
+                      type="button"
+                      aria-label="Aggiungi orario di invio"
+                      onClick={() =>
+                        setEmptySlotNotificationTimes((prev) => {
+                          // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
+                          const last = prev[prev.length - 1];
+                          const free = [
+                            ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
+                            ...NOTIFICATION_TIME_OPTIONS,
+                          ].find((t) => !prev.includes(t));
+                          return free ? [...prev, free].sort() : prev;
+                        })
+                      }
+                      className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#fafafa]"
+                    >
+                      <Plus className="size-4" strokeWidth={2.2} />
+                    </button>
+                  )}
                 </div>
               </FieldBlock>
 
