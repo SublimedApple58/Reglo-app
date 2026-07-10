@@ -351,6 +351,10 @@ export function AutoscuoleResourcesPage({
   const [loading, setLoading] = React.useState(false);
   // true dopo il primo caricamento: da lì in poi niente più skeleton globale
   const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
+  // true quando getAutoscuolaSettings ha risposto: le pane impostazioni non
+  // devono uscire dallo skeleton prima, altrimenti mostrano i default per un
+  // attimo e poi "scattano" sui valori reali
+  const [settingsLoaded, setSettingsLoaded] = React.useState(false);
   // dopo il primo paint, monta anche i pannelli non ancora visitati (prefetch)
   const [mountAllPanes, setMountAllPanes] = React.useState(false);
   const contentScrollRef = React.useRef<HTMLDivElement>(null);
@@ -628,6 +632,9 @@ export function AutoscuoleResourcesPage({
         toast.error({
           description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
         });
+        // sblocca comunque lo skeleton: meglio i default con il toast d'errore
+        // che uno skeleton infinito
+        setSettingsLoaded(true);
         return;
       }
       setAvailabilityWeeks(String(res.data.availabilityWeeks));
@@ -703,6 +710,7 @@ export function AutoscuoleResourcesPage({
           ? (res.data.instructorBookingMode as InstructorBookingModeValue)
           : "manual_engine",
       );
+      setSettingsLoaded(true);
     };
     loadSettings();
     return () => {
@@ -1903,7 +1911,7 @@ export function AutoscuoleResourcesPage({
             <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
               {CONFIG_PANE_TITLES[configTab]}
             </h2>
-            {!hasLoadedOnce ? (
+            {!hasLoadedOnce || !settingsLoaded ? (
           <SettingsPaneSkeleton />
         ) : (
           <FadeIn>
