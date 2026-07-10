@@ -280,6 +280,11 @@ type ConfigPane =
   | "instructors"
   | "vehicles";
 
+// Dipendenze dati per pane: chi legge i settings autoscuola, chi le risorse
+// (istruttori/veicoli/slot). Business e Fatturazione si caricano da sole.
+const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "students", "vehicles"];
+const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
+
 const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
   [
     { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
@@ -1795,6 +1800,12 @@ export function AutoscuoleResourcesPage({
   const toggleSection = (key: string) =>
     setExpandedSection((prev) => (prev === key ? null : key));
 
+  // Skeleton per-pane: la pane corrente compare appena arrivano i SUOI dati,
+  // senza aspettare le altre fetch (che continuano in background come prefetch).
+  const paneReady =
+    (!PANES_NEEDING_SETTINGS.includes(configTab) || settingsLoaded) &&
+    (!PANES_NEEDING_RESOURCES.includes(configTab) || hasLoadedOnce);
+
   // Le sezioni impostazioni (Prenotazioni/Promemoria/Policy/Sede/Registrazione)
   // sono rese una alla volta come pannello dell'overlay.
   const renderSettingsSection = (section: SettingsSectionKey) => (
@@ -1911,9 +1922,8 @@ export function AutoscuoleResourcesPage({
             <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
               {CONFIG_PANE_TITLES[configTab]}
             </h2>
-            {!hasLoadedOnce || !settingsLoaded ? (
-          <SettingsPaneSkeleton />
-        ) : (
+            {!paneReady && <SettingsPaneSkeleton />}
+            <div className={paneReady ? undefined : "hidden"}>
           <FadeIn>
         <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
           <BusinessInfoPane />
@@ -2065,7 +2075,7 @@ export function AutoscuoleResourcesPage({
           />
         </KeepAlivePane>
           </FadeIn>
-        )}
+            </div>
           </div>
         </div>
       </div>
