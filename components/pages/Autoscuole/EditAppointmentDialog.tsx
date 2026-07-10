@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
@@ -113,6 +114,12 @@ type Props = {
   followCarRules?: Record<string, { enabled: boolean }>;
   locations: LocationOption[];
   onSuccess?: () => void;
+  /** Ancora viewport della card popover. */
+  anchor?: { x: number; y: number } | null;
+  /** Draft (data/ora/durata/istruttore) per il blocco ghost in agenda. */
+  onDraftChange?: (draft: { date: string; time: string; durationMin: number; instructorId: string | null } | null) => void;
+  /** Click/drag su uno slot della griglia col popover aperto → sposta il draft. */
+  slotPatch?: { date: string; time: string; instructorId: string | null; nonce: number } | null;
 };
 
 export function EditAppointmentDialog({
@@ -125,6 +132,9 @@ export function EditAppointmentDialog({
   followCarRules = {},
   locations,
   onSuccess,
+  anchor,
+  onDraftChange,
+  slotPatch,
 }: Props) {
   const toast = useFeedbackToast();
 
@@ -212,6 +222,23 @@ export function EditAppointmentDialog({
     if (!effectiveStart || !originalStart) return false;
     return effectiveStart.getTime() !== originalStart.getTime();
   }, [effectiveStart, originalStart]);
+
+  // Ghost live in agenda: comunica il draft al parent a ogni modifica.
+  React.useEffect(() => {
+    if (!onDraftChange) return;
+    if (!open || !appointment) { onDraftChange(null); return; }
+    onDraftChange({ date: newDate, time: newTime, durationMin: Math.round(durationMs / 60000), instructorId: instructorId || null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, appointment, newDate, newTime, durationMs, instructorId]);
+
+  // Click/drag su slot della griglia col popover aperto → sposta il draft.
+  React.useEffect(() => {
+    if (!slotPatch || !open) return;
+    setNewDate(slotPatch.date);
+    setNewTime(slotPatch.time);
+    if (slotPatch.instructorId) setInstructorId(slotPatch.instructorId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotPatch?.nonce]);
 
   // Past/completed guides ARE editable (the titolare fixes records after the
   // fact: wrong vehicle, wrong time, missing notes). The only forbidden move
@@ -551,22 +578,31 @@ export function EditAppointmentDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => (!pending ? onOpenChange(o) : undefined)}>
-      {/* Capped to the viewport with an internal scrolling body (the form grew:
-          moto chips, follow car, notes). The DatePicker calendar is absolute
-          (non-portaled) but overlays the fields below it inside the scroll
-          area, so it stays fully usable. */}
-      <DialogContent className="flex max-h-[92vh] flex-col sm:max-w-[480px] gap-0 overflow-hidden p-0">
-        <DialogHeader className="shrink-0 p-6 text-left">
-          <DialogTitle className="text-[18px] leading-[24px] font-semibold tracking-[-0.01em]">
-            Modifica guida
-          </DialogTitle>
-          <p className="mt-1 text-sm text-muted-foreground">{studentLabel}</p>
-        </DialogHeader>
-
-        <div className="shrink-0 border-t border-border" />
-
-        <div className="flex flex-1 flex-col gap-5 overflow-y-auto p-6">
+    <CreateEventPopover
+      open={open}
+      onClose={() => { if (!pending) onOpenChange(false); }}
+      title="Modifica guida"
+      subtitle={studentLabel}
+      anchor={anchor ?? null}
+      width={440}
+      footer={
+        <>
+          <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={pending} onClick={() => onOpenChange(false)}>
+            Annulla
+          </button>
+          <button
+            type="button"
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+            className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+          >
+            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+            Salva modifiche
+          </button>
+        </>
+      }
+    >
+        <div className="flex flex-col gap-5">
           {/* Date + time pickers — together they replace the old "Sposta" dialog. */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
@@ -847,29 +883,6 @@ export function EditAppointmentDialog({
           )}
         </div>
 
-        <DialogFooter className="shrink-0 gap-2 border-t border-border p-4">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={() => onOpenChange(false)}
-            className="cursor-pointer"
-          >
-            Annulla
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={!canSubmit}
-            onClick={handleSubmit}
-            className="cursor-pointer"
-          >
-            {pending && <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />}
-            {pending ? "Salvataggio…" : "Salva modifiche"}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    </CreateEventPopover>
   );
 }

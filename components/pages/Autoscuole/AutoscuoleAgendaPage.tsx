@@ -485,6 +485,8 @@ export function AutoscuoleAgendaPage({
   const plusBtnRef = React.useRef<HTMLButtonElement>(null);
   const [groupDraft, setGroupDraft] = React.useState<{ date: string; time: string; durationMin: number; instructorId: string | null; kind: "standard" | "moto"; capacity: number } | null>(null);
   const [groupSlotPatch, setGroupSlotPatch] = React.useState<{ date: string; time: string; instructorId: string | null; nonce: number } | null>(null);
+  const [editDraft, setEditDraft] = React.useState<{ date: string; time: string; durationMin: number; instructorId: string | null } | null>(null);
+  const [editSlotPatch, setEditSlotPatch] = React.useState<{ date: string; time: string; instructorId: string | null; nonce: number } | null>(null);
   const anchorFromPlus = React.useCallback(() => {
     const rect = plusBtnRef.current?.getBoundingClientRect();
     setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
@@ -778,6 +780,10 @@ export function AutoscuoleAgendaPage({
       setGroupSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
       return;
     }
+    if (editAppointmentTarget) {
+      setEditSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      return;
+    }
     setSlotMenu({
       day: normalized,
       ymd,
@@ -788,7 +794,7 @@ export function AutoscuoleAgendaPage({
       ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
 
   // Ghost block rendered inside the clicked column while the slot menu is open
   // (neutral look: white + dashed gray border, approved via desktop preview).
@@ -838,8 +844,10 @@ export function AutoscuoleAgendaPage({
       setBlockForm((prev) => ({ ...prev, date: ymd, startTime: time, instructorId: instructorId ?? prev.instructorId }));
     } else if (createGroupLessonOpen) {
       setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    } else if (editAppointmentTarget) {
+      setEditSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
     }
-  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen]);
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
 
   // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
   // colonna istruttore (hit-test su [data-agenda-col-day]).
@@ -917,6 +925,27 @@ export function AutoscuoleAgendaPage({
         dotClass,
       };
     }
+    if (editAppointmentTarget && editDraft?.date && editDraft.time) {
+      const dur = editDraft.durationMin || 30;
+      const cardClass =
+        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
+        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
+        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
+        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
+        "bg-[#FBD9DD]/80 border-[#dd8f99]";
+      const dotClass =
+        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
+      const who = `${editAppointmentTarget.student?.firstName ?? ""} ${editAppointmentTarget.student?.lastName ?? ""}`.trim();
+      return {
+        ymd: editDraft.date,
+        startMin: parseStart(editDraft.time),
+        durMin: dur,
+        instructorId: editDraft.instructorId,
+        title: who || "Guida",
+        cardClass,
+        dotClass,
+      };
+    }
     if (examDialogOpen && examForm.date && examForm.timeSet && examForm.time) {
       return {
         ymd: examForm.date,
@@ -952,7 +981,7 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft]);
 
   // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
   // sola, e scrolla verticalmente fino all'orario del ghost.
@@ -1596,9 +1625,12 @@ export function AutoscuoleAgendaPage({
         <EditAppointmentDialog
           open={editAppointmentTarget !== null}
           onOpenChange={(open) => {
-            if (!open) setEditAppointmentTarget(null);
+            if (!open) { setEditAppointmentTarget(null); setEditDraft(null); setEditSlotPatch(null); }
           }}
           appointment={editAppointmentTarget}
+          anchor={null}
+          onDraftChange={setEditDraft}
+          slotPatch={editSlotPatch}
           instructors={instructors}
           vehicles={vehicles.map((v) => ({
             id: v.id,
