@@ -41,7 +41,9 @@ import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actio
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -386,6 +388,7 @@ export function AutoscuoleAgendaPage({
   const [search, setSearch] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [filtersMenuOpen, setFiltersMenuOpen] = React.useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = React.useState(false);
   // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
   // Applicati client-side sul bootstrap già caricato — cambiare filtro non
   // rifà la fetch.
@@ -409,7 +412,6 @@ export function AutoscuoleAgendaPage({
     });
   }, []);
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [createStep, setCreateStep] = React.useState(0);
   const [creating, setCreating] = React.useState(false);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
@@ -476,6 +478,17 @@ export function AutoscuoleAgendaPage({
     ghostTop: number;
   } | null>(null);
   const [groupLessonPrefill, setGroupLessonPrefill] = React.useState<{ date: string; time: string; instructorId: string | null } | null>(null);
+  // Popover di creazione (redesign 2026-07): ancora viewport della card,
+  // draft della guida di gruppo (lifted dal dialog figlio per il ghost) e
+  // patch slot→gruppo quando si clicca la griglia col popover gruppo aperto.
+  const [popoverAnchor, setPopoverAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  const plusBtnRef = React.useRef<HTMLButtonElement>(null);
+  const [groupDraft, setGroupDraft] = React.useState<{ date: string; time: string; durationMin: number; instructorId: string | null; kind: "standard" | "moto"; capacity: number } | null>(null);
+  const [groupSlotPatch, setGroupSlotPatch] = React.useState<{ date: string; time: string; instructorId: string | null; nonce: number } | null>(null);
+  const anchorFromPlus = React.useCallback(() => {
+    const rect = plusBtnRef.current?.getBoundingClientRect();
+    setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
+  }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
@@ -745,16 +758,37 @@ export function AutoscuoleAgendaPage({
     const startMin = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES;
     const snapped = startMin + DAY_START_HOUR * 60;
     const normalized = normalizeDay(day);
+    const ymd = formatYmd(normalized);
+    const time = `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`;
+    // Con un flusso di creazione aperto, il click sulla griglia RIPOSIZIONA il
+    // draft (stile Google Calendar) invece di aprire il menu slot.
+    if (createOpen) {
+      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (examDialogOpen) {
+      setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (blockDialogOpen) {
+      setBlockForm((prev) => ({ ...prev, date: ymd, startTime: time, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (createGroupLessonOpen) {
+      setGroupSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      return;
+    }
     setSlotMenu({
       day: normalized,
-      ymd: formatYmd(normalized),
-      time: `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`,
+      ymd,
+      time,
       instructorId: instructorId ?? null,
       colLeft: rect.left,
       colRight: rect.right,
       ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen]);
 
   // Ghost block rendered inside the clicked column while the slot menu is open
   // (neutral look: white + dashed gray border, approved via desktop preview).
@@ -791,6 +825,139 @@ export function AutoscuoleAgendaPage({
           );
         })()}
       </AnimatePresence>
+    );
+  };
+
+  // ── Draft ghost: anteprima live dell'evento in creazione ──
+  // Derivato dal form del popover attivo; mostra in griglia il blocco che si
+  // creerà, già del colore giusto (durata per le guide, viola esame, grigio
+  // bloccante, verde/arancio gruppo).
+  const draftGhost = React.useMemo<null | {
+    ymd: string;
+    startMin: number;
+    durMin: number;
+    instructorId: string | null;
+    title: string;
+    cardClass: string;
+    dotClass: string;
+  }>(() => {
+    const parseStart = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      return h * 60 + m - DAY_START_HOUR * 60;
+    };
+    if (createOpen && form.day && form.time) {
+      const dur = parseInt(form.duration, 10) || 30;
+      const student = students.find((s) => s.id === form.studentId);
+      const cardClass =
+        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
+        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
+        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
+        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
+        "bg-[#FBD9DD]/80 border-[#dd8f99]";
+      const dotClass =
+        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
+      return {
+        ymd: form.day,
+        startMin: parseStart(form.time),
+        durMin: dur,
+        instructorId: form.instructorId || null,
+        title: student ? `${student.firstName} ${student.lastName}` : "Nuova guida",
+        cardClass,
+        dotClass,
+      };
+    }
+    if (examDialogOpen && examForm.date && examForm.timeSet && examForm.time) {
+      return {
+        ymd: examForm.date,
+        startMin: parseStart(examForm.time),
+        durMin: parseInt(examForm.duration, 10) || 60,
+        instructorId: examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null,
+        title: examForm.studentIds.length > 1 ? `Esame · ${examForm.studentIds.length} allievi` : "Esame",
+        cardClass: "bg-[#F5F0FF]/80 border-[#b39ddb]",
+        dotClass: "bg-[#8b5cf6]",
+      };
+    }
+    if (blockDialogOpen && blockForm.date && blockForm.startTime) {
+      return {
+        ymd: blockForm.date,
+        startMin: parseStart(blockForm.startTime),
+        durMin: parseInt(blockForm.duration, 10) || 60,
+        instructorId: blockForm.instructorId || null,
+        title: blockForm.reason.trim() || "Evento bloccante",
+        cardClass: "bg-[#F3F4F8]/85 border-[#b8bcc8]",
+        dotClass: "bg-[#9ca3af]",
+      };
+    }
+    if (createGroupLessonOpen && groupDraft?.date && groupDraft.time) {
+      const moto = groupDraft.kind === "moto";
+      return {
+        ymd: groupDraft.date,
+        startMin: parseStart(groupDraft.time),
+        durMin: groupDraft.durationMin,
+        instructorId: groupDraft.instructorId,
+        title: `Guida di gruppo · ${groupDraft.capacity} posti`,
+        cardClass: moto ? "bg-[#FFEDD5]/80 border-[#e8a75e]" : "bg-[#ECFDF5]/80 border-[#6fc9a3]",
+        dotClass: moto ? "bg-[#f97316]" : "bg-[#10b981]",
+      };
+    }
+    return null;
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft]);
+
+  // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
+  // sola, e scrolla verticalmente fino all'orario del ghost.
+  React.useEffect(() => {
+    if (!draftGhost) return;
+    const target = toDate(`${draftGhost.ymd}T00:00:00`);
+    const normalized = normalizeDay(target);
+    if (viewMode === "week") {
+      const ws = startOfWeek(normalized);
+      if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
+    } else if (normalized.getTime() !== dayFocus.getTime()) {
+      setDayFocus(normalized);
+    }
+    const scroller = calendarScrollRef.current;
+    if (scroller) {
+      const top = Math.max(0, draftGhost.startMin * PIXELS_PER_MINUTE - 140);
+      scroller.scrollTo({ top, behavior: "smooth" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftGhost?.ymd, draftGhost?.startMin]);
+
+  // Ghost del draft nella colonna giusta. instructorId=null (vista classica)
+  // → matcha solo il giorno; nelle viste istruttori matcha la colonna, e se
+  // l'istruttore non è ancora scelto appare tratteggiato in tutte (opaco).
+  const renderDraftGhost = (day: Date, instructorId: string | null) => {
+    if (!draftGhost || draftGhost.ymd !== formatYmd(day)) return null;
+    const unassigned = instructorId !== null && draftGhost.instructorId === null;
+    if (instructorId !== null && draftGhost.instructorId !== null && draftGhost.instructorId !== instructorId) return null;
+    const startMin = Math.max(0, draftGhost.startMin);
+    const durMin = Math.min(draftGhost.durMin, totalMinutes - startMin);
+    const endTotal = startMin + DAY_START_HOUR * 60 + durMin;
+    const startLabel = `${pad(Math.floor((startMin + DAY_START_HOUR * 60) / 60))}:${pad((startMin + DAY_START_HOUR * 60) % 60)}`;
+    const endLabel = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
+    const height = Math.max(26, durMin * PIXELS_PER_MINUTE - 2);
+    const small = height < 40;
+    return (
+      <motion.div
+        key={`draft-ghost-${draftGhost.ymd}-${instructorId ?? "day"}`}
+        layout
+        initial={{ opacity: 0, scale: 0.94 }}
+        animate={{ opacity: unassigned ? 0.45 : 1, scale: 1 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className={cn(
+          "pointer-events-none absolute left-1 right-1 z-30 overflow-hidden rounded-lg border-[1.5px] border-dashed px-2 py-1 shadow-[0_6px_22px_rgba(16,24,40,0.16)]",
+          draftGhost.cardClass,
+        )}
+        style={{ top: startMin * PIXELS_PER_MINUTE, height }}
+      >
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[#222222]">
+          <span className={cn("size-1.5 shrink-0 rounded-full", draftGhost.dotClass)} />
+          {startLabel} – {endLabel}
+        </div>
+        {!small && (
+          <div className="mt-0.5 truncate text-[10.5px] font-medium text-[#555555]">{draftGhost.title}</div>
+        )}
+      </motion.div>
     );
   };
 
@@ -1271,10 +1438,11 @@ export function AutoscuoleAgendaPage({
 
           {/* CTA */}
           <div>
-            <DropdownMenu>
+            <DropdownMenu open={plusMenuOpen} onOpenChange={setPlusMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
+                  ref={plusBtnRef}
                   title="Inserisci a mano"
                   className="flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800"
                 >
@@ -1285,7 +1453,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setCreateStep(0); setCreateOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(normalizeDay(dayFocus)) })); setCreateOpen(true); }}
                 >
                   <Plus className="size-4 text-foreground" strokeWidth={1.7} />
                   Appuntamento
@@ -1293,7 +1461,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
@@ -1301,7 +1469,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
@@ -1310,7 +1478,7 @@ export function AutoscuoleAgendaPage({
                   <button
                     type="button"
                     className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                    onClick={() => setCreateGroupLessonOpen(true)}
+                    onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setCreateGroupLessonOpen(true); }}
                   >
                     <Users className="size-4 text-foreground" strokeWidth={1.7} />
                     Guida di gruppo
@@ -1323,7 +1491,7 @@ export function AutoscuoleAgendaPage({
                       <button
                         type="button"
                         className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
-                        onClick={() => { setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
+                        onClick={() => { setPlusMenuOpen(false); setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
                       >
                         <Ban className="size-4" strokeWidth={1.7} />
                         Rimuovi festivo
@@ -1332,7 +1500,7 @@ export function AutoscuoleAgendaPage({
                       <button
                         type="button"
                         className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
-                        onClick={() => { setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
+                        onClick={() => { setPlusMenuOpen(false); setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
                       >
                         <Ban className="size-4" strokeWidth={1.7} />
                         Segna festivo
@@ -1405,7 +1573,10 @@ export function AutoscuoleAgendaPage({
         />
         <GroupLessonCreateDialog
           open={createGroupLessonOpen}
-          onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) setGroupLessonPrefill(null); }}
+          onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) { setGroupLessonPrefill(null); setGroupDraft(null); setGroupSlotPatch(null); } }}
+          anchor={popoverAnchor}
+          onDraftChange={setGroupDraft}
+          slotPatch={groupSlotPatch}
           instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
@@ -1429,7 +1600,11 @@ export function AutoscuoleAgendaPage({
             const instructorName = slotMenu.instructorId
               ? instructors.find((i) => i.id === slotMenu.instructorId)?.name ?? null
               : null;
-            const closeAnd = (fn: () => void) => { setSlotMenu(null); fn(); };
+            const closeAnd = (fn: () => void) => {
+              setPopoverAnchor({ x: Math.min(slotMenu.colRight + 402, window.innerWidth - 16), y: Math.max(80, Math.min(slotMenu.ghostTop - 8, window.innerHeight - 420)) });
+              setSlotMenu(null);
+              fn();
+            };
             const options: Array<{ key: string; label: string; icon: React.ReactNode; onSelect: () => void }> = [
               {
                 key: "appointment",
@@ -1437,7 +1612,6 @@ export function AutoscuoleAgendaPage({
                 icon: <Plus className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setForm((prev) => ({ ...prev, day: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId ?? prev.instructorId }));
-                  setCreateStep(0);
                   setCreateOpen(true);
                 }),
               },
@@ -1570,6 +1744,7 @@ export function AutoscuoleAgendaPage({
                       onClick={(event) => openSlotMenu(event, day)}
                     >
                       {renderSlotGhost(day, null)}
+                      {renderDraftGhost(day, null)}
                       {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-[#f5f5f5]" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
                       {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
                       {dayAppointments.map((item) => {
@@ -1940,6 +2115,7 @@ export function AutoscuoleAgendaPage({
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {renderSlotGhost(day, instr.instructorId)}
+                        {renderDraftGhost(day, instr.instructorId)}
                         {isColumnHoliday && (
                           <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
                             {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
@@ -2288,6 +2464,7 @@ export function AutoscuoleAgendaPage({
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {renderSlotGhost(day, instr.id)}
+                    {renderDraftGhost(day, instr.id)}
                     {/* Availability bands */}
                     {instr.ranges.map((range, ri) => {
                       const top = range.startMinutes * PIXELS_PER_MINUTE;
@@ -2579,497 +2756,251 @@ export function AutoscuoleAgendaPage({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
-          <DialogTitle className="sr-only">Nuovo appuntamento</DialogTitle>
-          {/* Step indicator */}
-          <div className="flex items-center gap-0 border-b border-border px-6 pt-5 pb-4">
-            {[
-              { icon: CalendarDays, label: "Quando" },
-              { icon: Users, label: "Chi" },
-              { icon: Send, label: "Conferma" },
-            ].map((s, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && (
-                  <div className={cn("mx-2 h-px flex-1 transition-colors", i <= createStep ? "bg-yellow-300" : "bg-border")} />
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (i < createStep) setCreateStep(i);
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
-                    i === createStep
-                      ? "border-yellow-300 bg-yellow-50 text-yellow-700"
-                      : i < createStep
-                        ? "cursor-pointer border-yellow-200 bg-yellow-50/50 text-yellow-600"
-                        : "border-border bg-white text-muted-foreground",
-                  )}
-                >
-                  {i < createStep ? (
-                    <Check className="size-3" />
-                  ) : (
-                    <s.icon className="size-3" />
-                  )}
-                  {s.label}
-                </button>
-              </React.Fragment>
-            ))}
+      <CreateEventPopover
+        open={createOpen}
+        onClose={() => { if (!creating) setCreateOpen(false); }}
+        title="Nuovo appuntamento"
+        subtitle="Il blocco tratteggiato in agenda si aggiorna mentre compili"
+        anchor={popoverAnchor}
+        footer={
+          <>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={creating} onClick={() => setCreateOpen(false)}>
+              Annulla
+            </button>
+            <button
+              type="button"
+              disabled={creating || !form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)}
+              onClick={handleCreate}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+            >
+              {creating && <Loader2 className="size-3.5 animate-spin" />}
+              Crea guida
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
+              <DatePickerInput value={form.day} onChange={(value) => setForm((prev) => ({ ...prev, day: value }))} />
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
+              <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
+            </div>
           </div>
-
           <div>
-            {/* Step content area — fixed height for smooth transitions */}
-            <div className="relative min-h-[220px] px-6 py-5">
-              <AnimatePresence mode="wait" initial={false}>
-                {/* Step 1: Quando */}
-                {createStep === 0 && (
-                  <motion.div
-                    key="step-0"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-4"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Quando</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Scegli giorno, orario e durata della guida</p>
-                    </div>
-                    <FieldGroup label="Giorno" required>
-                      <DatePicker
-                        value={form.day}
-                        onChange={(value) => setForm((prev) => ({ ...prev, day: value }))}
-                      />
-                    </FieldGroup>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FieldGroup label="Orario" required>
-                        <Select
-                          value={form.time}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, time: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                          <SelectContent>
-                            {TIME_OPTIONS.map((option) => (
-                              <SelectItem key={option} value={option}>{option}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      <FieldGroup label="Durata">
-                        <Select
-                          value={form.duration}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, duration: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Durata" /></SelectTrigger>
-                          <SelectContent>
-                            {SLOT_OPTIONS.map((option) => (
-                              <SelectItem key={option} value={option}>{option} min</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 2: Chi */}
-                {createStep === 1 && (
-                  <motion.div
-                    key="step-1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-3"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Dettagli</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Tipo di guida, istruttore, allievo e veicolo</p>
-                    </div>
-                    {vehiclesEnabled && (
-                      <FieldGroup label="Modalità" required>
-                        <div className="grid grid-cols-2 gap-2">
-                          {([
-                            { value: "auto", label: "Auto", hint: "1 veicolo", icon: Car },
-                            { value: "moto", label: "Moto", hint: "+ auto al seguito", icon: Bike },
-                          ] as const).map((opt) => {
-                            const active = form.bookingMode === opt.value;
-                            const Icon = opt.icon;
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    bookingMode: opt.value,
-                                    // Switching mode resets student + vehicle: the eligible
-                                    // students differ per class (Auto=B, Moto=moto), so a
-                                    // stale selection would be incompatible.
-                                    studentId: "",
-                                    vehicleId: "",
-                                    followVehicleId: "",
-                                    extraMotoVehicleIds: [],
-                                  }))
-                                }
-                                className={cn(
-                                  "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition-colors cursor-pointer",
-                                  active
-                                    ? "border-yellow-400 bg-yellow-50"
-                                    : "border-border/60 hover:bg-gray-50",
-                                )}
-                              >
-                                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-yellow-700" : "text-muted-foreground")} />
-                                <span className="flex min-w-0 items-baseline gap-1.5">
-                                  <span className="text-sm font-medium text-foreground">{opt.label}</span>
-                                  <span className="truncate text-[10px] text-muted-foreground">{opt.hint}</span>
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </FieldGroup>
-                    )}
-                    <FieldGroup label="Tipo guida" required>
-                      <div className="flex flex-wrap gap-1.5">
-                        {LESSON_TYPE_OPTIONS.map((option) => {
-                          const active = form.types.includes(option.value);
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() =>
-                                setForm((prev) => {
-                                  const next = active
-                                    ? prev.types.filter((t) => t !== option.value)
-                                    : [...prev.types, option.value];
-                                  const types = next.length ? next : [option.value];
-                                  return { ...prev, types, type: types[0] };
-                                })
-                              }
-                              className={cn(
-                                "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                                active
-                                  ? "border-yellow-400 bg-yellow-50 text-yellow-700"
-                                  : "border-border bg-gray-50 text-muted-foreground hover:bg-gray-100",
-                              )}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </FieldGroup>
-                    <FieldGroup label="Allievo" required>
-                      <StudentSearchSelect
-                        students={
-                          vehiclesEnabled
-                            ? students.filter((s) =>
-                                // Hide students of the wrong class for the mode.
-                                // Students without a set license stay visible.
-                                !s.licenseCategory
-                                  ? true
-                                  : form.bookingMode === "moto"
-                                    ? isMotoLicenseCategory(s.licenseCategory)
-                                    : !isMotoLicenseCategory(s.licenseCategory),
-                              )
-                            : students
-                        }
-                        value={form.studentId}
-                        onChange={(id) => setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
-                      />
-                    </FieldGroup>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FieldGroup label="Istruttore" required>
-                        <Select
-                          value={form.instructorId}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, instructorId: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
-                          <SelectContent>
-                            {instructors.map((instructor) => (
-                              <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      {vehiclesEnabled && (
-                        <FieldGroup label={form.bookingMode === "moto" ? "Moto" : "Veicolo"} required>
-                          <Select
-                            value={form.vehicleId}
-                            onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
-                          >
-                            <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
-                            <SelectContent>
-                              {vehicles
-                                .filter((vehicle) =>
-                                  form.bookingMode === "moto"
-                                    ? isMotoLicenseCategory(vehicle.licenseCategory)
-                                    : !isMotoLicenseCategory(vehicle.licenseCategory),
-                                )
-                                .filter((vehicle) => {
-                                  // Only vehicles the selected student is eligible for
-                                  // (moto hierarchy). No student yet → show all of the mode.
-                                  const st = students.find((s) => s.id === form.studentId);
-                                  return st ? vehicleServesLicense(vehicle, st) : true;
-                                })
-                                .map((vehicle) => {
-                                const assignedTo = vehicle.assignedInstructorId
-                                  ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
-                                  : null;
-                                const licenseLabel = vehicle.licenseCategory
-                                  ? `${vehicle.licenseCategory} · ${
-                                      TRANSMISSION_LABELS[
-                                        vehicle.transmission as Transmission
-                                      ] ?? vehicle.transmission
-                                    }`
-                                  : null;
-                                return (
-                                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                                    {vehicle.name}
-                                    {licenseLabel ? (
-                                      <span className="text-muted-foreground"> · {licenseLabel}</span>
-                                    ) : null}
-                                    {assignedTo ? (
-                                      <span className="text-muted-foreground"> · {assignedTo}</span>
-                                    ) : null}
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </FieldGroup>
-                      )}
-                      {(() => {
-                        const need =
-                          vehiclesEnabled &&
-                          form.bookingMode === "moto" &&
-                          Object.values(followCarRules).some((r) => r?.enabled === true);
-                        if (!need) return null;
-                        const carOptions = vehicles.filter(
-                          (v) => v.licenseCategory === "B" && v.id !== form.vehicleId,
-                        );
-                        return (
-                          <FieldGroup label="Auto al seguito" required>
-                            <Select
-                              value={form.followVehicleId}
-                              onValueChange={(value) =>
-                                setForm((prev) => ({ ...prev, followVehicleId: value }))
-                              }
-                            >
-                              <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
-                                {carOptions.map((vehicle) => (
-                                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                                    {vehicle.name}
-                                    {vehicle.transmission ? (
-                                      <span className="text-muted-foreground">
-                                        {" · "}
-                                        {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}
-                                      </span>
-                                    ) : null}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FieldGroup>
-                        );
-                      })()}
-                      {(() => {
-                        if (!vehiclesEnabled || form.bookingMode !== "moto") {
-                          return null;
-                        }
-                        const extraStudent = students.find((s) => s.id === form.studentId);
-                        const motoOptions = vehicles.filter(
-                          (v) =>
-                            isMotoLicenseCategory(v.licenseCategory) &&
-                            v.id !== form.vehicleId &&
-                            // Extra motos follow the same moto hierarchy as the
-                            // primary: only motos the student is eligible for.
-                            (extraStudent ? vehicleServesLicense(v, extraStudent) : true),
-                        );
-                        if (!motoOptions.length) return null;
-                        const toggleExtra = (id: string) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            extraMotoVehicleIds: prev.extraMotoVehicleIds.includes(id)
-                              ? prev.extraMotoVehicleIds.filter((x) => x !== id)
-                              : [...prev.extraMotoVehicleIds, id],
-                          }));
-                        return (
-                          <FieldGroup label="Moto aggiuntive">
-                            <div className="flex flex-wrap gap-2">
-                              {motoOptions.map((vehicle) => {
-                                const active = form.extraMotoVehicleIds.includes(vehicle.id);
-                                return (
-                                  <button
-                                    key={vehicle.id}
-                                    type="button"
-                                    onClick={() => toggleExtra(vehicle.id)}
-                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                                      active
-                                        ? "border-pink-500 bg-pink-50 text-pink-700"
-                                        : "border-border bg-white text-foreground hover:bg-gray-50"
-                                    }`}
-                                  >
-                                    {vehicle.name}
-                                    {vehicle.licenseCategory ? (
-                                      <span className={active ? "text-pink-500" : "text-muted-foreground"}>
-                                        {" · "}
-                                        {vehicle.licenseCategory}
-                                      </span>
-                                    ) : null}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </FieldGroup>
-                        );
-                      })()}
-                    </div>
-                    {agendaLocations.length > 0 && (
-                      <FieldGroup label="Luogo" description="Modificabile dopo la creazione.">
-                        <Select
-                          value={form.locationId}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
-                          <SelectContent>
-                            {agendaLocations.map((loc) => (
-                              <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name}
-                                {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* Step 3: Conferma */}
-                {createStep === 2 && (
-                  <motion.div
-                    key="step-2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-4"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Riepilogo</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Controlla i dati e conferma</p>
-                    </div>
-                    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
-                      <SummaryRow label="Giorno" value={form.day || "—"} />
-                      <SummaryRow label="Orario" value={`${form.time} · ${form.duration} min`} />
-                      <SummaryRow label="Tipo" value={form.types.map((t) => LESSON_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t).join(", ")} />
-                      <SummaryRow label="Allievo" value={
-                        students.find((s) => s.id === form.studentId)
-                          ? `${students.find((s) => s.id === form.studentId)!.firstName} ${students.find((s) => s.id === form.studentId)!.lastName}`
-                          : "—"
-                      } />
-                      <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
-                      {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
-                      {vehiclesEnabled && form.followVehicleId ? (
-                        <SummaryRow
-                          label="Auto al seguito"
-                          value={
-                            form.followVehicleId === "__none__"
-                              ? "Nessuna"
-                              : vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"
-                          }
-                        />
-                      ) : null}
-                      {vehiclesEnabled && form.extraMotoVehicleIds.length > 0 ? (
-                        <SummaryRow
-                          label="Moto aggiuntive"
-                          value={form.extraMotoVehicleIds
-                            .map((id) => vehicles.find((v) => v.id === id)?.name ?? "—")
-                            .join(", ")}
-                        />
-                      ) : null}
-                      <SummaryRow
-                        label="Luogo"
-                        value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label htmlFor="create-notes" className="text-xs font-medium text-slate-700">
-                        Note
-                      </label>
-                      <Textarea
-                        id="create-notes"
-                        value={form.notes}
-                        onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Note opzionali sulla guida"
-                        rows={3}
-                        disabled={creating}
-                        className="resize-none text-sm"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Footer — always visible */}
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {createStep > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCreateStep((s) => s - 1)}
-                >
-                  <ChevronLeft className="mr-1 size-3.5" />
-                  Indietro
-                </Button>
-              ) : (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>
-                  Annulla
-                </Button>
-              )}
-
-              {createStep < 2 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    createStep === 0
-                      ? !form.day || !form.time
-                      : !form.studentId || !form.instructorId || (vehiclesEnabled && !form.vehicleId)
-                  }
-                  onClick={() => setCreateStep((s) => s + 1)}
-                >
-                  Avanti
-                  <ChevronRight className="ml-1 size-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    creating ||
-                    !form.studentId ||
-                    !form.day ||
-                    !form.time ||
-                    !form.instructorId ||
-                    (vehiclesEnabled && !form.vehicleId)
-                  }
-                  onClick={handleCreate}
-                >
-                  {creating ? "Salvataggio..." : "Conferma"}
-                </Button>
-              )}
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SLOT_OPTIONS.map((option) => {
+                const active = form.duration === option;
+                return (
+                  <button key={option} type="button" onClick={() => setForm((prev) => ({ ...prev, duration: option }))}
+                    className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                    {option} min
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+          {vehiclesEnabled && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Modalità</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "auto", label: "Auto", hint: "1 veicolo", icon: Car },
+                  { value: "moto", label: "Moto", hint: "+ auto al seguito", icon: Bike },
+                ] as const).map((opt) => {
+                  const active = form.bookingMode === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <button key={opt.value} type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
+                      className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
+                      <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="text-sm font-semibold text-[#222222]">{opt.label}</span>
+                        <span className="truncate text-[10px] font-medium text-[#929292]">{opt.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Tipo guida</p>
+            <div className="flex flex-wrap gap-1.5">
+              {LESSON_TYPE_OPTIONS.map((option) => {
+                const active = form.types.includes(option.value);
+                return (
+                  <button key={option.value} type="button"
+                    onClick={() =>
+                      setForm((prev) => {
+                        const next = active ? prev.types.filter((t) => t !== option.value) : [...prev.types, option.value];
+                        const types = next.length ? next : [option.value];
+                        return { ...prev, types, type: types[0] };
+                      })
+                    }
+                    className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
+            <StudentSearchSelect
+              students={
+                vehiclesEnabled
+                  ? students.filter((s) =>
+                      !s.licenseCategory
+                        ? true
+                        : form.bookingMode === "moto"
+                          ? isMotoLicenseCategory(s.licenseCategory)
+                          : !isMotoLicenseCategory(s.licenseCategory),
+                    )
+                  : students
+              }
+              value={form.studentId}
+              onChange={(id) => setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
+              <Select value={form.instructorId} onValueChange={(value) => setForm((prev) => ({ ...prev, instructorId: value }))}>
+                <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
+                <SelectContent>
+                  {instructors.map((instructor) => (
+                    <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {vehiclesEnabled && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">{form.bookingMode === "moto" ? "Moto" : "Veicolo"}</p>
+                <Select value={form.vehicleId} onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}>
+                  <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
+                  <SelectContent>
+                    {vehicles
+                      .filter((vehicle) =>
+                        form.bookingMode === "moto"
+                          ? isMotoLicenseCategory(vehicle.licenseCategory)
+                          : !isMotoLicenseCategory(vehicle.licenseCategory),
+                      )
+                      .filter((vehicle) => {
+                        const st = students.find((s) => s.id === form.studentId);
+                        return st ? vehicleServesLicense(vehicle, st) : true;
+                      })
+                      .map((vehicle) => {
+                        const assignedTo = vehicle.assignedInstructorId
+                          ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
+                          : null;
+                        const licenseLabel = vehicle.licenseCategory
+                          ? `${vehicle.licenseCategory} · ${TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}`
+                          : null;
+                        return (
+                          <SelectItem key={vehicle.id} value={vehicle.id}>
+                            {vehicle.name}
+                            {licenseLabel ? <span className="text-muted-foreground"> · {licenseLabel}</span> : null}
+                            {assignedTo ? <span className="text-muted-foreground"> · {assignedTo}</span> : null}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          {(() => {
+            const need = vehiclesEnabled && form.bookingMode === "moto" && Object.values(followCarRules).some((r) => r?.enabled === true);
+            if (!need) return null;
+            const carOptions = vehicles.filter((v) => v.licenseCategory === "B" && v.id !== form.vehicleId);
+            return (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Auto al seguito</p>
+                <Select value={form.followVehicleId} onValueChange={(value) => setForm((prev) => ({ ...prev, followVehicleId: value }))}>
+                  <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
+                    {carOptions.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.name}
+                        {vehicle.transmission ? (
+                          <span className="text-muted-foreground"> · {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}</span>
+                        ) : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })()}
+          {(() => {
+            if (!vehiclesEnabled || form.bookingMode !== "moto") return null;
+            const extraStudent = students.find((s) => s.id === form.studentId);
+            const motoOptions = vehicles.filter(
+              (v) => isMotoLicenseCategory(v.licenseCategory) && v.id !== form.vehicleId && (extraStudent ? vehicleServesLicense(v, extraStudent) : true),
+            );
+            if (!motoOptions.length) return null;
+            const toggleExtra = (id: string) =>
+              setForm((prev) => ({
+                ...prev,
+                extraMotoVehicleIds: prev.extraMotoVehicleIds.includes(id)
+                  ? prev.extraMotoVehicleIds.filter((x) => x !== id)
+                  : [...prev.extraMotoVehicleIds, id],
+              }));
+            return (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Moto aggiuntive</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {motoOptions.map((vehicle) => {
+                    const active = form.extraMotoVehicleIds.includes(vehicle.id);
+                    return (
+                      <button key={vehicle.id} type="button" onClick={() => toggleExtra(vehicle.id)}
+                        className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                        {vehicle.name}
+                        {vehicle.licenseCategory ? <span className={active ? "text-white/70" : "text-[#929292]"}> · {vehicle.licenseCategory}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {agendaLocations.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Luogo</p>
+              <Select value={form.locationId} onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}>
+                <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
+                <SelectContent>
+                  {agendaLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                      {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="Note opzionali sulla guida"
+              rows={2}
+              disabled={creating}
+              className="resize-none text-sm"
+            />
+          </div>
+        </div>
+      </CreateEventPopover>
 
       {/* ── Recurring Block Delete Confirmation ── */}
       <Dialog open={blockDeleteConfirm !== null} onOpenChange={(open) => { if (!open) setBlockDeleteConfirm(null); }}>
@@ -3413,298 +3344,196 @@ export function AutoscuoleAgendaPage({
       </Dialog>
 
       {/* ── Exam Creation Dialog ── */}
-      <Dialog open={examDialogOpen} onOpenChange={(open) => { if (!examCreating) setExamDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
-          <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-50">
-              <GraduationCap className="h-4 w-4 text-yellow-600" />
-            </div>
-            <div>
-              <DialogTitle className="text-sm font-semibold">Nuovo esame</DialogTitle>
-              <p className="text-xs text-muted-foreground">Pianifica un esame per uno o più allievi</p>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-            {/* Data e orario */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Quando</p>
-              <div className="space-y-3">
-                <FieldGroup label="Giorno" required>
-                  <DatePicker value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
-                </FieldGroup>
-                <div
-                  className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2 cursor-pointer"
-                  onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
-                >
-                  <span className="text-xs text-muted-foreground">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
-                  <InlineToggle checked={examForm.timeSet} size="sm" />
-                </div>
-                {examForm.timeSet && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldGroup label="Orario">
-                      <Select value={examForm.time} onValueChange={(v) => setExamForm((f) => ({ ...f, time: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                    <FieldGroup label="Durata">
-                      <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {EXAM_SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Istruttore */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
-              <Select value={examForm.instructorId} onValueChange={(v) => setExamForm((f) => ({ ...f, instructorId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Nessuno (facoltativo)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nessuno</SelectItem>
-                  {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Allievi */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                Allievi
-                {examForm.studentIds.length > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-700">
-                    {examForm.studentIds.length}
-                  </span>
-                )}
-              </p>
-
-              {/* Selected students chips */}
-              {examForm.studentIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {examForm.studentIds.map((id) => {
-                    const s = students.find((st) => st.id === id);
-                    if (!s) return null;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
-                        className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-[11px] font-medium text-yellow-700 transition-colors hover:bg-yellow-100 hover:border-yellow-300 cursor-pointer"
-                      >
-                        {s.firstName} {s.lastName}
-                        <span className="text-yellow-400 hover:text-yellow-600">&times;</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                <Input
-                  value={examStudentSearch}
-                  onChange={(e) => setExamStudentSearch(e.target.value)}
-                  placeholder="Cerca allievo per nome..."
-                  className="pl-9 h-9 text-xs"
-                />
-              </div>
-
-              {/* Student results — only shown when searching */}
-              {examStudentSearch.trim().length >= 2 && (() => {
-                const q = examStudentSearch.toLowerCase();
-                const results = students
-                  .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
-                  .filter((s) => !examForm.studentIds.includes(s.id))
-                  .slice(0, 20);
-                return (
-                  <div className="mt-2 max-h-[160px] overflow-y-auto rounded-xl border border-border">
-                    {results.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => {
-                          setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, s.id] }));
-                          setExamStudentSearch("");
-                        }}
-                        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs cursor-pointer transition-colors border-b border-border last:border-b-0 hover:bg-yellow-50/60 text-left"
-                      >
-                        <Plus className="size-3 text-muted-foreground shrink-0" />
-                        <span className="font-medium text-foreground">{s.firstName} {s.lastName}</span>
-                      </button>
-                    ))}
-                    {results.length === 0 && (
-                      <p className="px-4 py-4 text-center text-xs text-muted-foreground">Nessun allievo trovato</p>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Note */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
-              <Input
-                value={examForm.note}
-                onChange={(e) => setExamForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Es: Esame pratico patente B, sede Motorizzazione..."
-              />
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between border-t border-border px-6 py-4">
-            <p className="text-[11px] text-muted-foreground">
+      <CreateEventPopover
+        open={examDialogOpen}
+        onClose={() => { if (!examCreating) setExamDialogOpen(false); }}
+        title="Nuovo esame"
+        subtitle="Pianifica un esame per uno o più allievi"
+        anchor={popoverAnchor}
+        footer={
+          <>
+            <p className="text-[11px] font-medium text-[#929292]">
               {examForm.studentIds.length === 0
                 ? "Seleziona almeno un allievo"
                 : `${examForm.studentIds.length} alliev${examForm.studentIds.length === 1 ? "o" : "i"} selezionat${examForm.studentIds.length === 1 ? "o" : "i"}`}
             </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setExamDialogOpen(false)} disabled={examCreating}>Annulla</Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={examCreating || !examForm.date || !examForm.studentIds.length}
-                onClick={async () => {
-                  setExamCreating(true);
-                  const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
-                  let startsAtIso: string;
-                  let endsAtIso: string | undefined;
-                  if (examForm.timeSet) {
-                    const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
-                    const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
-                    const endsAt = new Date(startsAt.getTime() + durationMs);
-                    startsAtIso = startsAt.toISOString();
-                    endsAtIso = endsAt.toISOString();
-                  } else {
-                    startsAtIso = new Date(`${examForm.date}T00:00:00`).toISOString();
-                    endsAtIso = undefined;
-                  }
-
-                  const res = await createExamEvent({
-                    studentIds: examForm.studentIds,
-                    startsAt: startsAtIso,
-                    endsAt: endsAtIso,
-                    instructorId: instrId,
-                    notes: examForm.note.trim() || undefined,
-                  });
-
-                  setExamCreating(false);
-                  if (res.success) {
-                    const count = (res.data as { count: number }).count;
-                    toast.success({
-                      description: `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.`,
-                    });
-                    setExamDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: res.message ?? "Impossibile creare l'esame." });
-                  }
-                }}
-              >
-                {examCreating ? (
-                  <><Loader2 className="size-3.5 animate-spin mr-1.5" />Creazione...</>
-                ) : (
-                  <><GraduationCap className="size-3.5 mr-1.5" />Crea esame</>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Instructor Block Creation Dialog ── */}
-      <Dialog open={blockDialogOpen} onOpenChange={(open) => { if (!blockCreating) setBlockDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuovo evento bloccante</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
+            <button
+              type="button"
+              disabled={examCreating || !examForm.date || !examForm.studentIds.length}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+              onClick={async () => {
+                setExamCreating(true);
+                const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
+                let startsAtIso: string;
+                let endsAtIso: string | undefined;
+                if (examForm.timeSet) {
+                  const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
+                  const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
+                  const endsAt = new Date(startsAt.getTime() + durationMs);
+                  startsAtIso = startsAt.toISOString();
+                  endsAtIso = endsAt.toISOString();
+                } else {
+                  startsAtIso = new Date(`${examForm.date}T00:00:00`).toISOString();
+                  endsAtIso = undefined;
+                }
+                const res = await createExamEvent({
+                  studentIds: examForm.studentIds,
+                  startsAt: startsAtIso,
+                  endsAt: endsAtIso,
+                  instructorId: instrId,
+                  notes: examForm.note.trim() || undefined,
+                });
+                setExamCreating(false);
+                if (res.success) {
+                  const count = (res.data as { count: number }).count;
+                  toast.success({ description: `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.` });
+                  setExamDialogOpen(false);
+                  load({ silent: true });
+                } else {
+                  toast.error({ description: res.message ?? "Impossibile creare l'esame." });
+                }
+              }}
+            >
+              {examCreating && <Loader2 className="size-3.5 animate-spin" />}
+              Crea esame
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Istruttore</label>
-              <Select value={blockForm.instructorId} onValueChange={(v) => setBlockForm((f) => ({ ...f, instructorId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
+              <DatePickerInput value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
+            </div>
+            {examForm.timeSet && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
+                <TimePickerInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
+              </div>
+            )}
+          </div>
+          <div
+            className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+            onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
+          >
+            <span className="text-[13px] font-medium text-[#555555]">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
+            <InlineToggle checked={examForm.timeSet} size="sm" />
+          </div>
+          {examForm.timeSet && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
+              <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {instructors.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                  ))}
+                  {EXAM_SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Data</label>
-              <DatePicker value={blockForm.date} onChange={(v) => setBlockForm((f) => ({ ...f, date: v }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Ora inizio</label>
-                <Select value={blockForm.startTime} onValueChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 48 }, (_, i) => { const h = Math.floor(i * 30 / 60); const m = (i * 30) % 60; const v = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; return <SelectItem key={v} value={v}>{v}</SelectItem>; })}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Durata</label>
-                <Select value={blockForm.duration} onValueChange={(v) => setBlockForm((f) => ({ ...f, duration: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[
-                      { value: "15", label: "15 min" },
-                      { value: "30", label: "30 min" },
-                      { value: "45", label: "45 min" },
-                      { value: "60", label: "1 ora" },
-                      { value: "90", label: "1h 30m" },
-                      { value: "120", label: "2 ore" },
-                    ].map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titolo (opzionale)</label>
-              <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
-            </div>
-            {/* Ricorrenza */}
-            <div className="space-y-2">
-              <div
-                className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2.5 cursor-pointer"
-                onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
-              >
-                <span className="text-xs font-medium">Evento ricorrente</span>
-                <InlineToggle checked={blockForm.recurring} size="sm" />
-              </div>
-              {blockForm.recurring && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Ripeti per</span>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={52}
-                    value={blockForm.recurringWeeks}
-                    onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
-                    className="w-16 h-8 text-xs"
-                  />
-                  <span className="text-xs text-muted-foreground">settimane</span>
-                </div>
-              )}
-            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore accompagnatore</p>
+            <Select value={examForm.instructorId} onValueChange={(v) => setExamForm((f) => ({ ...f, instructorId: v }))}>
+              <SelectTrigger><SelectValue placeholder="Nessuno (facoltativo)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nessuno</SelectItem>
+                {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setBlockDialogOpen(false)} disabled={blockCreating}>Annulla</Button>
-            <Button
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">
+              Allievi
+              {examForm.studentIds.length > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-bold text-[#222222]">
+                  {examForm.studentIds.length}
+                </span>
+              )}
+            </p>
+            {examForm.studentIds.length > 0 && (
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {examForm.studentIds.map((id) => {
+                  const s = students.find((st) => st.id === id);
+                  if (!s) return null;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#222222] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      {s.firstName} {s.lastName}
+                      <span className="text-[#929292]">&times;</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={examStudentSearch}
+                onChange={(e) => setExamStudentSearch(e.target.value)}
+                placeholder="Cerca allievo per nome..."
+                className="h-9 pl-9 text-xs"
+              />
+            </div>
+            {examStudentSearch.trim().length >= 2 && (() => {
+              const q = examStudentSearch.toLowerCase();
+              const results = students
+                .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+                .filter((s) => !examForm.studentIds.includes(s.id))
+                .slice(0, 20);
+              return (
+                <div className="mt-2 max-h-[160px] overflow-y-auto rounded-xl border border-[#dddddd]">
+                  {results.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => {
+                        setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, s.id] }));
+                        setExamStudentSearch("");
+                      }}
+                      className="flex w-full cursor-pointer items-center gap-3 border-b border-[#f0f0f0] px-3.5 py-2.5 text-left text-xs transition-colors last:border-b-0 hover:bg-[#f7f7f7]"
+                    >
+                      <Plus className="size-3 shrink-0 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                    </button>
+                  ))}
+                  {results.length === 0 && (
+                    <p className="px-4 py-4 text-center text-xs text-muted-foreground">Nessun allievo trovato</p>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
+            <Input
+              value={examForm.note}
+              onChange={(e) => setExamForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="Es: Esame pratico patente B, sede Motorizzazione..."
+            />
+          </div>
+        </div>
+      </CreateEventPopover>
+
+      {/* ── Instructor Block Creation Dialog ── */}
+      <CreateEventPopover
+        open={blockDialogOpen}
+        onClose={() => { if (!blockCreating) setBlockDialogOpen(false); }}
+        title="Nuovo evento bloccante"
+        subtitle="Blocca l'agenda dell'istruttore per un impegno"
+        anchor={popoverAnchor}
+        footer={
+          <>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => setBlockDialogOpen(false)}>
+              Annulla
+            </button>
+            <button
               type="button"
-              size="sm"
               disabled={blockCreating || !blockForm.instructorId || !blockForm.date}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
               onClick={async () => {
                 setBlockCreating(true);
                 const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
@@ -3729,11 +3558,84 @@ export function AutoscuoleAgendaPage({
                 toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
               }}
             >
-              {blockCreating ? "Creazione..." : "Crea evento"}
-            </Button>
+              {blockCreating && <Loader2 className="size-3.5 animate-spin" />}
+              Crea evento
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
+            <Select value={blockForm.instructorId} onValueChange={(v) => setBlockForm((f) => ({ ...f, instructorId: v }))}>
+              <SelectTrigger><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
+              <SelectContent>
+                {instructors.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Data</p>
+              <DatePickerInput value={blockForm.date} onChange={(v) => setBlockForm((f) => ({ ...f, date: v }))} />
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Ora inizio</p>
+              <TimePickerInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { value: "15", label: "15 min" },
+                { value: "30", label: "30 min" },
+                { value: "45", label: "45 min" },
+                { value: "60", label: "1 ora" },
+                { value: "90", label: "1h 30m" },
+                { value: "120", label: "2 ore" },
+              ].map((o) => {
+                const active = blockForm.duration === o.value;
+                return (
+                  <button key={o.value} type="button" onClick={() => setBlockForm((f) => ({ ...f, duration: o.value }))}
+                    className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                    {o.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
+            <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
+          </div>
+          <div className="space-y-2">
+            <div
+              className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+              onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
+            >
+              <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
+              <InlineToggle checked={blockForm.recurring} size="sm" />
+            </div>
+            {blockForm.recurring && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ripeti per</span>
+                <Input
+                  type="number"
+                  min={2}
+                  max={52}
+                  value={blockForm.recurringWeeks}
+                  onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
+                  className="h-8 w-16 text-xs"
+                />
+                <span className="text-xs text-muted-foreground">settimane</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CreateEventPopover>
 
       {/* ── Holiday Creation Dialog ── */}
       <Dialog open={holidayDialogOpen} onOpenChange={(open) => { if (!holidayPending) setHolidayDialogOpen(open); }}>

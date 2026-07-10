@@ -211,6 +211,10 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
 
 **Gotcha e2e**: suite Playwright (`tests/e2e`, `test.skip` senza `E2E_USER_EMAIL`/`E2E_USER_PASSWORD`) — girare con `E2E_BASE_URL=http://localhost:3000`: su `127.0.0.1` il login rimbalza su `localhost/en/sign-in` (redirect NextAuth ad AUTH_URL host) e il test muore su waitForURL. Quirk pre-esistente della sign-in redesignata, solo ambienti alias.
 
+## ⇒ CREAZIONE EVENTI: POPOVER + GHOST LIVE (2026-07-10 sera)
+
+I 4 dialog del "+" (Appuntamento/Esame/Bloccante/Gruppo) sono ora POPOVER non-modali (`dialogs/CreateEventPopover.tsx`: card fixed ancorata al + o allo slot cliccato, z-40 sotto i popper Radix z-50, chiusa SOLO da X/Annulla/Esc — mai da click fuori) con **blocco ghost live** in griglia: `draftGhost` memo (colore vero: durata→tinta legenda, viola esame, grigio bloccante, teal/arancio gruppo) + `renderDraftGhost(day, instructorId)` nelle 3 viste (istruttore non scelto → tutte le colonne al 45%). L'agenda SEGUE il draft (auto-navigazione settimana/giorno + scroll all'orario) e **click su slot col popover aperto = riposiziona il draft** (openSlotMenu intercetta; per il gruppo via prop `slotPatch` con nonce). Appuntamento: NIENTE più step, form unico (tutti i campi conservati: modalità auto/moto, tipo multi, allievo, veicolo+idoneità, auto al seguito, moto extra, luogo, note); de-giallito/de-rosato; DatePickerInput+TimePickerInput ovunque (via input nativi anche nel gruppo); durate a chips; CTA nera con spinner. GroupLessonCreateDialog: stessa shell, emette il draft con `onDraftChange`. GOTCHA: menu Radix con item-bottoni "plain" + popover non-modale → il menu NON si chiude da solo e congela i pointer events: SEMPRE controlled (plusMenuOpen/filtersMenuOpen). Handler di creazione INVARIATI (verificato create+delete bloccante E2E, DB pulito).
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

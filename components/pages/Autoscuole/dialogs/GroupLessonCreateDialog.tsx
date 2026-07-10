@@ -3,13 +3,9 @@
 import * as React from "react";
 import { Bike, Car, Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
@@ -66,6 +62,12 @@ type Props = {
   /** Optional instructor to pre-select (agenda slot click on an instructor column). */
   defaultInstructorId?: string | null;
   onCreated: () => void;
+  /** Ancora viewport della card popover (bottone + o slot cliccato). */
+  anchor?: { x: number; y: number } | null;
+  /** Notifica il parent del draft corrente per il blocco ghost in agenda. */
+  onDraftChange?: (draft: { date: string; time: string; durationMin: number; instructorId: string | null; kind: "standard" | "moto"; capacity: number } | null) => void;
+  /** Click su uno slot della griglia col popover aperto → riposiziona il draft. */
+  slotPatch?: { date: string; time: string; instructorId: string | null; nonce: number } | null;
 };
 
 const MOTO_CATEGORIES = new Set<string>(MOTO_LICENSE_CATEGORIES);
@@ -106,6 +108,9 @@ export function GroupLessonCreateDialog({
   defaultTime,
   defaultInstructorId,
   onCreated,
+  anchor,
+  onDraftChange,
+  slotPatch,
 }: Props) {
   const toast = useFeedbackToast();
   const [loading, setLoading] = React.useState(false);
@@ -132,6 +137,23 @@ export function GroupLessonCreateDialog({
   // Free choice for both kinds (moto participants may outnumber the fleet and
   // ride in turns). Clamped to the backend's 1–12 sanity range.
   const CAPACITY = Math.min(12, Math.max(1, Number(capacityStr) || 1));
+
+  // Ghost live in agenda: comunica il draft al parent a ogni modifica.
+  React.useEffect(() => {
+    if (!onDraftChange) return;
+    if (!open) { onDraftChange(null); return; }
+    onDraftChange({ date: day, time, durationMin: Number(durationMin) || 180, instructorId: instructorId || null, kind, capacity: CAPACITY });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, day, time, durationMin, instructorId, kind, CAPACITY]);
+
+  // Click su slot della griglia col popover aperto → sposta il draft.
+  React.useEffect(() => {
+    if (!slotPatch || !open) return;
+    setDay(slotPatch.date);
+    setTime(slotPatch.time);
+    if (slotPatch.instructorId) setInstructorId(slotPatch.instructorId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotPatch?.nonce]);
 
   // Accent tint follows the agenda card colour: teal = standard, ORANGE = moto.
   const tint = isMoto
@@ -357,20 +379,14 @@ export function GroupLessonCreateDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!saving) onOpenChange(o); }}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Nuova guida di gruppo
-            <Badge variant="secondary" className={tint.headerBadge}>
-              fino a {CAPACITY} allievi
-            </Badge>
-          </DialogTitle>
-          <DialogDescription>
-            1 istruttore · {vehiclesEnabled ? "1 veicolo · " : ""}fino a {CAPACITY} allievi. Pre-inserisci
-            gli allievi abilitati o apri i posti agli inviti.
-          </DialogDescription>
-        </DialogHeader>
+    <CreateEventPopover
+      open={open}
+      onClose={() => { if (!saving) onOpenChange(false); }}
+      title="Nuova guida di gruppo"
+      subtitle={`1 istruttore · ${vehiclesEnabled ? "1 veicolo · " : ""}fino a ${CAPACITY} allievi`}
+      anchor={anchor ?? null}
+      width={440}
+    >
 
         {loading ? (
           <div className="flex justify-center py-10">
@@ -419,21 +435,11 @@ export function GroupLessonCreateDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Giorno</Label>
-                <Input
-                  type="date"
-                  value={day}
-                  onChange={(e) => setDay(e.target.value)}
-                  className="cursor-pointer"
-                />
+                <DatePickerInput value={day} onChange={setDay} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Ora inizio</Label>
-                <Input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="cursor-pointer"
-                />
+                <TimePickerInput value={time} onChange={setTime} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Durata</Label>
@@ -724,7 +730,7 @@ export function GroupLessonCreateDialog({
             {/* CTA */}
             <Button
               type="button"
-              className="w-full cursor-pointer bg-pink-500 text-white hover:bg-pink-600"
+              className="w-full cursor-pointer bg-[#222222] text-white hover:bg-black"
               disabled={saving}
               onClick={handleCreate}
             >
@@ -737,7 +743,6 @@ export function GroupLessonCreateDialog({
             </Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </CreateEventPopover>
   );
 }
