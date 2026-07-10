@@ -49,30 +49,29 @@ function TimeColumn({
   const listRef = React.useRef<HTMLDivElement>(null);
   const selectedRef = React.useRef<HTMLButtonElement>(null);
 
-  // Porta il valore selezionato in cima alla colonna (comportamento antd):
-  // istantaneo al mount (apertura), animato ai cambi successivi.
+  // Centra verticalmente il valore selezionato nella colonna (quando lo
+  // scroll lo consente): istantaneo al mount (apertura), animato dopo.
   const mountedRef = React.useRef(false);
   React.useEffect(() => {
     const list = listRef.current;
     const item = selectedRef.current;
     if (!list || !item) return;
     list.scrollTo({
-      top: item.offsetTop - list.offsetTop,
+      top: item.offsetTop - list.clientHeight / 2 + item.clientHeight / 2,
       behavior: mountedRef.current ? "smooth" : "auto",
     });
     mountedRef.current = true;
   }, [selected]);
 
   // Se tutti i valori ci stanno nel pannello (item h-8 = 32px + py-1 = 8px)
-  // la colonna si stringe sul contenuto: niente scroll né filler. Altezza
-  // fissa + filler solo quando serve scrollare (es. tutte le 24 ore).
+  // la colonna si stringe sul contenuto; altezza fissa solo quando scrolla.
   const needsScroll = values.length * 32 + 8 > 224;
 
   return (
     <div
       ref={listRef}
       className={cn(
-        "overflow-y-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "relative overflow-y-auto px-1 py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         needsScroll ? "h-[224px]" : "max-h-[224px]",
       )}
     >
@@ -98,8 +97,6 @@ function TimeColumn({
           </button>
         );
       })}
-      {/* Filler: permette anche all'ultimo valore di scrollare in cima */}
-      {needsScroll && <div className="h-[184px]" />}
     </div>
   );
 }
@@ -109,7 +106,7 @@ export function TimePickerInput({
   onChange,
   minTime,
   maxTime,
-  minuteStep = 30,
+  minuteStep = 15,
   className,
 }: {
   /** Orario corrente "HH:MM". */
@@ -119,7 +116,7 @@ export function TimePickerInput({
   /** Limiti inclusivi "HH:MM" (es. "06:00"–"10:00"). */
   minTime?: string;
   maxTime?: string;
-  /** Passo dei minuti (default 30). */
+  /** Passo dei minuti (default 15: quarti d'ora). */
   minuteStep?: number;
   className?: string;
 }) {
