@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle, Car, Bike } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, Info, X, Car, Bike } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
@@ -383,6 +383,8 @@ export function AutoscuoleAgendaPage({
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [filtersMenuOpen, setFiltersMenuOpen] = React.useState(false);
   // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
   // Applicati client-side sul bootstrap già caricato — cambiare filtro non
   // rifà la fetch.
@@ -1190,76 +1192,102 @@ export function AutoscuoleAgendaPage({
             ]}
           />
 
-          <Button variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full px-2.5 text-[13px] text-[#6a6a6a] hover:text-foreground" onClick={() => setLegendOpen(true)}>
-            <HelpCircle className="size-3.5" />Legenda
-          </Button>
+          <div className="min-w-2 flex-1" />
 
-          <div className="h-5 w-px bg-border" />
+          {/* Legenda (icona info, proto) */}
+          <button
+            type="button"
+            title="Legenda"
+            onClick={() => setLegendOpen(true)}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            <Info className="size-4" strokeWidth={1.6} />
+          </button>
 
-          {/* Filters */}
-          <div className="flex items-center gap-1.5">
-            <FilterTag label="Istruttore" selected={instructorFilter}
-              onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
-              displayValue={
-                instructorFilter.length === 1
-                  ? instructors.find((item) => item.id === instructorFilter[0])?.name ?? "1 istruttore"
-                  : `${instructorFilter.length} istruttori`
-              } />
-            {vehiclesEnabled && (
-              <FilterTag label="Veicolo" selected={vehicleFilter}
-                onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
-                displayValue={
-                  vehicleFilter.length === 1
-                    ? vehicles.find((item) => item.id === vehicleFilter[0])?.name ?? "1 veicolo"
-                    : `${vehicleFilter.length} veicoli`
-                } />
-            )}
-            <FilterTag label="Tipo" selected={typeFilter}
-              onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
-              displayValue={
-                typeFilter.length === 1
-                  ? LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter[0])?.label ?? typeFilter[0]
-                  : `${typeFilter.length} tipi`
-              } />
-            <FilterTag label="Stato" selected={statusFilter}
-              onClick={() => setFilterEditor({ kind: "status", value: statusFilter })}
-              displayValue={
-                statusFilter.length === 1
-                  ? getStatusMeta(statusFilter[0]).label
-                  : `${statusFilter.length} stati`
-              } />
-            {(instructorFilter.length > 0 || vehicleFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0) && (
-              <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs px-2"
-                onClick={() => { setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}>
-                Reset
-              </Button>
-            )}
-          </div>
+          {/* Filtri (menu unico, proto) */}
+          {(() => {
+            const hasActiveFilters =
+              instructorFilter.length > 0 || vehicleFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0;
+            const menuEntries: Array<{ kind: FilterKind; label: string; active: boolean; value: string[] }> = [
+              { kind: "instructor", label: "Istruttore", active: instructorFilter.length > 0, value: instructorFilter },
+              ...(vehiclesEnabled
+                ? [{ kind: "vehicle" as FilterKind, label: "Veicolo", active: vehicleFilter.length > 0, value: vehicleFilter }]
+                : []),
+              { kind: "type", label: "Tipo", active: typeFilter.length > 0, value: typeFilter },
+              { kind: "status", label: "Stato", active: statusFilter.length > 0, value: statusFilter },
+            ];
+            return (
+              <DropdownMenu open={filtersMenuOpen} onOpenChange={setFiltersMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-[#f0f0f0]"
+                  >
+                    <SlidersHorizontal className="size-4 text-[#888888]" strokeWidth={1.6} />
+                    <span className="text-[13px] font-medium text-[#555555]">Filtri</span>
+                    {hasActiveFilters && (
+                      <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[190px] rounded-xl p-1.5 shadow-dropdown">
+                  {menuEntries.map((entry) => (
+                    <button
+                      key={entry.kind}
+                      type="button"
+                      className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                      onClick={() => { setFiltersMenuOpen(false); setFilterEditor({ kind: entry.kind, value: entry.value }); }}
+                    >
+                      {entry.label}
+                      {entry.active && <span className="ml-auto size-[7px] rounded-full bg-[#1a1a2e]" />}
+                    </button>
+                  ))}
+                  {hasActiveFilters && (
+                    <>
+                      <div className="my-1 border-t border-[#f0f0f0]" />
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-[#1a1a2e] transition-colors hover:bg-[#eeeef4]"
+                        onClick={() => { setFiltersMenuOpen(false); setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}
+                      >
+                        Rimuovi filtri
+                      </button>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
 
-          {/* Holiday toggle (day view) */}
-          {viewMode === "day" && (
-            <div className="flex items-center gap-1.5">
-              <div className="h-5 w-px bg-border" />
-              {holidaySet.has(formatYmd(dayFocus)) ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => { setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
-                >
-                  <Ban className="size-3" /> Rimuovi festivo
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2.5 text-xs"
-                  onClick={() => { setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
-                >
-                  <Ban className="size-3" /> Segna festivo
-                </Button>
-              )}
+          {/* Cerca (espandibile, proto) */}
+          {searchOpen ? (
+            <div className="flex h-[38px] min-w-[220px] shrink-0 items-center gap-2 rounded-full border-[1.5px] border-[#1a1a2e] bg-white px-3.5 shadow-[0_2px_8px_rgba(26,26,46,0.15)]">
+              <Search className="size-[15px] shrink-0 text-[#1a1a2e]" strokeWidth={1.8} />
+              <input
+                autoFocus
+                placeholder="Cerca in agenda…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                onKeyDown={(event) => { if (event.key === "Escape") { setSearch(""); setSearchOpen(false); } }}
+                className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-[#222222] outline-none placeholder:text-[#929292]"
+              />
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setSearchOpen(false); }}
+                className="flex size-[18px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#ebebeb] transition-colors hover:bg-[#dddddd]"
+              >
+                <X className="size-2.5 text-[#555555]" strokeWidth={2} />
+              </button>
             </div>
+          ) : (
+            <button
+              type="button"
+              title="Cerca"
+              onClick={() => setSearchOpen(true)}
+              className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+            >
+              <Search className="size-[17px]" strokeWidth={1.6} />
+            </button>
           )}
 
           {/* CTA */}
@@ -1308,6 +1336,30 @@ export function AutoscuoleAgendaPage({
                     <Users className="size-4 text-foreground" strokeWidth={1.7} />
                     Guida di gruppo
                   </button>
+                )}
+                {viewMode === "day" && (
+                  <>
+                    <div className="my-1 border-t border-[#f0f0f0]" />
+                    {holidaySet.has(formatYmd(dayFocus)) ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
+                        onClick={() => { setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
+                      >
+                        <Ban className="size-4" strokeWidth={1.7} />
+                        Rimuovi festivo
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
+                        onClick={() => { setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
+                      >
+                        <Ban className="size-4" strokeWidth={1.7} />
+                        Segna festivo
+                      </button>
+                    )}
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -1487,7 +1539,7 @@ export function AutoscuoleAgendaPage({
         {/* ── CLASSIC VIEW ── */}
         {agendaMode === "classic" && (
           <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <div ref={calendarScrollRef} className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card" style={{ height: "100%" }}>
+            <div ref={calendarScrollRef} className="overflow-y-auto rounded-[14px] border border-[#dddddd] bg-white" style={{ height: "100%" }}>
               {/* Sticky day headers */}
               <div
                 className={`sticky top-0 z-30 grid border-b border-[#eeeeee] bg-white/95 backdrop-blur-sm ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
@@ -1746,7 +1798,7 @@ export function AutoscuoleAgendaPage({
 
           return (
           <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <div className="flex flex-col bg-white" style={{ height: "100%" }}>
+            <div className="flex flex-col overflow-hidden rounded-[14px] border border-[#dddddd] bg-white" style={{ height: "100%" }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
                 <div className="bg-white" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
@@ -1761,7 +1813,7 @@ export function AutoscuoleAgendaPage({
                     <div
                       key={`day-${day.toISOString()}`}
                       className={cn(
-                        "flex cursor-pointer items-center justify-center gap-1.5 border-l border-[#eeeeee] py-1 transition-colors hover:bg-[#f7f7f7]",
+                        "relative flex h-[52px] cursor-pointer flex-col items-center justify-center gap-px border-l border-[#eeeeee] transition-colors hover:bg-[#f7f7f7]",
                         isDayHoliday ? "bg-[#fffcf0]" : isWeekendDay ? "bg-[#fafafa]" : "bg-white",
                       )}
                       style={{ gridColumn: `span ${instrCount}` }}
@@ -1789,7 +1841,7 @@ export function AutoscuoleAgendaPage({
                       >
                         {day.getDate()}
                       </span>
-                      {isDayHoliday && <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-600">{dayHolidayLabel || "Festivo"}</span>}
+                      {isDayHoliday && <span className="absolute right-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">{dayHolidayLabel || "festivo"}</span>}
                     </div>
                   );
                 })}
@@ -2147,7 +2199,7 @@ export function AutoscuoleAgendaPage({
           )}
           <div
             ref={calendarScrollRef}
-            className="overflow-y-auto bg-white"
+            className="overflow-y-auto rounded-[14px] border border-[#dddddd] bg-white"
             style={{ height: "100%" }}
           >
           {/* Sticky instructor headers */}
@@ -2168,12 +2220,12 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="flex flex-col items-center gap-1 border-l border-[#eeeeee] py-2.5"
+                    className="flex h-16 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
                   >
-                    <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
+                    <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
                       {initials}
                     </div>
-                    <span className="text-[11px] font-semibold text-foreground truncate max-w-[90%]">{instr.name}</span>
+                    <span className="max-w-[90%] truncate text-[12px] font-medium text-[#444444]">{instr.name}</span>
                   </div>
                 );
               }) : (
@@ -3097,7 +3149,7 @@ export function AutoscuoleAgendaPage({
         <DialogContent className="sm:max-w-[420px] p-0">
           <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100">
-              <HelpCircle className="h-4 w-4 text-gray-600" />
+              <Info className="h-4 w-4 text-gray-600" />
             </div>
             <DialogTitle className="text-sm font-semibold">Legenda colori agenda</DialogTitle>
           </div>
@@ -4289,37 +4341,3 @@ function AgendaDayHeader({
   );
 }
 
-function FilterTag({
-  label,
-  selected,
-  onClick,
-  displayValue,
-}: {
-  label: string;
-  selected: string[];
-  onClick: () => void;
-  displayValue?: string | null;
-}) {
-  const active = selected.length > 0;
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-9 max-w-[220px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] transition-colors",
-        active
-          ? "border-[#222222] bg-white font-semibold text-foreground shadow-[inset_0_0_0_0.5px_#222222]"
-          : "border-border bg-white font-medium text-[#6a6a6a] hover:border-[#c1c1c1]",
-      )}
-    >
-      {active ? (
-        <span className="truncate">{displayValue ?? label}</span>
-      ) : (
-        <>
-          <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
-          <span>{label}</span>
-        </>
-      )}
-    </button>
-  );
-}

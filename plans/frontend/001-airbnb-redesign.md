@@ -201,6 +201,16 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
 
 **Gotcha Playwright accumulati**: login `/it/sign-in` + `button:has-text("Accedi")`; DOPO il login fare `page.goto()` pieno (session atom/hamburger); pane settings = aspettare ~6s (settings async, prima mostrano default); `node run.js` SEMPRE con `cd .../.claude/skills/playwright-skill` prima (la cwd non persiste); toggle idempotenti leggendo `[data-state]`/`aria-checked`; ripristinare SEMPRE lo stato dev dopo i test (verificare con `pnpm db:dev:query`).
 
+## ⇒ SESSIONE 2026-07-10 (sera) — caricamento impostazioni, backoffice, agenda
+
+**Caricamento Impostazioni (3 commit `47a41cb`→`77591ae`)**: (1) fix snap-sui-default: flag `settingsLoaded`, skeleton finché non risponde `getAutoscuolaSettings`; (2) skeleton per-pane (`paneReady` da `PANES_NEEDING_SETTINGS`/`PANES_NEEDING_RESOURCES`, albero pane sempre montato, nascosto con `hidden`); (3) orchestrazione fetch: priorità alla pane aperta via `ensureSettings`/`ensureResources` (promise in-flight memorizzate in ref), resto in background dopo la primaria; al cambio pane la fetch mancante si anticipa. Scoperta chiave: **Next serializza le server action della stessa pagina in coda** → l'ordine di partenza conta. Prenotazioni: da ~6.9s con snap → ~1.3s senza snap.
+
+**Backoffice de-rosa (`494a51e`)**: 18 punti in 4 file (BackofficeCompaniesPage, ResolveTeoriaDeactivationDialog, BackofficeHeader, backoffice-sign-in) — chip/avatar neutri #f2f2f2+#222222, segmented attivi #222222, badge Voce AI azzurro #eaf2fd/#1a2b45, aloni sign-in navy/azzurro. Verdi/rossi semantici lasciati.
+
+**Agenda allineata al proto (questo commit)**: toolbar = cluster destro con icona info (legenda), bottone "Filtri" unico con menu (Istruttore/Veicolo/Tipo/Stato + pallino navy se attivo + "Rimuovi filtri"; dropdown CONTROLLED per chiudersi quando si apre l'editor), cerca espandibile a pillola (state `search` esisteva già senza UI — ora cablato), + menu con "Segna/Rimuovi festivo" (solo vista giorno, ambra come proto). Griglia: container rounded-[14px] border #dddddd su tutte le viste, header settimana-istruttori impilato (dow sopra, numero 26px), header giorno-istruttori 64px (avatar 32 + nome #444), badge festivo assoluto in alto a destra. NON toccati: logica colori blocchi/istruttori, editor filtri multi-select, availability bands, linea rossa now.
+
+**Gotcha e2e**: suite Playwright (`tests/e2e`, `test.skip` senza `E2E_USER_EMAIL`/`E2E_USER_PASSWORD`) — girare con `E2E_BASE_URL=http://localhost:3000`: su `127.0.0.1` il login rimbalza su `localhost/en/sign-in` (redirect NextAuth ad AUTH_URL host) e il test muore su waitForURL. Quirk pre-esistente della sign-in redesignata, solo ambienti alias.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
