@@ -372,8 +372,9 @@ function ReminderBanner({
   checked: boolean;
   onToggle: () => void;
   timeValue: string;
-  minTime: string;
-  maxTime: string;
+  /** Limiti opzionali: senza, il picker naviga tutte le 24 ore. */
+  minTime?: string;
+  maxTime?: string;
   onTimeChange: (v: string) => void;
 }) {
   return (
@@ -651,8 +652,8 @@ function SettingsTab({
                   })
                 }
                 timeValue={studentReminderMorningTime}
-                minTime="06:00"
-                maxTime="10:00"
+                minTime="05:00"
+                maxTime="12:00"
                 onTimeChange={(value) =>
                   updateReminderSettings({ studentReminderMorningTime: value })
                 }
@@ -668,8 +669,6 @@ function SettingsTab({
                   })
                 }
                 timeValue={studentReminderDayBeforeTime}
-                minTime="16:00"
-                maxTime="21:00"
                 onTimeChange={(value) =>
                   updateReminderSettings({ studentReminderDayBeforeTime: value })
                 }
