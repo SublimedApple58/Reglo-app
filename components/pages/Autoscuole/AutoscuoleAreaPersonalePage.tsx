@@ -755,7 +755,9 @@ export function AutoscuoleAreaPersonalePage() {
       data-testid="autoscuole-area-personale-page"
     >
       {/* ── Header overlay ── */}
-      <div className="flex h-[72px] shrink-0 items-center justify-between border-b border-[#dddddd] px-6 lg:px-10">
+      <div className="h-[72px] shrink-0 border-b border-[#dddddd]">
+        {/* Stesso container della top bar principale: logo sempre nello stesso punto */}
+        <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between px-4 lg:px-10">
         <Image
           src="/images/nav/logo-reglo-tight.png"
           alt="Reglo"
@@ -770,6 +772,7 @@ export function AutoscuoleAreaPersonalePage() {
         >
           Fatto
         </button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 justify-center overflow-hidden">

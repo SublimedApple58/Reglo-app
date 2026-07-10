@@ -1,20 +1,20 @@
 import Image from "next/image";
 import { cn } from "@/lib/utils";
-import regloLogo from "@/assets/reglo_new_logo.png";
 
 type RegloMarkProps = {
   className?: string;
   size?: number;
 };
 
+/** Logo Reglo corrente (lo stesso della top bar web app). */
 export function RegloMark({ className, size = 48 }: RegloMarkProps) {
   return (
     <Image
-      src={regloLogo}
+      src="/images/nav/logo-reglo-tight.png"
       alt="Reglo"
       width={size}
       height={size}
-      className={cn("rounded-xl", className)}
+      className={cn("select-none object-contain", className)}
       aria-hidden
     />
   );
