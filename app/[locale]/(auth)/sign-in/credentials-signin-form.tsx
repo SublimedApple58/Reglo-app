@@ -1,13 +1,12 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import { Loader2 } from 'lucide-react';
 import { signInWithCredentials } from '@/lib/actions/user.actions';
 import { useSearchParams } from 'next/navigation';
+import { PROTO_INPUT } from '@/components/ui/proto-styles';
 
 const CredentialsSignInForm = () => {
   const [data, action] = useActionState(signInWithCredentials, {
@@ -22,62 +21,73 @@ const CredentialsSignInForm = () => {
 
   const SignInButton = () => {
     const { pending } = useFormStatus();
-
     return (
-      <Button disabled={pending} className='w-full' variant='default'>
-        {pending ? 'Accesso...' : 'Accedi'}
-      </Button>
+      <button
+        type="submit"
+        disabled={pending}
+        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-black py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#1a1a1a] disabled:opacity-70"
+      >
+        {pending && <Loader2 className="size-4 animate-spin" />}
+        Accedi
+      </button>
     );
   };
 
   return (
-    <form action={action} className='space-y-6'>
-      <input type='hidden' name='callbackUrl' value={callbackUrl} />
+    <form action={action} className="space-y-5">
+      <input type="hidden" name="callbackUrl" value={callbackUrl} />
       <div>
-        <Label htmlFor='email' style={{marginBottom: 8}}>Email</Label>
-        <Input
-          id='email'
-          name='email'
-          type='email'
+        <label htmlFor="email" className="mb-2 block text-xs font-semibold text-[#555555]">
+          Email
+        </label>
+        <input
+          id="email"
+          name="email"
+          type="email"
           required
-          autoComplete='email'
-          placeholder='you@company.com'
+          autoComplete="email"
+          placeholder="nome@autoscuola.it"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
+          className={PROTO_INPUT}
         />
       </div>
       <div>
-        <Label htmlFor='password' style={{marginBottom: 8}}>Password</Label>
-        <Input
-          id='password'
-          name='password'
-          type='password'
+        <label htmlFor="password" className="mb-2 block text-xs font-semibold text-[#555555]">
+          Password
+        </label>
+        <input
+          id="password"
+          name="password"
+          type="password"
           required
-          autoComplete='current-password'
+          autoComplete="current-password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          className={PROTO_INPUT}
         />
-      </div>
-      <div>
-        <SignInButton />
       </div>
 
       {data && !data.success && data.message && (
-        <div className='rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive'>
+        <div className="rounded-[10px] border border-[#f0c9c0] bg-[#fdf3f1] px-3.5 py-2.5 text-sm font-medium text-[#c13515]">
           {data.message}
         </div>
       )}
 
-      <div className='text-sm text-center text-muted-foreground'>
+      <div className="pt-1">
+        <SignInButton />
+      </div>
+
+      <p className="pt-1 text-center text-sm font-medium text-[#6a6a6a]">
         Non hai ancora un account?{' '}
         <Link
           href={`/sign-up?callbackUrl=${encodeURIComponent(callbackUrl)}`}
-          target='_self'
-          className='link'
+          target="_self"
+          className="font-semibold text-[#222222] underline underline-offset-2"
         >
           Registrati
         </Link>
-      </div>
+      </p>
     </form>
   );
 };
