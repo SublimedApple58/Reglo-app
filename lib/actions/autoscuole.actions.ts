@@ -5975,6 +5975,15 @@ export async function getVoiceCallbackTasks(status?: "pending" | "done" | "all")
       },
       include: {
         student: { select: { id: true, name: true, email: true, phone: true } },
+        call: {
+          select: {
+            id: true,
+            startedAt: true,
+            durationSec: true,
+            recordingUrl: true,
+            transcriptText: true,
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 100,
@@ -5992,6 +6001,15 @@ export async function getVoiceCallbackTasks(status?: "pending" | "done" | "all")
         createdAt: t.createdAt.toISOString(),
         student: t.student
           ? { id: t.student.id, name: t.student.name, email: t.student.email, phone: t.student.phone }
+          : null,
+        call: t.call
+          ? {
+              id: t.call.id,
+              startedAt: t.call.startedAt.toISOString(),
+              durationSec: t.call.durationSec,
+              recordingUrl: t.call.recordingUrl,
+              transcriptText: t.call.transcriptText,
+            }
           : null,
       })),
     };

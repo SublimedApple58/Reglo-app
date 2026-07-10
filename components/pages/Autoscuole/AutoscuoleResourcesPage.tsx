@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, X, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, X, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ import InstructorsTab from "./tabs/InstructorsTab";
 import StudentsTab from "./tabs/StudentsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
 import PaymentsSettingsPane from "./PaymentsSettingsPane";
+import { VoiceSettingsPane } from "./VoiceSettingsPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
@@ -278,7 +279,8 @@ type ConfigPane =
   | "reminders"
   | "students"
   | "instructors"
-  | "vehicles";
+  | "vehicles"
+  | "voice";
 
 // Dipendenze dati per pane: chi legge i settings autoscuola, chi le risorse
 // (istruttori/veicoli/slot). Business e Fatturazione si caricano da sole.
@@ -301,6 +303,7 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
     { key: "instructors", label: "Istruttori", icon: Users },
     { key: "vehicles", label: "Veicoli", icon: Car },
   ],
+  [{ key: "voice", label: "Segretaria", icon: PhoneCall }],
 ];
 
 /**
@@ -334,6 +337,7 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   students: "Gestione allievi",
   instructors: "Istruttori",
   vehicles: "Veicoli",
+  voice: "Segretaria AI",
 };
 
 export function AutoscuoleResourcesPage({
@@ -2095,6 +2099,9 @@ export function AutoscuoleResourcesPage({
             openEditVehicle={openEditVehicle}
             openAvailabilityDialog={openAvailabilityDialog}
           />
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>
+          <VoiceSettingsPane />
         </KeepAlivePane>
           </FadeIn>
             </div>

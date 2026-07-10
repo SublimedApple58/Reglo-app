@@ -129,6 +129,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Voice AI
 - → **Instructor Clusters**: voice settings stored in company settings
 - → **Notifications**: callback tasks, missed call handling
+- → **Settings (web)**: le impostazioni segretaria sono il pane `voice` di AutoscuoleResourcesPage (`?tab=settings&pane=voice`)
+- → **Support Center**: il tutorial di attivazione linea invia la segnalazione "operatore non in lista" via `sendSupportMessage`
 - → Mostly self-contained (Twilio/Telnyx webhooks, knowledge base, call records)
 
 ### Quiz Teoria

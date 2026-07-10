@@ -187,19 +187,27 @@ test.describe("Autoscuole smoke", () => {
 
     // La feature può essere attiva o meno sull'ambiente target
     const featureOff = page.getByText("Segretaria AI non attiva");
-    const callbacks = page.getByText("Richiamate in sospeso");
+    const callbacks = page.getByText("Chiamate in sospeso");
     await expect(featureOff.or(callbacks).first()).toBeVisible({ timeout: 60000 });
 
     if (await callbacks.isVisible().catch(() => false)) {
-      // Pannello impostazioni: apertura, accordion, chiusura con Escape
+      // Impostazioni segretaria: pane dedicato nell'overlay Impostazioni
       await page.getByRole("button", { name: "Impostazioni" }).click();
-      const panel = page.getByTestId("voice-settings-panel");
-      await expect(panel).toBeVisible();
-      await expect(panel.getByText("Comportamento e azioni")).toBeVisible();
-      await panel.getByText("Orari e registrazione", { exact: true }).click();
-      await expect(panel.getByText("Giorni attivi")).toBeVisible({ timeout: 10000 });
-      await page.keyboard.press("Escape");
-      await expect(panel).not.toBeVisible();
+      const pane = page.getByTestId("voice-settings-pane");
+      await expect(pane).toBeVisible({ timeout: 60000 });
+
+      // Linea attiva (sub-tabs) o onboarding di attivazione
+      const subTabs = pane.getByRole("button", { name: "Comportamento ed azioni" });
+      const onboarding = pane.getByText("Linea Telefonica");
+      await expect(subTabs.or(onboarding).first()).toBeVisible({ timeout: 60000 });
+
+      if (await subTabs.isVisible().catch(() => false)) {
+        await expect(pane.getByText("Numero della segretaria")).toBeVisible();
+        await subTabs.click();
+        await expect(pane.getByText("Azioni consentite")).toBeVisible({ timeout: 10000 });
+        await pane.getByRole("button", { name: "Orari e registrazioni" }).click();
+        await expect(pane.getByText("Giorni attivi")).toBeVisible({ timeout: 10000 });
+      }
     }
   });
 
