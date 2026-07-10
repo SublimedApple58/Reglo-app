@@ -167,6 +167,10 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
   - **Bugfix backend scoperto**: il `.refine()` di `updateAutoscuolaSettings` non includeva `lessonCreditFlowEnabled`/`lessonCreditsRequired` → patch col solo toggle rifiutata con "Nessuna impostazione da aggiornare" (il salvataggio legacy passava solo perché mandava il blob completo). Aggiunti alla lista.
   - Proto NON copre questo tab (il suo "Fatturazione e pagamenti" è l'abbonamento Reglo: dati fatturazione + carta — eventualmente in futuro). Verificato Playwright: struttura, toggle→sub-banner, cutoff e prezzo persistono dopo reload, prezzo invalido→toast+revert; e2e 9/9.
 
+- Revisione #11 — **TimePickerInput stile antd** (2026-07-10, richiesta utente: "la select per l'orario fa pena"):
+  - Nuovo componente riusabile `components/ui/time-picker.tsx`: trigger compatto (orario + icona Clock, bordo proto), pannello Radix Popover `modal` con 2 colonne scrollabili ore|minuti (selezione near-black che scrolla in cima come antd, filler per lo scroll, scrollbar nascosta), footer OK. Props: `value/onChange/minTime/maxTime/minuteStep` (default 30); minuti fuori range disabilitati sulle ore di bordo, clamp al cambio ora. **`onChange` scatta UNA volta alla chiusura (OK/click fuori/Esc)** così l'auto-save fa un solo salvataggio per interazione.
+  - Montato nei 2 banner del pane Promemoria (ReminderBanner: prop timeOptions → minTime/maxTime). **DA FARE progressivamente**: adottarlo in tutti i punti dove si seleziona un orario (policy "Limite orario", cutoff prenotazioni, empty-slot times, cluster istruttore, ore guida…) — richiesta esplicita utente.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

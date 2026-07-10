@@ -28,6 +28,7 @@ import { FieldGroup } from "@/components/ui/field-group";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -361,7 +362,8 @@ function ReminderBanner({
   checked,
   onToggle,
   timeValue,
-  timeOptions,
+  minTime,
+  maxTime,
   onTimeChange,
 }: {
   icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
@@ -370,7 +372,8 @@ function ReminderBanner({
   checked: boolean;
   onToggle: () => void;
   timeValue: string;
-  timeOptions: string[];
+  minTime: string;
+  maxTime: string;
   onTimeChange: (v: string) => void;
 }) {
   return (
@@ -388,16 +391,12 @@ function ReminderBanner({
       {checked && (
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3">
           <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
-          <Select value={timeValue} onValueChange={onTimeChange}>
-            <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[130px] py-2")}>
-              <SelectValue placeholder="Orario" />
-            </SelectTrigger>
-            <SelectContent>
-              {timeOptions.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <TimePickerInput
+            value={timeValue}
+            onChange={onTimeChange}
+            minTime={minTime}
+            maxTime={maxTime}
+          />
         </div>
       )}
     </div>
@@ -652,7 +651,8 @@ function SettingsTab({
                   })
                 }
                 timeValue={studentReminderMorningTime}
-                timeOptions={["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"]}
+                minTime="06:00"
+                maxTime="10:00"
                 onTimeChange={(value) =>
                   updateReminderSettings({ studentReminderMorningTime: value })
                 }
@@ -668,7 +668,8 @@ function SettingsTab({
                   })
                 }
                 timeValue={studentReminderDayBeforeTime}
-                timeOptions={["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"]}
+                minTime="16:00"
+                maxTime="21:00"
                 onTimeChange={(value) =>
                   updateReminderSettings({ studentReminderDayBeforeTime: value })
                 }
