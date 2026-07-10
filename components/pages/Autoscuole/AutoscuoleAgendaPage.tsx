@@ -1861,13 +1861,13 @@ export function AutoscuoleAgendaPage({
                             ? glTint.card
                             : statusMeta.className;
                         return (
-                          <DropdownMenu key={item.id}>
+                          <DropdownMenu modal={false} key={item.id}>
                             <DropdownMenuTrigger asChild>
                               <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
                                 {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? glTint.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? glTint.label : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? glTint.time : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
                               </button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"><DraggableEventPanel>
                               <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>{item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}</div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className={glTint.detailBadge}>{glTint.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
                               {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
                               {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
@@ -1876,7 +1876,7 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               )}
-                            </DropdownMenuContent>
+                            </DraggableEventPanel></DropdownMenuContent>
                           </DropdownMenu>
                         );
                       })}
@@ -2249,7 +2249,7 @@ export function AutoscuoleAgendaPage({
                               ? glTintInstr.card
                               : statusMeta.className;
                           return (
-                            <DropdownMenu key={item.id}>
+                            <DropdownMenu modal={false} key={item.id}>
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
@@ -2267,7 +2267,7 @@ export function AutoscuoleAgendaPage({
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"><DraggableEventPanel>
                                 <div className="space-y-2">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                                   <div className="rounded-xl border border-border bg-white p-3">
@@ -2304,7 +2304,7 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               )}
-                              </DropdownMenuContent>
+                              </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
                           );
                         })}
@@ -2611,7 +2611,7 @@ export function AutoscuoleAgendaPage({
                           : statusMeta.className;
 
                       return (
-                        <DropdownMenu key={item.id}>
+                        <DropdownMenu modal={false} key={item.id}>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
@@ -2664,8 +2664,8 @@ export function AutoscuoleAgendaPage({
                             align="start"
                             side="right"
                             sideOffset={12}
-                            className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                          >
+                            className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"
+                          ><DraggableEventPanel>
                             <div className="space-y-2">
                               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                               <div className="rounded-xl border border-border bg-white p-3">
@@ -2702,7 +2702,7 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               )}
-                          </DropdownMenuContent>
+                          </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
                       );
                     })}
@@ -4177,6 +4177,20 @@ function getFilterOptions(
     { value: "completed", label: "Completata" },
     { value: "no_show", label: "Assente" },
   ];
+}
+
+/** Rende trascinabile il pannello dettaglio EVENTO dentro i menu Radix. */
+function DraggableEventPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      drag
+      dragMomentum={false}
+      dragElastic={0}
+      className="cursor-grab rounded-lg border border-border bg-white p-3 shadow-dropdown active:cursor-grabbing"
+    >
+      {children}
+    </motion.div>
+  );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {

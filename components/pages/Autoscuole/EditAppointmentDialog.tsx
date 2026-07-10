@@ -22,6 +22,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
@@ -618,22 +619,7 @@ export function EditAppointmentDialog({
             </div>
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-700">Orario</label>
-              <Select
-                value={newTime}
-                onValueChange={setNewTime}
-                disabled={pending}
-              >
-                <SelectTrigger className="h-10 cursor-pointer">
-                  <SelectValue placeholder="--:--" />
-                </SelectTrigger>
-                <SelectContent className="max-h-64">
-                  {TIME_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t} className="cursor-pointer">
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TimePickerInput value={newTime} onChange={setNewTime} />
             </div>
           </div>
 
