@@ -215,6 +215,25 @@ Top nav 84px #f7f7f7: logo sx · 4 tab centrali con icone 3D (Agenda, Allievi, S
 
 I 4 dialog del "+" (Appuntamento/Esame/Bloccante/Gruppo) sono ora POPOVER non-modali (`dialogs/CreateEventPopover.tsx`: card fixed ancorata al + o allo slot cliccato, z-40 sotto i popper Radix z-50, chiusa SOLO da X/Annulla/Esc — mai da click fuori) con **blocco ghost live** in griglia: `draftGhost` memo (colore vero: durata→tinta legenda, viola esame, grigio bloccante, teal/arancio gruppo) + `renderDraftGhost(day, instructorId)` nelle 3 viste (istruttore non scelto → tutte le colonne al 45%). L'agenda SEGUE il draft (auto-navigazione settimana/giorno + scroll all'orario) e **click su slot col popover aperto = riposiziona il draft** (openSlotMenu intercetta; per il gruppo via prop `slotPatch` con nonce). Appuntamento: NIENTE più step, form unico (tutti i campi conservati: modalità auto/moto, tipo multi, allievo, veicolo+idoneità, auto al seguito, moto extra, luogo, note); de-giallito/de-rosato; DatePickerInput+TimePickerInput ovunque (via input nativi anche nel gruppo); durate a chips; CTA nera con spinner. GroupLessonCreateDialog: stessa shell, emette il draft con `onDraftChange`. GOTCHA: menu Radix con item-bottoni "plain" + popover non-modale → il menu NON si chiude da solo e congela i pointer events: SEMPRE controlled (plusMenuOpen/filtersMenuOpen). Handler di creazione INVARIATI (verificato create+delete bloccante E2E, DB pulito).
 
+## ⇒ STATO AL COMPACT 2026-07-10 (sera, secondo compact)
+
+**Branch**: tutto pushato su `feat/airbnb-redesign` fino a `4125b04`. main/staging NON toccati oggi (staging fermo ad `aa219ac` di stamattina). Prod intonso.
+
+**Fatto in questa sessione (post primo compact)**:
+1. Caricamento Impostazioni: fix snap default + skeleton per-pane + priorità fetch alla pane aperta (`47a41cb`→`77591ae`). Next SERIALIZZA le server action della stessa pagina in coda.
+2. Backoffice de-rosato (`494a51e`).
+3. Agenda allineata al proto: menu Filtri unico controlled, cerca espandibile animata (`ExpandingSearch` condiviso con Allievi), legenda a icona, container rounded-[14px], festivo nel menu + (`8104b19`→`2b3b541`).
+4. **Creazione eventi = POPOVER + GHOST LIVE** (`5ba64a4`): `dialogs/CreateEventPopover.tsx` (non-modale z-40, ancora dal + o dallo slot, chiusa solo X/Annulla/Esc), draftGhost con colori veri, agenda che segue il draft, click-su-slot riposiziona. Tutti i campi conservati; handler invariati.
+5. Popover trascinabili dall'header (dragControls) + ghost trascinabile in griglia (15' vert, giorno/istruttore orizz via hit-test `[data-agenda-col-day]`) (`bf08f8d`).
+6. **Modifica guida** in popover con ghost (editDraft/editSlotPatch via onDraftChange/slotPatch) (`5850720`), menu EVENTO chiuso all'apertura (`f63f431`, Escape sintetico in handleOpenEdit).
+7. Pannello EVENTO **trascinabile** (`4125b04`): DraggableEventPanel = motion.div drag col chrome grafico; i 3 DropdownMenuContent → `overflow-visible border-0 bg-transparent p-0 shadow-none` + `modal={false}` (altrimenti freeze pointer events post-drag / clipping). + TimePicker al posto della select orario in EditAppointmentDialog.
+
+**GOTCHA CHIAVE**: menu Radix + popover non-modali → menu SEMPRE controlled o chiusi esplicitamente; drag dentro DropdownMenuContent → chrome sul motion.div e content trasparente non-modale. e2e con `E2E_BASE_URL=http://localhost:3000` (su 127.0.0.1 il login rimbalza su localhost). Card Playwright: popover = `div[role="dialog"]`, ghost = `div.border-dashed.cursor-grab`.
+
+**Candidato prossimo giro**: RescheduleAppointmentDialog (riprogrammazione rapida) ancora dialog classico — da convertire allo stesso pattern. Poi prosegue la revisione pezzo-pezzo del redesign.
+
+**CHECKLIST RILASCIO PROD invariata** (vedi blocco compact precedente): merge→main con OK utente, `pnpm migrate:prod` (…+ national_holiday_preset), `pnpm trigger:deploy:prod` OBBLIGATORIO, niente OTA mobile.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
