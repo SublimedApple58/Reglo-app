@@ -1260,10 +1260,13 @@ export function AutoscuoleAgendaPage({
           })()}
 
           {/* Cerca (espandibile, proto) */}
+          <AnimatePresence mode="wait" initial={false}>
           {searchOpen ? (
             <motion.div
+              key="agenda-search-open"
               initial={{ width: 34, opacity: 0.5 }}
               animate={{ width: 220, opacity: 1 }}
+              exit={{ width: 34, opacity: 0, transition: { duration: 0.2, ease: [0.4, 0, 0.7, 0.2] } }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
               className="flex h-[38px] shrink-0 items-center gap-2 overflow-hidden rounded-full border-[1.5px] border-[#1a1a2e] bg-white px-3.5 shadow-[0_2px_8px_rgba(26,26,46,0.15)]"
             >
@@ -1271,6 +1274,7 @@ export function AutoscuoleAgendaPage({
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
+                exit={{ opacity: 0, transition: { duration: 0.08 } }}
                 transition={{ duration: 0.18, delay: 0.12 }}
                 className="flex min-w-0 flex-1 items-center gap-2"
               >
@@ -1292,15 +1296,21 @@ export function AutoscuoleAgendaPage({
               </motion.div>
             </motion.div>
           ) : (
-            <button
+            <motion.button
+              key="agenda-search-closed"
               type="button"
               title="Cerca"
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.08 } }}
+              transition={{ duration: 0.15, ease: "easeOut" }}
               onClick={() => setSearchOpen(true)}
               className="flex size-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
             >
               <Search className="size-[17px]" strokeWidth={1.6} />
-            </button>
+            </motion.button>
           )}
+          </AnimatePresence>
 
           {/* CTA */}
           <div>
