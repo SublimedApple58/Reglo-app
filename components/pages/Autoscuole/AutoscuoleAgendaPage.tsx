@@ -1120,6 +1120,35 @@ export function AutoscuoleAgendaPage({
     });
   }, [appointments, search, rangeStart, rangeEnd, instructorFilter, vehicleFilter, typeFilter, statusFilter]);
 
+  // Auto-avanzamento del form di creazione: quando un campo obbligatorio viene
+  // compilato, scrolla al prossimo ancora vuoto (allievo → istruttore →
+  // veicolo) e gli dà il focus. Le note sono facoltative e vengono saltate.
+  const createStudentRef = React.useRef<HTMLDivElement>(null);
+  const createInstructorRef = React.useRef<HTMLDivElement>(null);
+  const createVehicleRef = React.useRef<HTMLDivElement>(null);
+  const advanceCreateFocus = (patch: { studentId?: string; instructorId?: string; vehicleId?: string }) => {
+    const next = {
+      studentId: form.studentId,
+      instructorId: form.instructorId,
+      vehicleId: form.vehicleId,
+      ...patch,
+    };
+    const target = !next.studentId
+      ? createStudentRef.current
+      : !next.instructorId
+        ? createInstructorRef.current
+        : vehiclesEnabled && !next.vehicleId
+          ? createVehicleRef.current
+          : null;
+    if (!target) return;
+    // Il delay lascia chiudere il popover della select appena usata (Radix
+    // riporta il focus sul proprio trigger alla chiusura: dobbiamo passare dopo).
+    window.setTimeout(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true });
+    }, 160);
+  };
+
   const handleCreate = async () => {
     const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
     const needFollowCar =
@@ -2943,7 +2972,7 @@ export function AutoscuoleAgendaPage({
               })}
             </div>
           </div>
-          <div>
+          <div ref={createStudentRef}>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
             <StudentSearchSelect
               students={
@@ -2958,13 +2987,22 @@ export function AutoscuoleAgendaPage({
                   : students
               }
               value={form.studentId}
-              onChange={(id) => setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
+              onChange={(id) => {
+                setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }));
+                if (id) advanceCreateFocus({ studentId: id, vehicleId: "" });
+              }}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            <div ref={createInstructorRef}>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
-              <Select value={form.instructorId} onValueChange={(value) => setForm((prev) => ({ ...prev, instructorId: value }))}>
+              <Select
+                value={form.instructorId}
+                onValueChange={(value) => {
+                  setForm((prev) => ({ ...prev, instructorId: value }));
+                  advanceCreateFocus({ instructorId: value });
+                }}
+              >
                 <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
                 <SelectContent>
                   {instructors.map((instructor) => (
@@ -2974,9 +3012,15 @@ export function AutoscuoleAgendaPage({
               </Select>
             </div>
             {vehiclesEnabled && (
-              <div>
+              <div ref={createVehicleRef}>
                 <p className="mb-1.5 text-xs font-semibold text-[#555555]">{form.bookingMode === "moto" ? "Moto" : "Veicolo"}</p>
-                <Select value={form.vehicleId} onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}>
+                <Select
+                  value={form.vehicleId}
+                  onValueChange={(value) => {
+                    setForm((prev) => ({ ...prev, vehicleId: value }));
+                    advanceCreateFocus({ vehicleId: value });
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
                   <SelectContent>
                     {vehicles

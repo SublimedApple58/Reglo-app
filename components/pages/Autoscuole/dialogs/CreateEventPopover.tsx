@@ -18,7 +18,7 @@ export function CreateEventPopover({
   title,
   subtitle,
   anchor,
-  width = 392,
+  width = 460,
   children,
   footer,
 }: {
@@ -28,11 +28,38 @@ export function CreateEventPopover({
   subtitle?: string;
   /** Coordinate viewport a cui ancorare l'angolo in alto a destra della card. */
   anchor: { x: number; y: number } | null;
+  /** Larghezza di partenza (poi ridimensionabile dal grip). */
   width?: number;
   children: React.ReactNode;
   footer?: React.ReactNode;
 }) {
   const dragControls = useDragControls();
+  const cardRef = React.useRef<HTMLDivElement>(null);
+
+  // Ridimensionamento col mouse dal grip in basso a destra: il contenuto è
+  // fluido (input w-full, chips flex-wrap) quindi si riadatta da solo.
+  const [size, setSize] = React.useState<{ w: number; h: number | null }>({ w: width, h: null });
+  React.useEffect(() => {
+    if (open) setSize({ w: width, h: null });
+  }, [open, width]);
+  const startResize = (event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const el = cardRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const onMove = (ev: PointerEvent) => {
+      // clamp sul viewport usando la posizione REALE della card (drag incluso)
+      const w = Math.min(Math.max(340, rect.width + ev.clientX - startX), window.innerWidth - rect.left - 8);
+      const h = Math.min(Math.max(320, rect.height + ev.clientY - startY), window.innerHeight - rect.top - 8);
+      setSize({ w, h });
+    };
+    const onUp = () => window.removeEventListener("pointermove", onMove);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp, { once: true });
+  };
 
   // Affordance di scroll: il body può nascondere campi sotto la piega senza
   // che nulla lo segnali. Tracciamo se c'è contenuto sopra/sotto e mostriamo
@@ -79,8 +106,12 @@ export function CreateEventPopover({
   const margin = 16;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
-  const left = anchor ? Math.max(margin, Math.min(anchor.x, vw - margin) - width) : vw - width - 40;
-  const top = anchor ? Math.max(margin, anchor.y) : 150;
+  // Posizionamento "smart": la card va sul lato di schermo OPPOSTO al punto di
+  // apertura (dove sta il blocco ghost / l'evento), così non lo copre, e parte
+  // alta per avere il massimo spazio verticale disponibile.
+  const preferLeft = anchor ? anchor.x > vw / 2 : false;
+  const left = preferLeft ? margin + 8 : vw - width - margin - 8;
+  const top = margin + 72;
   const maxHeight = vh - top - margin;
 
   return createPortal(
@@ -103,8 +134,16 @@ export function CreateEventPopover({
             top: -(top - margin),
             bottom: vh - 72 - top,
           }}
+          ref={cardRef}
           className="fixed z-40 flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
-          style={{ left, top, width, maxHeight }}
+          style={{
+            left,
+            top,
+            width: size.w,
+            // finché l'utente non ridimensiona, l'altezza è naturale (capped)
+            height: size.h ?? undefined,
+            maxHeight: size.h ? undefined : maxHeight,
+          }}
           role="dialog"
           aria-label={title}
         >
@@ -176,6 +215,19 @@ export function CreateEventPopover({
               {footer}
             </div>
           ) : null}
+          {/* Grip di ridimensionamento — rimbalza verso l'angolo alla prima
+              apertura per segnalare che la card è ridimensionabile */}
+          <motion.div
+            onPointerDown={startResize}
+            title="Ridimensiona"
+            animate={{ x: [0, 3, 0, 3, 0], y: [0, 3, 0, 3, 0] }}
+            transition={{ duration: 1.1, ease: "easeInOut", delay: 0.7, repeat: 2, repeatDelay: 1.6 }}
+            className="absolute bottom-0 right-0 z-20 flex size-[20px] cursor-nwse-resize items-end justify-end p-1 text-[#b2b2b2] transition-colors hover:text-[#555555]"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M9 1 1 9M9 5.5 5.5 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </motion.div>
         </motion.div>
       )}
     </AnimatePresence>,

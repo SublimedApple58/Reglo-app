@@ -299,6 +299,17 @@ Richiesta utente: modelli di salvataggio misti (CTA "Salva configurazione" vs au
 
 **GOTCHA test**: in dev le server action della pagina si SERIALIZZANO — un reload a ~1.5s dal click tronca la action di save in coda e sembra "non salvato"; aspettare ~4s (o attendere il completamento delle fetch iniziali) prima di ricaricare.
 
+## ⇒ COMODITÀ POPOVER PRENOTAZIONE (2026-07-11 pomeriggio)
+
+Richieste utente sul flusso "Nuovo appuntamento" (CreateEventPopover, condiviso con modifica guida):
+1. **Affordance di scroll** (`f474f5a`): fade bianco top/bottom sul body + pill flottante "Altri campi ▾" che scrolla di ~una schermata e sparisce a fondo corsa; ResizeObserver ricalcola gli hint quando il contenuto cambia altezza.
+2. **Resize col mouse**: grip diagonale nell'angolo basso-destro (pointer events, clamp 340..vw / 320..vh usando getBoundingClientRect così il clamp tiene conto del drag); contenuto già fluido → responsive. Grip con **rimbalzo verso l'angolo** all'apertura (motion, 3 cicli poi fermo) per segnalarne l'esistenza.
+3. **Default più grande**: width default 392→460, height naturale cappata dal nuovo top.
+4. **Posizionamento smart**: card sul lato di schermo OPPOSTO al punto di apertura (anchor.x vs vw/2) così non copre il blocco ghost, e top fisso a 88px per il massimo spazio verticale. Sostituisce l'ancoraggio al punto di apertura.
+5. **Auto-avanzamento form creazione** (AutoscuoleAgendaPage): compilato un campo obbligatorio → scrollIntoView+focus sul prossimo vuoto (allievo → istruttore → veicolo se vehiclesEnabled; note escluse). Delay 160ms perché Radix Select al close riporta il focus sul proprio trigger (bisogna passare DOPO).
+
+Verificato con Playwright: apertura dal + (destra) → card a sinistra 460x796; resize a 630x726 dal grip; scelta allievo → focus su combobox Istruttore.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.
