@@ -137,7 +137,7 @@ export function NovitaDialog({
                 type="button"
                 onClick={() => {
                   onClose();
-                  router.push("/user/autoscuole?tab=settings&pane=students");
+                  router.push("/user/autoscuole?tab=settings&pane=bookings");
                 }}
                 className="inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-navy-900 px-6 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-navy-800"
               >

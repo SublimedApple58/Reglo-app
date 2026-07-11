@@ -255,6 +255,25 @@ La segretaria è APPROVATA così com'è ("va bene così la segretaria").
 
 **CHECKLIST RILASCIO PROD invariata** (vedi blocco compact precedente): merge→main con OK utente, `pnpm migrate:prod` (…+ national_holiday_preset), `pnpm trigger:deploy:prod` OBBLIGATORIO, niente OTA mobile.
 
+## ⇒ PANE "PRENOTAZIONI E ALLIEVI" UNIFICATO (2026-07-11)
+
+Richiesta utente: i pane "Prenotazioni" e "Gestione allievi" trattavano cose simili (dentro Gestione allievi c'era pure un sub-tab chiamato "Prenotazioni") e confondevano gli utenti; carta bianca su come sistemarli, con indicazione di usare i tab interni per evitare schermate lunghe.
+
+**Decisione: UNIFICATI in un solo pane "Prenotazioni e allievi"** (key `bookings`, icona CalendarDays, stesso slot sidebar; "Gestione allievi"/`students` eliminato). Quattro sub-tab underline (stesso pattern di VoiceSettingsPane):
+1. **Generali** — chi può prenotare dall'app (+ modalità istruttore condizionale), settimane di disponibilità, prenotazioni aperte dal, durate, solo orari tondi, festività non prenotabili. Restyling in righe flat (SettingRow con `control` = Select/DatePicker a destra), niente più FieldGroup a griglia.
+2. **Limiti** — stop last-minute, massimo guide/settimana (+ precedenza esame annidata), riempi fasce vuote.
+3. **Guide** — scambi, annullamento da app, presenza automatica, guide di gruppo.
+4. **App allievi** — note in app, notifica slot liberi, scelta istruttore, RegistrationSection (licenza quiz).
+
+**File**:
+- NUOVO `tabs/BookingsTab.tsx` (testid `bookings-pane`): fusione di StudentsTab + sezione bookings di SettingsTab; HolidayIcon/NationalHolidaysCard spostati qui; UN solo bottone "Salva configurazione" (handleSaveSettings salva già tutti i campi in una chiamata).
+- `tabs/StudentsTab.tsx` ELIMINATO.
+- `tabs/SettingsTab.tsx` snellito: SettingsSectionKey = reminders|policy|locations, via props/costanti/JSX bookings.
+- `AutoscuoleResourcesPage`: ConfigPane senza "students"; **legacy `?pane=students` → mappato a `bookings`** nell'initializer (deep-link in giro per l'app); gruppo 2 sidebar = Prenotazioni e allievi / Policy tipi guida / Promemoria e notifiche.
+- `NovitaDialog` CTA guide di gruppo → `pane=bookings`.
+- e2e `autoscuole-smoke.spec.ts`: test rinominato "prenotazioni e allievi", naviga col deep-link legacy `pane=students` (verifica il redirect) e tocca i 4 sub-tab. PASSA.
+- Docs: group-lessons.md + impact-map.md aggiornati (riferimenti StudentsTab→BookingsTab).
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

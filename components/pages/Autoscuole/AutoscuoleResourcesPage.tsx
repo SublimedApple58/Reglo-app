@@ -33,7 +33,7 @@ import { DatePickerInput } from "@/components/ui/date-picker";
 // "scatto" bianco a ogni switch.
 import SettingsTab, { type SettingsSectionKey } from "./tabs/SettingsTab";
 import InstructorsTab from "./tabs/InstructorsTab";
-import StudentsTab from "./tabs/StudentsTab";
+import BookingsTab from "./tabs/BookingsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
 import PaymentsSettingsPane from "./PaymentsSettingsPane";
 import { VoiceSettingsPane } from "./VoiceSettingsPane";
@@ -277,14 +277,13 @@ type ConfigPane =
   | "bookings"
   | "policy"
   | "reminders"
-  | "students"
   | "instructors"
   | "vehicles"
   | "voice";
 
 // Dipendenze dati per pane: chi legge i settings autoscuola, chi le risorse
 // (istruttori/veicoli/slot). Business e Fatturazione si caricano da sole.
-const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "students", "vehicles"];
+const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "vehicles"];
 const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
 
 const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
@@ -294,10 +293,9 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
     { key: "payments", label: "Fatturazione e pagamenti", icon: CreditCard },
   ],
   [
-    { key: "bookings", label: "Prenotazioni", icon: CalendarDays },
+    { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarDays },
     { key: "policy", label: "Policy tipi guida", icon: ClipboardList },
     { key: "reminders", label: "Promemoria e notifiche", icon: Bell },
-    { key: "students", label: "Gestione allievi", icon: UserRoundCog },
   ],
   [
     { key: "instructors", label: "Istruttori", icon: Users },
@@ -331,10 +329,9 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   business: "Informazioni aziendali",
   locations: "Sede e luoghi",
   payments: "Fatturazione e pagamenti",
-  bookings: "Prenotazioni",
+  bookings: "Prenotazioni e allievi",
   policy: "Policy tipi guida",
   reminders: "Promemoria e notifiche",
-  students: "Gestione allievi",
   instructors: "Istruttori",
   vehicles: "Veicoli",
   voice: "Segretaria AI",
@@ -350,7 +347,10 @@ export function AutoscuoleResourcesPage({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
-    const pane = searchParams?.get("pane");
+    // "students" è il vecchio pane Gestione allievi, ora fuso in "bookings"
+    // (link legacy in giro per l'app e nelle notifiche).
+    const raw = searchParams?.get("pane");
+    const pane = raw === "students" ? "bookings" : raw;
     return pane && CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
       ? (pane as ConfigPane)
       : "bookings";
@@ -1832,29 +1832,13 @@ export function AutoscuoleResourcesPage({
     (!PANES_NEEDING_SETTINGS.includes(configTab) || settingsLoaded) &&
     (!PANES_NEEDING_RESOURCES.includes(configTab) || hasLoadedOnce);
 
-  // Le sezioni impostazioni (Prenotazioni/Promemoria/Policy/Sede/Registrazione)
-  // sono rese una alla volta come pannello dell'overlay.
+  // Le sezioni impostazioni (Promemoria/Policy/Sede) sono rese una alla
+  // volta come pannello dell'overlay.
   const renderSettingsSection = (section: SettingsSectionKey) => (
           <SettingsTab
             section={section}
             expandedSection={expandedSection}
             toggleSection={toggleSection}
-            availabilityWeeks={availabilityWeeks}
-            setAvailabilityWeeks={setAvailabilityWeeks}
-            bookingMinStartDate={bookingMinStartDate}
-            setBookingMinStartDate={setBookingMinStartDate}
-            appBookingActors={appBookingActors}
-            setAppBookingActors={(v) => setAppBookingActors(v as AppBookingActorsValue)}
-            instructorBookingMode={instructorBookingMode}
-            setInstructorBookingMode={(v) => setInstructorBookingMode(v as InstructorBookingModeValue)}
-            bookingSlotDurations={bookingSlotDurations}
-            toggleBookingDuration={toggleBookingDuration}
-            roundedHoursOnly={roundedHoursOnly}
-            setRoundedHoursOnly={setRoundedHoursOnly}
-            nationalHolidaysEnabled={nationalHolidaysEnabled}
-            setNationalHolidaysEnabled={setNationalHolidaysEnabled}
-            nationalHolidaysDisabled={nationalHolidaysDisabled}
-            setNationalHolidaysDisabled={setNationalHolidaysDisabled}
             studentReminderMinutes={studentReminderMinutes}
             studentReminderMorningEnabled={studentReminderMorningEnabled}
             studentReminderMorningTime={studentReminderMorningTime}
@@ -1954,7 +1938,7 @@ export function AutoscuoleResourcesPage({
         <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
           <BusinessInfoPane />
         </KeepAlivePane>
-        {(["bookings", "policy", "reminders", "locations"] as const).map((section) => (
+        {(["policy", "reminders", "locations"] as const).map((section) => (
           <KeepAlivePane key={section} active={configTab === section} eager={mountAllPanes}>
             {renderSettingsSection(section)}
           </KeepAlivePane>
@@ -2031,10 +2015,24 @@ export function AutoscuoleResourcesPage({
             clusterSaving={clusterSaving}
           />
         </KeepAlivePane>
-        <KeepAlivePane active={configTab === "students"} eager={mountAllPanes}>
-          <StudentsTab
-            expandedSection={expandedSection}
-            toggleSection={toggleSection}
+        <KeepAlivePane active={configTab === "bookings"} eager={mountAllPanes}>
+          <BookingsTab
+            availabilityWeeks={availabilityWeeks}
+            setAvailabilityWeeks={setAvailabilityWeeks}
+            bookingMinStartDate={bookingMinStartDate}
+            setBookingMinStartDate={setBookingMinStartDate}
+            appBookingActors={appBookingActors}
+            setAppBookingActors={(v) => setAppBookingActors(v as AppBookingActorsValue)}
+            instructorBookingMode={instructorBookingMode}
+            setInstructorBookingMode={(v) => setInstructorBookingMode(v as InstructorBookingModeValue)}
+            bookingSlotDurations={bookingSlotDurations}
+            toggleBookingDuration={toggleBookingDuration}
+            roundedHoursOnly={roundedHoursOnly}
+            setRoundedHoursOnly={setRoundedHoursOnly}
+            nationalHolidaysEnabled={nationalHolidaysEnabled}
+            setNationalHolidaysEnabled={setNationalHolidaysEnabled}
+            nationalHolidaysDisabled={nationalHolidaysDisabled}
+            setNationalHolidaysDisabled={setNationalHolidaysDisabled}
             bookingCutoffEnabled={bookingCutoffEnabled}
             setBookingCutoffEnabled={setBookingCutoffEnabled}
             bookingCutoffTime={bookingCutoffTime}

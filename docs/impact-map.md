@@ -148,7 +148,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg per TEORIA.
 - → **Notifications**: kinds `theory_exam_countdown` e `theory_quiz_inactivity` (mobile-inbox-only).
 - → **Mobile**: 4 home screen per fase (AWAITING / TEORIA / PRATICA / PATENTATO). AWAITING nasconde tutte le tab funzionali; il tab Quiz richiede `hasQuizAccess`.
-- → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `SettingsTab` espone toggle "Modalità registrazione allievi" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
+- → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `tabs/BookingsTab.tsx` (pane "Prenotazioni e allievi", sub-tab App allievi) espone il toggle "Assegnazione automatica della licenza quiz" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 

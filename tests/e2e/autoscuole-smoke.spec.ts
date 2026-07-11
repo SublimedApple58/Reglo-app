@@ -211,7 +211,7 @@ test.describe("Autoscuole smoke", () => {
     }
   });
 
-  test("impostazioni: gestione allievi con sub-tab @smoke", async ({ page }) => {
+  test("impostazioni: prenotazioni e allievi con sub-tab @smoke", async ({ page }) => {
     test.setTimeout(180_000);
     const emailInput = page.locator('input[name="email"], input[type="email"]');
     const passwordInput = page.locator('input[name="password"], input[type="password"]');
@@ -223,11 +223,17 @@ test.describe("Autoscuole smoke", () => {
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
     await page.waitForURL(/\/user\//, { timeout: 90_000 });
 
+    // Il vecchio deep-link pane=students deve atterrare sul pane unificato
     await page.goto("/it/user/autoscuole?tab=settings&pane=students");
-    const pane = page.getByTestId("gestione-allievi-pane");
+    const pane = page.getByTestId("bookings-pane");
     await expect(pane).toBeVisible({ timeout: 60000 });
 
-    // Sub-tab Prenotazioni (default): righe flat visibili subito
+    // Sub-tab Generali (default): motore prenotazioni
+    await expect(pane.getByText("Chi può prenotare dall'app")).toBeVisible();
+    await expect(pane.getByText("Durata prenotazione allievo")).toBeVisible();
+
+    // Sub-tab Limiti
+    await pane.getByRole("button", { name: "Limiti", exact: true }).click();
     await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
     await expect(pane.getByText("Massimo di guide a settimana")).toBeVisible();
 

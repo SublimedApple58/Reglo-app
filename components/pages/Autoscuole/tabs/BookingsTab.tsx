@@ -1,9 +1,10 @@
 "use client";
 
 import React from "react";
-import { Loader2, Plus, Send, X } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TimePickerInput } from "@/components/ui/time-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
 import {
   Select,
   SelectContent,
@@ -12,17 +13,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
+import {
+  NATIONAL_HOLIDAYS,
+  nationalHolidayDateLabel,
+} from "@/lib/autoscuole/national-holidays";
 import {
   getQuizSeatsContext,
   setAutoAssignQuizOnSignup,
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 
-export type StudentsTabProps = {
-  expandedSection: string | null;
-  toggleSection: (key: string) => void;
+export type BookingsTabProps = {
+  // Generali (motore prenotazioni)
+  availabilityWeeks: string;
+  setAvailabilityWeeks: (v: string) => void;
+  bookingMinStartDate: string;
+  setBookingMinStartDate: (v: string) => void;
+  appBookingActors: string;
+  setAppBookingActors: (v: string) => void;
+  instructorBookingMode: string;
+  setInstructorBookingMode: (v: string) => void;
+  bookingSlotDurations: number[];
+  toggleBookingDuration: (d: number) => void;
+  roundedHoursOnly: boolean;
+  setRoundedHoursOnly: React.Dispatch<React.SetStateAction<boolean>>;
+  nationalHolidaysEnabled: boolean;
+  setNationalHolidaysEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  nationalHolidaysDisabled: string[];
+  setNationalHolidaysDisabled: React.Dispatch<React.SetStateAction<string[]>>;
+  // Limiti
   bookingCutoffEnabled: boolean;
   setBookingCutoffEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   bookingCutoffTime: string;
@@ -45,6 +67,7 @@ export type StudentsTabProps = {
   setRestrictedTimeRangeStart: (v: string) => void;
   restrictedTimeRangeEnd: string;
   setRestrictedTimeRangeEnd: (v: string) => void;
+  // Guide
   swapEnabled: boolean;
   setSwapEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   swapNotifyMode: "all" | "available_only";
@@ -53,10 +76,11 @@ export type StudentsTabProps = {
   setStudentCancellationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   autoCheckinEnabled: boolean;
   setAutoCheckinEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  studentNotesEnabled: boolean;
-  setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   groupLessonsEnabled: boolean;
   setGroupLessonsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  // App allievi
+  studentNotesEnabled: boolean;
+  setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   emptySlotNotificationEnabled: boolean;
   setEmptySlotNotificationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   emptySlotNotificationTarget: "all" | "availability_matching";
@@ -72,13 +96,25 @@ export type StudentsTabProps = {
   toast: { success: (opts: { description: string }) => void; error: (opts: { description: string }) => void };
 };
 
-type GestioneTab = "prenotazioni" | "guide" | "app";
+type SubTab = "generali" | "limiti" | "guide" | "app";
 
-const GESTIONE_TABS: Array<{ key: GestioneTab; label: string }> = [
-  { key: "prenotazioni", label: "Prenotazioni" },
+const SUB_TABS: Array<{ key: SubTab; label: string }> = [
+  { key: "generali", label: "Generali" },
+  { key: "limiti", label: "Limiti" },
   { key: "guide", label: "Guide" },
   { key: "app", label: "App allievi" },
 ];
+
+const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
+const APP_BOOKING_ACTOR_OPTIONS = [
+  { value: "students", label: "Solo allievi" },
+  { value: "instructors", label: "Solo istruttori" },
+  { value: "both", label: "Entrambi" },
+] as const;
+const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
+  { value: "manual_full", label: "Manuale totale" },
+  { value: "manual_engine", label: "Manuale + motore annullamenti" },
+] as const;
 
 const CUTOFF_TIME_OPTIONS = [
   "12:00", "12:30", "13:00", "13:30",
@@ -116,7 +152,7 @@ function SettingRow({
   description: string;
   checked?: boolean;
   onToggle?: () => void;
-  /** Sostituisce il toggle (es. bottone pausa) */
+  /** Sostituisce il toggle (es. select, bottone pausa) */
   control?: React.ReactNode;
   /** Riga annidata sotto un setting padre (spaziatura ridotta) */
   nested?: boolean;
@@ -172,6 +208,96 @@ function InfoTooltip({ text }: { text: string }) {
         </span>
       )}
     </span>
+  );
+}
+
+/** Icone delle festività nazionali (path SVG dal proto, stile lucide). */
+function HolidayIcon({ id }: { id: string }) {
+  const paths: Record<string, React.ReactNode> = {
+    capodanno: (<><path d="M5.8 11.3 2 22l10.7-3.79" /><path d="M4 3h.01" /><path d="M22 8h.01" /><path d="M15 2h.01" /><path d="M22 20h.01" /><path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /><path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /><path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /><path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" /></>),
+    epifania: (<><path d="M6 3h11a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" /><path d="M7 8v6a5 5 0 0 0 5 5h3a3 3 0 0 0 1.1-5.8L15 12V8" /></>),
+    pasqua: <path d="M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z" />,
+    pasquetta: (<><path d="M13 16a3 3 0 0 1 2.24 5" /><path d="M18 12h.01" /><path d="M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3" /><path d="M20 8.54V4a2 2 0 1 0-4 0v3" /><path d="M7.612 12.524a3 3 0 1 0-1.6 4.3" /></>),
+    liberazione: (<><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" /></>),
+    lavoro: (<><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /><rect x="2" y="6" width="20" height="14" rx="2" /></>),
+    repubblica: (<><line x1="3" y1="22" x2="21" y2="22" /><line x1="6" y1="18" x2="6" y2="11" /><line x1="10" y1="18" x2="10" y2="11" /><line x1="14" y1="18" x2="14" y2="11" /><line x1="18" y1="18" x2="18" y2="11" /><polygon points="12 2 20 7 4 7" /></>),
+    ferragosto: (<><circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.41 1.41" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m6.34 17.66-1.41 1.41" /><path d="m19.07 4.93-1.41 1.41" /></>),
+    ognissanti: (<><path d="M12 2.5c1.4 1.7 2 2.7 2 3.7a2 2 0 0 1-4 0c0-1 .6-2 2-3.7z" /><path d="M12 8v1.5" /><path d="M9 10.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 10.5V21H9z" /></>),
+    immacolata: (<><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z" /><path d="M20 3v4" /><path d="M22 5h-4" /><path d="M4 17v2" /><path d="M5 18H3" /></>),
+    natale: (<><rect x="3" y="8" width="18" height="4" rx="1" /><path d="M12 8v13" /><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" /><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" /></>),
+    stefano: (<><path d="M19 9V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v3" /><path d="M3 11v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-4 0v2H7v-2a2 2 0 0 0-4 0Z" /><path d="M5 18v2" /><path d="M19 18v2" /></>),
+  };
+  return (
+    <svg
+      width={17}
+      height={17}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="shrink-0"
+    >
+      {paths[id] ?? <circle cx="12" cy="12" r="9" />}
+    </svg>
+  );
+}
+
+/** Card collassabile "Mostra festività" del proto: lista preset con toggle. */
+function NationalHolidaysCard({
+  disabledIds,
+  onToggle,
+}: {
+  disabledIds: string[];
+  onToggle: (id: string) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const year = new Date().getFullYear();
+  const activeCount = NATIONAL_HOLIDAYS.length - disabledIds.length;
+  return (
+    <div className="mt-4 overflow-hidden rounded-[10px] border border-[#efefef]">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full cursor-pointer select-none items-center justify-between bg-white px-3.5 py-3 transition-colors hover:bg-[#fafafa]"
+      >
+        <span className="text-[13px] font-semibold text-[#555555]">
+          Mostra festività ({activeCount})
+        </span>
+        <ChevronDown
+          className={cn("size-4 text-[#929292] transition-transform", open && "rotate-180")}
+          strokeWidth={2}
+        />
+      </button>
+      {open && (
+        <div className="flex flex-col gap-px border-t border-[#efefef] p-1.5">
+          {NATIONAL_HOLIDAYS.map((holiday) => {
+            const active = !disabledIds.includes(holiday.id);
+            return (
+              <div
+                key={holiday.id}
+                className="flex cursor-pointer items-center justify-between rounded-[8px] px-3 py-2.5 transition-colors hover:bg-[#f7f7f7]"
+                onClick={() => onToggle(holiday.id)}
+              >
+                <div className={cn("flex items-center gap-3", active ? "text-[#6a6a6a]" : "text-[#c0c0c0]")}>
+                  <HolidayIcon id={holiday.id} />
+                  <div className="flex flex-col gap-px">
+                    <span className={cn("text-[15px] font-semibold", active ? "text-[#222222]" : "text-[#a0a0a0]")}>
+                      {holiday.label}
+                    </span>
+                    <span className={cn("text-[13px] font-medium", active ? "text-[#929292]" : "text-[#c0c0c0]")}>
+                      {nationalHolidayDateLabel(holiday, year)}
+                    </span>
+                  </div>
+                </div>
+                <InlineToggle checked={active} size="lg" />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -270,7 +396,28 @@ function RegistrationSection() {
   );
 }
 
-export default function StudentsTab({
+/**
+ * Pane unificato "Prenotazioni e allievi": fonde il vecchio pane Prenotazioni
+ * (configurazione motore) e Gestione allievi (regole verso gli allievi) in
+ * quattro sub-tab: Generali / Limiti / Guide / App allievi.
+ */
+export default function BookingsTab({
+  availabilityWeeks,
+  setAvailabilityWeeks,
+  bookingMinStartDate,
+  setBookingMinStartDate,
+  appBookingActors,
+  setAppBookingActors,
+  instructorBookingMode,
+  setInstructorBookingMode,
+  bookingSlotDurations,
+  toggleBookingDuration,
+  roundedHoursOnly,
+  setRoundedHoursOnly,
+  nationalHolidaysEnabled,
+  setNationalHolidaysEnabled,
+  nationalHolidaysDisabled,
+  setNationalHolidaysDisabled,
   bookingCutoffEnabled,
   setBookingCutoffEnabled,
   bookingCutoffTime,
@@ -318,25 +465,25 @@ export default function StudentsTab({
   handleSaveSettings,
   savingSettings,
   toast,
-}: StudentsTabProps) {
-  const [gestioneTab, setGestioneTab] = React.useState<GestioneTab>("prenotazioni");
+}: BookingsTabProps) {
+  const [subTab, setSubTab] = React.useState<SubTab>("generali");
 
   const isPaused = Boolean(
     examPriorityPausedUntil && new Date(examPriorityPausedUntil) > new Date(),
   );
 
   return (
-    <div data-testid="gestione-allievi-pane">
-      {/* ── Sub-tab Prenotazioni / Guide / App allievi ── */}
+    <div data-testid="bookings-pane">
+      {/* ── Sub-tab Generali / Limiti / Guide / App allievi ── */}
       <div className="flex flex-wrap items-center gap-8 border-b border-[#e8e8e8]">
-        {GESTIONE_TABS.map((tab) => (
+        {SUB_TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
-            onClick={() => setGestioneTab(tab.key)}
+            onClick={() => setSubTab(tab.key)}
             className={cn(
               "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
-              gestioneTab === tab.key
+              subTab === tab.key
                 ? "border-[#222222] font-semibold text-foreground"
                 : "border-transparent font-medium text-[#6a6a6a] hover:text-foreground",
             )}
@@ -346,8 +493,143 @@ export default function StudentsTab({
         ))}
       </div>
 
-      {/* ══ PRENOTAZIONI ══ */}
-      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "prenotazioni" && "hidden")}>
+      {/* ══ GENERALI ══ */}
+      <div className={cn("divide-y divide-[#ebebeb]", subTab !== "generali" && "hidden")}>
+        <div className="py-6">
+          <SettingRow
+            title="Chi può prenotare dall'app"
+            description="Scegli chi può prenotare le guide in autonomia: gli allievi dalla loro app, gli istruttori dalla propria, o entrambi."
+            control={
+              <Select value={appBookingActors} onValueChange={setAppBookingActors}>
+                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
+                  <SelectValue placeholder="Seleziona" />
+                </SelectTrigger>
+                <SelectContent>
+                  {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          />
+          {(appBookingActors === "instructors" || appBookingActors === "both") && (
+            <FieldBlock label="Modalità istruttore">
+              <Select value={instructorBookingMode} onValueChange={setInstructorBookingMode}>
+                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
+                  <SelectValue placeholder="Seleziona modalità" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldBlock>
+          )}
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Settimane di disponibilità"
+            description="Quante settimane di calendario gli allievi vedono e possono prenotare in app."
+            control={
+              <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
+                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
+                  <SelectValue placeholder="Settimane" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
+                    <SelectItem key={weeks} value={String(weeks)}>
+                      {weeks} settimane
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          />
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Prenotazioni aperte dal"
+            description="Prima di questa data il calendario resta chiuso alle prenotazioni. Lascia vuoto per nessun limite."
+            control={
+              <div className="flex shrink-0 items-center gap-2">
+                <DatePickerInput
+                  value={bookingMinStartDate}
+                  onChange={setBookingMinStartDate}
+                  placeholder="Nessun limite"
+                  className="w-[200px]"
+                />
+                {bookingMinStartDate ? (
+                  <button
+                    type="button"
+                    onClick={() => setBookingMinStartDate("")}
+                    className="shrink-0 cursor-pointer text-xs font-medium text-[#6a6a6a] transition hover:text-foreground"
+                  >
+                    Rimuovi
+                  </button>
+                ) : null}
+              </div>
+            }
+          />
+        </div>
+
+        <div className="py-6">
+          <div className="text-[15px] font-semibold text-foreground">
+            Durata prenotazione allievo
+          </div>
+          <div className="mt-0.5 max-w-[680px] text-[13.5px] font-medium leading-relaxed text-[#6a6a6a]">
+            Le durate tra cui un allievo può scegliere quando prenota una guida.
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {BOOKING_DURATION_OPTIONS.map((duration) => (
+              <ToggleChip
+                key={duration}
+                active={bookingSlotDurations.includes(duration)}
+                onClick={() => toggleBookingDuration(duration)}
+              >
+                {duration} min
+              </ToggleChip>
+            ))}
+          </div>
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Solo orari tondi"
+            description="Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)"
+            checked={roundedHoursOnly}
+            onToggle={() => setRoundedHoursOnly((prev) => !prev)}
+          />
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Festività non prenotabili"
+            description="I giorni segnati come festivi sul calendario (nazionali e locali) restano chiusi alle prenotazioni."
+            checked={nationalHolidaysEnabled}
+            onToggle={() => setNationalHolidaysEnabled((prev) => !prev)}
+          />
+          {nationalHolidaysEnabled && (
+            <NationalHolidaysCard
+              disabledIds={nationalHolidaysDisabled}
+              onToggle={(id) =>
+                setNationalHolidaysDisabled((prev) =>
+                  prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+                )
+              }
+            />
+          )}
+        </div>
+      </div>
+
+      {/* ══ LIMITI ══ */}
+      <div className={cn("divide-y divide-[#ebebeb]", subTab !== "limiti" && "hidden")}>
         <div className="py-6">
           <SettingRow
             title="Stop alle prenotazioni last-minute"
@@ -494,7 +776,7 @@ export default function StudentsTab({
       </div>
 
       {/* ══ GUIDE ══ */}
-      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "guide" && "hidden")}>
+      <div className={cn("divide-y divide-[#ebebeb]", subTab !== "guide" && "hidden")}>
         <div className="py-6">
           <SettingRow
             title="Consenti scambi tra allievi"
@@ -557,7 +839,7 @@ export default function StudentsTab({
       </div>
 
       {/* ══ APP ALLIEVI ══ */}
-      <div className={cn("divide-y divide-[#ebebeb]", gestioneTab !== "app" && "hidden")}>
+      <div className={cn("divide-y divide-[#ebebeb]", subTab !== "app" && "hidden")}>
         <div className="py-6">
           <SettingRow
             title="Mostra note nell'app allievi"
