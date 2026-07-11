@@ -12,7 +12,7 @@ AI voice secretary: answers incoming calls, uses company knowledge base, handles
 - `app/api/voice/telnyx/` — call-control, tools
 - `components/pages/Autoscuole/AutoscuoleVoicePage.tsx` — pagina Segretaria (saluto con typewriter + "Chiamate in sospeso" con Info/Chiama/Fatto; modal Info con player registrazione e trascrizione quando disponibili)
 - `components/pages/Autoscuole/VoiceSettingsPane.tsx` — pane "Segretaria" dell'overlay Impostazioni (sub-tabs Linea / Comportamento ed azioni / Orari e registrazioni / Istruzioni; salvataggi immediati su toggle, su blur per le textarea)
-- `components/pages/Autoscuole/dialogs/VoiceLineTutorialModal.tsx` — tutorial "Collega il numero" (deviazione di chiamata per modalità/operatore/dispositivo; CTA "Attiva segretaria" sbloccata dopo le 3 scelte + handoff; "Altro" invia segnalazione via support chat)
+- `components/pages/Autoscuole/dialogs/VoiceLineTutorialModal.tsx` — tutorial "Collega il numero": solo deviazione incondizionata ("sempre"); scelta cellulare/fisso (i codici GSM sono identici tra operatori: **21 su mobile, *21 su fisso con note per gestore); CTA "Attiva segretaria" sbloccata da tipo linea + handoff
 
 ## Web UX (redesign 2026-07)
 - Le impostazioni NON vivono più in un pannello laterale sulla pagina voice: sono il pane `?tab=settings&pane=voice`.

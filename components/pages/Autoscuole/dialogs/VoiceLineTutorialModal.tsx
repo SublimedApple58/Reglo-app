@@ -4,74 +4,20 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter, usePathname } from "next/navigation";
-import { HelpCircle, Loader2, Plus, X } from "lucide-react";
+import { HelpCircle, Loader2, Smartphone, Phone, X } from "lucide-react";
 
-import { sendSupportMessage } from "@/lib/actions/support.actions";
-import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * Tutorial "Collega il numero della segretaria" (proto): modal 720px con la
- * deviazione di chiamata "sempre" (modalità unica), selettore operatore,
- * selettore dispositivo e CTA finale "Attiva segretaria" che si sblocca solo
- * dopo le scelte (+ numero handoff compilato). Le scelte servono a far leggere
- * davvero la guida prima di attivare la linea.
+ * Tutorial "Collega il numero della segretaria": deviazione di chiamata
+ * incondizionata ("sempre"), che su mobile usa lo stesso codice GSM standard
+ * per tutti gli operatori italiani e su fisso lo stesso codice *21 con piccole
+ * differenze per gestore. Per questo la scelta è cellulare/fisso, non per
+ * operatore. La CTA "Attiva segretaria" si sblocca dopo la scelta della linea
+ * + numero handoff compilato, così la guida viene letta davvero.
  */
 
-type Device = "iphone" | "android";
-
-type OperatorVariant = {
-  tag: string;
-  always: string;
-  offAlways: string;
-};
-
-type Operator = {
-  name: string;
-  variants: OperatorVariant[];
-  note: React.ReactNode;
-};
-
-function buildOperators(num: string): Operator[] {
-  return [
-    {
-      name: "TIM",
-      variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
-        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#" },
-      ],
-      note: "Su mobile funziona subito, nessuna attivazione. Su fisso è incluso su fibra/ISDN, mentre sulle linee tradizionali (RTG/ADSL) va attivato chiamando il 187 (privati) o 191 (business), ~3€/mese.",
-    },
-    {
-      name: "Vodafone",
-      variants: [
-        { tag: "Mobile e fisso", always: `**21*${num}#`, offAlways: "##21#" },
-      ],
-      note: "Su fisso puoi gestire la deviazione anche dal pannello Vodafone Station.",
-    },
-    {
-      name: "WindTre",
-      variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
-      ],
-      note: "Codici GSM standard, funzionano subito senza attivazione.",
-    },
-    {
-      name: "Fastweb",
-      variants: [
-        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#" },
-      ],
-      note: "Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box (regole avanzate per numero chiamante). Costo ~0,05€/chiamata deviata.",
-    },
-    {
-      name: "Iliad",
-      variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
-      ],
-      note: "Richiede il prefisso +39. Costo ~0,05€/min per le chiamate deviate.",
-    },
-  ];
-}
+type LineType = "mobile" | "fisso";
 
 /** Codice deviazione in stile chip monospace (selezionabile con un click). */
 function Chip({ children, inline }: { children: React.ReactNode; inline?: boolean }) {
@@ -87,50 +33,23 @@ function Chip({ children, inline }: { children: React.ReactNode; inline?: boolea
   );
 }
 
-function CodeRow({ label, code }: { label: string; code: string }) {
-  return (
-    <div className="mb-1.5 flex items-center gap-2.5">
-      <span className="min-w-[70px] shrink-0 text-[13px] font-medium text-[#6a6a6a]">{label}</span>
-      <Chip>{code}</Chip>
-    </div>
-  );
-}
-
-function DeviationBlock({ title, activate, deactivate }: { title: string; activate: string; deactivate: string }) {
-  return (
-    <div className="mb-3.5">
-      <div className="mb-2 text-[13.5px] font-semibold text-[#222222]">{title}</div>
-      <CodeRow label="Attiva:" code={activate} />
-      <CodeRow label="Disattiva:" code={deactivate} />
-    </div>
-  );
-}
-
 function SectionHeading({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-3.5 mt-8 text-[17px] font-bold tracking-[-0.2px] text-[#222222]">{children}</div>
   );
 }
 
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-[14px] border-[1.5px] border-dashed border-[#e2e2e2] p-[22px] text-center text-[13px] font-medium text-[#b0b0b0]">
-      {children}
-    </div>
-  );
-}
-
 /** SVG mela/robottino (lucide non ha i brand logo). */
 function AppleLogo() {
   return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09l.01-.01zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z" />
     </svg>
   );
 }
 function AndroidLogo() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
       <path d="M17.6 9.48l1.84-3.18c.16-.31.04-.69-.26-.85-.29-.15-.65-.06-.83.22l-1.88 3.24a11.46 11.46 0 0 0-8.94 0L5.65 5.67c-.19-.29-.58-.38-.87-.2-.28.18-.37.54-.22.83L6.4 9.48A10.81 10.81 0 0 0 1 18h22a10.81 10.81 0 0 0-5.4-8.52zM7 15.25a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5zm10 0a1.25 1.25 0 1 1 0-2.5 1.25 1.25 0 0 1 0 2.5z" />
     </svg>
   );
@@ -153,32 +72,21 @@ export function VoiceLineTutorialModal({
   /** Attiva davvero la linea; risolve true se è andata a buon fine. */
   onActivate: (handoffPhone: string) => Promise<boolean>;
 }) {
-  const toast = useFeedbackToast();
   const router = useRouter();
   const pathname = usePathname() ?? "";
 
   const num = phoneNumber.replace(/\s/g, "");
-  const operators = React.useMemo(() => buildOperators(num), [num]);
 
-  const [opIndex, setOpIndex] = React.useState<number | null>(null);
-  const [device, setDevice] = React.useState<Device | null>(null);
+  const [lineType, setLineType] = React.useState<LineType | null>(null);
   const [handoff, setHandoff] = React.useState(initialHandoff);
   const [helpOpen, setHelpOpen] = React.useState(false);
-  const [altroOpen, setAltroOpen] = React.useState(false);
-  const [altroText, setAltroText] = React.useState("");
-  const [altroSending, setAltroSending] = React.useState(false);
-  const [altroSent, setAltroSent] = React.useState(false);
 
   // Riparti pulito a ogni apertura (e riallinea l'handoff ai settings).
   React.useEffect(() => {
     if (open) {
-      setOpIndex(null);
-      setDevice(null);
+      setLineType(null);
       setHandoff(initialHandoff);
       setHelpOpen(false);
-      setAltroOpen(false);
-      setAltroText("");
-      setAltroSent(false);
     }
   }, [open, initialHandoff]);
 
@@ -186,36 +94,19 @@ export function VoiceLineTutorialModal({
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (altroOpen) setAltroOpen(false);
-      else if (helpOpen) setHelpOpen(false);
+      if (helpOpen) setHelpOpen(false);
       else onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, helpOpen, altroOpen, onClose]);
+  }, [open, helpOpen, onClose]);
 
-  const ready = opIndex !== null && device !== null && handoff.trim().length > 0;
+  const ready = lineType !== null && handoff.trim().length > 0;
 
   const handleActivate = async () => {
     if (!ready || activating) return;
     const ok = await onActivate(handoff.trim());
     if (ok) onClose();
-  };
-
-  const handleAltroSend = async () => {
-    const text = altroText.trim();
-    if (!text || altroSending) return;
-    setAltroSending(true);
-    const res = await sendSupportMessage({
-      body: `Segnalazione dalla guida di attivazione della segretaria AI: il mio operatore telefonico non è tra quelli elencati. Operatore: ${text}`,
-    });
-    setAltroSending(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile inviare la segnalazione." });
-      return;
-    }
-    setAltroSent(true);
-    setTimeout(() => setAltroOpen(false), 1600);
   };
 
   const pillBase =
@@ -280,19 +171,126 @@ export function VoiceLineTutorialModal({
                 <b className="font-bold text-[#222222]">{phoneNumber}</b>
               </div>
 
-              {/* ── Metodo rapido ── */}
-              <SectionHeading>Metodo rapido</SectionHeading>
-              <div className="mb-3.5 rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
-                <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
-                  Digita questo codice dal telefono aziendale: tutte le chiamate andranno alla
-                  segretaria AI e il telefono non squillerà più.
-                </div>
-                <Chip>{`**21*${num}#`}</Chip>
-                <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
-                  Per disattivare: <Chip inline>##21#</Chip>
-                </div>
+              {/* ── Imposta la deviazione ── */}
+              <SectionHeading>Imposta la deviazione</SectionHeading>
+              <div className="mb-3.5 text-sm font-medium text-[#6a6a6a]">
+                Su che tipo di linea ricevi oggi le chiamate? Il codice è lo stesso per tutti gli
+                operatori, cambia solo tra cellulare e fisso.
               </div>
-              <div className="mb-3.5 rounded-xl border border-[#e6e8f0] bg-[#f6f7fb] px-4 py-3.5">
+              <div className="mb-3.5 flex flex-wrap gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setLineType("mobile")}
+                  className={cn(pillBase, pillState(lineType === "mobile"), "flex min-w-[200px] flex-1 items-center gap-3 px-4 py-3.5 text-left")}
+                >
+                  <Smartphone
+                    className={cn("size-5 shrink-0", lineType === "mobile" ? "text-navy-900" : "text-[#555555]")}
+                    strokeWidth={1.8}
+                  />
+                  <div>
+                    <div className="text-[14.5px] font-bold text-[#222222]">Cellulare</div>
+                    <div className="mt-0.5 text-[12.5px] font-medium text-[#8a8a8a]">
+                      TIM, Vodafone, WindTre, Iliad…
+                    </div>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLineType("fisso")}
+                  className={cn(pillBase, pillState(lineType === "fisso"), "flex min-w-[200px] flex-1 items-center gap-3 px-4 py-3.5 text-left")}
+                >
+                  <Phone
+                    className={cn("size-5 shrink-0", lineType === "fisso" ? "text-navy-900" : "text-[#555555]")}
+                    strokeWidth={1.8}
+                  />
+                  <div>
+                    <div className="text-[14.5px] font-bold text-[#222222]">Telefono fisso</div>
+                    <div className="mt-0.5 text-[12.5px] font-medium text-[#8a8a8a]">
+                      Numero di ufficio o centralino
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              {lineType === null ? (
+                <div className="rounded-[14px] border-[1.5px] border-dashed border-[#e2e2e2] p-[22px] text-center text-[13px] font-medium text-[#b0b0b0]">
+                  Scegli il tipo di linea qui sopra
+                </div>
+              ) : lineType === "mobile" ? (
+                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
+                  <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
+                    Digita questo codice dal cellulare aziendale e premi invio: tutte le chiamate
+                    andranno alla segretaria AI e il telefono non squillerà più.
+                  </div>
+                  <Chip>{`**21*${num}#`}</Chip>
+                  <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
+                    Per disattivare: <Chip inline>##21#</Chip> &middot; Per verificare:{" "}
+                    <Chip inline>*#21#</Chip>
+                  </div>
+                  <div className="mt-3.5 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
+                    È un codice GSM standard: vale per <b className="font-bold text-[#555555]">tutti gli
+                    operatori</b> (TIM, Vodafone, WindTre, Iliad e virtuali), senza attivazioni. Il
+                    traffico deviato segue la tua tariffa: con minuti illimitati non costa nulla (su
+                    Iliad ~0,05€/min).
+                  </div>
+                  <div className="mb-3 mt-4 h-px bg-[#ececec]" />
+                  <div className="mb-2.5 text-[13.5px] font-semibold text-[#222222]">
+                    In alternativa, dalle impostazioni del telefono
+                  </div>
+                  <div className="mb-2 flex items-start gap-2.5 text-[13.5px] font-medium leading-[1.7] text-[#555555]">
+                    <span className="mt-1 shrink-0 text-[#333333]"><AppleLogo /></span>
+                    <span>
+                      <b className="font-bold text-[#222222]">iPhone:</b> Impostazioni &rarr; Telefono
+                      &rarr; Inoltro chiamate &rarr; attiva e inserisci <Chip inline>{num}</Chip>
+                    </span>
+                  </div>
+                  <div className="flex items-start gap-2.5 text-[13.5px] font-medium leading-[1.7] text-[#555555]">
+                    <span className="mt-1 shrink-0 text-[#333333]"><AndroidLogo /></span>
+                    <span>
+                      <b className="font-bold text-[#222222]">Android:</b> App Telefono &rarr; Menu
+                      (&#8942;) &rarr; Impostazioni &rarr; Deviazione chiamate &rarr; scegli
+                      &ldquo;Devia sempre&rdquo; &rarr; inserisci <Chip inline>{num}</Chip>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
+                  <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
+                    Digita questo codice dal telefono fisso: tutte le chiamate andranno alla
+                    segretaria AI e il telefono non squillerà più.
+                  </div>
+                  <Chip>{`*21*${num}#`}</Chip>
+                  <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
+                    Per disattivare: <Chip inline>#21#</Chip> (su Vodafone e WindTre{" "}
+                    <Chip inline>##21#</Chip>) &middot; Per verificare: <Chip inline>*#21#</Chip>
+                  </div>
+                  <div className="mb-3 mt-4 h-px bg-[#ececec]" />
+                  <div className="mb-2.5 text-[13.5px] font-semibold text-[#222222]">
+                    Differenze per gestore
+                  </div>
+                  <ul className="m-0 list-disc space-y-1.5 pl-5 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
+                    <li>
+                      <b className="font-bold text-[#555555]">TIM:</b> incluso su fibra/ISDN; sulle
+                      linee tradizionali (RTG/ADSL) va attivato chiamando il 187 (privati) o 191
+                      (business), ~3€/mese.
+                    </li>
+                    <li>
+                      <b className="font-bold text-[#555555]">Vodafone:</b> gestibile anche dal
+                      pannello o dall&rsquo;app della Vodafone Station.
+                    </li>
+                    <li>
+                      <b className="font-bold text-[#555555]">WindTre:</b> servizio &ldquo;In
+                      Trasferta&rdquo;, gratuito sulle offerte fibra.
+                    </li>
+                    <li>
+                      <b className="font-bold text-[#555555]">Fastweb:</b> gestibile anche da
+                      MyFastweb o dal pannello Fritz!Box; ~0,05€/chiamata deviata.
+                    </li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3.5 rounded-xl border border-[#e6e8f0] bg-[#f6f7fb] px-4 py-3.5">
                 <div className="mb-1 text-[13px] font-bold text-[#222222]">Attenzione al loop</div>
                 <div className="text-[13px] font-medium leading-[1.6] text-[#5a5a5a] [text-wrap:pretty]">
                   Con la deviazione attiva il telefono deviato non squilla mai. Se attivi il
@@ -301,110 +299,6 @@ export function VoiceLineTutorialModal({
                   crea un loop.
                 </div>
               </div>
-
-              {/* ── Operatore ── */}
-              <SectionHeading>Istruzioni per operatore</SectionHeading>
-              <div className="mb-3.5 text-sm font-medium text-[#6a6a6a]">
-                Seleziona il tuo operatore telefonico per vedere i codici giusti:
-              </div>
-              <div className="mb-3.5 flex flex-wrap gap-2">
-                {operators.map((op, i) => (
-                  <button
-                    key={op.name}
-                    type="button"
-                    onClick={() => setOpIndex(i)}
-                    className={cn(
-                      "flex h-[42px] min-w-[74px] cursor-pointer select-none items-center justify-center rounded-[10px] border-[1.5px] bg-white px-[18px] text-[14.5px] font-bold transition-all",
-                      opIndex === i
-                        ? "border-navy-900 text-navy-900"
-                        : "border-[#e0e0e0] text-[#333333] hover:border-[#bdbdbd]",
-                    )}
-                  >
-                    {op.name}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => { setAltroSent(false); setAltroText(""); setAltroOpen(true); }}
-                  className="flex h-[42px] cursor-pointer select-none items-center gap-1.5 rounded-[10px] border-[1.5px] border-dashed border-[#d5d5d5] bg-white px-4 text-sm font-semibold text-[#8a8a8a] transition-all hover:border-[#bdbdbd] hover:bg-[#fafafa]"
-                >
-                  <Plus className="size-3.5" strokeWidth={2} />
-                  Altro
-                </button>
-              </div>
-              {opIndex === null ? (
-                <EmptyHint>Scegli un operatore qui sopra</EmptyHint>
-              ) : (
-                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-5 py-[18px]">
-                  {operators[opIndex].variants.map((variant, vi) => (
-                    <React.Fragment key={variant.tag}>
-                      {vi > 0 && <div className="mb-4 mt-1.5 h-px bg-[#ececec]" />}
-                      {operators[opIndex].variants.length > 1 && (
-                        <div className="mb-2.5 text-xs font-semibold uppercase tracking-[0.6px] text-[#8a8a8a]">
-                          {variant.tag}
-                        </div>
-                      )}
-                      <DeviationBlock
-                        title="Deviazione sempre (tutte le chiamate)"
-                        activate={variant.always}
-                        deactivate={variant.offAlways}
-                      />
-                    </React.Fragment>
-                  ))}
-                  <div className="mt-2 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
-                    {operators[opIndex].note}
-                  </div>
-                </div>
-              )}
-
-              {/* ── Dispositivo ── */}
-              <SectionHeading>In alternativa: dalle impostazioni del telefono</SectionHeading>
-              <div className="mb-3.5 text-sm font-medium text-[#6a6a6a]">Seleziona il tuo dispositivo:</div>
-              <div className="mb-3.5 flex gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setDevice("iphone")}
-                  className={cn(
-                    pillBase,
-                    pillState(device === "iphone"),
-                    "flex flex-1 items-center justify-center gap-2 p-3.5 text-[15px] font-semibold",
-                    device === "iphone" ? "text-navy-900" : "text-[#333333]",
-                  )}
-                >
-                  <AppleLogo />
-                  iPhone
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDevice("android")}
-                  className={cn(
-                    pillBase,
-                    pillState(device === "android"),
-                    "flex flex-1 items-center justify-center gap-2 p-3.5 text-[15px] font-semibold",
-                    device === "android" ? "text-navy-900" : "text-[#333333]",
-                  )}
-                >
-                  <AndroidLogo />
-                  Android
-                </button>
-              </div>
-              {device === null ? (
-                <EmptyHint>Scegli un dispositivo qui sopra</EmptyHint>
-              ) : device === "iphone" ? (
-                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-5 py-[18px]">
-                  <div className="text-[13.5px] font-medium leading-[1.7] text-[#555555]">
-                    Impostazioni &rarr; Telefono &rarr; Inoltro chiamate &rarr; attiva e inserisci{" "}
-                    <Chip inline>{num}</Chip>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-5 py-[18px]">
-                  <div className="text-[13.5px] font-medium leading-[1.7] text-[#555555]">
-                    App Telefono &rarr; Menu (&#8942;) &rarr; Impostazioni &rarr; Deviazione chiamate
-                    &rarr; scegli &ldquo;Devia sempre&rdquo; &rarr; inserisci <Chip inline>{num}</Chip>
-                  </div>
-                </div>
-              )}
 
               {/* ── Consigli ── */}
               <SectionHeading>Consigli utili</SectionHeading>
@@ -431,7 +325,7 @@ export function VoiceLineTutorialModal({
                 </div>
                 <div className="mb-2.5 text-[13px] font-medium leading-[1.5] text-[#929292]">
                   Il numero a cui la segretaria trasferisce le chiamate fuori orario o quando serve una
-                  persona. Con deviazione &ldquo;sempre&rdquo; usa un numero diverso da quello deviato.
+                  persona. Usa un numero diverso da quello deviato.
                 </div>
                 <input
                   type="tel"
@@ -502,74 +396,6 @@ export function VoiceLineTutorialModal({
                     >
                       Contatta il supporto
                     </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* ── Sub-modal: operatore non in lista ── */}
-            <AnimatePresence>
-              {altroOpen && (
-                <motion.div
-                  key="voice-tutorial-altro"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.12 }}
-                  className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 p-8"
-                  onClick={() => setAltroOpen(false)}
-                >
-                  <div
-                    className="relative w-[440px] max-w-[92%] rounded-[20px] bg-white px-[30px] pb-[26px] pt-[30px] shadow-[0_16px_56px_rgba(0,0,0,0.28)]"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setAltroOpen(false)}
-                      aria-label="Chiudi"
-                      className="absolute right-[18px] top-[18px] flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
-                    >
-                      <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
-                    </button>
-                    {altroSent ? (
-                      <div className="px-1 py-3.5 text-center">
-                        <div className="mx-auto mb-3.5 flex size-16 items-center justify-center rounded-full bg-[#e7f6ec]">
-                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden>
-                            <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#1a7f50" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </div>
-                        <div className="mb-1.5 text-lg font-bold text-[#222222]">Grazie!</div>
-                        <div className="text-sm font-medium leading-[1.5] text-[#6a6a6a]">
-                          Abbiamo ricevuto la tua segnalazione, il team la valuterà a breve.
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="mb-1.5 text-[19px] font-bold tracking-[-0.2px] text-[#222222]">
-                          Non trovi il tuo gestore?
-                        </div>
-                        <div className="mb-[18px] text-sm font-medium leading-[1.5] text-[#6a6a6a] [text-wrap:pretty]">
-                          Comunicalo al nostro team di supporto: lo aggiungeremo il prima possibile.
-                        </div>
-                        <textarea
-                          value={altroText}
-                          onChange={(e) => setAltroText(e.target.value)}
-                          placeholder="Scrivi qui il nome del tuo operatore telefonico…"
-                          className="min-h-[80px] w-full resize-y rounded-[10px] border-[1.5px] border-[#e0e0e0] bg-white px-3.5 py-3 text-sm font-medium leading-[1.6] text-[#222222] outline-none transition focus:border-navy-900"
-                        />
-                        <div className="mt-[18px] flex justify-end">
-                          <button
-                            type="button"
-                            onClick={handleAltroSend}
-                            disabled={!altroText.trim() || altroSending}
-                            className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {altroSending && <Loader2 className="size-4 animate-spin" />}
-                            Invia
-                          </button>
-                        </div>
-                      </>
-                    )}
                   </div>
                 </motion.div>
               )}
