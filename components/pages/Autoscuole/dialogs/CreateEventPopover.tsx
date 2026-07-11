@@ -3,7 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useDragControls } from "motion/react";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,6 +33,34 @@ export function CreateEventPopover({
   footer?: React.ReactNode;
 }) {
   const dragControls = useDragControls();
+
+  // Affordance di scroll: il body può nascondere campi sotto la piega senza
+  // che nulla lo segnali. Tracciamo se c'è contenuto sopra/sotto e mostriamo
+  // fade + pill "Altri campi" finché non si arriva in fondo.
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [canScrollUp, setCanScrollUp] = React.useState(false);
+  const [canScrollDown, setCanScrollDown] = React.useState(false);
+  const updateScrollHints = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanScrollUp(el.scrollTop > 4);
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+  }, []);
+  React.useEffect(() => {
+    if (!open) return;
+    // il contenuto cambia altezza quando si espandono sezioni: riosserva sempre
+    const raf = requestAnimationFrame(updateScrollHints);
+    const el = scrollRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return () => cancelAnimationFrame(raf);
+    const observer = new ResizeObserver(updateScrollHints);
+    observer.observe(el);
+    if (el.firstElementChild) observer.observe(el.firstElementChild);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [open, updateScrollHints]);
+
   React.useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -103,8 +131,44 @@ export function CreateEventPopover({
             </button>
           </div>
           {/* Body */}
-          <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 pb-4", footer ? "" : "pb-5")}>
-            {children}
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <div
+              ref={scrollRef}
+              onScroll={updateScrollHints}
+              className={cn("min-h-0 flex-1 overflow-y-auto px-5 pb-4", footer ? "" : "pb-5")}
+            >
+              {/* wrapper unico: è lui che il ResizeObserver osserva per l'altezza totale */}
+              <div>{children}</div>
+            </div>
+            {/* Fade in alto quando c'è contenuto scrollato sopra */}
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-x-0 top-0 h-8 bg-gradient-to-b from-white to-transparent transition-opacity duration-200",
+                canScrollUp ? "opacity-100" : "opacity-0",
+              )}
+            />
+            {/* Fade + pill "Altri campi" quando c'è contenuto sotto la piega */}
+            <div
+              aria-hidden
+              className={cn(
+                "pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/70 to-transparent transition-opacity duration-200",
+                canScrollDown ? "opacity-100" : "opacity-0",
+              )}
+            />
+            {canScrollDown && (
+              <button
+                type="button"
+                onClick={() => {
+                  const el = scrollRef.current;
+                  el?.scrollBy({ top: el.clientHeight - 80, behavior: "smooth" });
+                }}
+                className="absolute bottom-2 left-1/2 flex -translate-x-1/2 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border border-[#e3e3e3] bg-white py-[5px] pl-3 pr-2 text-xs font-semibold text-[#222222] shadow-[0_2px_10px_rgba(0,0,0,0.12)] transition-colors hover:bg-[#f7f7f7]"
+              >
+                Altri campi
+                <ChevronDown className="size-3.5" strokeWidth={2.2} />
+              </button>
+            )}
           </div>
           {/* Footer */}
           {footer ? (
