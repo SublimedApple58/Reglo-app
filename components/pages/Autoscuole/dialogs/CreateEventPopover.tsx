@@ -18,7 +18,7 @@ export function CreateEventPopover({
   title,
   subtitle,
   anchor,
-  width = 460,
+  width = 500,
   children,
   footer,
 }: {
@@ -109,9 +109,10 @@ export function CreateEventPopover({
   // Posizionamento "smart": la card va sul lato di schermo OPPOSTO al punto di
   // apertura (dove sta il blocco ghost / l'evento), così non lo copre, e parte
   // alta per avere il massimo spazio verticale disponibile.
+  const edgeInset = 48;
   const preferLeft = anchor ? anchor.x > vw / 2 : false;
-  const left = preferLeft ? margin + 8 : vw - width - margin - 8;
-  const top = margin + 72;
+  const left = preferLeft ? edgeInset : vw - width - edgeInset;
+  const top = 148;
   const maxHeight = vh - top - margin;
 
   return createPortal(
