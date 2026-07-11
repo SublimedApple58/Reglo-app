@@ -931,7 +931,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           ? { ...baseWhere, instructorId: input.instructorId }
           : baseWhere;
 
-    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits] = await Promise.all([
+    const [appointments, students, instructors, vehicles, instructorBlocks, holidays, agendaLimits, lastInstructorRows] = await Promise.all([
       prisma.autoscuolaAppointment.findMany({
         where: appointmentsWhere,
         select: {
@@ -1047,6 +1047,18 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
         orderBy: { date: "asc" },
       }),
       getCachedCompanyServiceLimits(companyId),
+      // Ultimo istruttore con cui ogni allievo ha GIÀ guidato: preseleziona
+      // l'istruttore nel form di creazione quando l'allievo non ne ha uno
+      // assegnato. DISTINCT ON + indice su studentId: una riga per allievo.
+      prisma.$queryRaw<Array<{ studentId: string; instructorId: string }>>`
+        SELECT DISTINCT ON ("studentId") "studentId", "instructorId"
+        FROM "AutoscuolaAppointment"
+        WHERE "companyId" = ${companyId}::uuid
+          AND "instructorId" IS NOT NULL
+          AND "status" <> 'cancelled'
+          AND "startsAt" <= NOW()
+        ORDER BY "studentId", "startsAt" DESC
+      `,
     ]);
     const agendaVehiclesEnabled =
       (agendaLimits as Record<string, unknown>).vehiclesEnabled !== false;
@@ -1176,11 +1188,18 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       }
     }
 
+    const lastInstructorByStudent = new Map(
+      lastInstructorRows.map((row) => [row.studentId, row.instructorId]),
+    );
+
     return {
       success: true,
       data: {
         appointments: mappedAppointments,
-        students,
+        students: students.map((student) => ({
+          ...student,
+          lastInstructorId: lastInstructorByStudent.get(student.id) ?? null,
+        })),
         instructors,
         // Surface poolInstructorIds (from the poolMembers relation) so the web
         // agenda can filter vehicle pickers to what each instructor may use,

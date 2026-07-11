@@ -67,7 +67,7 @@ import {
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; licenseCategory?: string | null; transmission?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -137,6 +137,8 @@ type AgendaBootstrapPayload = {
     lastName: string;
     licenseCategory?: string | null;
     transmission?: string | null;
+    assignedInstructorId?: string | null;
+    lastInstructorId?: string | null;
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
@@ -2990,8 +2992,27 @@ export function AutoscuoleAgendaPage({
               }
               value={form.studentId}
               onChange={(id) => {
-                setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }));
-                if (id) advanceCreateFocus({ studentId: id, vehicleId: "" });
+                // Preseleziona l'istruttore dell'allievo: quello assegnato, o
+                // in mancanza l'ultimo con cui ha guidato. Non sovrascrive un
+                // istruttore già scelto (es. slot cliccato nella vista Istruttori).
+                const student = students.find((s) => s.id === id);
+                const preferredInstructorId = [student?.assignedInstructorId, student?.lastInstructorId]
+                  .find((candidate) => candidate && instructors.some((i) => i.id === candidate)) ?? "";
+                setForm((prev) => ({
+                  ...prev,
+                  studentId: id,
+                  instructorId: prev.instructorId || preferredInstructorId,
+                  vehicleId: "",
+                  followVehicleId: "",
+                  extraMotoVehicleIds: [],
+                }));
+                if (id) {
+                  advanceCreateFocus({
+                    studentId: id,
+                    instructorId: form.instructorId || preferredInstructorId,
+                    vehicleId: "",
+                  });
+                }
               }}
             />
           </div>
