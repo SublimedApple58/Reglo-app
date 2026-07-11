@@ -2993,15 +2993,16 @@ export function AutoscuoleAgendaPage({
               value={form.studentId}
               onChange={(id) => {
                 // Preseleziona l'istruttore dell'allievo: quello assegnato, o
-                // in mancanza l'ultimo con cui ha guidato. Non sovrascrive un
-                // istruttore già scelto (es. slot cliccato nella vista Istruttori).
+                // in mancanza l'ultimo con cui ha guidato. La scelta dell'allievo
+                // VINCE su un istruttore già impostato (es. colonna cliccata);
+                // solo se l'allievo non ne suggerisce nessuno resta il corrente.
                 const student = students.find((s) => s.id === id);
                 const preferredInstructorId = [student?.assignedInstructorId, student?.lastInstructorId]
                   .find((candidate) => candidate && instructors.some((i) => i.id === candidate)) ?? "";
                 setForm((prev) => ({
                   ...prev,
                   studentId: id,
-                  instructorId: prev.instructorId || preferredInstructorId,
+                  instructorId: preferredInstructorId || prev.instructorId,
                   vehicleId: "",
                   followVehicleId: "",
                   extraMotoVehicleIds: [],
@@ -3009,7 +3010,7 @@ export function AutoscuoleAgendaPage({
                 if (id) {
                   advanceCreateFocus({
                     studentId: id,
-                    instructorId: form.instructorId || preferredInstructorId,
+                    instructorId: preferredInstructorId || form.instructorId,
                     vehicleId: "",
                   });
                 }
