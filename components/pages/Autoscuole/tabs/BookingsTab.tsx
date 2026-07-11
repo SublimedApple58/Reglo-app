@@ -565,7 +565,11 @@ export default function BookingsTab({
                   value={bookingMinStartDate}
                   onChange={setBookingMinStartDate}
                   placeholder="Nessun limite"
-                  className={cn("w-[240px]", bookingMinStartDate && "pr-[76px]")}
+                  // Stessa metrica delle select del pane (h-11, radius 10, bordo 1.5)
+                  className={cn(
+                    "h-11 w-[240px] rounded-[10px] border-[1.5px] px-3.5",
+                    bookingMinStartDate && "pr-[76px]",
+                  )}
                 />
                 {bookingMinStartDate ? (
                   <button
