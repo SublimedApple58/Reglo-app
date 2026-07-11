@@ -18,7 +18,7 @@ export function CreateEventPopover({
   title,
   subtitle,
   anchor,
-  width = 560,
+  width = 600,
   children,
   footer,
 }: {
@@ -112,7 +112,7 @@ export function CreateEventPopover({
   const edgeInset = 48;
   const preferLeft = anchor ? anchor.x > vw / 2 : false;
   const left = preferLeft ? edgeInset : vw - width - edgeInset;
-  const top = 205;
+  const top = 250;
   const maxHeight = vh - top - margin;
 
   return createPortal(
