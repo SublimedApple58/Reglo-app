@@ -558,18 +558,20 @@ export default function BookingsTab({
             title="Prenotazioni aperte dal"
             description="Prima di questa data il calendario resta chiuso alle prenotazioni. Lascia vuoto per nessun limite."
             control={
-              <div className="flex shrink-0 items-center gap-2">
+              // "Rimuovi" vive DENTRO il bordo dell'input (come nel proto):
+              // sibling assoluto sopra il trigger, che resta un <button> singolo.
+              <div className="relative shrink-0">
                 <DatePickerInput
                   value={bookingMinStartDate}
                   onChange={setBookingMinStartDate}
                   placeholder="Nessun limite"
-                  className="w-[200px]"
+                  className={cn("w-[240px]", bookingMinStartDate && "pr-[76px]")}
                 />
                 {bookingMinStartDate ? (
                   <button
                     type="button"
                     onClick={() => setBookingMinStartDate("")}
-                    className="shrink-0 cursor-pointer text-xs font-medium text-[#6a6a6a] transition hover:text-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-xs font-medium text-[#6a6a6a] transition hover:text-foreground"
                   >
                     Rimuovi
                   </button>
