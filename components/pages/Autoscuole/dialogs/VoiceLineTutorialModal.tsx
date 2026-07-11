@@ -35,13 +35,15 @@ type Operator = {
   note: React.ReactNode;
 };
 
+// Timer GSM: la stringa completa è **61*numero**secondi# — il doppio asterisco
+// prima dei secondi è obbligatorio (con uno solo la rete legge un altro campo).
 const RING_OPTIONS = [
-  ["*5#", "~1 squillo"],
-  ["*10#", "~2 squilli"],
-  ["*15#", "~3 squilli"],
-  ["*20#", "~4 squilli"],
-  ["*25#", "~5 squilli"],
-  ["*30#", "~6 squilli"],
+  ["**5#", "~1 squillo"],
+  ["**10#", "~2 squilli"],
+  ["**15#", "~3 squilli"],
+  ["**20#", "~4 squilli"],
+  ["**25#", "~5 squilli"],
+  ["**30#", "~6 squilli"],
 ] as const;
 
 function buildOperators(num: string): Operator[] {
@@ -49,38 +51,36 @@ function buildOperators(num: string): Operator[] {
     {
       name: "TIM",
       variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}*5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
         { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#", noAnswer: `*61*${num}#`, offNoAnswer: "#61#" },
       ],
-      note: "Su mobile funziona subito, nessuna attivazione. Su fisso il servizio potrebbe richiedere attivazione chiamando il 187 (privati) o 191 (business), 24-48h; gratuito su fibra, ~3€/mese su ADSL. Su fisso il timeout non è configurabile da codice, contatta il 187.",
+      note: "Su mobile funziona subito, nessuna attivazione. Su fisso è incluso su fibra/ISDN, mentre sulle linee tradizionali (RTG/ADSL) va attivato chiamando il 187 (privati) o 191 (business), ~3€/mese. Su fisso il tempo di squillo non è configurabile da codice, contatta il 187.",
     },
     {
       name: "Vodafone",
       variants: [
-        { tag: "Mobile e fisso", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}*5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile e fisso", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
       ],
       note: "Su fisso puoi gestire la deviazione anche dal pannello Vodafone Station.",
     },
     {
       name: "WindTre",
       variants: [
-        { tag: "Mobile", always: `**21*${num}*#`, offAlways: "##21#", noAnswer: `**61*${num}*5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
       ],
-      note: (
-        <>Deviazione sempre: attenzione alla sintassi, c&rsquo;è un <Chip inline>*</Chip> in più prima del <Chip inline>#</Chip> finale.</>
-      ),
+      note: "Codici GSM standard, funzionano subito senza attivazione.",
     },
     {
       name: "Fastweb",
       variants: [
-        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#", noAnswer: `*61*${num}#`, offNoAnswer: "#61#" },
+        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#", noAnswer: `*23*${num}#`, offNoAnswer: "#23#" },
       ],
-      note: "Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box (regole avanzate per numero chiamante). Costo ~0,05€/chiamata deviata.",
+      note: "Su fisso Fastweb la deviazione su mancata risposta usa il codice *23 (non *61). Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box (regole avanzate per numero chiamante). Costo ~0,05€/chiamata deviata.",
     },
     {
       name: "Iliad",
       variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}*5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
       ],
       note: "Richiede il prefisso +39. Costo ~0,05€/min per le chiamate deviate.",
     },
@@ -351,7 +351,7 @@ export function VoiceLineTutorialModal({
                   <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
                     Il telefono squilla per il tempo scelto. Se non rispondi, parte la segretaria AI.
                   </div>
-                  <Chip>{`**61*${num}*5#`}</Chip>
+                  <Chip>{`**61*${num}**5#`}</Chip>
                   <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
                     Per disattivare: <Chip inline>##61#</Chip>
                   </div>
@@ -359,8 +359,8 @@ export function VoiceLineTutorialModal({
                     Quanto tempo impostare?
                   </div>
                   <div className="mt-1.5 text-[13px] font-medium leading-[1.55] text-[#6a6a6a]">
-                    Il numero finale nel codice indica i secondi di squillo prima che parta l&rsquo;AI.
-                    Valori possibili: 5, 10, 15, 20, 25, 30.
+                    La parte finale del codice (dopo il doppio asterisco) indica i secondi di squillo
+                    prima che parta l&rsquo;AI. Valori possibili: 5, 10, 15, 20, 25, 30.
                   </div>
                   <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
                     {RING_OPTIONS.map(([code, rings]) => (
@@ -377,6 +377,11 @@ export function VoiceLineTutorialModal({
                     <b className="font-bold text-[#222222]">15-20 secondi</b> se vuoi avere il tempo di
                     rispondere di persona quando sei in ufficio e far intervenire l&rsquo;AI solo quando
                     non ci sei.
+                  </div>
+                  <div className="mt-2.5 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
+                    <b className="font-bold text-[#555555]">Linea fissa:</b> su alcune linee fisse
+                    tradizionali il servizio va prima attivato dall&rsquo;operatore e i codici possono
+                    differire — controlla le istruzioni per operatore qui sotto.
                   </div>
                 </div>
               )}
@@ -482,7 +487,7 @@ export function VoiceLineTutorialModal({
                   </div>
                   <div className="text-[13.5px] font-medium leading-[1.7] text-[#555555]">
                     <b className="font-bold text-[#222222]">Su mancata risposta:</b> non configurabile
-                    dall&rsquo;interfaccia, usa il codice <Chip inline>{`**61*${num}*5#`}</Chip>
+                    dall&rsquo;interfaccia, usa il codice <Chip inline>{`**61*${num}**5#`}</Chip>
                   </div>
                 </div>
               ) : (
