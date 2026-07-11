@@ -15,7 +15,7 @@ Click su uno slot vuoto (tutte e 3 le viste: classica, istruttori-settimana, ist
 ## Popover "Nuovo appuntamento" — comodità (2026-07-11)
 - `CreateEventPopover` (condiviso con modifica guida): affordance di scroll (fade top/bottom + pill "Altri campi ▾"), ridimensionabile dal grip in basso a destra (rimbalzo all'apertura), default 600px × altezza naturale da top 250. Posizionamento smart: si affianca alla colonna del ghost (`[data-agenda-col-day]` che contiene `anchor.x`) sul lato con più spazio, gap 20px; l'anchor del menu slot punta al centro colonna.
 - Auto-avanzamento form: campo compilato → scroll+focus sul prossimo obbligatorio vuoto (allievo → istruttore → veicolo; note escluse), delay 160ms per il focus-restore di Radix Select.
-- **Preselezione istruttore alla scelta dell'allievo**: `assignedInstructorId` (già nel bootstrap) o in mancanza `lastInstructorId` (nuova query DISTINCT ON nel bootstrap: ultimo appuntamento passato non-cancelled per studente). Non sovrascrive un istruttore già impostato (es. slot cliccato nella vista Istruttori).
+- **Preselezione istruttore alla scelta dell'allievo**: `assignedInstructorId` (già nel bootstrap) o in mancanza `lastInstructorId` (nuova query DISTINCT ON nel bootstrap: ultimo appuntamento passato non-cancelled per studente). La scelta dell'allievo VINCE sull'istruttore già impostato (es. colonna cliccata nella vista Istruttori); resta il corrente solo se l'allievo non ne suggerisce nessuno.
 
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson
