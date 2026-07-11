@@ -228,6 +228,14 @@ I 4 dialog del "+" (Appuntamento/Esame/Bloccante/Gruppo) sono ora POPOVER non-mo
 
 **TODO futuri legati**: voice-runtime non persiste turni/summary → trascrizioni e riassunti sempre vuoti (lavoro separato sul runtime Railway). Il resto del nuovo proto (differenze fuori dalla segretaria) è ancora da diffare.
 
+### ⇒ Iterazioni segretaria post-prima-implementazione (2026-07-11, APPROVATE — fino a `68b44f6`)
+1. **Stato feature-non-attiva** (`0c4a5fc`): `VoiceInactiveState.tsx` condiviso pagina+pane — icona 3D, pitch, CTA "Richiedi attivazione" che invia richiesta REALE via `sendSupportMessage` + conferma verde e link assistenza. GOTCHA scoperto: i limits passano dalla **cache Redis TTL 5min** (`autoscuole:v1:{companyId}:settings:version`) — un flip diretto su DB non si vede finché non bumpi la versione (INCR) o scade il TTL.
+2. **Dev "Reglo srl"**: feature voice attivata (prov ready, lineRef dev-test-line, numero +39 0542 371032, assistant OFF apposta per provare l'onboarding).
+3. **Codici deviazione VERIFICATI e corretti** (`137a730`): timer GSM = `**61*num**SEC#` (doppio asterisco), Fastweb fisso usa *23, WindTre codici standard. POI l'utente ha deciso di **rimuovere del tutto la "mancata risposta"** (`5ff908c`).
+4. **Verifica gestori** (`5ce9185`): per la deviazione incondizionata i codici sono IDENTICI tra operatori (mobile `**21*` GSM standard; fisso `*21*` con differenze solo di contorno: TIM RTG via 187 ~3€/mese, Vodafone Station, WindTre "In Trasferta", Fastweb MyFastweb, disattivazione #21#/##21#). Tutorial ristrutturato: selettore **Cellulare/Fisso** al posto dei 5 operatori; sub-modal "Altro" rimosso.
+5. **Versione minimal FINALE** (`68b44f6`): modal 620px content-hugging, codice grande al centro, dettagli in righe espandibili (Disclosure), loop-warning assorbito nell'hint handoff, input+CTA su una riga. **Fisso in formato nazionale** (senza +39: dal fisso il + non si digita). CTA sbloccata da tipo linea + handoff.
+La segretaria è APPROVATA così com'è ("va bene così la segretaria").
+
 ## ⇒ STATO AL COMPACT 2026-07-10 (sera, secondo compact)
 
 **Branch**: tutto pushato su `feat/airbnb-redesign` fino a `4125b04`. main/staging NON toccati oggi (staging fermo ad `aa219ac` di stamattina). Prod intonso.
