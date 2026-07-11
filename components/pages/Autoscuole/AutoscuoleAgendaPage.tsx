@@ -228,17 +228,27 @@ type FilterOption = {
 
 function StudentSearchSelect({
   students,
+  instructors,
   value,
   onChange,
 }: {
   students: StudentOption[];
+  /** Per mostrare in lista il nome dell'istruttore assegnato all'allievo. */
+  instructors?: ResourceOption[];
   value: string;
   onChange: (id: string) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
+  // Posizione del flyout: AFFIANCATO alla card del popover (non dentro, dove
+  // coprirebbe i campi successivi). A destra della card, o a sinistra se non
+  // c'è spazio; allineato verticalmente all'input.
+  const [panelPos, setPanelPos] = React.useState<{ left: number; top: number } | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const PANEL_W = 340;
+  const PANEL_MAX_H = 380;
 
   const selected = students.find((s) => s.id === value);
 
@@ -252,6 +262,22 @@ function StudentSearchSelect({
         (s.email && s.email.toLowerCase().includes(q)),
     );
   }, [students, query]);
+
+  const openPanel = React.useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    const card = input.closest('[role="dialog"]')?.getBoundingClientRect();
+    const gap = 14;
+    let left = (card ? card.right : rect.right) + gap;
+    if (left + PANEL_W > window.innerWidth - 8) {
+      left = (card ? card.left : rect.left) - gap - PANEL_W;
+    }
+    left = Math.max(8, left);
+    const top = Math.max(16, Math.min(rect.top, window.innerHeight - PANEL_MAX_H - 16));
+    setPanelPos({ left, top });
+    setOpen(true);
+  }, []);
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -275,49 +301,62 @@ function StudentSearchSelect({
         value={open ? query : selected ? `${selected.firstName} ${selected.lastName}` : query}
         onChange={(e) => {
           setQuery(e.target.value);
-          if (!open) setOpen(true);
+          if (!open) openPanel();
         }}
         onFocus={() => {
-          setOpen(true);
+          openPanel();
           setQuery("");
         }}
       />
-      {open && (
-        <div
-          ref={dropdownRef}
-          className="absolute left-0 top-full z-[9999] mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-lg"
-        >
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
-          ) : (
-            filtered.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
-                  s.id === value && "bg-muted",
-                )}
-                onClick={() => {
-                  onChange(s.id);
-                  setQuery("");
-                  setOpen(false);
-                }}
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="font-medium truncate">{s.firstName} {s.lastName}</span>
-                  {s.email && <span className="text-[11px] text-muted-foreground truncate">{s.email}</span>}
-                </span>
-                {s.licenseCategory ? (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
-                    {s.licenseCategory}
-                  </span>
-                ) : null}
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {open && panelPos &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="fixed z-[60] overflow-y-auto rounded-[14px] border border-[#e3e3e3] bg-white p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
+            style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, maxHeight: PANEL_MAX_H }}
+          >
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
+            ) : (
+              filtered.map((s) => {
+                const assignedInstructor = s.assignedInstructorId
+                  ? instructors?.find((i) => i.id === s.assignedInstructorId)
+                  : null;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-[9px] px-3 py-2 text-left text-sm transition-colors hover:bg-[#f7f7f7]",
+                      s.id === value && "bg-[#f2f2f2]",
+                    )}
+                    onClick={() => {
+                      onChange(s.id);
+                      setQuery("");
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">{s.firstName} {s.lastName}</span>
+                      {s.email && <span className="truncate text-[11px] text-muted-foreground">{s.email}</span>}
+                      {assignedInstructor && (
+                        <span className="mt-px truncate text-[11px] font-medium text-[#555555]">
+                          Istruttore · {assignedInstructor.name}
+                        </span>
+                      )}
+                    </span>
+                    {s.licenseCategory ? (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
+                        {s.licenseCategory}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -2990,6 +3029,7 @@ export function AutoscuoleAgendaPage({
                     )
                   : students
               }
+              instructors={instructors}
               value={form.studentId}
               onChange={(id) => {
                 // Preseleziona l'istruttore dell'allievo: quello assegnato, o
