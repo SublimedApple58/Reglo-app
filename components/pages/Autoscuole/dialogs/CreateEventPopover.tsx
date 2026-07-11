@@ -18,7 +18,7 @@ export function CreateEventPopover({
   title,
   subtitle,
   anchor,
-  width = 500,
+  width = 560,
   children,
   footer,
 }: {
@@ -112,7 +112,7 @@ export function CreateEventPopover({
   const edgeInset = 48;
   const preferLeft = anchor ? anchor.x > vw / 2 : false;
   const left = preferLeft ? edgeInset : vw - width - edgeInset;
-  const top = 148;
+  const top = 205;
   const maxHeight = vh - top - margin;
 
   return createPortal(
@@ -221,12 +221,12 @@ export function CreateEventPopover({
           <motion.div
             onPointerDown={startResize}
             title="Ridimensiona"
-            animate={{ x: [0, 3, 0, 3, 0], y: [0, 3, 0, 3, 0] }}
+            animate={{ x: [0, 4, 0, 4, 0], y: [0, 4, 0, 4, 0] }}
             transition={{ duration: 1.1, ease: "easeInOut", delay: 0.7, repeat: 2, repeatDelay: 1.6 }}
-            className="absolute bottom-0 right-0 z-20 flex size-[20px] cursor-nwse-resize items-end justify-end p-1 text-[#b2b2b2] transition-colors hover:text-[#555555]"
+            className="absolute bottom-0 right-0 z-20 flex size-[22px] cursor-nwse-resize items-end justify-end p-[5px] text-[#767676] transition-colors hover:text-[#222222]"
           >
-            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-              <path d="M9 1 1 9M9 5.5 5.5 9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path d="M12 1 1 12M12 6 6 12M12 10.5 10.5 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </motion.div>
         </motion.div>
