@@ -108,7 +108,7 @@ export function AutoscuoleOreGuidaPage() {
           <button
             type="button"
             onClick={() => router.push("/user/autoscuole")}
-            className="cursor-pointer select-none rounded-full px-[22px] py-2 text-sm font-medium text-foreground transition-colors hover:bg-[#f2f2f2]"
+            className="cursor-pointer select-none rounded-full bg-[#f2f2f2] px-[22px] py-2 text-sm font-medium text-foreground transition-colors hover:bg-[#e8e8e8]"
           >
             Fatto
           </button>
