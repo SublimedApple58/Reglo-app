@@ -1718,7 +1718,9 @@ export function AutoscuoleAgendaPage({
               ? instructors.find((i) => i.id === slotMenu.instructorId)?.name ?? null
               : null;
             const closeAnd = (fn: () => void) => {
-              setPopoverAnchor({ x: Math.min(slotMenu.colRight + 402, window.innerWidth - 16), y: Math.max(80, Math.min(slotMenu.ghostTop - 8, window.innerHeight - 420)) });
+              // Anchor al CENTRO della colonna del ghost: CreateEventPopover la
+              // riconosce (data-agenda-col-day) e si affianca sul lato più libero.
+              setPopoverAnchor({ x: (slotMenu.colLeft + slotMenu.colRight) / 2, y: Math.max(80, Math.min(slotMenu.ghostTop - 8, window.innerHeight - 420)) });
               setSlotMenu(null);
               fn();
             };

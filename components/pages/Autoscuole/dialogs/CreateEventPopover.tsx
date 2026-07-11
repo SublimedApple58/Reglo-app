@@ -106,12 +106,25 @@ export function CreateEventPopover({
   const margin = 16;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1440;
   const vh = typeof window !== "undefined" ? window.innerHeight : 900;
-  // Posizionamento "smart": la card va sul lato di schermo OPPOSTO al punto di
-  // apertura (dove sta il blocco ghost / l'evento), così non lo copre, e parte
-  // alta per avere il massimo spazio verticale disponibile.
-  const edgeInset = 48;
-  const preferLeft = anchor ? anchor.x > vw / 2 : false;
-  const left = preferLeft ? edgeInset : vw - width - edgeInset;
+  // Posizionamento "smart": la card si AFFIANCA alla colonna del blocco ghost
+  // (individuata dal punto di apertura via [data-agenda-col-day]), sul lato
+  // dove c'è più spazio, senza mai coprirla. Senza colonna (es. apertura dal
+  // "+") si affianca al punto di apertura stesso.
+  const gap = 20;
+  let left = vw - width - 48;
+  if (anchor) {
+    const columns = Array.from(document.querySelectorAll<HTMLElement>("[data-agenda-col-day]"));
+    const columnRect = columns
+      .map((column) => column.getBoundingClientRect())
+      .find((rect) => anchor.x >= rect.left && anchor.x <= rect.right);
+    const zone = columnRect ?? { left: anchor.x, right: anchor.x };
+    const spaceLeft = zone.left;
+    const spaceRight = vw - zone.right;
+    left =
+      spaceLeft >= spaceRight
+        ? Math.max(margin, zone.left - gap - width)
+        : Math.min(vw - width - margin, zone.right + gap);
+  }
   const top = 250;
   const maxHeight = vh - top - margin;
 
