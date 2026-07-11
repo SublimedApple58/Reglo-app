@@ -11,22 +11,19 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 
 /**
- * Tutorial "Collega il numero della segretaria" (proto): modal 720px con
- * selettore modalità di deviazione, selettore operatore, selettore dispositivo
- * e CTA finale "Attiva segretaria" che si sblocca solo dopo le tre scelte
- * (+ numero handoff compilato). Le scelte servono a far leggere davvero la
- * guida prima di attivare la linea.
+ * Tutorial "Collega il numero della segretaria" (proto): modal 720px con la
+ * deviazione di chiamata "sempre" (modalità unica), selettore operatore,
+ * selettore dispositivo e CTA finale "Attiva segretaria" che si sblocca solo
+ * dopo le scelte (+ numero handoff compilato). Le scelte servono a far leggere
+ * davvero la guida prima di attivare la linea.
  */
 
-type DeviationMode = "sempre" | "mancata";
 type Device = "iphone" | "android";
 
 type OperatorVariant = {
   tag: string;
   always: string;
   offAlways: string;
-  noAnswer: string;
-  offNoAnswer: string;
 };
 
 type Operator = {
@@ -35,52 +32,41 @@ type Operator = {
   note: React.ReactNode;
 };
 
-// Timer GSM: la stringa completa è **61*numero**secondi# — il doppio asterisco
-// prima dei secondi è obbligatorio (con uno solo la rete legge un altro campo).
-const RING_OPTIONS = [
-  ["**5#", "~1 squillo"],
-  ["**10#", "~2 squilli"],
-  ["**15#", "~3 squilli"],
-  ["**20#", "~4 squilli"],
-  ["**25#", "~5 squilli"],
-  ["**30#", "~6 squilli"],
-] as const;
-
 function buildOperators(num: string): Operator[] {
   return [
     {
       name: "TIM",
       variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
-        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#", noAnswer: `*61*${num}#`, offNoAnswer: "#61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
+        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#" },
       ],
-      note: "Su mobile funziona subito, nessuna attivazione. Su fisso è incluso su fibra/ISDN, mentre sulle linee tradizionali (RTG/ADSL) va attivato chiamando il 187 (privati) o 191 (business), ~3€/mese. Su fisso il tempo di squillo non è configurabile da codice, contatta il 187.",
+      note: "Su mobile funziona subito, nessuna attivazione. Su fisso è incluso su fibra/ISDN, mentre sulle linee tradizionali (RTG/ADSL) va attivato chiamando il 187 (privati) o 191 (business), ~3€/mese.",
     },
     {
       name: "Vodafone",
       variants: [
-        { tag: "Mobile e fisso", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile e fisso", always: `**21*${num}#`, offAlways: "##21#" },
       ],
       note: "Su fisso puoi gestire la deviazione anche dal pannello Vodafone Station.",
     },
     {
       name: "WindTre",
       variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
       ],
       note: "Codici GSM standard, funzionano subito senza attivazione.",
     },
     {
       name: "Fastweb",
       variants: [
-        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#", noAnswer: `*23*${num}#`, offNoAnswer: "#23#" },
+        { tag: "Fisso", always: `*21*${num}#`, offAlways: "#21#" },
       ],
-      note: "Su fisso Fastweb la deviazione su mancata risposta usa il codice *23 (non *61). Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box (regole avanzate per numero chiamante). Costo ~0,05€/chiamata deviata.",
+      note: "Gestibile anche dal portale MyFastweb e dal pannello Fritz!Box (regole avanzate per numero chiamante). Costo ~0,05€/chiamata deviata.",
     },
     {
       name: "Iliad",
       variants: [
-        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#", noAnswer: `**61*${num}**5#`, offNoAnswer: "##61#" },
+        { tag: "Mobile", always: `**21*${num}#`, offAlways: "##21#" },
       ],
       note: "Richiede il prefisso +39. Costo ~0,05€/min per le chiamate deviate.",
     },
@@ -174,7 +160,6 @@ export function VoiceLineTutorialModal({
   const num = phoneNumber.replace(/\s/g, "");
   const operators = React.useMemo(() => buildOperators(num), [num]);
 
-  const [mode, setMode] = React.useState<DeviationMode | null>(null);
   const [opIndex, setOpIndex] = React.useState<number | null>(null);
   const [device, setDevice] = React.useState<Device | null>(null);
   const [handoff, setHandoff] = React.useState(initialHandoff);
@@ -187,7 +172,6 @@ export function VoiceLineTutorialModal({
   // Riparti pulito a ogni apertura (e riallinea l'handoff ai settings).
   React.useEffect(() => {
     if (open) {
-      setMode(null);
       setOpIndex(null);
       setDevice(null);
       setHandoff(initialHandoff);
@@ -210,7 +194,7 @@ export function VoiceLineTutorialModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, helpOpen, altroOpen, onClose]);
 
-  const ready = mode !== null && opIndex !== null && device !== null && handoff.trim().length > 0;
+  const ready = opIndex !== null && device !== null && handoff.trim().length > 0;
 
   const handleActivate = async () => {
     if (!ready || activating) return;
@@ -298,93 +282,25 @@ export function VoiceLineTutorialModal({
 
               {/* ── Metodo rapido ── */}
               <SectionHeading>Metodo rapido</SectionHeading>
-              <div className="mb-3.5 text-sm font-medium text-[#6a6a6a]">
-                Scegli la modalità di deviazione in base alle tue esigenze:
+              <div className="mb-3.5 rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
+                <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
+                  Digita questo codice dal telefono aziendale: tutte le chiamate andranno alla
+                  segretaria AI e il telefono non squillerà più.
+                </div>
+                <Chip>{`**21*${num}#`}</Chip>
+                <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
+                  Per disattivare: <Chip inline>##21#</Chip>
+                </div>
               </div>
-              <div className="mb-4 rounded-xl border border-[#e6e8f0] bg-[#f6f7fb] px-4 py-3.5">
-                <div className="mb-1 text-[13px] font-bold text-[#222222]">Quale modalità scegliere?</div>
+              <div className="mb-3.5 rounded-xl border border-[#e6e8f0] bg-[#f6f7fb] px-4 py-3.5">
+                <div className="mb-1 text-[13px] font-bold text-[#222222]">Attenzione al loop</div>
                 <div className="text-[13px] font-medium leading-[1.6] text-[#5a5a5a] [text-wrap:pretty]">
-                  Con la deviazione &ldquo;sempre&rdquo; il telefono non squilla mai e tutte le chiamate
-                  vanno all&rsquo;AI. Se hai attivato il trasferimento a segreteria durante la chiamata,
-                  il numero di trasferimento deve essere diverso dal numero deviato (es. il tuo cellulare
-                  personale), altrimenti si crea un loop. Con la deviazione &ldquo;su mancata
-                  risposta&rdquo; il telefono squilla brevemente per ogni chiamata (~5 sec), ma la
-                  segretaria AI può ritrasferire allo stesso numero senza problemi.
+                  Con la deviazione attiva il telefono deviato non squilla mai. Se attivi il
+                  trasferimento a segreteria durante la chiamata, il numero di trasferimento deve
+                  essere diverso dal numero deviato (es. il tuo cellulare personale), altrimenti si
+                  crea un loop.
                 </div>
               </div>
-              <div className="mb-3.5 flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setMode("sempre")}
-                  className={cn(pillBase, pillState(mode === "sempre"), "min-w-[200px] flex-1 px-4 py-3.5 text-left")}
-                >
-                  <div className="text-[14.5px] font-bold text-[#222222]">Deviazione sempre</div>
-                  <div className="mt-0.5 text-[12.5px] font-medium text-[#8a8a8a]">
-                    Consigliata · il telefono non squilla mai
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode("mancata")}
-                  className={cn(pillBase, pillState(mode === "mancata"), "min-w-[200px] flex-1 px-4 py-3.5 text-left")}
-                >
-                  <div className="text-[14.5px] font-bold text-[#222222]">Su mancata risposta</div>
-                  <div className="mt-0.5 text-[12.5px] font-medium text-[#8a8a8a]">
-                    Squilla prima, poi passa all&rsquo;AI
-                  </div>
-                </button>
-              </div>
-              {mode === null ? (
-                <EmptyHint>Scegli una modalità qui sopra</EmptyHint>
-              ) : mode === "sempre" ? (
-                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
-                  <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
-                    Tutte le chiamate vanno alla segretaria AI. Il telefono non squilla mai.
-                  </div>
-                  <Chip>{`**21*${num}#`}</Chip>
-                  <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
-                    Per disattivare: <Chip inline>##21#</Chip>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-[22px] py-5">
-                  <div className="mb-3.5 text-sm font-medium leading-[1.55] text-[#444444]">
-                    Il telefono squilla per il tempo scelto. Se non rispondi, parte la segretaria AI.
-                  </div>
-                  <Chip>{`**61*${num}**5#`}</Chip>
-                  <div className="mt-3 text-[12.5px] font-medium text-[#8a8a8a]">
-                    Per disattivare: <Chip inline>##61#</Chip>
-                  </div>
-                  <div className="mt-5 text-[13.5px] font-semibold text-[#222222]">
-                    Quanto tempo impostare?
-                  </div>
-                  <div className="mt-1.5 text-[13px] font-medium leading-[1.55] text-[#6a6a6a]">
-                    La parte finale del codice (dopo il doppio asterisco) indica i secondi di squillo
-                    prima che parta l&rsquo;AI. Valori possibili: 5, 10, 15, 20, 25, 30.
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-                    {RING_OPTIONS.map(([code, rings]) => (
-                      <div key={code} className="rounded-[10px] border border-[#e6e6e6] bg-white p-3 text-center">
-                        <div className="font-mono text-sm font-bold text-[#222222]">{code}</div>
-                        <div className="mt-0.5 text-xs font-medium text-[#929292]">{rings}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3.5 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
-                    <b className="font-bold text-[#555555]">Consiglio:</b> usa{" "}
-                    <b className="font-bold text-[#222222]">5 secondi</b> se vuoi che l&rsquo;AI risponda
-                    quasi subito con il minimo disturbo. Usa{" "}
-                    <b className="font-bold text-[#222222]">15-20 secondi</b> se vuoi avere il tempo di
-                    rispondere di persona quando sei in ufficio e far intervenire l&rsquo;AI solo quando
-                    non ci sei.
-                  </div>
-                  <div className="mt-2.5 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
-                    <b className="font-bold text-[#555555]">Linea fissa:</b> su alcune linee fisse
-                    tradizionali il servizio va prima attivato dall&rsquo;operatore e i codici possono
-                    differire — controlla le istruzioni per operatore qui sotto.
-                  </div>
-                </div>
-              )}
 
               {/* ── Operatore ── */}
               <SectionHeading>Istruzioni per operatore</SectionHeading>
@@ -433,11 +349,6 @@ export function VoiceLineTutorialModal({
                         activate={variant.always}
                         deactivate={variant.offAlways}
                       />
-                      <DeviationBlock
-                        title="Deviazione su mancata risposta (dopo ~5 sec)"
-                        activate={variant.noAnswer}
-                        deactivate={variant.offNoAnswer}
-                      />
                     </React.Fragment>
                   ))}
                   <div className="mt-2 text-[12.5px] font-medium leading-[1.55] text-[#8a8a8a]">
@@ -481,21 +392,16 @@ export function VoiceLineTutorialModal({
                 <EmptyHint>Scegli un dispositivo qui sopra</EmptyHint>
               ) : device === "iphone" ? (
                 <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-5 py-[18px]">
-                  <div className="mb-2 text-[13.5px] font-medium leading-[1.7] text-[#555555]">
-                    <b className="font-bold text-[#222222]">Devia sempre:</b> Impostazioni &rarr; Telefono
-                    &rarr; Inoltro chiamate &rarr; attiva e inserisci <Chip inline>{num}</Chip>
-                  </div>
                   <div className="text-[13.5px] font-medium leading-[1.7] text-[#555555]">
-                    <b className="font-bold text-[#222222]">Su mancata risposta:</b> non configurabile
-                    dall&rsquo;interfaccia, usa il codice <Chip inline>{`**61*${num}**5#`}</Chip>
+                    Impostazioni &rarr; Telefono &rarr; Inoltro chiamate &rarr; attiva e inserisci{" "}
+                    <Chip inline>{num}</Chip>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-[14px] border border-[#ededed] bg-[#f9f9fb] px-5 py-[18px]">
                   <div className="text-[13.5px] font-medium leading-[1.7] text-[#555555]">
                     App Telefono &rarr; Menu (&#8942;) &rarr; Impostazioni &rarr; Deviazione chiamate
-                    &rarr; scegli &ldquo;Devia sempre&rdquo; oppure &ldquo;Devia se non rispondo&rdquo;
-                    &rarr; inserisci <Chip inline>{num}</Chip>
+                    &rarr; scegli &ldquo;Devia sempre&rdquo; &rarr; inserisci <Chip inline>{num}</Chip>
                   </div>
                 </div>
               )}
