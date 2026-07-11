@@ -280,6 +280,25 @@ Richiesta utente: i pane "Prenotazioni" e "Gestione allievi" trattavano cose sim
 - **SelectTrigger default → bg-white** (`components/ui/select.tsx`, era bg-secondary grigio): vale per tutta l'app. Input data allineato alle select (h-11, radius 10, bordo 1.5, px-3.5).
 - **Pane "Fatturazione e pagamenti" ELIMINATO dalla sidebar** (2026-07-11, carta bianca utente: il nome era sbagliato, niente fatturazione lì dentro): `PaymentsSettingsPane` (self-contained, auto-save) ora è il **5° sub-tab "Crediti e prezzi"** di Prenotazioni e allievi. Legacy `?pane=payments` → bookings. Bottone "Salva configurazione" nascosto su quel sub-tab (salva da solo). Gruppo 1 sidebar ridotto a Informazioni aziendali + Sede e luoghi. e2e aggiornato (verifica sub-tab + assenza del bottone Salva).
 
+## ⇒ AUTO-SAVE UNIFICATO SU TUTTE LE PANE IMPOSTAZIONI (2026-07-11)
+
+Richiesta utente: modelli di salvataggio misti (CTA "Salva configurazione" vs auto-save, e pane con ENTRAMBI tipo App allievi che aveva RegistrationSection auto-save + CTA) — "controllo a tappeto, unifica".
+
+**Censimento**: auto-save già presenti = Promemoria, Veicoli, Segretaria, Crediti e prezzi, RegistrationSection; per-field commit = Informazioni aziendali (edit inline Salva/Annulla per campo, ok), Sede e luoghi (CRUD); CTA globale = **BookingsTab** (Generali/Limiti/Guide/App allievi) e **Policy tipi guida**. Cluster istruttori = drawer con proprio Salva (form modale, resta così).
+
+**Decisione: auto-save OVUNQUE, CTA eliminata.** Pattern unico (già di Veicoli/Promemoria): applica subito in UI → `persistSettings(patch, rollback)` persiste il SOLO campo toccato via `updateAutoscuolaSettings` (schema tutto optional) → rollback + toast se il server rifiuta.
+
+**Implementazione** (`AutoscuoleResourcesPage`):
+- `handleSaveSettings` (~200 righe, salvava TUTTO in una chiamata) ELIMINATO insieme a `savingSettings`.
+- Nuova factory `persistField(current, apply, toPatch)` → setter auto-save compatibile `Dispatch<SetStateAction<T>>` (gestisce anche gli updater `prev => …`; skip se `Object.is(next, current)`); ~30 setter `saveXxx` passati a BookingsTab/SettingsTab al posto dei setter nudi.
+- Toggle con guard che tengono lo stato SEMPRE valido (prima la validazione era al Salva): `toggleBookingDuration` min 1 durata; `toggleConstraintDay` min 1 giorno se attivo; `updateConstraintWindow` fine>inizio; vincoli policy serializzati come mappa intera (`serializeLessonConstraints`, disabled→null) a ogni click.
+- `BookingsTab`: footer Salva rimosso; input numerici → `NumberField` (draft locale, commit clamp+save su blur/Invio, niente save per keystroke).
+- `SettingsTab`: bottone Salva + `showSaveButton` + props handleSaveSettings/savingSettings rimossi.
+
+**Verifica live**: flip "Stop alle prenotazioni last-minute" via UI → DB dev `bookingCutoffEnabled=true` (query diretta) → reload UI mostra true → flip off → DB false. Stato ripristinato. e2e smoke 6/6 passed (assert: `Salva configurazione` count=0).
+
+**GOTCHA test**: in dev le server action della pagina si SERIALIZZANO — un reload a ~1.5s dal click tronca la action di save in coda e sembra "non salvato"; aspettare ~4s (o attendere il completamento delle fetch iniziali) prima di ricaricare.
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

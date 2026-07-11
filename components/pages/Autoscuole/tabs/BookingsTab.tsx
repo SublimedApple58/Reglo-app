@@ -2,7 +2,6 @@
 
 import React from "react";
 import { ChevronDown, Loader2, Plus, Send, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import {
@@ -92,8 +91,6 @@ export type BookingsTabProps = {
   setTriggeringNotification: React.Dispatch<React.SetStateAction<boolean>>;
   instructorPreferenceEnabled: boolean;
   setInstructorPreferenceEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  handleSaveSettings: () => Promise<void>;
-  savingSettings: boolean;
   toast: { success: (opts: { description: string }) => void; error: (opts: { description: string }) => void };
 };
 
@@ -187,6 +184,41 @@ function FieldBlock({ label, children }: { label: string; children: React.ReactN
 
 const SELECT_TRIGGER_CLASS =
   "h-11 max-w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0";
+
+/** Input numerico auto-save: modifica libera, commit (clamp + save) su blur/Invio. */
+function NumberField({
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  const [draft, setDraft] = React.useState(String(value));
+  React.useEffect(() => setDraft(String(value)), [value]);
+  const commit = () => {
+    const parsed = Math.max(min, Math.min(max, Number(draft) || min));
+    setDraft(String(parsed));
+    onCommit(parsed);
+  };
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-[120px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
+    />
+  );
+}
 
 /** Tooltip informativo (i) sul titolo, come nel proto guide di gruppo. */
 function InfoTooltip({ text }: { text: string }) {
@@ -464,8 +496,6 @@ export default function BookingsTab({
   setTriggeringNotification,
   instructorPreferenceEnabled,
   setInstructorPreferenceEnabled,
-  handleSaveSettings,
-  savingSettings,
   toast,
 }: BookingsTabProps) {
   const [subTab, setSubTab] = React.useState<SubTab>("generali");
@@ -671,14 +701,7 @@ export default function BookingsTab({
           {weeklyBookingLimitEnabled && (
             <>
               <FieldBlock label="Guide a settimana per allievo">
-                <input
-                  type="number"
-                  min={1}
-                  max={50}
-                  value={weeklyBookingLimit}
-                  onChange={(e) => setWeeklyBookingLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
-                  className="w-[120px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
-                />
+                <NumberField value={weeklyBookingLimit} min={1} max={50} onCommit={setWeeklyBookingLimit} />
               </FieldBlock>
               <SettingRow
                 nested
@@ -690,14 +713,7 @@ export default function BookingsTab({
               {examPriorityEnabled && (
                 <>
                   <FieldBlock label="Giorni prima dell'esame in cui scatta la precedenza">
-                    <input
-                      type="number"
-                      min={1}
-                      max={60}
-                      value={examPriorityDaysBeforeExam}
-                      onChange={(e) => setExamPriorityDaysBeforeExam(Math.max(1, Math.min(60, Number(e.target.value) || 14)))}
-                      className="w-[120px] rounded-[10px] border-[1.5px] border-[#dddddd] bg-white px-3.5 py-[11px] text-sm font-medium text-foreground outline-none transition-colors focus:border-[#222222]"
-                    />
+                    <NumberField value={examPriorityDaysBeforeExam} min={1} max={60} onCommit={setExamPriorityDaysBeforeExam} />
                   </FieldBlock>
                   <SettingRow
                     nested
@@ -998,19 +1014,6 @@ export default function BookingsTab({
       <div className={cn("pt-6", subTab !== "crediti" && "hidden")}>
         <PaymentsSettingsPane />
       </div>
-
-      {/* Save (nascosto su Crediti e prezzi: quel tab salva da solo) */}
-      {subTab !== "crediti" && (
-        <div className="mt-3 flex justify-end border-t border-[#ebebeb] pt-5">
-          <Button
-            onClick={handleSaveSettings}
-            disabled={savingSettings}
-            className="min-w-[180px]"
-          >
-            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

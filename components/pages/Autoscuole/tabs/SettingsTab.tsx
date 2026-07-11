@@ -15,7 +15,6 @@ import {
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
 
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -131,9 +130,6 @@ export type SettingsTabProps = {
   toggleConstraintEnabled: (t: LessonTypeValue) => void;
   toggleConstraintDay: (t: LessonTypeValue, d: number) => void;
   updateConstraintWindow: (t: LessonTypeValue, field: "startMinutes" | "endMinutes", v: string) => void;
-  // Save
-  handleSaveSettings: () => Promise<void>;
-  savingSettings: boolean;
 };
 
 // ── Sub-components (local) ────────────────────────────────────────────────────
@@ -401,14 +397,10 @@ function SettingsTab({
   toggleConstraintEnabled,
   toggleConstraintDay,
   updateConstraintWindow,
-  handleSaveSettings,
-  savingSettings,
   section,
 }: SettingsTabProps) {
   const standalone = Boolean(section);
   const show = (key: SettingsSectionKey) => !section || section === key;
-  // La pane Promemoria è auto-save (come Veicoli): niente bottone Salva.
-  const showSaveButton = !section || section === "policy";
   return (
     <>
       {/* Accordion settings card (chrome solo in modalità tab legacy) */}
@@ -734,18 +726,6 @@ function SettingsTab({
         )}
       </div>
 
-      {/* Save button */}
-      {showSaveButton && (
-        <div className={cn("flex justify-end", standalone && "mt-8")}>
-          <Button
-            onClick={handleSaveSettings}
-            disabled={savingSettings}
-            className="min-w-[180px]"
-          >
-            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-          </Button>
-        </div>
-      )}
     </>
   );
 }

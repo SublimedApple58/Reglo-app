@@ -368,7 +368,6 @@ export function AutoscuoleResourcesPage({
     setConfigTab(pane);
     contentScrollRef.current?.scrollTo({ top: 0 });
   }, []);
-  const [savingSettings, setSavingSettings] = React.useState(false);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
   const [studentReminderMorningEnabled, setStudentReminderMorningEnabled] = React.useState(false);
@@ -749,208 +748,165 @@ export function AutoscuoleResourcesPage({
     if (PANES_NEEDING_RESOURCES.includes(configTab)) ensureResources();
   }, [configTab, ensureSettings, ensureResources]);
 
-  const handleSaveSettings = async () => {
-    const parsedWeeks = Number(availabilityWeeks);
-    const parsedStudentReminder = Number(studentReminderMinutes);
-    const parsedInstructorReminder = Number(instructorReminderMinutes);
+  // ── Auto-save Impostazioni (pattern unico di tutte le pane) ────────────────
+  // Applica subito il cambiamento in UI, persiste il SOLO campo toccato via
+  // updateAutoscuolaSettings (schema tutto optional) e ripristina il valore
+  // precedente + toast se il server rifiuta. Nessun bottone "Salva".
+  type SettingsPatch = Parameters<typeof updateAutoscuolaSettings>[0];
 
-    if (Number.isNaN(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 12) {
-      toast.error({ description: "Settimane disponibilità non valide (1-12)." });
-      return;
+  const persistSettings = async (patch: SettingsPatch, rollback: () => void) => {
+    const res = await updateAutoscuolaSettings(patch);
+    if (!res.success) {
+      rollback();
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
     }
-    if (!REMINDER_OPTIONS.includes(parsedStudentReminder as (typeof REMINDER_OPTIONS)[number])) {
-      toast.error({ description: "Preavviso reminder allievo non valido." });
-      return;
-    }
-    if (
-      !REMINDER_OPTIONS.includes(
-        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
-      )
-    ) {
-      toast.error({ description: "Preavviso reminder istruttore non valido." });
-      return;
-    }
-    if (!slotFillChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per slot-fill." });
-      return;
-    }
-    if (!studentReminderChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per reminder allievo." });
-      return;
-    }
-    if (!instructorReminderChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per reminder istruttore." });
-      return;
-    }
-    if (!bookingSlotDurations.length) {
-      toast.error({ description: "Seleziona almeno una durata prenotabile per l'allievo." });
-      return;
-    }
-    if (
-      (appBookingActors === "instructors" || appBookingActors === "both") &&
-      !instructorBookingMode
-    ) {
-      toast.error({ description: "Seleziona la modalità prenotazione istruttore." });
-      return;
-    }
-    if (lessonRequiredTypesEnabled && !lessonRequiredTypes.length) {
-      toast.error({ description: "Seleziona almeno un tipo guida obbligatorio." });
-      return;
-    }
-
-    const lessonTypeConstraints = {} as Record<
-      LessonTypeValue,
-      { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null
-    >;
-    for (const option of LESSON_TYPE_OPTIONS) {
-      const state = lessonConstraints[option.value];
-      if (!state?.enabled) {
-        lessonTypeConstraints[option.value] = null;
-        continue;
-      }
-      const daysOfWeek = normalizeDays(state.daysOfWeek);
-      if (!daysOfWeek.length) {
-        toast.error({ description: `Seleziona almeno un giorno per ${option.label}.` });
-        return;
-      }
-      if (
-        !Number.isInteger(state.startMinutes) ||
-        !Number.isInteger(state.endMinutes) ||
-        state.startMinutes < 0 ||
-        state.startMinutes > 1410 ||
-        state.endMinutes < 30 ||
-        state.endMinutes > 1440 ||
-        state.startMinutes % 30 !== 0 ||
-        state.endMinutes % 30 !== 0 ||
-        state.endMinutes <= state.startMinutes
-      ) {
-        toast.error({ description: `Intervallo non valido per ${option.label}.` });
-        return;
-      }
-      lessonTypeConstraints[option.value] = {
-        daysOfWeek,
-        startMinutes: state.startMinutes,
-        endMinutes: state.endMinutes,
-      };
-    }
-
-    setSavingSettings(true);
-    const res = await updateAutoscuolaSettings({
-      availabilityWeeks: parsedWeeks,
-      bookingMinStartDate: bookingMinStartDate || null,
-      studentReminderMinutes:
-        parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
-      studentReminderMorningEnabled,
-      studentReminderMorningTime,
-      studentReminderDayBeforeEnabled,
-      studentReminderDayBeforeTime,
-      instructorReminderMinutes:
-        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
-      slotFillChannels,
-      studentReminderChannels,
-      instructorReminderChannels,
-      lessonPolicyEnabled,
-      lessonRequiredTypesEnabled,
-      lessonRequiredTypes,
-      lessonTypeConstraints,
-      bookingSlotDurations,
-      roundedHoursOnly,
-      nationalHolidaysEnabled,
-      nationalHolidaysDisabled,
-      swapEnabled,
-      swapNotifyMode,
-      studentCancellationEnabled,
-      bookingCutoffEnabled,
-      bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
-      weeklyBookingLimitEnabled,
-      weeklyBookingLimit,
-      examPriorityEnabled,
-      examPriorityDaysBeforeExam,
-      examPriorityPausedUntil,
-      examPriorityBlockNonExam,
-      restrictedTimeRangeEnabled,
-      restrictedTimeRangeStart,
-      restrictedTimeRangeEnd,
-      emptySlotNotificationEnabled,
-      emptySlotNotificationTarget,
-      emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
-      instructorPreferenceEnabled,
-      studentNotesEnabled,
-      autoCheckinEnabled,
-      vehiclesEnabled,
-      defaultLicenseCategory: defaultLicenseCategory as LicenseCategory,
-      defaultTransmission: defaultTransmission as "manual" | "automatic",
-      followCarMotoEnabled,
-      groupLessonsEnabled,
-      appBookingActors,
-      instructorBookingMode,
-    });
-    setSavingSettings(false);
-
-    if (!res.success || !res.data) {
-      toast.error({
-        description: res.message ?? "Impossibile aggiornare le impostazioni autoscuola.",
-      });
-      return;
-    }
-
-    setAvailabilityWeeks(String(res.data.availabilityWeeks));
-    setStudentReminderMinutes(String(res.data.studentReminderMinutes));
-    setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
-    setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
-    setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
-    setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
-    setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
-    setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
-    setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
-    const nextConstraints = createDefaultLessonConstraintMap();
-    for (const option of LESSON_TYPE_OPTIONS) {
-      const constraint = res.data.lessonTypeConstraints?.[option.value];
-      if (!constraint) continue;
-      nextConstraints[option.value] = {
-        enabled: true,
-        daysOfWeek: normalizeDays(constraint.daysOfWeek),
-        startMinutes: constraint.startMinutes,
-        endMinutes: constraint.endMinutes,
-      };
-    }
-    setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
-    setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
-    setLessonRequiredTypes(
-      (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
-        LESSON_TYPE_OPTIONS.some((option) => option.value === value),
-      ),
-    );
-    setLessonConstraints(nextConstraints);
-    setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
-    setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
-    setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
-    setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
-    setSwapEnabled(res.data.swapEnabled ?? false);
-    setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
-    setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
-    setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
-    setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
-    setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
-    setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
-    setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
-    setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
-    setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
-    setVehiclesEnabled(res.data.vehiclesEnabled !== false);
-    setAppBookingActors(
-      APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
-        ? (res.data.appBookingActors as AppBookingActorsValue)
-        : "students",
-    );
-    setInstructorBookingMode(
-      INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
-        (option) => option.value === res.data.instructorBookingMode,
-      )
-        ? (res.data.instructorBookingMode as InstructorBookingModeValue)
-        : "manual_engine",
-    );
-    toast.success({ description: "Impostazioni autoscuola aggiornate." });
   };
+
+  /** Costruisce un setter auto-save compatibile con Dispatch<SetStateAction<T>>. */
+  function persistField<T>(
+    current: T,
+    apply: (v: T) => void,
+    toPatch: (v: T) => SettingsPatch,
+  ): React.Dispatch<React.SetStateAction<T>> {
+    return (action) => {
+      const next =
+        typeof action === "function" ? (action as (prev: T) => T)(current) : action;
+      if (Object.is(next, current)) return;
+      apply(next);
+      void persistSettings(toPatch(next), () => apply(current));
+    };
+  }
+
+  // Generali
+  const saveAvailabilityWeeks = persistField(availabilityWeeks, setAvailabilityWeeks, (v) => ({
+    availabilityWeeks: Number(v),
+  }));
+  const saveBookingMinStartDate = persistField(bookingMinStartDate, setBookingMinStartDate, (v) => ({
+    bookingMinStartDate: v || null,
+  }));
+  const saveAppBookingActors = persistField(appBookingActors, setAppBookingActors, (v) => ({
+    appBookingActors: v,
+  }));
+  const saveInstructorBookingMode = persistField(
+    instructorBookingMode,
+    setInstructorBookingMode,
+    (v) => ({ instructorBookingMode: v }),
+  );
+  const saveRoundedHoursOnly = persistField(roundedHoursOnly, setRoundedHoursOnly, (v) => ({
+    roundedHoursOnly: v,
+  }));
+  const saveNationalHolidaysEnabled = persistField(
+    nationalHolidaysEnabled,
+    setNationalHolidaysEnabled,
+    (v) => ({ nationalHolidaysEnabled: v }),
+  );
+  const saveNationalHolidaysDisabled = persistField(
+    nationalHolidaysDisabled,
+    setNationalHolidaysDisabled,
+    (v) => ({ nationalHolidaysDisabled: v as SettingsPatch["nationalHolidaysDisabled"] }),
+  );
+
+  // Limiti
+  const saveBookingCutoffEnabled = persistField(bookingCutoffEnabled, setBookingCutoffEnabled, (v) => ({
+    bookingCutoffEnabled: v,
+  }));
+  const saveBookingCutoffTime = persistField(bookingCutoffTime, setBookingCutoffTime, (v) => ({
+    bookingCutoffTime: v as SettingsPatch["bookingCutoffTime"],
+  }));
+  const saveWeeklyBookingLimitEnabled = persistField(
+    weeklyBookingLimitEnabled,
+    setWeeklyBookingLimitEnabled,
+    (v) => ({ weeklyBookingLimitEnabled: v }),
+  );
+  const saveWeeklyBookingLimit = persistField(weeklyBookingLimit, setWeeklyBookingLimit, (v) => ({
+    weeklyBookingLimit: v,
+  }));
+  const saveExamPriorityEnabled = persistField(examPriorityEnabled, setExamPriorityEnabled, (v) => ({
+    examPriorityEnabled: v,
+  }));
+  const saveExamPriorityDaysBeforeExam = persistField(
+    examPriorityDaysBeforeExam,
+    setExamPriorityDaysBeforeExam,
+    (v) => ({ examPriorityDaysBeforeExam: v }),
+  );
+  const saveExamPriorityBlockNonExam = persistField(
+    examPriorityBlockNonExam,
+    setExamPriorityBlockNonExam,
+    (v) => ({ examPriorityBlockNonExam: v }),
+  );
+  const saveExamPriorityPausedUntil = persistField(
+    examPriorityPausedUntil,
+    setExamPriorityPausedUntil,
+    (v) => ({ examPriorityPausedUntil: v }),
+  );
+  const saveRestrictedTimeRangeEnabled = persistField(
+    restrictedTimeRangeEnabled,
+    setRestrictedTimeRangeEnabled,
+    (v) => ({ restrictedTimeRangeEnabled: v }),
+  );
+  const saveRestrictedTimeRangeStart = persistField(
+    restrictedTimeRangeStart,
+    setRestrictedTimeRangeStart,
+    (v) => ({ restrictedTimeRangeStart: v }),
+  );
+  const saveRestrictedTimeRangeEnd = persistField(
+    restrictedTimeRangeEnd,
+    setRestrictedTimeRangeEnd,
+    (v) => ({ restrictedTimeRangeEnd: v }),
+  );
+
+  // Guide
+  const saveSwapEnabled = persistField(swapEnabled, setSwapEnabled, (v) => ({ swapEnabled: v }));
+  const saveSwapNotifyMode = persistField(swapNotifyMode, setSwapNotifyMode, (v) => ({
+    swapNotifyMode: v,
+  }));
+  const saveStudentCancellationEnabled = persistField(
+    studentCancellationEnabled,
+    setStudentCancellationEnabled,
+    (v) => ({ studentCancellationEnabled: v }),
+  );
+  const saveAutoCheckinEnabled = persistField(autoCheckinEnabled, setAutoCheckinEnabled, (v) => ({
+    autoCheckinEnabled: v,
+  }));
+  const saveGroupLessonsEnabled = persistField(groupLessonsEnabled, setGroupLessonsEnabled, (v) => ({
+    groupLessonsEnabled: v,
+  }));
+
+  // App allievi
+  const saveStudentNotesEnabled = persistField(studentNotesEnabled, setStudentNotesEnabled, (v) => ({
+    studentNotesEnabled: v,
+  }));
+  const saveEmptySlotNotificationEnabled = persistField(
+    emptySlotNotificationEnabled,
+    setEmptySlotNotificationEnabled,
+    (v) => ({ emptySlotNotificationEnabled: v }),
+  );
+  const saveEmptySlotNotificationTarget = persistField(
+    emptySlotNotificationTarget,
+    setEmptySlotNotificationTarget,
+    (v) => ({ emptySlotNotificationTarget: v }),
+  );
+  const saveEmptySlotNotificationTimes = persistField(
+    emptySlotNotificationTimes,
+    setEmptySlotNotificationTimes,
+    (v) => ({ emptySlotNotificationTimes: v as SettingsPatch["emptySlotNotificationTimes"] }),
+  );
+  const saveInstructorPreferenceEnabled = persistField(
+    instructorPreferenceEnabled,
+    setInstructorPreferenceEnabled,
+    (v) => ({ instructorPreferenceEnabled: v }),
+  );
+
+  // Policy tipi guida
+  const saveLessonPolicyEnabled = persistField(lessonPolicyEnabled, setLessonPolicyEnabled, (v) => ({
+    lessonPolicyEnabled: v,
+  }));
+  const saveLessonRequiredTypesEnabled = persistField(
+    lessonRequiredTypesEnabled,
+    setLessonRequiredTypesEnabled,
+    (v) => ({ lessonRequiredTypesEnabled: v }),
+  );
+
 
   // Auto-save della pane Veicoli: applica subito il cambiamento in UI,
   // persiste il solo campo toccato e ripristina i valori precedenti se il
@@ -1103,36 +1059,59 @@ export function AutoscuoleResourcesPage({
   };
 
   const toggleRequiredType = (type: LessonTypeValue) => {
-    setLessonRequiredTypes((current) =>
-      current.includes(type)
-        ? current.filter((item) => item !== type)
-        : [...current, type],
+    const next = lessonRequiredTypes.includes(type)
+      ? lessonRequiredTypes.filter((item) => item !== type)
+      : [...lessonRequiredTypes, type];
+    setLessonRequiredTypes(next);
+    void persistSettings({ lessonRequiredTypes: next }, () =>
+      setLessonRequiredTypes(lessonRequiredTypes),
+    );
+  };
+
+  // I vincoli si salvano come mappa intera (il backend rimpiazza l'oggetto):
+  // le guard sotto tengono lo stato sempre valido, così ogni click persiste.
+  const serializeLessonConstraints = (map: LessonConstraintMap) => {
+    const out = {} as Record<
+      LessonTypeValue,
+      { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null
+    >;
+    for (const option of LESSON_TYPE_OPTIONS) {
+      const state = map[option.value];
+      out[option.value] = state?.enabled
+        ? {
+            daysOfWeek: normalizeDays(state.daysOfWeek),
+            startMinutes: state.startMinutes,
+            endMinutes: state.endMinutes,
+          }
+        : null;
+    }
+    return out;
+  };
+
+  const applyConstraints = (next: LessonConstraintMap) => {
+    setLessonConstraints(next);
+    void persistSettings({ lessonTypeConstraints: serializeLessonConstraints(next) }, () =>
+      setLessonConstraints(lessonConstraints),
     );
   };
 
   const toggleConstraintEnabled = (type: LessonTypeValue) => {
-    setLessonConstraints((current) => ({
-      ...current,
-      [type]: {
-        ...(current[type] ?? DEFAULT_LESSON_CONSTRAINT),
-        enabled: !(current[type]?.enabled ?? false),
-      },
-    }));
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    applyConstraints({ ...lessonConstraints, [type]: { ...state, enabled: !state.enabled } });
   };
 
   const toggleConstraintDay = (type: LessonTypeValue, day: number) => {
-    setLessonConstraints((current) => {
-      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
-      const nextDays = state.daysOfWeek.includes(day)
-        ? state.daysOfWeek.filter((item) => item !== day)
-        : [...state.daysOfWeek, day];
-      return {
-        ...current,
-        [type]: {
-          ...state,
-          daysOfWeek: normalizeDays(nextDays),
-        },
-      };
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    const nextDays = state.daysOfWeek.includes(day)
+      ? state.daysOfWeek.filter((item) => item !== day)
+      : [...state.daysOfWeek, day];
+    if (state.enabled && !nextDays.length) {
+      toast.error({ description: "Seleziona almeno un giorno per il limite orario." });
+      return;
+    }
+    applyConstraints({
+      ...lessonConstraints,
+      [type]: { ...state, daysOfWeek: normalizeDays(nextDays) },
     });
   };
 
@@ -1143,25 +1122,30 @@ export function AutoscuoleResourcesPage({
   ) => {
     const minutes = Number(value);
     if (!Number.isFinite(minutes)) return;
-    setLessonConstraints((current) => {
-      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
-      return {
-        ...current,
-        [type]: {
-          ...state,
-          [field]: minutes,
-        },
-      };
-    });
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    const nextState = { ...state, [field]: minutes };
+    if (nextState.endMinutes <= nextState.startMinutes) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
+    applyConstraints({ ...lessonConstraints, [type]: nextState });
   };
 
   const toggleBookingDuration = (duration: number) => {
-    setBookingSlotDurations((current) => {
-      const next = current.includes(duration)
-        ? current.filter((value) => value !== duration)
-        : [...current, duration];
-      return next.sort((a, b) => a - b);
-    });
+    const next = (
+      bookingSlotDurations.includes(duration)
+        ? bookingSlotDurations.filter((value) => value !== duration)
+        : [...bookingSlotDurations, duration]
+    ).sort((a, b) => a - b);
+    if (!next.length) {
+      toast.error({ description: "Seleziona almeno una durata prenotabile." });
+      return;
+    }
+    setBookingSlotDurations(next);
+    void persistSettings(
+      { bookingSlotDurations: next as SettingsPatch["bookingSlotDurations"] },
+      () => setBookingSlotDurations(bookingSlotDurations),
+    );
   };
 
   // ── Instructor availability handlers ──────────────────────────────────────
@@ -1847,17 +1831,15 @@ export function AutoscuoleResourcesPage({
             instructorReminderChannels={instructorReminderChannels}
             updateReminderSettings={updateReminderSettings}
             lessonPolicyEnabled={lessonPolicyEnabled}
-            setLessonPolicyEnabled={setLessonPolicyEnabled}
+            setLessonPolicyEnabled={saveLessonPolicyEnabled}
             lessonRequiredTypesEnabled={lessonRequiredTypesEnabled}
-            setLessonRequiredTypesEnabled={setLessonRequiredTypesEnabled}
+            setLessonRequiredTypesEnabled={saveLessonRequiredTypesEnabled}
             lessonRequiredTypes={lessonRequiredTypes}
             toggleRequiredType={toggleRequiredType}
             lessonConstraints={lessonConstraints}
             toggleConstraintEnabled={toggleConstraintEnabled}
             toggleConstraintDay={toggleConstraintDay}
             updateConstraintWindow={updateConstraintWindow}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
           />
   );
 
@@ -2011,67 +1993,65 @@ export function AutoscuoleResourcesPage({
         <KeepAlivePane active={configTab === "bookings"} eager={mountAllPanes}>
           <BookingsTab
             availabilityWeeks={availabilityWeeks}
-            setAvailabilityWeeks={setAvailabilityWeeks}
+            setAvailabilityWeeks={saveAvailabilityWeeks}
             bookingMinStartDate={bookingMinStartDate}
-            setBookingMinStartDate={setBookingMinStartDate}
+            setBookingMinStartDate={saveBookingMinStartDate}
             appBookingActors={appBookingActors}
-            setAppBookingActors={(v) => setAppBookingActors(v as AppBookingActorsValue)}
+            setAppBookingActors={(v) => saveAppBookingActors(v as AppBookingActorsValue)}
             instructorBookingMode={instructorBookingMode}
-            setInstructorBookingMode={(v) => setInstructorBookingMode(v as InstructorBookingModeValue)}
+            setInstructorBookingMode={(v) => saveInstructorBookingMode(v as InstructorBookingModeValue)}
             bookingSlotDurations={bookingSlotDurations}
             toggleBookingDuration={toggleBookingDuration}
             roundedHoursOnly={roundedHoursOnly}
-            setRoundedHoursOnly={setRoundedHoursOnly}
+            setRoundedHoursOnly={saveRoundedHoursOnly}
             nationalHolidaysEnabled={nationalHolidaysEnabled}
-            setNationalHolidaysEnabled={setNationalHolidaysEnabled}
+            setNationalHolidaysEnabled={saveNationalHolidaysEnabled}
             nationalHolidaysDisabled={nationalHolidaysDisabled}
-            setNationalHolidaysDisabled={setNationalHolidaysDisabled}
+            setNationalHolidaysDisabled={saveNationalHolidaysDisabled}
             bookingCutoffEnabled={bookingCutoffEnabled}
-            setBookingCutoffEnabled={setBookingCutoffEnabled}
+            setBookingCutoffEnabled={saveBookingCutoffEnabled}
             bookingCutoffTime={bookingCutoffTime}
-            setBookingCutoffTime={setBookingCutoffTime}
+            setBookingCutoffTime={saveBookingCutoffTime}
             weeklyBookingLimitEnabled={weeklyBookingLimitEnabled}
-            setWeeklyBookingLimitEnabled={setWeeklyBookingLimitEnabled}
+            setWeeklyBookingLimitEnabled={saveWeeklyBookingLimitEnabled}
             weeklyBookingLimit={weeklyBookingLimit}
-            setWeeklyBookingLimit={setWeeklyBookingLimit}
+            setWeeklyBookingLimit={saveWeeklyBookingLimit}
             examPriorityEnabled={examPriorityEnabled}
-            setExamPriorityEnabled={setExamPriorityEnabled}
+            setExamPriorityEnabled={saveExamPriorityEnabled}
             examPriorityDaysBeforeExam={examPriorityDaysBeforeExam}
-            setExamPriorityDaysBeforeExam={setExamPriorityDaysBeforeExam}
+            setExamPriorityDaysBeforeExam={saveExamPriorityDaysBeforeExam}
             examPriorityBlockNonExam={examPriorityBlockNonExam}
-            setExamPriorityBlockNonExam={setExamPriorityBlockNonExam}
+            setExamPriorityBlockNonExam={saveExamPriorityBlockNonExam}
             examPriorityPausedUntil={examPriorityPausedUntil}
-            setExamPriorityPausedUntil={setExamPriorityPausedUntil}
+            setExamPriorityPausedUntil={saveExamPriorityPausedUntil}
             restrictedTimeRangeEnabled={restrictedTimeRangeEnabled}
-            setRestrictedTimeRangeEnabled={setRestrictedTimeRangeEnabled}
+            setRestrictedTimeRangeEnabled={saveRestrictedTimeRangeEnabled}
             restrictedTimeRangeStart={restrictedTimeRangeStart}
-            setRestrictedTimeRangeStart={setRestrictedTimeRangeStart}
+            setRestrictedTimeRangeStart={saveRestrictedTimeRangeStart}
             restrictedTimeRangeEnd={restrictedTimeRangeEnd}
-            setRestrictedTimeRangeEnd={setRestrictedTimeRangeEnd}
+            setRestrictedTimeRangeEnd={saveRestrictedTimeRangeEnd}
             swapEnabled={swapEnabled}
-            setSwapEnabled={setSwapEnabled}
+            setSwapEnabled={saveSwapEnabled}
             swapNotifyMode={swapNotifyMode}
-            setSwapNotifyMode={(v) => setSwapNotifyMode(v as "all" | "available_only")}
+            setSwapNotifyMode={(v) => saveSwapNotifyMode(v as "all" | "available_only")}
             studentCancellationEnabled={studentCancellationEnabled}
-            setStudentCancellationEnabled={setStudentCancellationEnabled}
+            setStudentCancellationEnabled={saveStudentCancellationEnabled}
             autoCheckinEnabled={autoCheckinEnabled}
-            setAutoCheckinEnabled={setAutoCheckinEnabled}
+            setAutoCheckinEnabled={saveAutoCheckinEnabled}
             studentNotesEnabled={studentNotesEnabled}
-            setStudentNotesEnabled={setStudentNotesEnabled}
+            setStudentNotesEnabled={saveStudentNotesEnabled}
             groupLessonsEnabled={groupLessonsEnabled}
-            setGroupLessonsEnabled={setGroupLessonsEnabled}
+            setGroupLessonsEnabled={saveGroupLessonsEnabled}
             emptySlotNotificationEnabled={emptySlotNotificationEnabled}
-            setEmptySlotNotificationEnabled={setEmptySlotNotificationEnabled}
+            setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
             emptySlotNotificationTarget={emptySlotNotificationTarget}
-            setEmptySlotNotificationTarget={(v) => setEmptySlotNotificationTarget(v as "all" | "availability_matching")}
+            setEmptySlotNotificationTarget={(v) => saveEmptySlotNotificationTarget(v as "all" | "availability_matching")}
             emptySlotNotificationTimes={emptySlotNotificationTimes}
-            setEmptySlotNotificationTimes={setEmptySlotNotificationTimes}
+            setEmptySlotNotificationTimes={saveEmptySlotNotificationTimes}
             triggeringNotification={triggeringNotification}
             setTriggeringNotification={setTriggeringNotification}
             instructorPreferenceEnabled={instructorPreferenceEnabled}
-            setInstructorPreferenceEnabled={setInstructorPreferenceEnabled}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
+            setInstructorPreferenceEnabled={saveInstructorPreferenceEnabled}
             toast={toast}
           />
         </KeepAlivePane>
