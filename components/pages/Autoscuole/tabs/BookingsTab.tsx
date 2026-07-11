@@ -556,7 +556,7 @@ export default function BookingsTab({
         <div className="py-6">
           <SettingRow
             title="Prenotazioni aperte dal"
-            description="Prima di questa data il calendario resta chiuso alle prenotazioni. Lascia vuoto per nessun limite."
+            description="Prima di questa data il calendario resta chiuso alle prenotazioni."
             control={
               // "Rimuovi" vive DENTRO il bordo dell'input (come nel proto):
               // sibling assoluto sopra il trigger, che resta un <button> singolo.
@@ -564,10 +564,10 @@ export default function BookingsTab({
                 <DatePickerInput
                   value={bookingMinStartDate}
                   onChange={setBookingMinStartDate}
-                  placeholder="Nessun limite"
+                  placeholder="Lascia vuoto per nessun limite."
                   // Stessa metrica delle select del pane (h-11, radius 10, bordo 1.5)
                   className={cn(
-                    "h-11 w-[240px] rounded-[10px] border-[1.5px] px-3.5",
+                    "h-11 w-[270px] rounded-[10px] border-[1.5px] px-3.5",
                     bookingMinStartDate && "pr-[76px]",
                   )}
                 />
