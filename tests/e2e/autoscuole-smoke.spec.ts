@@ -246,5 +246,12 @@ test.describe("Autoscuole smoke", () => {
     await pane.getByRole("button", { name: "App allievi", exact: true }).click();
     await expect(pane.getByText("Notifica slot disponibili domani")).toBeVisible();
     await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
+
+    // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
+    await pane.getByRole("button", { name: "Crediti e prezzi", exact: true }).click();
+    await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
+    await expect(pane.getByText("Cancellazioni tardive")).toBeVisible();
+    // niente bottone Salva qui: il tab salva da solo
+    await expect(pane.getByRole("button", { name: "Salva configurazione" })).toBeHidden();
   });
 });

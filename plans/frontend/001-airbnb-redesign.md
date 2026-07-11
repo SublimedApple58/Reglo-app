@@ -274,6 +274,12 @@ Richiesta utente: i pane "Prenotazioni" e "Gestione allievi" trattavano cose sim
 - e2e `autoscuole-smoke.spec.ts`: test rinominato "prenotazioni e allievi", naviga col deep-link legacy `pane=students` (verifica il redirect) e tocca i 4 sub-tab. PASSA.
 - Docs: group-lessons.md + impact-map.md aggiornati (riferimenti StudentsTab→BookingsTab).
 
+**Iterazioni post-prima-implementazione (stesso giorno)**:
+- "Rimuovi" della data DENTRO il bordo dell'input (bottone assoluto sopra il trigger, `pr-[76px]` quando c'è una data); placeholder = "Lascia vuoto per nessun limite." (input 270px), frase tolta dalla descrizione.
+- Bottone "Fatto" degli overlay SEMPRE con bg grigio #f2f2f2 (hover #e8e8e8) — allineati anche AreaPersonale/Assistenza/OreGuida.
+- **SelectTrigger default → bg-white** (`components/ui/select.tsx`, era bg-secondary grigio): vale per tutta l'app. Input data allineato alle select (h-11, radius 10, bordo 1.5, px-3.5).
+- **Pane "Fatturazione e pagamenti" ELIMINATO dalla sidebar** (2026-07-11, carta bianca utente: il nome era sbagliato, niente fatturazione lì dentro): `PaymentsSettingsPane` (self-contained, auto-save) ora è il **5° sub-tab "Crediti e prezzi"** di Prenotazioni e allievi. Legacy `?pane=payments` → bookings. Bottone "Salva configurazione" nascosto su quel sub-tab (salva da solo). Gruppo 1 sidebar ridotto a Informazioni aziendali + Sede e luoghi. e2e aggiornato (verifica sub-tab + assenza del bottone Salva).
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

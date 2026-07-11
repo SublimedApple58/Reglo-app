@@ -15,6 +15,7 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import PaymentsSettingsPane from "@/components/pages/Autoscuole/PaymentsSettingsPane";
 import { cn } from "@/lib/utils";
 import {
   NATIONAL_HOLIDAYS,
@@ -96,13 +97,14 @@ export type BookingsTabProps = {
   toast: { success: (opts: { description: string }) => void; error: (opts: { description: string }) => void };
 };
 
-type SubTab = "generali" | "limiti" | "guide" | "app";
+type SubTab = "generali" | "limiti" | "guide" | "app" | "crediti";
 
 const SUB_TABS: Array<{ key: SubTab; label: string }> = [
   { key: "generali", label: "Generali" },
   { key: "limiti", label: "Limiti" },
   { key: "guide", label: "Guide" },
   { key: "app", label: "App allievi" },
+  { key: "crediti", label: "Crediti e prezzi" },
 ];
 
 const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
@@ -991,16 +993,24 @@ export default function BookingsTab({
         <RegistrationSection />
       </div>
 
-      {/* Save */}
-      <div className="mt-3 flex justify-end border-t border-[#ebebeb] pt-5">
-        <Button
-          onClick={handleSaveSettings}
-          disabled={savingSettings}
-          className="min-w-[180px]"
-        >
-          {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-        </Button>
+      {/* ══ CREDITI E PREZZI ══ */}
+      {/* Ex pane "Fatturazione e pagamenti": self-contained, auto-save. */}
+      <div className={cn("pt-6", subTab !== "crediti" && "hidden")}>
+        <PaymentsSettingsPane />
       </div>
+
+      {/* Save (nascosto su Crediti e prezzi: quel tab salva da solo) */}
+      {subTab !== "crediti" && (
+        <div className="mt-3 flex justify-end border-t border-[#ebebeb] pt-5">
+          <Button
+            onClick={handleSaveSettings}
+            disabled={savingSettings}
+            className="min-w-[180px]"
+          >
+            {savingSettings ? "Salvataggio..." : "Salva configurazione"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

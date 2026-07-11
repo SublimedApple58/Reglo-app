@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, CreditCard, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, UserRoundCog, X, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, X, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,6 @@ import SettingsTab, { type SettingsSectionKey } from "./tabs/SettingsTab";
 import InstructorsTab from "./tabs/InstructorsTab";
 import BookingsTab from "./tabs/BookingsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
-import PaymentsSettingsPane from "./PaymentsSettingsPane";
 import { VoiceSettingsPane } from "./VoiceSettingsPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
@@ -273,7 +272,6 @@ type OverrideInfo = {
 type ConfigPane =
   | "business"
   | "locations"
-  | "payments"
   | "bookings"
   | "policy"
   | "reminders"
@@ -290,7 +288,6 @@ const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: Lu
   [
     { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
     { key: "locations", label: "Sede e luoghi", icon: MapPin },
-    { key: "payments", label: "Fatturazione e pagamenti", icon: CreditCard },
   ],
   [
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarDays },
@@ -328,7 +325,6 @@ function KeepAlivePane({
 const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   business: "Informazioni aziendali",
   locations: "Sede e luoghi",
-  payments: "Fatturazione e pagamenti",
   bookings: "Prenotazioni e allievi",
   policy: "Policy tipi guida",
   reminders: "Promemoria e notifiche",
@@ -347,10 +343,10 @@ export function AutoscuoleResourcesPage({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
-    // "students" è il vecchio pane Gestione allievi, ora fuso in "bookings"
-    // (link legacy in giro per l'app e nelle notifiche).
+    // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
+    // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
     const raw = searchParams?.get("pane");
-    const pane = raw === "students" ? "bookings" : raw;
+    const pane = raw === "students" || raw === "payments" ? "bookings" : raw;
     return pane && CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
       ? (pane as ConfigPane)
       : "bookings";
@@ -1943,9 +1939,6 @@ export function AutoscuoleResourcesPage({
             {renderSettingsSection(section)}
           </KeepAlivePane>
         ))}
-        <KeepAlivePane active={configTab === "payments"} eager={mountAllPanes}>
-          <PaymentsSettingsPane />
-        </KeepAlivePane>
         <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
             instructors={instructors}
