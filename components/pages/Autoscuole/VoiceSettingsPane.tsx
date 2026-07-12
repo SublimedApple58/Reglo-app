@@ -217,13 +217,25 @@ export function VoiceSettingsPane() {
     setVoiceTranscriptionEnabled(d.voiceTranscriptionEnabled !== false);
     setVoiceHandoffPhone(d.voiceHandoffPhone ?? null);
     setVoiceHandoffDuringCallEnabled(d.voiceHandoffDuringCallEnabled ?? false);
-    setVoiceHandoffDuringCallInstructions(d.voiceHandoffDuringCallInstructions ?? "");
     setVoiceOfficeDays(normalizeDays(Array.from(d.voiceOfficeHours?.daysOfWeek ?? [1, 2, 3, 4, 5])));
     setVoiceOfficeStartMinutes(d.voiceOfficeHours?.startMinutes ?? 9 * 60);
     setVoiceOfficeEndMinutes(d.voiceOfficeHours?.endMinutes ?? 19 * 60);
-    setVoiceInstructions(d.voiceInstructions ?? "");
-    setVoiceCustomGreeting(d.voiceCustomGreeting ?? "");
-    setVoiceCustomGreetingEnabled(Boolean(d.voiceCustomGreeting));
+    // Le textarea si riallineano al server solo se il valore salvato è davvero
+    // cambiato: il save di un campo qualsiasi non deve buttare via bozze locali
+    // né spegnere il toggle del saluto appena acceso ma non ancora salvato.
+    const serverGreeting = d.voiceCustomGreeting ?? "";
+    const serverRules = d.voiceHandoffDuringCallInstructions ?? "";
+    const serverInstructions = d.voiceInstructions ?? "";
+    if (serverRules !== savedTextsRef.current.rules) {
+      setVoiceHandoffDuringCallInstructions(serverRules);
+    }
+    if (serverInstructions !== savedTextsRef.current.instructions) {
+      setVoiceInstructions(serverInstructions);
+    }
+    if (serverGreeting !== savedTextsRef.current.greeting) {
+      setVoiceCustomGreeting(serverGreeting);
+      setVoiceCustomGreetingEnabled(Boolean(serverGreeting));
+    }
     const VALID_ACTIONS: VoiceAllowedAction[] = ["faq", "lesson_info", "booking"];
     const loaded = (d.voiceAllowedActions ?? []).filter((a): a is VoiceAllowedAction =>
       VALID_ACTIONS.includes(a as VoiceAllowedAction),
@@ -386,7 +398,13 @@ export function VoiceSettingsPane() {
   const toggleCustomGreeting = () => {
     if (voiceCustomGreetingEnabled) {
       // Spegnere il saluto personalizzato lo cancella (comportamento attuale).
-      save({ voiceCustomGreeting: null }, "greeting-toggle");
+      if (savedTextsRef.current.greeting) {
+        save({ voiceCustomGreeting: null }, "greeting-toggle");
+      } else {
+        // Niente di salvato sul server: basta chiudere localmente.
+        setVoiceCustomGreetingEnabled(false);
+        setVoiceCustomGreeting("");
+      }
     } else {
       setVoiceCustomGreetingEnabled(true);
     }
