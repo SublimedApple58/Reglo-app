@@ -1586,7 +1586,7 @@ export function AutoscuoleResourcesPage({
                           "flex shrink-0 cursor-pointer select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
                           active
                             ? "bg-[#f2f2f2] font-semibold text-foreground"
-                            : "font-medium text-[#444444] hover:bg-[#ebebeb] hover:text-foreground",
+                            : "font-medium text-[#444444] hover:text-foreground",
                         )}
                       >
                         <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />

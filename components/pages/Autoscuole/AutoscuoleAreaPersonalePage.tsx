@@ -800,7 +800,7 @@ export function AutoscuoleAreaPersonalePage() {
                     "flex shrink-0 cursor-pointer items-center gap-4 rounded-[10px] px-5 py-4 text-left text-lg transition-colors",
                     pane === item.key
                       ? "bg-[#e8e8e8] font-semibold text-foreground"
-                      : "font-medium text-[#444444] hover:bg-[#ebebeb] hover:text-foreground",
+                      : "font-medium text-[#444444] hover:text-foreground",
                   )}
                 >
                   {item.icon}
