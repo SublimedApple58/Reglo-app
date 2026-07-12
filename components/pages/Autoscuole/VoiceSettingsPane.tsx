@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Loader2, X } from "lucide-react";
+import { AlertTriangle, X } from "lucide-react";
 
 import {
   getAutoscuolaSettings,
@@ -12,6 +12,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -122,7 +123,7 @@ function ToggleRow({
       </div>
       <div className="flex shrink-0 items-center">
         {saving ? (
-          <Loader2 className="size-5 animate-spin text-[#929292]" />
+          <LoadingDots className="text-[#929292]" />
         ) : (
           <InlineToggle checked={checked} size="lg" onChange={onToggle} />
         )}
@@ -528,8 +529,7 @@ export function VoiceSettingsPane() {
                     disabled={savingKey === "handoff"}
                     className="inline-flex min-h-10 min-w-[78px] cursor-pointer items-center justify-center gap-2 rounded-lg bg-navy-900 px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
                   >
-                    {savingKey === "handoff" && <Loader2 className="size-3.5 animate-spin" />}
-                    Salva
+                    {savingKey === "handoff" ? <LoadingDots /> : "Salva"}
                   </button>
                   <button
                     type="button"
@@ -551,7 +551,7 @@ export function VoiceSettingsPane() {
               </div>
             </div>
             {savingKey === "linea" ? (
-              <Loader2 className="size-5 animate-spin text-[#929292]" />
+              <LoadingDots className="text-[#929292]" />
             ) : (
               <InlineToggle checked size="lg" onChange={() => setDeactivateOpen(true)} />
             )}
@@ -867,8 +867,7 @@ export function VoiceSettingsPane() {
                   disabled={savingKey === "linea"}
                   className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#c13515] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#a92d10] disabled:opacity-60"
                 >
-                  {savingKey === "linea" && <Loader2 className="size-4 animate-spin" />}
-                  Disattiva
+                  {savingKey === "linea" ? <LoadingDots className="min-h-[1.5em]" /> : "Disattiva"}
                 </button>
               </div>
             </motion.div>

@@ -11,6 +11,7 @@ import {
   type SupportMessageDto,
 } from "@/lib/actions/support.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 
 const THREADS_POLL_MS = 30_000;
@@ -307,7 +308,7 @@ export function BackofficeSupportPage({
                       className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800 disabled:cursor-default disabled:opacity-40"
                     >
                       {sending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={2} />
+                        <LoadingDots className="scale-[0.55]" />
                       ) : (
                         <ArrowUp className="h-3.5 w-3.5" strokeWidth={2} />
                       )}

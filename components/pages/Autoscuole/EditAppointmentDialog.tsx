@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
 import { TimePickerInput } from "@/components/ui/time-picker";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
@@ -597,8 +598,7 @@ export function EditAppointmentDialog({
             onClick={handleSubmit}
             className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
           >
-            {pending && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-            Salva modifiche
+            {pending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
           </button>
         </>
       }

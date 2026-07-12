@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, Clock, GraduationCap, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, GraduationCap } from "lucide-react";
 
 import {
   Dialog,
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -223,8 +224,7 @@ export function BackofficeResolveTeoriaDeactivationDialog({
               Annulla
             </Button>
             <Button size="sm" onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Conferma e disattiva TEORIA
+              {isSubmitting ? <LoadingDots /> : "Conferma e disattiva TEORIA"}
             </Button>
           </div>
         </DialogFooter>

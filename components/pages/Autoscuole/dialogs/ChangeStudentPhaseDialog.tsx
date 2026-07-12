@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, GraduationCap, Car, Award, AlertCircle, Hourglass } from "lucide-react";
+import { GraduationCap, Car, Award, AlertCircle, Hourglass } from "lucide-react";
 
 import {
   Dialog,
@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateStudentPhase } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 
 export type StudentPhase = "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
 
@@ -279,8 +280,7 @@ export function ChangeStudentPhaseDialog({
               disabled={saving || phase === currentPhase || isBlocked}
               className="cursor-pointer"
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-              {saving ? "Salvataggio…" : "Aggiorna fase"}
+              {saving ? <LoadingDots /> : "Aggiorna fase"}
             </Button>
           </DialogFooter>
         </form>

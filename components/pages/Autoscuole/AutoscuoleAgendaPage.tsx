@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, Info, Car, Bike } from "lucide-react";
+import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike } from "lucide-react";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
@@ -56,6 +56,7 @@ import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type 
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   OutOfAvailabilitySheet,
   type OutOfAvailabilityAppointment,
@@ -2938,8 +2939,7 @@ export function AutoscuoleAgendaPage({
               onClick={handleCreate}
               className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
             >
-              {creating && <Loader2 className="size-3.5 animate-spin" />}
-              Crea guida
+              {creating ? <LoadingDots className="min-h-5" /> : "Crea guida"}
             </button>
           </>
         }
@@ -3595,8 +3595,7 @@ export function AutoscuoleAgendaPage({
                 }
               }}
             >
-              {examCreating && <Loader2 className="size-3.5 animate-spin" />}
-              Crea esame
+              {examCreating ? <LoadingDots className="min-h-5" /> : "Crea esame"}
             </button>
           </>
         }
@@ -3759,8 +3758,7 @@ export function AutoscuoleAgendaPage({
                 toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
               }}
             >
-              {blockCreating && <Loader2 className="size-3.5 animate-spin" />}
-              Crea evento
+              {blockCreating ? <LoadingDots className="min-h-5" /> : "Crea evento"}
             </button>
           </>
         }

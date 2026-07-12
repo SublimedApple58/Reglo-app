@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { KeyRound, Loader2, Plus, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
+import { KeyRound, Plus, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -63,6 +63,7 @@ import { useAtomValue } from "jotai";
 import { companyAtom } from "@/atoms/company.store";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
 
 type StudentProfile = {
@@ -2112,11 +2113,13 @@ export function AutoscuoleStudentsPage({
             <DialogFooter>
               <Button type="submit" disabled={createSaving} className="w-full sm:w-auto">
                 {createSaving ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <LoadingDots />
                 ) : (
-                  <UserPlus className="mr-2 h-4 w-4" />
+                  <>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Crea account
+                  </>
                 )}
-                {createSaving ? "Creazione…" : "Crea account"}
               </Button>
             </DialogFooter>
           </form>

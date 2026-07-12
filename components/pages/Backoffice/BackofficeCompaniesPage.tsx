@@ -20,6 +20,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Drawer,
@@ -441,11 +442,13 @@ function AutoscuolaDrawerContent({
                 disabled={isUnassigning}
               >
                 {isUnassigning ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
+                  <LoadingDots />
                 ) : (
-                  <PhoneOff className="h-3 w-3" />
+                  <>
+                    <PhoneOff className="h-3 w-3" />
+                    Scollega
+                  </>
                 )}
-                {isUnassigning ? "..." : "Scollega"}
               </Button>
             </div>
           ) : voiceProvisioningStatus === "pending_approval" ? (
@@ -472,11 +475,13 @@ function AutoscuolaDrawerContent({
                 disabled={isCheckingStatus}
               >
                 {isCheckingStatus ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <LoadingDots />
                 ) : (
-                  <CircleCheck className="h-4 w-4" />
+                  <>
+                    <CircleCheck className="h-4 w-4" />
+                    Verifica stato numero
+                  </>
                 )}
-                {isCheckingStatus ? "Verifica in corso..." : "Verifica stato numero"}
               </Button>
             </div>
           ) : (
@@ -489,11 +494,13 @@ function AutoscuolaDrawerContent({
                 disabled={isProvisioning}
               >
                 {isProvisioning ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <LoadingDots />
                 ) : (
-                  <Phone className="h-4 w-4" />
+                  <>
+                    <Phone className="h-4 w-4" />
+                    Acquista nuovo numero
+                  </>
                 )}
-                {isProvisioning ? "Acquisto numero in corso..." : "Acquista nuovo numero"}
               </Button>
               {isProvisioning && (
                 <p className="text-center text-[11px] text-muted-foreground">
@@ -559,8 +566,7 @@ function AutoscuolaDrawerContent({
                       ((assignRoutingMode === "twilio" || assignRoutingMode === "telnyx") && !assignTwilioSid.trim())
                     }
                   >
-                    {isAssigning && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                    {isAssigning ? "Assegnazione..." : "Assegna linea"}
+                    {isAssigning ? <LoadingDots /> : "Assegna linea"}
                   </Button>
                 </div>
               )}
@@ -1023,7 +1029,7 @@ export default function BackofficeCompaniesPage({
                           disabled={deletingId === company.id}
                         >
                           {deletingId === company.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <LoadingDots className="scale-[0.6]" />
                           ) : (
                             <Trash2 className="h-3.5 w-3.5" />
                           )}

@@ -2,10 +2,11 @@
 
 import React from "react";
 import { useAtom } from "jotai";
-import { Camera, Loader2 } from "lucide-react";
+import { Camera } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
 import { companyAtom } from "@/atoms/company.store";
@@ -232,11 +233,13 @@ export function BusinessInfoPane() {
               un ring 1px #d9d9d9 dentro la box-shadow */}
           <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-[7px] whitespace-nowrap rounded-full bg-white px-[15px] py-2 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]">
             {uploading ? (
-              <Loader2 className="size-4 animate-spin text-foreground" />
+              <LoadingDots className="min-h-5 text-foreground" />
             ) : (
-              <Camera className="size-4 text-foreground" strokeWidth={1.7} />
+              <>
+                <Camera className="size-4 text-foreground" strokeWidth={1.7} />
+                <span className="text-sm font-semibold text-foreground">Modifica</span>
+              </>
             )}
-            <span className="text-sm font-semibold text-foreground">Modifica</span>
           </span>
         </button>
       </div>
@@ -271,7 +274,7 @@ export function BusinessInfoPane() {
                       onClick={() => void handleSave(field)}
                       className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
                     >
-                      {saving ? <Loader2 className="size-4 animate-spin" /> : "Salva"}
+                      {saving ? <LoadingDots /> : "Salva"}
                     </button>
                     <button
                       type="button"

@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   getGroupLesson,
   getAutoscuolaVehicles,
@@ -383,7 +384,7 @@ export function GroupLessonManageDialog({
                           <div className="flex justify-end gap-2">
                             <Button type="button" variant="ghost" size="sm" className="cursor-pointer" disabled={busy} onClick={() => setNoteEditing(null)}>Annulla</Button>
                             <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={() => handleSaveNote(p.appointmentId)}>
-                              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva nota
+                              {busy ? <LoadingDots /> : "Salva nota"}
                             </Button>
                           </div>
                         </div>
@@ -542,7 +543,7 @@ export function GroupLessonManageDialog({
                 </div>
               ) : null}
               <Button type="button" size="sm" className="w-full cursor-pointer" disabled={busy} onClick={handleSaveEdit}>
-                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva modifiche
+                {busy ? <LoadingDots /> : "Salva modifiche"}
               </Button>
             </div>
 

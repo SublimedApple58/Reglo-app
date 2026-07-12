@@ -2,11 +2,11 @@
 
 import React from "react";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
 
 import { sendBroadcastPush } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -142,8 +142,7 @@ export function ComunicatoDialog({
                 disabled={!canSend}
                 className="flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-[12px] bg-gradient-to-br from-[#2d2d4a] to-[#1a1a2e] py-3.5 text-[15px] font-semibold text-white shadow-[0_6px_18px_rgba(26,26,46,0.35)] transition-opacity hover:opacity-95 disabled:cursor-default disabled:opacity-50"
               >
-                {sending && <Loader2 className="size-4 animate-spin" />}
-                Invia notifica
+                {sending ? <LoadingDots className="min-h-[1.5em]" /> : "Invia notifica"}
               </button>
             </div>
           </>

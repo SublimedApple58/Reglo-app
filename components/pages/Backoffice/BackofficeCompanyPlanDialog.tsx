@@ -4,6 +4,7 @@ import React from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import {
   Dialog,
@@ -404,15 +405,13 @@ export function BackofficeCompanyPlanDialog({
                   onClick={() => void remove()}
                   disabled={removing || saving}
                 >
-                  {removing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Rimuovi piano
+                  {removing ? <LoadingDots /> : "Rimuovi piano"}
                 </Button>
               ) : (
                 <span />
               )}
               <Button onClick={() => void save()} disabled={!parsed.valid || saving || removing}>
-                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                {hasPlan ? "Salva piano" : "Assegna piano"}
+                {saving ? <LoadingDots /> : hasPlan ? "Salva piano" : "Assegna piano"}
               </Button>
             </div>
 
@@ -453,7 +452,7 @@ export function BackofficeCompanyPlanDialog({
                         className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
                       >
                         {deletingPurchaseId === purchase.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <LoadingDots className="scale-[0.6]" />
                         ) : (
                           <Trash2 className="h-4 w-4" strokeWidth={1.8} />
                         )}
@@ -499,13 +498,15 @@ export function BackofficeCompanyPlanDialog({
                     disabled={!parsedPurchase.valid || addingPurchase}
                   >
                     {addingPurchase ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <LoadingDots />
                     ) : (
-                      <Plus className="h-3.5 w-3.5" />
+                      <>
+                        <Plus className="h-3.5 w-3.5" />
+                        Registra acquisto
+                        {parsedPurchase.totalCents !== null &&
+                          ` · ${formatEuroCents(parsedPurchase.totalCents)}`}
+                      </>
                     )}
-                    Registra acquisto
-                    {parsedPurchase.totalCents !== null &&
-                      ` · ${formatEuroCents(parsedPurchase.totalCents)}`}
                   </Button>
                 </div>
               </div>

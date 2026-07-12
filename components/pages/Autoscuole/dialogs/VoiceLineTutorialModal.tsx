@@ -4,7 +4,9 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronDown, HelpCircle, Loader2, Smartphone, Phone, X } from "lucide-react";
+import { ChevronDown, HelpCircle, Smartphone, Phone, X } from "lucide-react";
+
+import { LoadingDots } from "@/components/ui/loading-dots";
 
 import { cn } from "@/lib/utils";
 
@@ -343,8 +345,7 @@ export function VoiceLineTutorialModal({
                         : "cursor-not-allowed bg-[#e6e6e6] text-[#a8a8a8]",
                     )}
                   >
-                    {activating && <Loader2 className="size-4 animate-spin" />}
-                    Attiva segretaria
+                    {activating ? <LoadingDots className="min-h-[1.5em]" /> : "Attiva segretaria"}
                   </button>
                 </div>
               </div>

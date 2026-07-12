@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Clock,
   IdCard,
-  Loader2,
   MessageCircle,
   Phone,
   Plus,
@@ -29,6 +28,7 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 
 const SUPPORT_WHATSAPP = "https://wa.me/393477756855";
@@ -484,7 +484,7 @@ export function AutoscuoleAssistenzaPage() {
                 )}
               >
                 {sending ? (
-                  <Loader2 className="size-[18px] animate-spin" strokeWidth={2} />
+                  <LoadingDots className="scale-[0.6]" />
                 ) : (
                   <ArrowUp className="size-[18px]" strokeWidth={2} />
                 )}

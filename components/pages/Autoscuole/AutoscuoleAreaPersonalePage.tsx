@@ -11,13 +11,13 @@ import {
   CreditCard,
   Download,
   FileText,
-  Loader2,
   Receipt,
 } from "lucide-react";
 
 import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/user.store";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { FadeIn } from "@/components/ui/fade-in";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getCompanyDocumentDownloadUrl,
@@ -205,13 +205,17 @@ function ProfiloPane() {
               {initials}
             </span>
           )}
-          <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+          {/* Pill dal proto (photoBtnStyle): niente bordo, all'hover si aggiunge
+              un ring 1px #d9d9d9 dentro la box-shadow */}
+          <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-[7px] whitespace-nowrap rounded-full bg-white px-[15px] py-2 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]">
             {uploading ? (
-              <Loader2 className="size-4 animate-spin text-foreground" />
+              <LoadingDots className="min-h-5 text-foreground" />
             ) : (
-              <Camera className="size-4 text-foreground" strokeWidth={1.7} />
+              <>
+                <Camera className="size-4 text-foreground" strokeWidth={1.7} />
+                <span className="text-sm font-semibold text-foreground">Modifica</span>
+              </>
             )}
-            <span className="text-sm font-semibold text-foreground">Modifica</span>
           </span>
         </button>
         <div className="mt-5 text-center">
@@ -249,8 +253,7 @@ function ProfiloPane() {
                   disabled={resetRequesting}
                   className="flex shrink-0 cursor-pointer select-none items-center gap-2 rounded-[10px] border border-[#dddddd] px-4 py-2.5 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-[#f7f7f7] disabled:pointer-events-none disabled:opacity-60"
                 >
-                  {resetRequesting && <Loader2 className="size-4 animate-spin" />}
-                  Reimposta password
+                  {resetRequesting ? <LoadingDots className="min-h-5" /> : "Reimposta password"}
                 </button>
               </div>
             ) : (
@@ -317,8 +320,11 @@ function ProfiloPane() {
                     disabled={resetSubmitting}
                     className="flex cursor-pointer select-none items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-black disabled:pointer-events-none disabled:opacity-60"
                   >
-                    {resetSubmitting && <Loader2 className="size-4 animate-spin" />}
-                    Conferma nuova password
+                    {resetSubmitting ? (
+                      <LoadingDots className="min-h-5" />
+                    ) : (
+                      "Conferma nuova password"
+                    )}
                   </button>
                   <button
                     type="button"
@@ -395,7 +401,7 @@ function DocumentiPane() {
       className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#929292] hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
     >
       {downloadingId === doc.id ? (
-        <Loader2 className="size-4 animate-spin" />
+        <LoadingDots className="scale-[0.6]" />
       ) : (
         <Download className="size-4" strokeWidth={1.7} />
       )}

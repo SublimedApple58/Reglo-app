@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AlertCircle, CalendarDays, Loader2, Sparkles } from "lucide-react";
+import { AlertCircle, CalendarDays, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -283,14 +284,7 @@ export function RescheduleAppointmentDialog({
             Annulla
           </Button>
           <Button type="button" onClick={handleSubmit} disabled={!canSubmit}>
-            {pending ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Spostando…
-              </>
-            ) : (
-              "Sposta guida"
-            )}
+            {pending ? <LoadingDots /> : "Sposta guida"}
           </Button>
         </DialogFooter>
       </DialogContent>

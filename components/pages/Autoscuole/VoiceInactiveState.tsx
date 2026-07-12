@@ -3,10 +3,11 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { sendSupportMessage } from "@/lib/actions/support.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 
 /**
  * Stato "Segretaria AI non ancora attivata sull'autoscuola" (feature flag off),
@@ -77,8 +78,7 @@ export function VoiceInactiveState() {
           disabled={sending}
           className="mt-6 inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-[26px] py-3 text-[15px] font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
         >
-          {sending && <Loader2 className="size-4 animate-spin" />}
-          Richiedi attivazione
+          {sending ? <LoadingDots className="min-h-[1.5em]" /> : "Richiedi attivazione"}
         </button>
       )}
     </div>

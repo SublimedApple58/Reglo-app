@@ -14,6 +14,7 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import PaymentsSettingsPane from "@/components/pages/Autoscuole/PaymentsSettingsPane";
 import { cn } from "@/lib/utils";
 import {
@@ -402,9 +403,7 @@ function RegistrationSection() {
         checked={enabled}
         onToggle={() => void handleToggle()}
         control={
-          saving || loading ? (
-            <Loader2 className="size-5 shrink-0 animate-spin text-[#929292]" />
-          ) : undefined
+          saving || loading ? <LoadingDots className="shrink-0 text-[#929292]" /> : undefined
         }
       />
       {!enabled && available > 0 && (
@@ -986,11 +985,13 @@ export default function BookingsTab({
                   className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-[8px] border-[1.5px] border-[#dddddd] px-4 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
                 >
                   {triggeringNotification ? (
-                    <Loader2 className="size-[13px] animate-spin" />
+                    <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
                   ) : (
-                    <Send className="size-[13px]" strokeWidth={1.7} />
+                    <>
+                      <Send className="size-[13px]" strokeWidth={1.7} />
+                      Invia notifica
+                    </>
                   )}
-                  {triggeringNotification ? "Invio in corso..." : "Invia notifica"}
                 </button>
               </div>
             </>

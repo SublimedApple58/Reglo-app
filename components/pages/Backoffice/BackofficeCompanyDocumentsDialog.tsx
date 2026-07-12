@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   deleteBackofficeCompanyDocument,
   getBackofficeCompanyDocuments,
@@ -76,7 +77,7 @@ function DocumentRow({
         className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 disabled:pointer-events-none disabled:opacity-50"
       >
         {deleting ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <LoadingDots className="scale-[0.6]" />
         ) : (
           <Trash2 className="h-4 w-4" strokeWidth={1.8} />
         )}
@@ -246,11 +247,13 @@ export function BackofficeCompanyDocumentsDialog({
                       onClick={() => inputRefs[section.kind].current?.click()}
                     >
                       {uploadingKind === section.kind ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <LoadingDots />
                       ) : (
-                        <Upload className="h-3.5 w-3.5" />
+                        <>
+                          <Upload className="h-3.5 w-3.5" />
+                          {section.uploadLabel}
+                        </>
                       )}
-                      {section.uploadLabel}
                     </Button>
                   </div>
                   {sectionDocs.length > 0 ? (

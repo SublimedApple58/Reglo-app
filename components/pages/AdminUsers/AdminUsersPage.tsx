@@ -21,13 +21,13 @@ import {
   resendCompanyInvite,
 } from "@/lib/actions/invite.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import {
   Bell,
   ChevronLeft,
   ChevronRight,
   ListFilter,
-  Loader2,
   MailPlus,
   MoreHorizontal,
   Search,
@@ -565,11 +565,13 @@ export function AdminUsersPage({
             <DialogFooter>
               <Button type="submit" disabled={pushSending} className="w-full sm:w-auto">
                 {pushSending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <LoadingDots />
                 ) : (
-                  <Bell className="mr-2 h-4 w-4" />
+                  <>
+                    <Bell className="mr-2 h-4 w-4" />
+                    Invia notifica
+                  </>
                 )}
-                {pushSending ? "Invio in corso…" : "Invia notifica"}
               </Button>
             </DialogFooter>
           </form>
@@ -763,8 +765,7 @@ function UserDetailPanelContent({
                   disabled={resending}
                   className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
                 >
-                  {resending && <Loader2 className="size-4 animate-spin" />}
-                  Reinvia invito
+                  {resending ? <LoadingDots className="min-h-5" /> : "Reinvia invito"}
                 </button>
                 <button
                   type="button"
@@ -824,8 +825,7 @@ function UserDetailPanelContent({
                     disabled={saving || !dirty}
                     className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:opacity-50"
                   >
-                    {saving && <Loader2 className="size-4 animate-spin" />}
-                    Salva modifiche
+                    {saving ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
                   </button>
                 )}
               </div>
@@ -842,8 +842,11 @@ function UserDetailPanelContent({
                     disabled={testPushing}
                     className="flex cursor-pointer items-center gap-2 text-[13px] font-semibold text-[#428bff] hover:underline disabled:opacity-60"
                   >
-                    {testPushing && <Loader2 className="size-3.5 animate-spin" />}
-                    Invia notifica di prova
+                    {testPushing ? (
+                      <LoadingDots className="min-h-[19px] scale-[0.8]" />
+                    ) : (
+                      "Invia notifica di prova"
+                    )}
                   </button>
                   <button
                     type="button"

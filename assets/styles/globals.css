@@ -423,6 +423,21 @@
   }
 }
 
+/* Loading dots (proto .ab-dots) — 3 puntini che pulsano a cascata, lo stato
+   di loading unico di TUTTI i bottoni (componente ui/loading-dots.tsx) */
+@keyframes loading-dots-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.4);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
 /* Skeleton shimmer — sweep di luce sui placeholder (skeleton "vivi") */
 @keyframes skeleton-shimmer {
   0% {

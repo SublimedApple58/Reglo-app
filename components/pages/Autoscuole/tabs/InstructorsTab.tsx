@@ -16,6 +16,7 @@ import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import {
   updateAutoscuolaInstructor,
@@ -1012,8 +1013,7 @@ function CalendarOverrides({
               onClick={() => void applyRecurring()}
               className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-navy-900 px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
             >
-              {applyingRec && <Loader2 className="size-3.5 animate-spin" />}
-              Applica
+              {applyingRec ? <LoadingDots className="min-h-[1.5em]" /> : "Applica"}
             </button>
           </div>
           <div className="mt-2">
@@ -1187,8 +1187,7 @@ function MalattiaTab({
         onClick={() => void save()}
         className="mt-[18px] flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 p-[13px] text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
       >
-        {saving && <Loader2 className="size-4 animate-spin" />}
-        Aggiungi assenza
+        {saving ? <LoadingDots className="min-h-5" /> : "Aggiungi assenza"}
       </button>
 
       {loaded && periods.length > 0 && (

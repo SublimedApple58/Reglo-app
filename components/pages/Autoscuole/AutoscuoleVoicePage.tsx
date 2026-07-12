@@ -13,6 +13,7 @@ import {
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
 import {
@@ -20,7 +21,6 @@ import {
   RefreshCw,
   CheckCircle2,
   Info,
-  Loader2,
   Pause,
   Play,
   Settings,
@@ -556,8 +556,14 @@ export function AutoscuoleVoicePage() {
                     disabled={loadingCallbacks}
                     className="flex cursor-pointer items-center gap-2 rounded-[20px] border border-[#ebebeb] bg-[#f7f7f7] px-4 py-2 text-[13px] font-semibold text-foreground transition-colors hover:bg-[#f0f0f0] disabled:opacity-60"
                   >
-                    <RefreshCw className={cn("size-3.5", loadingCallbacks && "animate-spin")} strokeWidth={1.6} />
-                    Aggiorna
+                    {loadingCallbacks ? (
+                      <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
+                    ) : (
+                      <>
+                        <RefreshCw className="size-3.5" strokeWidth={1.6} />
+                        Aggiorna
+                      </>
+                    )}
                   </button>
                 </div>
                 {!callbacksLoaded ? (
@@ -632,11 +638,13 @@ export function AutoscuoleVoicePage() {
                               )}
                             >
                               {markingDone === task.id ? (
-                                <Loader2 className="size-3 animate-spin" />
+                                <LoadingDots className="min-h-[1.5em] scale-[0.7]" />
                               ) : (
-                                <CheckCircle2 className="size-3 text-[#1a7f50]" />
+                                <>
+                                  <CheckCircle2 className="size-3 text-[#1a7f50]" />
+                                  Fatto
+                                </>
                               )}
-                              Fatto
                             </button>
                           </div>
                         </div>

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import {
   createGroupLesson,
@@ -735,11 +736,13 @@ export function GroupLessonCreateDialog({
               onClick={handleCreate}
             >
               {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <LoadingDots />
               ) : (
-                <Plus className="mr-1.5 h-4 w-4" />
+                <>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Crea guida di gruppo
+                </>
               )}
-              Crea guida di gruppo
             </Button>
           </div>
         )}
