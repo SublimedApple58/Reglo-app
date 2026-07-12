@@ -168,7 +168,7 @@ function Seg<T extends string>({
             onClick={() => onChange(o.v)}
             className={cn(
               "cursor-pointer font-semibold transition-all",
-              small ? "rounded-[7px] px-[11px] py-1.5 text-[12.5px]" : "flex-1 rounded-lg px-2 py-[9px] text-center text-[13.5px]",
+              small ? "rounded-[7px] px-[11px] py-1.5 text-[12.5px]" : "flex-1 rounded-[8px] px-2 py-[9px] text-center text-[13.5px]",
               on ? "bg-white text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "bg-transparent text-[#999999] hover:text-[#666666]",
             )}
           >
@@ -1495,7 +1495,7 @@ function AutonomaTab({
 
           {/* Governance */}
           <div className={cn(LBL, "mt-[22px]")}>Governance prenotazione</div>
-          <div className="mb-4 flex gap-2.5 rounded-xl bg-[#f6f7f9] px-[15px] py-[13px]">
+          <div className="mb-4 flex gap-2.5 rounded-[12px] bg-[#f6f7f9] px-[15px] py-[13px]">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-px shrink-0">
               <circle cx="8" cy="8" r="6.5" stroke="#8a8a8a" strokeWidth="1.4" />
               <path d="M8 7.2v3.6" stroke="#8a8a8a" strokeWidth="1.4" strokeLinecap="round" />
@@ -1712,7 +1712,7 @@ function AutonomaTab({
                   <path d="M11 11l3 3" stroke="#aaaaaa" strokeWidth="1.5" strokeLinecap="round" />
                 </svg>
               </div>
-              <div className="flex max-h-[230px] flex-col overflow-y-auto rounded-xl border border-[#eeeeee]">
+              <div className="flex max-h-[230px] flex-col overflow-y-auto rounded-[12px] border border-[#eeeeee]">
                 {!studentsLoaded ? (
                   <div className="flex items-center justify-center p-4">
                     <Loader2 className="size-4 animate-spin text-[#929292]" />
@@ -2039,7 +2039,7 @@ function ParcoAllievi({
             type="button"
             onClick={() => onToggle(detail.id)}
             className={cn(
-              "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl p-[13px] text-sm font-semibold transition-colors",
+              "flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] p-[13px] text-sm font-semibold transition-colors",
               assignedIds.includes(detail.id)
                 ? "bg-[#f4f4f4] text-[#c13515] hover:bg-[#eeeeee]"
                 : "bg-navy-900 text-white hover:bg-navy-800",
@@ -2074,7 +2074,7 @@ function ParcoAllievi({
               <path d="M11 11l3 3" stroke="#aaaaaa" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </div>
-          <div className="flex max-h-[220px] flex-col overflow-y-auto rounded-xl border border-[#eeeeee]">
+          <div className="flex max-h-[220px] flex-col overflow-y-auto rounded-[12px] border border-[#eeeeee]">
             {!addable.length ? (
               <div className="p-4 text-center text-[13px] text-[#aaaaaa]">Nessun allievo trovato</div>
             ) : (
