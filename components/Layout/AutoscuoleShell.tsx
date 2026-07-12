@@ -5,19 +5,19 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAtomValue, useSetAtom } from "jotai";
+import { Plus, Check, Menu } from "lucide-react";
+
+// Icone del menu hamburger 1:1 dal proto (user-menu-dropdown)
 import {
-  LogOut,
-  Settings,
-  Users,
-  CircleUserRound,
-  Plus,
-  Check,
-  Menu,
-  Clock,
-  BellRing,
-  MessageCircleQuestion,
-  Star,
-} from "lucide-react";
+  BellProtoIcon,
+  ClockProtoIcon,
+  GearProtoIcon,
+  HelpCircleProtoIcon,
+  LogoutProtoIcon,
+  StarProtoIcon,
+  UserProtoIcon,
+  UsersProtoIcon,
+} from "@/components/ui/proto-icons";
 
 import { companyAtom, companyListAtom, companyRefreshAtom } from "@/atoms/company.store";
 import { userSessionAtom } from "@/atoms/user.store";
@@ -257,42 +257,42 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     onClick={() => router.push("/user/autoscuole/area-personale")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <CircleUserRound className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <UserProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Area personale</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole?tab=settings")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <Settings className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <GearProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Impostazioni dell&apos;account</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/admin/users")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <Users className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <UsersProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Utenti</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole/ore-guida")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <Clock className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Ore guida</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => setComunicatoOpen(true)}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <BellRing className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Invia comunicato</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole/assistenza")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <MessageCircleQuestion className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <HelpCircleProtoIcon className="h-[18px] w-[18px]" />
                     <span className="text-[15px] font-medium">Centro assistenza</span>
                     {supportUnread > 0 && (
                       <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-[#c13515] px-1.5 text-[11px] font-bold text-white">
@@ -304,7 +304,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     onClick={() => setFeedbackOpen(true)}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <Star className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <StarProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Lascia un feedback</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
@@ -360,7 +360,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     onClick={() => signOutUser()}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                   >
-                    <LogOut className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                    <LogoutProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Esci</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>

@@ -7,7 +7,6 @@ import { useAtomValue, useSetAtom } from "jotai";
 import { useSession } from "next-auth/react";
 import {
   Camera,
-  CircleUserRound,
   CreditCard,
   Download,
   FileText,
@@ -18,6 +17,7 @@ import { userAvatarUrlAtom, userRefreshAtom, userSessionAtom } from "@/atoms/use
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { CardProtoIcon, NotepadProtoIcon, UserProtoIcon } from "@/components/ui/proto-icons";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getCompanyDocumentDownloadUrl,
@@ -34,10 +34,11 @@ import { cn } from "@/lib/utils";
 
 type PaneKey = "profilo" | "documenti" | "abbonamento";
 
+// Icone 1:1 dal proto (apnav-*): vedi components/ui/proto-icons.tsx
 const PANES: Array<{ key: PaneKey; label: string; icon: React.ReactNode }> = [
-  { key: "profilo", label: "Il tuo profilo", icon: <CircleUserRound className="size-6" strokeWidth={1.9} /> },
-  { key: "documenti", label: "Contratto e fattura", icon: <FileText className="size-6" strokeWidth={1.9} /> },
-  { key: "abbonamento", label: "Abbonamento", icon: <CreditCard className="size-6" strokeWidth={1.9} /> },
+  { key: "profilo", label: "Il tuo profilo", icon: <UserProtoIcon className="size-6" strokeWidth={1.9} /> },
+  { key: "documenti", label: "Contratto e fattura", icon: <NotepadProtoIcon className="size-6" strokeWidth={1.9} /> },
+  { key: "abbonamento", label: "Abbonamento", icon: <CardProtoIcon className="size-6" strokeWidth={1.9} /> },
 ];
 
 const RESET_INPUT_CLASS =
