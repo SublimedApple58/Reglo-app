@@ -6723,6 +6723,53 @@ export async function deleteInstructorBlock(blockId: string) {
   }
 }
 
+/** Lista i blocchi malattia (reason "sick_leave") di un istruttore, dagli
+ * ultimi 14 giorni in avanti — la vista dettaglio istruttore li raggruppa in
+ * periodi contigui ("Assenze registrate"). */
+export async function listInstructorSickLeaves(instructorId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const blocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId: membership.companyId,
+        instructorId,
+        reason: "sick_leave",
+        endsAt: { gte: twoWeeksAgo },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+      orderBy: { startsAt: "asc" },
+    });
+    return { success: true as const, data: blocks };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Rimuove un periodo di malattia (i blocchi giornalieri che lo compongono).
+ * Non ripristina le guide già cancellate dal sick-leave. */
+export async function deleteInstructorSickLeave(blockIds: string[]) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    if (!blockIds.length) return { success: true as const, data: { deleted: 0 } };
+    const result = await prisma.autoscuolaInstructorBlock.deleteMany({
+      where: {
+        companyId: membership.companyId,
+        id: { in: blockIds },
+        reason: "sick_leave",
+      },
+    });
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const, data: { deleted: result.count } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function deleteInstructorBlockRecurrence(recurrenceGroupId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");

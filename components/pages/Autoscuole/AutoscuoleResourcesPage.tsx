@@ -428,44 +428,11 @@ export function AutoscuoleResourcesPage({
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
-  const [clusterInstructor, setClusterInstructor] = React.useState<InstructorDetail | null>(null);
-  const [clusterAutonomous, setClusterAutonomous] = React.useState(false);
-  const [clusterDurations, setClusterDurations] = React.useState<number[]>([30, 60]);
-  const [clusterRoundedHours, setClusterRoundedHours] = React.useState(false);
-  const [clusterStudentIds, setClusterStudentIds] = React.useState<string[]>([]);
-  const [clusterSaving, setClusterSaving] = React.useState(false);
-  const [clusterStudentSearch, setClusterStudentSearch] = React.useState("");
   // Task 3: new cluster booking settings
-  const [clusterAppBookingActors, setClusterAppBookingActors] = React.useState<"students" | "instructors" | "both" | undefined>(undefined);
-  const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | undefined>(undefined);
-  const [clusterSwapEnabled, setClusterSwapEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterStudentCancellationEnabled, setClusterStudentCancellationEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterSwapNotifyMode, setClusterSwapNotifyMode] = React.useState<"all" | "available_only" | undefined>(undefined);
-  const [clusterBookingCutoffEnabled, setClusterBookingCutoffEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterBookingCutoffTime, setClusterBookingCutoffTime] = React.useState<string | undefined>(undefined);
-  const [clusterWeeklyLimitEnabled, setClusterWeeklyLimitEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterWeeklyLimit, setClusterWeeklyLimit] = React.useState<number | undefined>(undefined);
-  const [clusterEmptySlotEnabled, setClusterEmptySlotEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterEmptySlotTarget, setClusterEmptySlotTarget] = React.useState<"all" | "availability_matching" | undefined>(undefined);
-  const [clusterEmptySlotTimes, setClusterEmptySlotTimes] = React.useState<string[] | undefined>(undefined);
-  const [clusterRestrictedTimeEnabled, setClusterRestrictedTimeEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterRestrictedTimeStart, setClusterRestrictedTimeStart] = React.useState<string | undefined>(undefined);
-  const [clusterRestrictedTimeEnd, setClusterRestrictedTimeEnd] = React.useState<string | undefined>(undefined);
-  const [clusterWeeklyAbsenceEnabled, setClusterWeeklyAbsenceEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterWorkingHoursStart, setClusterWorkingHoursStart] = React.useState<string | undefined>(undefined);
-  const [clusterWorkingHoursEnd, setClusterWorkingHoursEnd] = React.useState<string | undefined>(undefined);
-  const [clusterAvailabilityMode, setClusterAvailabilityMode] = React.useState<"default" | "publication">("default");
-  const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null; licenseCategory: string | null; transmission: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   // Sick leave state
-  const [sickLeaveInstructor, setSickLeaveInstructor] = React.useState<InstructorDetail | null>(null);
-  const [sickLeaveStartDate, setSickLeaveStartDate] = React.useState("");
-  const [sickLeaveEndDate, setSickLeaveEndDate] = React.useState("");
-  const [sickLeaveHalfDay, setSickLeaveHalfDay] = React.useState(false);
-  const [sickLeaveStartTime, setSickLeaveStartTime] = React.useState("14:00");
-  const [sickLeaveSaving, setSickLeaveSaving] = React.useState(false);
   const [instructorWeeklyAvailability, setInstructorWeeklyAvailability] = React.useState<
     Record<string, VehicleWeeklyAvailability>
   >({});
@@ -478,27 +445,15 @@ export function AutoscuoleResourcesPage({
   const [availDialogTab, setAvailDialogTab] = React.useState<"default" | "calendar">("default");
   // Mode of the instructor currently open in the availability dialog
   // (publication → week-by-week editor, default → Predefinito/Calendario tabs).
-  const [availInstructorMode, setAvailInstructorMode] = React.useState<"default" | "publication">("default");
-  const [availModeSwitching, setAvailModeSwitching] = React.useState(false);
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
   const [calendarSelectedDate, setCalendarSelectedDate] = React.useState<string | null>(null);
   const [calendarDayRanges, setCalendarDayRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
   const [calendarDayEnabled, setCalendarDayEnabled] = React.useState(true);
-  const [recurringOverride, setRecurringOverride] = React.useState(false);
 
   // ── Instructor availability dialog
-  const [availInstructor, setAvailInstructor] = React.useState<InstructorDetail | null>(null);
-  const [instrDays, setInstrDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
-  const [instrStartMinutes, setInstrStartMinutes] = React.useState(9 * 60);
-  const [instrEndMinutes, setInstrEndMinutes] = React.useState(18 * 60);
-  const [instrDefaultRanges, setInstrDefaultRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
-  const [savingInstrAvailability, setSavingInstrAvailability] = React.useState(false);
   // Week override state for instructor dialog
-  const [instrSelectedWeek, setInstrSelectedWeek] = React.useState<string | null>(null); // null = "Predefinito"
-  const [instrOverrides, setInstrOverrides] = React.useState<OverrideInfo[]>([]);
   const weekOptions = React.useMemo(buildWeekOptions, []);
   // Per-day schedule for override weeks: map dayOfWeek → { startMinutes, endMinutes }
-  const [instrDaySchedule, setInstrDaySchedule] = React.useState<DayScheduleEntry[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -1150,209 +1105,15 @@ export function AutoscuoleResourcesPage({
 
   // ── Instructor availability handlers ──────────────────────────────────────
 
-  /** (Re)load the daily overrides of an instructor into `instrOverrides`,
-   * grouped by ISO week. Called on dialog open AND after a recurring save so
-   * the calendar dots reflect the just-saved state immediately. */
-  const loadInstrOverrides = (instructorId: string) => {
-    getWeeklyAvailabilityOverrides({
-      ownerType: "instructor",
-      ownerId: instructorId,
-    }).then((res) => {
-      if (res.success && res.data) {
-        const byWeek = new Map<string, DayScheduleEntry[]>();
-        for (const o of res.data) {
-          const d = new Date(o.date);
-          const ws = getWeekStart(d);
-          const key = ws.toISOString().slice(0, 10);
-          const list = byWeek.get(key) ?? [];
-          const dayOfWeek = d.getUTCDay();
-          const ranges = Array.isArray(o.ranges) ? o.ranges as Array<{ startMinutes: number; endMinutes: number }> : [];
-          const first = ranges[0];
-          const second = ranges[1];
-          list.push({
-            dayOfWeek,
-            startMinutes: first?.startMinutes ?? 0,
-            endMinutes: first?.endMinutes ?? 0,
-            startMinutes2: second?.startMinutes ?? null,
-            endMinutes2: second?.endMinutes ?? null,
-          });
-          byWeek.set(key, list);
-        }
-        setInstrOverrides(
-          Array.from(byWeek.entries()).map(([weekStart, schedule]) => ({ weekStart, schedule })),
-        );
-      }
-    });
-  };
 
-  const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
-    const current = instructorWeeklyAvailability[instructor.id];
-    setAvailInstructorMode(readAvailabilityMode(instructor.settings));
-    setAvailDialogTab("default");
-    setCalendarSelectedDate(null);
-    setCalendarMonth(new Date());
-    setRecurringOverride(false);
-    setAvailInstructor(instructor);
-    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-    setInstrDefaultRanges(
-      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
-    );
-    setInstrSelectedWeek(null);
-    setInstrDaySchedule([]);
-    // Load daily overrides for this instructor and group them by week
-    loadInstrOverrides(instructor.id);
-  };
 
-  const toggleInstrDay = (day: number) => {
-    setInstrDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
-    );
-  };
 
   // Switch the instructor between default ↔ publication availability mode from
   // the dialog (same setting the cluster panel and the mobile app expose).
-  const handleSwitchAvailabilityMode = async () => {
-    if (!availInstructor) return;
-    const next = availInstructorMode === "publication" ? "default" : "publication";
-    const label =
-      next === "publication"
-        ? "PUBBLICAZIONE: l'istruttore compila e pubblica la disponibilità settimana per settimana; gli allievi prenotano solo le settimane pubblicate."
-        : "PREDEFINITA: settimana tipo valida ogni settimana, con eccezioni dal calendario.";
-    if (!window.confirm(`Cambiare la modalità disponibilità di ${availInstructor.name}?\n\n${label}`)) return;
-    setAvailModeSwitching(true);
-    const existingSettings =
-      availInstructor.settings && typeof availInstructor.settings === "object"
-        ? (availInstructor.settings as Record<string, unknown>)
-        : {};
-    const updatedSettings = { ...existingSettings, availabilityMode: next } as Parameters<
-      typeof updateAutoscuolaInstructor
-    >[0]["settings"] & Record<string, unknown>;
-    const res = await updateAutoscuolaInstructor({
-      instructorId: availInstructor.id,
-      settings: updatedSettings,
-    });
-    setAvailModeSwitching(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile cambiare modalità." });
-      return;
-    }
-    setAvailInstructorMode(next);
-    setAvailInstructor((prev) => (prev ? { ...prev, settings: updatedSettings } : prev));
-    setInstructors((prev) =>
-      prev.map((i) => (i.id === availInstructor.id ? { ...i, settings: updatedSettings } : i)),
-    );
-    toast.success({
-      description: `Modalità disponibilità: ${next === "publication" ? "Pubblicazione" : "Predefinita"}.`,
-    });
-  };
 
   /** Build default per-day schedule from the flat base availability */
-  const buildDefaultDaySchedule = (instructorId: string): DayScheduleEntry[] => {
-    const current = instructorWeeklyAvailability[instructorId];
-    if (!current) return WEEKDAY_OPTIONS.map((d) => ({ dayOfWeek: d.value, startMinutes: 9 * 60, endMinutes: 18 * 60 })).filter((d) => [1,2,3,4,5].includes(d.dayOfWeek));
-    return current.daysOfWeek.map((dow) => ({
-      dayOfWeek: dow,
-      startMinutes: current.startMinutes,
-      endMinutes: current.endMinutes,
-    }));
-  };
 
-  const openClusterPanel = async (instructor: InstructorDetail) => {
-    setClusterInstructor(instructor);
-    setClusterAutonomous(instructor.autonomousMode ?? false);
-    setClusterStudentSearch("");
-    const settings = (instructor.settings ?? {}) as Record<string, unknown>;
-    setClusterDurations(
-      Array.isArray(settings.bookingSlotDurations)
-        ? (settings.bookingSlotDurations as number[]).filter((d) => [30, 45, 60, 90, 120].includes(d))
-        : [30, 60],
-    );
-    setClusterRoundedHours(settings.roundedHoursOnly === true);
-    // Load new cluster booking settings
-    setClusterAppBookingActors(settings.appBookingActors as "students" | "instructors" | "both" | undefined);
-    setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | undefined);
-    setClusterSwapEnabled(typeof settings.swapEnabled === "boolean" ? settings.swapEnabled : undefined);
-    setClusterStudentCancellationEnabled(typeof settings.studentCancellationEnabled === "boolean" ? settings.studentCancellationEnabled : undefined);
-    setClusterSwapNotifyMode(settings.swapNotifyMode as "all" | "available_only" | undefined);
-    setClusterBookingCutoffEnabled(typeof settings.bookingCutoffEnabled === "boolean" ? settings.bookingCutoffEnabled : undefined);
-    setClusterBookingCutoffTime(settings.bookingCutoffTime as string | undefined);
-    setClusterWeeklyLimitEnabled(typeof settings.weeklyBookingLimitEnabled === "boolean" ? settings.weeklyBookingLimitEnabled : undefined);
-    setClusterWeeklyLimit(typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : undefined);
-    setClusterEmptySlotEnabled(typeof settings.emptySlotNotificationEnabled === "boolean" ? settings.emptySlotNotificationEnabled : undefined);
-    setClusterEmptySlotTarget(settings.emptySlotNotificationTarget as "all" | "availability_matching" | undefined);
-    setClusterEmptySlotTimes(Array.isArray(settings.emptySlotNotificationTimes) ? settings.emptySlotNotificationTimes as string[] : undefined);
-    setClusterRestrictedTimeEnabled(typeof settings.restrictedTimeRangeEnabled === "boolean" ? settings.restrictedTimeRangeEnabled : undefined);
-    setClusterRestrictedTimeStart(settings.restrictedTimeRangeStart as string | undefined);
-    setClusterRestrictedTimeEnd(settings.restrictedTimeRangeEnd as string | undefined);
-    setClusterWeeklyAbsenceEnabled(typeof settings.weeklyAbsenceEnabled === "boolean" ? settings.weeklyAbsenceEnabled : undefined);
-    setClusterWorkingHoursStart(typeof settings.workingHoursStart === "string" ? settings.workingHoursStart : undefined);
-    setClusterWorkingHoursEnd(typeof settings.workingHoursEnd === "string" ? settings.workingHoursEnd : undefined);
-    setClusterAvailabilityMode(settings.availabilityMode === "publication" ? "publication" : "default");
-    const studRes = await getAutoscuolaStudentsWithProgress();
-    if (studRes.success && studRes.data) {
-      setAllStudents(studRes.data.map((s) => ({
-        id: s.id,
-        firstName: s.firstName,
-        lastName: s.lastName,
-        assignedInstructorId: (s as Record<string, unknown>).assignedInstructorId as string | null,
-        licenseCategory: s.licenseCategory ?? null,
-        transmission: s.transmission ?? null,
-      })));
-      setClusterStudentIds(
-        studRes.data
-          .filter((s) => (s as Record<string, unknown>).assignedInstructorId === instructor.id)
-          .map((s) => s.id),
-      );
-    }
-  };
 
-  const saveClusterSettings = async () => {
-    if (!clusterInstructor) return;
-    setClusterSaving(true);
-    const res = await updateAutoscuolaInstructor({
-      instructorId: clusterInstructor.id,
-      autonomousMode: clusterAutonomous,
-      settings: {
-        ...(clusterAutonomous ? {
-          bookingSlotDurations: clusterDurations,
-          roundedHoursOnly: clusterRoundedHours,
-          appBookingActors: clusterAppBookingActors,
-          instructorBookingMode: clusterInstructorBookingMode,
-          swapEnabled: clusterSwapEnabled,
-          studentCancellationEnabled: clusterStudentCancellationEnabled,
-          swapNotifyMode: clusterSwapNotifyMode,
-          bookingCutoffEnabled: clusterBookingCutoffEnabled,
-          bookingCutoffTime: clusterBookingCutoffTime,
-          weeklyBookingLimitEnabled: clusterWeeklyLimitEnabled,
-          weeklyBookingLimit: clusterWeeklyLimit,
-          emptySlotNotificationEnabled: clusterEmptySlotEnabled,
-          emptySlotNotificationTarget: clusterEmptySlotTarget,
-          emptySlotNotificationTimes: clusterEmptySlotTimes,
-          restrictedTimeRangeEnabled: clusterRestrictedTimeEnabled,
-          restrictedTimeRangeStart: clusterRestrictedTimeStart,
-          restrictedTimeRangeEnd: clusterRestrictedTimeEnd,
-          weeklyAbsenceEnabled: clusterWeeklyAbsenceEnabled,
-        } : {}),
-        workingHoursStart: clusterWorkingHoursStart,
-        workingHoursEnd: clusterWorkingHoursEnd,
-        availabilityMode: clusterAvailabilityMode,
-      },
-      assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
-    });
-    setClusterSaving(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Errore salvataggio." });
-      return;
-    }
-    toast.success({ description: "Impostazioni istruttore salvate." });
-    const instrRes = await getAutoscuolaInstructors();
-    if (instrRes.success && instrRes.data) {
-      setInstructors(instrRes.data);
-    }
-    setClusterInstructor(null);
-  };
 
   // Save the instructor display color (null = back to automatic palette).
   // Awaited by ColorSwatchPicker, which spins on the trigger until we resolve.
@@ -1367,103 +1128,9 @@ export function AutoscuoleResourcesPage({
     );
   };
 
-  const handleSelectInstrWeek = (weekStart: string | null) => {
-    setInstrSelectedWeek(weekStart);
-    if (!availInstructor) return;
-    if (weekStart === null) {
-      // "Predefinito" selected — load the flat default
-      const current = instructorWeeklyAvailability[availInstructor.id];
-      setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-      setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-      setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-      setInstrDaySchedule([]);
-    } else {
-      // Specific week selected — load override schedule or build from default
-      const override = instrOverrides.find((o) => o.weekStart === weekStart);
-      if (override) {
-        setInstrDaySchedule(override.schedule);
-      } else {
-        setInstrDaySchedule(buildDefaultDaySchedule(availInstructor.id));
-      }
-    }
-  };
 
-  const handleSaveInstructorAvailability = async () => {
-    if (!availInstructor) return;
-    if (!instrDays.length) {
-      toast.error({ description: "Seleziona almeno un giorno." });
-      return;
-    }
-    const invalidRange = instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes);
-    if (invalidRange) {
-      toast.error({ description: "Una o più fasce orarie non sono valide." });
-      return;
-    }
-    setSavingInstrAvailability(true);
-    const res = await setAutoscuolaInstructorWeeklyAvailability({
-      instructorId: availInstructor.id,
-      daysOfWeek: instrDays,
-      startMinutes: instrDefaultRanges[0]?.startMinutes ?? 9 * 60,
-      endMinutes: instrDefaultRanges[0]?.endMinutes ?? 18 * 60,
-      ranges: instrDefaultRanges,
-    });
-    setSavingInstrAvailability(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
-      return;
-    }
-    setInstructorWeeklyAvailability((prev) => ({
-      ...prev,
-      [availInstructor.id]: res.data!,
-    }));
-    setAvailInstructor(null);
-    toast.success({ description: "Disponibilità salvata." });
-    loadAvailability(date);
-  };
 
-  const handleResetInstrOverride = async () => {
-    if (!availInstructor || !instrSelectedWeek) return;
-    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
-    setSavingInstrAvailability(true);
-    const res = await deleteWeeklyAvailabilityOverride({
-      ownerType: "instructor",
-      ownerId: availInstructor.id,
-      weekStart: instrSelectedWeek,
-    });
-    setSavingInstrAvailability(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile rimuovere l'override." });
-      return;
-    }
-    setInstrOverrides((prev) => prev.filter((o) => o.weekStart !== instrSelectedWeek));
-    // Reset form to default
-    const current = instructorWeeklyAvailability[availInstructor.id];
-    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-    toast.success({ description: "Override rimosso, settimana tornata al predefinito." });
-    loadAvailability(date);
-  };
 
-  const handleDeleteInstructorAvailability = async () => {
-    if (!availInstructor) return;
-    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo istruttore?")) return;
-    setSavingInstrAvailability(true);
-    const res = await deleteAutoscuolaInstructorWeeklyAvailability(availInstructor.id);
-    setSavingInstrAvailability(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile rimuovere la disponibilità." });
-      return;
-    }
-    setInstructorWeeklyAvailability((prev) => {
-      const next = { ...prev };
-      delete next[availInstructor.id];
-      return next;
-    });
-    setAvailInstructor(null);
-    toast.success({ description: "Disponibilità rimossa." });
-    loadAvailability(date);
-  };
 
   // ── Vehicle management handlers ───────────────────────────────────────────
 
@@ -1924,70 +1591,12 @@ export function AutoscuoleResourcesPage({
         <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
             instructors={instructors}
+            setInstructors={setInstructors}
             instructorWeeklyAvailability={instructorWeeklyAvailability}
-            instructorAvailability={instructorAvailability}
-            openClusterPanel={openClusterPanel}
-            openInstructorAvailabilityDialog={openInstructorAvailabilityDialog}
-            changeInstructorColor={changeInstructorColor}
-            setSickLeaveInstructor={setSickLeaveInstructor}
-            setSickLeaveStartDate={setSickLeaveStartDate}
-            setSickLeaveEndDate={setSickLeaveEndDate}
-            setSickLeaveHalfDay={setSickLeaveHalfDay}
-            setSickLeaveStartTime={setSickLeaveStartTime}
+            setInstructorWeeklyAvailability={setInstructorWeeklyAvailability}
             setInviteInstructorOpen={setInviteInstructorOpen}
-            clusterInstructor={clusterInstructor}
-            setClusterInstructor={setClusterInstructor}
-            clusterAutonomous={clusterAutonomous}
-            setClusterAutonomous={setClusterAutonomous}
-            clusterDurations={clusterDurations}
-            setClusterDurations={setClusterDurations}
-            clusterRoundedHours={clusterRoundedHours}
-            setClusterRoundedHours={setClusterRoundedHours}
-            clusterAppBookingActors={clusterAppBookingActors}
-            setClusterAppBookingActors={setClusterAppBookingActors}
-            clusterInstructorBookingMode={clusterInstructorBookingMode}
-            setClusterInstructorBookingMode={setClusterInstructorBookingMode}
-            clusterSwapEnabled={clusterSwapEnabled}
-            setClusterSwapEnabled={setClusterSwapEnabled}
-            clusterStudentCancellationEnabled={clusterStudentCancellationEnabled}
-            setClusterStudentCancellationEnabled={setClusterStudentCancellationEnabled}
-            clusterSwapNotifyMode={clusterSwapNotifyMode}
-            setClusterSwapNotifyMode={setClusterSwapNotifyMode}
-            clusterBookingCutoffEnabled={clusterBookingCutoffEnabled}
-            setClusterBookingCutoffEnabled={setClusterBookingCutoffEnabled}
-            clusterBookingCutoffTime={clusterBookingCutoffTime}
-            setClusterBookingCutoffTime={setClusterBookingCutoffTime}
-            clusterWeeklyLimitEnabled={clusterWeeklyLimitEnabled}
-            setClusterWeeklyLimitEnabled={setClusterWeeklyLimitEnabled}
-            clusterWeeklyLimit={clusterWeeklyLimit}
-            setClusterWeeklyLimit={setClusterWeeklyLimit}
-            clusterEmptySlotEnabled={clusterEmptySlotEnabled}
-            setClusterEmptySlotEnabled={setClusterEmptySlotEnabled}
-            clusterEmptySlotTarget={clusterEmptySlotTarget}
-            setClusterEmptySlotTarget={setClusterEmptySlotTarget}
-            clusterEmptySlotTimes={clusterEmptySlotTimes}
-            setClusterEmptySlotTimes={setClusterEmptySlotTimes}
-            clusterRestrictedTimeEnabled={clusterRestrictedTimeEnabled}
-            setClusterRestrictedTimeEnabled={setClusterRestrictedTimeEnabled}
-            clusterRestrictedTimeStart={clusterRestrictedTimeStart}
-            setClusterRestrictedTimeStart={setClusterRestrictedTimeStart}
-            clusterRestrictedTimeEnd={clusterRestrictedTimeEnd}
-            setClusterRestrictedTimeEnd={setClusterRestrictedTimeEnd}
-            clusterWeeklyAbsenceEnabled={clusterWeeklyAbsenceEnabled}
-            setClusterWeeklyAbsenceEnabled={setClusterWeeklyAbsenceEnabled}
-            clusterWorkingHoursStart={clusterWorkingHoursStart}
-            setClusterWorkingHoursStart={setClusterWorkingHoursStart}
-            clusterWorkingHoursEnd={clusterWorkingHoursEnd}
-            setClusterWorkingHoursEnd={setClusterWorkingHoursEnd}
-            clusterAvailabilityMode={clusterAvailabilityMode}
-            setClusterAvailabilityMode={setClusterAvailabilityMode}
-            allStudents={allStudents}
-            clusterStudentIds={clusterStudentIds}
-            setClusterStudentIds={setClusterStudentIds}
-            clusterStudentSearch={clusterStudentSearch}
-            setClusterStudentSearch={setClusterStudentSearch}
-            saveClusterSettings={saveClusterSettings}
-            clusterSaving={clusterSaving}
+            changeInstructorColor={changeInstructorColor}
+            refreshAgenda={() => loadAvailability(date)}
           />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "bookings"} eager={mountAllPanes}>
@@ -2080,201 +1689,6 @@ export function AutoscuoleResourcesPage({
         </div>
       </div>
 
-        {/* ── Instructor availability dialog */}
-        <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
-          <DialogContent className={cn("gap-0 p-0 overflow-y-hidden overflow-x-clip", availInstructorMode === "publication" ? "sm:max-w-[560px]" : "sm:max-w-[480px]")}>
-            <DialogTitle className="sr-only">Disponibilità — {availInstructor?.name}</DialogTitle>
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availInstructor?.name}</h3>
-              {/* Mode badge + switch (mirrors the mobile availability-mode setting) */}
-              <div className="mt-2 flex items-center gap-2">
-                {availInstructorMode === "publication" ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#9fc3f0] bg-[#eaf2fd] px-2.5 py-1 text-[11px] font-semibold text-[#1a2b45]">
-                    <span className="size-1.5 rounded-full bg-[#1a2b45]" />
-                    Modalità pubblicazione
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e0e0e0] bg-[#f7f7f7] px-2.5 py-1 text-[11px] font-semibold text-[#6a6a6a]">
-                    <span className="size-1.5 rounded-full bg-[#b0b0b0]" />
-                    Modalità predefinita
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleSwitchAvailabilityMode}
-                  disabled={availModeSwitching}
-                  className="cursor-pointer text-[11px] font-medium text-[#6a6a6a] underline underline-offset-2 transition-colors hover:text-[#222222] disabled:opacity-50"
-                >
-                  {availModeSwitching ? "Cambio..." : "Cambia modalità"}
-                </button>
-              </div>
-              {/* Tab switcher (default mode only) */}
-              {availInstructorMode === "default" && (
-                <div className="mt-3 flex max-w-[260px] items-center gap-1 rounded-full bg-[#f2f2f2] p-1">
-                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors", availDialogTab === "default" ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.08)]" : "font-medium text-[#6a6a6a] hover:text-[#222222]")}>
-                    Predefinito
-                  </button>
-                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 cursor-pointer rounded-full px-3 py-1.5 text-xs transition-colors", availDialogTab === "calendar" ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.08)]" : "font-medium text-[#6a6a6a] hover:text-[#222222]")}>
-                    Calendario
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* min-w-0: DialogContent is a grid — without it the week rail's
-                intrinsic width expands the item past the dialog and the whole
-                content bleeds/scrolls horizontally. */}
-            <div className="min-w-0 px-6 py-5 space-y-4">
-              {availInstructorMode === "publication" && availInstructor ? (
-                <InstructorPublicationEditor
-                  instructorId={availInstructor.id}
-                  base={instructorWeeklyAvailability[availInstructor.id] ?? null}
-                  onChanged={() => loadAvailability(date)}
-                />
-              ) : availDialogTab === "default" ? (
-                <>
-                  <FieldGroup label="Giorni attivi">
-                    <div className="flex flex-wrap gap-1.5">
-                      {WEEKDAY_OPTIONS.map((day) => (
-                        <ToggleChip key={day.value} active={instrDays.includes(day.value)} onClick={() => toggleInstrDay(day.value)}>
-                          {day.label}
-                        </ToggleChip>
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="Fasce orarie">
-                    <TimeRangeRows
-                      ranges={instrDefaultRanges}
-                      onChange={(next) => {
-                        setInstrDefaultRanges(next);
-                        if (next.length) {
-                          setInstrStartMinutes(next[0].startMinutes);
-                          setInstrEndMinutes(next[0].endMinutes);
-                        }
-                      }}
-                    />
-                  </FieldGroup>
-                </>
-              ) : (
-                <>
-                  <AvailabilityCalendar
-                    calendarMonth={calendarMonth}
-                    setCalendarMonth={setCalendarMonth}
-                    selectedDate={calendarSelectedDate}
-                    setSelectedDate={(d) => { setCalendarSelectedDate(d); setRecurringOverride(false); }}
-                    overrides={instrOverrides}
-                    ranges={calendarDayRanges}
-                    setRanges={setCalendarDayRanges}
-                    dayEnabled={calendarDayEnabled}
-                    setDayEnabled={setCalendarDayEnabled}
-                    defaultAvailability={availInstructor ? instructorWeeklyAvailability[availInstructor.id] ?? null : null}
-                  />
-                  {calendarSelectedDate && calendarDayEnabled && (
-                    <div
-                      className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                      onClick={() => setRecurringOverride((prev) => !prev)}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Disponibilità ricorrente</span>
-                        <span className="text-xs text-muted-foreground">
-                          Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} dal {new Date(calendarSelectedDate).toLocaleDateString("it-IT", { day: "numeric", month: "short", timeZone: "UTC" })} in poi
-                        </span>
-                      </div>
-                      <InlineToggle checked={recurringOverride} size="lg" />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {availInstructorMode === "publication" ? (
-              <div className="flex items-center justify-end border-t border-border px-6 py-4">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)}>Chiudi</Button>
-              </div>
-            ) : (
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {availDialogTab === "default" ? (
-                <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="cursor-pointer text-[13px] font-medium text-[#c13515] transition-colors hover:text-[#9a2810] disabled:opacity-40">
-                  Rimuovi disponibilità
-                </button>
-              ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availInstructor) { const weekStart = getWeekStart(new Date(calendarSelectedDate)).toISOString().slice(0, 10); handleResetInstrOverride(); } }} disabled={savingInstrAvailability || !calendarSelectedDate} className="text-xs text-navy-900 hover:text-navy-700 hover:underline disabled:opacity-40">
-                  Ripristina predefinito
-                </button>
-              )}
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)} disabled={savingInstrAvailability}>Annulla</Button>
-                <Button type="button" size="sm" onClick={async () => {
-                  if (availDialogTab === "calendar" && calendarSelectedDate && availInstructor) {
-                    const dateObj = new Date(calendarSelectedDate);
-                    const ws = getWeekStart(dateObj);
-                    const weekStartStr = ws.toISOString().slice(0, 10);
-                    const dayOfWeek = dateObj.getUTCDay();
-
-                    if (!calendarDayEnabled) {
-                      // Save empty schedule = day off
-                      setSavingInstrAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        weekStart: weekStartStr,
-                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      loadInstrOverrides(availInstructor.id);
-                    } else if (recurringOverride) {
-                      // Recurring: apply to all future weeks for this day of week
-                      setSavingInstrAvailability(true);
-                      const res = await setRecurringAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        dayOfWeek,
-                        ranges: calendarDayRanges,
-                        // Start from the selected day, not from the nearest
-                        // future occurrence of the weekday.
-                        fromDate: dateObj.toISOString().slice(0, 10),
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      // Refresh the calendar dots with the just-saved weeks —
-                      // without this the dialog showed no trace of the save.
-                      loadInstrOverrides(availInstructor.id);
-                    } else {
-                      const schedule: DayScheduleEntry[] = [{
-                        dayOfWeek,
-                        startMinutes: calendarDayRanges[0].startMinutes,
-                        endMinutes: calendarDayRanges[0].endMinutes,
-                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
-                      }];
-                      setSavingInstrAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        weekStart: weekStartStr,
-                        schedule,
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      // Update local overrides
-                      setInstrOverrides((prev) => {
-                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
-                        return [...filtered, { weekStart: weekStartStr, schedule }];
-                      });
-                    }
-                    toast.success({ description: "Override salvato." });
-                    loadAvailability(date);
-                  } else {
-                    handleSaveInstructorAvailability();
-                  }
-                }} disabled={savingInstrAvailability || (availDialogTab === "default" && (!instrDays.length || instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
-                  {savingInstrAvailability ? "Salvataggio..." : "Salva"}
-                </Button>
-              </div>
-            </div>
-            )}
-          </DialogContent>
-        </Dialog>
 
         {/* ── Aggiungi istruttore: crea direttamente l'account (niente invito) */}
         <AdminUsersCreateDialog
@@ -2724,91 +2138,6 @@ export function AutoscuoleResourcesPage({
           </DialogContent>
         </Dialog>
 
-        {/* ── Sick leave dialog ── */}
-        <Dialog open={Boolean(sickLeaveInstructor)} onOpenChange={(open) => !open && setSickLeaveInstructor(null)}>
-          <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <DialogHeader>
-                <DialogTitle>🤒 Malattia — {sickLeaveInstructor?.name}</DialogTitle>
-              </DialogHeader>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <div className="mb-2 text-xs font-semibold text-[#555555]">Data inizio</div>
-                  <DatePickerInput value={sickLeaveStartDate} onChange={setSickLeaveStartDate} />
-                </div>
-                <div>
-                  <div className="mb-2 text-xs font-semibold text-[#555555]">Data fine</div>
-                  <DatePickerInput value={sickLeaveEndDate} onChange={setSickLeaveEndDate} />
-                </div>
-              </div>
-              <div className="rounded-[10px] bg-[#f8f8f8] p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-[#222222]">Mezza giornata</div>
-                    <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                      La malattia inizia a un orario specifico del primo giorno.
-                    </div>
-                  </div>
-                  <InlineToggle
-                    checked={sickLeaveHalfDay}
-                    onChange={() => setSickLeaveHalfDay((prev) => !prev)}
-                    size="lg"
-                  />
-                </div>
-                {sickLeaveHalfDay && (
-                  <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3">
-                    <span className="text-[13px] font-medium text-[#555555]">Orario inizio malattia</span>
-                    <TimePickerInput
-                      value={sickLeaveStartTime}
-                      onChange={setSickLeaveStartTime}
-                      minTime="06:00"
-                      maxTime="20:00"
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-              <Button variant="outline" onClick={() => setSickLeaveInstructor(null)}>
-                Annulla
-              </Button>
-              <Button
-                disabled={sickLeaveSaving || !sickLeaveStartDate || !sickLeaveEndDate}
-                onClick={async () => {
-                  if (!sickLeaveInstructor) return;
-                  setSickLeaveSaving(true);
-                  try {
-                    const res = await fetch("/api/autoscuole/instructor-sick-leave", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        instructorId: sickLeaveInstructor.id,
-                        startDate: sickLeaveStartDate,
-                        endDate: sickLeaveEndDate,
-                        startTime: sickLeaveHalfDay ? sickLeaveStartTime : undefined,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      toast.success({ description: `Malattia registrata. ${data.data.appointmentsCancelled} guide cancellate.` });
-                      setSickLeaveInstructor(null);
-                    } else {
-                      toast.error({ description: data.message ?? "Errore." });
-                    }
-                  } catch {
-                    toast.error({ description: "Errore nel salvataggio." });
-                  } finally {
-                    setSickLeaveSaving(false);
-                  }
-                }}
-              >
-                {sickLeaveSaving ? "Salvataggio..." : "Conferma malattia"}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
     </div>
   );
 }

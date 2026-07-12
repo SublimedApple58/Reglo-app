@@ -2,15 +2,8 @@
 
 import React from "react";
 import Image from "next/image";
-import { Plus, Clock, Settings2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/animate-ui/radix/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { createPortal } from "react-dom";
+import { Check, ChevronLeft, Loader2, Plus } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -18,804 +11,1727 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { FieldGroup } from "@/components/ui/field-group";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
-import { TimePickerInput } from "@/components/ui/time-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import {
-  ResourceCard,
-  SlotPill,
-  ResourceCardAction,
-} from "@/components/ui/resource-card";
-import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
+  updateAutoscuolaInstructor,
+  getAutoscuolaInstructors,
+  setAutoscuolaInstructorWeeklyAvailability,
+  deleteAutoscuolaInstructorWeeklyAvailability,
+  getAutoscuolaStudentsWithProgress,
+  listInstructorSickLeaves,
+  deleteInstructorSickLeave,
+} from "@/lib/actions/autoscuole.actions";
+import {
+  getDailyAvailabilityOverrides,
+  setDailyAvailabilityOverride,
+  deleteDailyAvailabilityOverride,
+  setRecurringAvailabilityOverride,
+} from "@/lib/actions/autoscuole-availability.actions";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type InstructorDetail = {
+export type InstructorDetail = {
   id: string;
   name: string;
   status: string;
   autonomousMode?: boolean;
   settings?: unknown;
-  /** Owner-picked display color (hex). Null = automatic palette. */
   color?: string | null;
-  /** Per-instructor invite code: students signing up with it land in this instructor's group. */
   inviteCode?: string | null;
   _count?: { assignedStudents: number };
 };
 
-type VehicleWeeklyAvailability = {
+type Range = { startMinutes: number; endMinutes: number };
+
+export type WeeklyAvailability = {
   daysOfWeek: number[];
   startMinutes: number;
   endMinutes: number;
-  ranges?: Array<{ startMinutes: number; endMinutes: number }>;
+  ranges?: Range[];
 };
-
-type AvailabilityRange = { start: Date; end: Date };
 
 type StudentEntry = {
   id: string;
   firstName: string;
   lastName: string;
   assignedInstructorId: string | null;
-  /** Pursued license path — shown as a badge in the assigned-students list. */
   licenseCategory?: string | null;
   transmission?: string | null;
 };
 
-/** Compact license tag, e.g. "A2" / "B autom." — empty when the path is unset. */
-const licenseTag = (s: StudentEntry): string | null =>
-  s.licenseCategory
-    ? `${s.licenseCategory}${s.transmission === "automatic" ? " autom." : ""}`
-    : null;
+// ── Costanti ───────────────────────────────────────────────────────────────────
 
-// ── Constants ──────────────────────────────────────────────────────────────────
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+const DAY_LABELS: Record<number, string> = { 1: "Lun", 2: "Mar", 3: "Mer", 4: "Gio", 5: "Ven", 6: "Sab", 0: "Dom" };
+const DAY_FULL: Record<number, string> = { 1: "lunedì", 2: "martedì", 3: "mercoledì", 4: "giovedì", 5: "venerdì", 6: "sabato", 0: "domenica" };
+const MONTHS = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
+const MONTHS_AB = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 
-const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
+// Fasce orarie a passi di 30' (06:00–23:00) per disponibilità e malattia.
+const TIME_OPTIONS = Array.from({ length: (23 - 6) * 2 + 1 }, (_, i) => {
+  const m = 6 * 60 + i * 30;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+});
 
-const WEEKDAY_OPTIONS = [
-  { value: 1, label: "Lun" },
-  { value: 2, label: "Mar" },
-  { value: 3, label: "Mer" },
-  { value: 4, label: "Gio" },
-  { value: 5, label: "Ven" },
-  { value: 6, label: "Sab" },
-  { value: 0, label: "Dom" },
-] as const;
+const LBL = "mb-2 text-[11px] font-bold uppercase tracking-[0.4px] text-[#929292]";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function pad(v: number) {
-  return v.toString().padStart(2, "0");
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const mmToLabel = (m: number) => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
+const labelToMm = (l: string) => {
+  const [h, m] = l.split(":").map(Number);
+  return h * 60 + m;
+};
+const ymd = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fmtIso = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS_AB[m - 1]} ${y}`;
+};
+
+/** "Lun–Ven" / "Lun, Mar, Gio" — comprime i giorni contigui nell'ordine Lun→Dom. */
+function compressDays(days: number[]): string {
+  const idx = days
+    .map((d) => DAY_ORDER.indexOf(d as (typeof DAY_ORDER)[number]))
+    .filter((i) => i >= 0)
+    .sort((a, b) => a - b);
+  if (!idx.length) return "";
+  const runs: Array<[number, number]> = [];
+  for (const i of idx) {
+    const last = runs[runs.length - 1];
+    if (last && i === last[1] + 1) last[1] = i;
+    else runs.push([i, i]);
+  }
+  return runs
+    .map(([a, b]) =>
+      b - a >= 2
+        ? `${DAY_LABELS[DAY_ORDER[a]]}–${DAY_LABELS[DAY_ORDER[b]]}`
+        : Array.from({ length: b - a + 1 }, (_, k) => DAY_LABELS[DAY_ORDER[a + k]]).join(", "),
+    )
+    .join(", ");
 }
 
-function formatMinutes(totalMinutes: number) {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${pad(hours)}:${pad(minutes)}`;
+function weeklySummary(w: WeeklyAvailability | null | undefined): string | null {
+  if (!w || !w.daysOfWeek.length) return null;
+  const ranges = w.ranges?.length ? w.ranges : [{ startMinutes: w.startMinutes, endMinutes: w.endMinutes }];
+  const label = ranges.map((r) => `${mmToLabel(r.startMinutes)}–${mmToLabel(r.endMinutes)}`).join(", ");
+  return `${label} · ${compressDays(w.daysOfWeek)}`;
 }
 
-function formatTime(date: Date) {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const rangesOf = (w: WeeklyAvailability | null | undefined): Range[] =>
+  w ? (w.ranges?.length ? w.ranges.map((r) => ({ ...r })) : [{ startMinutes: w.startMinutes, endMinutes: w.endMinutes }]) : [];
+
+/** Colore effettivo dell'istruttore (custom o palette posizionale legacy). */
+const effectiveColor = (instructor: InstructorDetail, index: number) =>
+  instructor.color ?? INSTRUCTOR_COLOR_CHOICES[index % 8].hex;
+
+// ── Atomi UI ───────────────────────────────────────────────────────────────────
+
+function BlueChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+        active ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]" : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
-function diffMinutes(a: Date, b: Date) {
-  return (a.getTime() - b.getTime()) / 60000;
+function Seg<T extends string>({
+  options,
+  value,
+  onChange,
+  small,
+}: {
+  options: Array<{ v: T; l: string }>;
+  value: T;
+  onChange: (v: T) => void;
+  small?: boolean;
+}) {
+  return (
+    <div className={cn("flex shrink-0 gap-1 rounded-[10px] bg-[#f4f4f6]", small ? "rounded-[9px] p-[3px]" : "p-1")}>
+      {options.map((o) => {
+        const on = o.v === value;
+        return (
+          <button
+            key={o.v}
+            type="button"
+            onClick={() => onChange(o.v)}
+            className={cn(
+              "cursor-pointer font-semibold transition-all",
+              small ? "rounded-[7px] px-[11px] py-1.5 text-[12.5px]" : "flex-1 rounded-lg px-2 py-[9px] text-center text-[13.5px]",
+              on ? "bg-white text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]" : "bg-transparent text-[#999999] hover:text-[#666666]",
+            )}
+          >
+            {o.l}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TimeField({
+  value,
+  onChange,
+  options = TIME_OPTIONS,
+  placeholder = "Orario",
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options?: string[];
+  placeholder?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((t) => (
+          <SelectItem key={t} value={t}>{t}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function OptField<T extends string>({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: T | "";
+  onChange: (v: T) => void;
+  options: Array<{ v: T; l: string }>;
+  placeholder?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as T)}>
+      <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={o.v} value={o.v}>{o.l}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Riga flat: titolo + descrizione a sinistra, controllo a destra. */
+function Row({
+  title,
+  description,
+  control,
+  border,
+}: {
+  title: string;
+  description?: string;
+  control: React.ReactNode;
+  border?: boolean;
+}) {
+  return (
+    <div className={cn("flex items-center justify-between gap-6 py-5", border && "border-t border-[#f0f0f0]")}>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-[#222222]">{title}</div>
+        {description ? (
+          <div className="mt-0.5 max-w-[460px] text-[12.5px] font-medium leading-snug text-[#929292]">{description}</div>
+        ) : null}
+      </div>
+      {control}
+    </div>
+  );
+}
+
+/** Palette colore istruttore (portal ancorato allo swatch, 16 tinte, prese disabilitate). */
+function ColorPop({
+  anchor,
+  current,
+  taken,
+  onPick,
+  onClose,
+}: {
+  anchor: DOMRect;
+  current: string;
+  taken: string[];
+  onPick: (hex: string) => void;
+  onClose: () => void;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose();
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("mousedown", handler);
+    };
+  }, [onClose]);
+  const width = 236;
+  let left = anchor.right - width;
+  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+  let top = anchor.bottom + 8;
+  if (top + 190 > window.innerHeight) top = Math.max(12, anchor.top - 198);
+  return createPortal(
+    <div
+      ref={ref}
+      className="fixed z-[70] rounded-2xl border border-[#ececec] bg-white p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+      style={{ left, top, width }}
+    >
+      <div className="grid grid-cols-6 gap-[9px]">
+        {INSTRUCTOR_COLOR_CHOICES.map(({ hex, name }) => {
+          const isTaken = taken.includes(hex) && hex !== current;
+          const isSel = current === hex;
+          return (
+            <button
+              key={hex}
+              type="button"
+              title={name}
+              disabled={isTaken}
+              onClick={() => onPick(hex)}
+              className={cn(
+                "aspect-square w-full rounded-lg transition-transform",
+                isTaken ? "cursor-not-allowed opacity-25" : "cursor-pointer hover:scale-110",
+              )}
+              style={{ background: hex, boxShadow: isSel ? `0 0 0 2px #fff, 0 0 0 4px ${hex}` : undefined }}
+            >
+              {isSel && <Check className="mx-auto size-3.5 text-white" strokeWidth={2.6} />}
+            </button>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface InstructorsTabProps {
   instructors: InstructorDetail[];
-  instructorWeeklyAvailability: Record<string, VehicleWeeklyAvailability | null>;
-  instructorAvailability: Record<string, AvailabilityRange[]>;
-
-  openClusterPanel: (instructor: InstructorDetail) => void;
-  openInstructorAvailabilityDialog: (instructor: InstructorDetail) => void;
+  setInstructors: React.Dispatch<React.SetStateAction<InstructorDetail[]>>;
+  instructorWeeklyAvailability: Record<string, WeeklyAvailability>;
+  setInstructorWeeklyAvailability: React.Dispatch<React.SetStateAction<Record<string, WeeklyAvailability>>>;
   setInviteInstructorOpen: (open: boolean) => void;
-  /** Persist the instructor display color (null = back to automatic). */
   changeInstructorColor: (instructor: InstructorDetail, color: string | null) => Promise<void>;
-
-  // Sick leave
-  setSickLeaveInstructor: (instructor: InstructorDetail) => void;
-  setSickLeaveStartDate: (date: string) => void;
-  setSickLeaveEndDate: (date: string) => void;
-  setSickLeaveHalfDay: (halfDay: boolean) => void;
-  setSickLeaveStartTime: (time: string) => void;
-
-  // Cluster panel state
-  clusterInstructor: InstructorDetail | null;
-  setClusterInstructor: (instructor: InstructorDetail | null) => void;
-
-  clusterAutonomous: boolean;
-  setClusterAutonomous: React.Dispatch<React.SetStateAction<boolean>>;
-
-  clusterDurations: number[];
-  setClusterDurations: React.Dispatch<React.SetStateAction<number[]>>;
-
-  clusterRoundedHours: boolean;
-  setClusterRoundedHours: React.Dispatch<React.SetStateAction<boolean>>;
-
-  clusterAppBookingActors: "students" | "instructors" | "both" | undefined;
-  setClusterAppBookingActors: React.Dispatch<React.SetStateAction<"students" | "instructors" | "both" | undefined>>;
-
-  clusterInstructorBookingMode: "manual_full" | "manual_engine" | undefined;
-  setClusterInstructorBookingMode: React.Dispatch<React.SetStateAction<"manual_full" | "manual_engine" | undefined>>;
-
-  clusterSwapEnabled: boolean | undefined;
-  setClusterSwapEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterStudentCancellationEnabled: boolean | undefined;
-  setClusterStudentCancellationEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterSwapNotifyMode: "all" | "available_only" | undefined;
-  setClusterSwapNotifyMode: React.Dispatch<React.SetStateAction<"all" | "available_only" | undefined>>;
-
-  clusterBookingCutoffEnabled: boolean | undefined;
-  setClusterBookingCutoffEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterBookingCutoffTime: string | undefined;
-  setClusterBookingCutoffTime: (time: string | undefined) => void;
-
-  clusterWeeklyLimitEnabled: boolean | undefined;
-  setClusterWeeklyLimitEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterWeeklyLimit: number | undefined;
-  setClusterWeeklyLimit: (limit: number | undefined) => void;
-
-  clusterEmptySlotEnabled: boolean | undefined;
-  setClusterEmptySlotEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterEmptySlotTarget: "all" | "availability_matching" | undefined;
-  setClusterEmptySlotTarget: React.Dispatch<React.SetStateAction<"all" | "availability_matching" | undefined>>;
-
-  clusterEmptySlotTimes: string[] | undefined;
-  setClusterEmptySlotTimes: React.Dispatch<React.SetStateAction<string[] | undefined>>;
-
-  clusterRestrictedTimeEnabled: boolean | undefined;
-  setClusterRestrictedTimeEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterRestrictedTimeStart: string | undefined;
-  setClusterRestrictedTimeStart: (time: string | undefined) => void;
-
-  clusterRestrictedTimeEnd: string | undefined;
-  setClusterRestrictedTimeEnd: (time: string | undefined) => void;
-
-  clusterWeeklyAbsenceEnabled: boolean | undefined;
-  setClusterWeeklyAbsenceEnabled: React.Dispatch<React.SetStateAction<boolean | undefined>>;
-
-  clusterWorkingHoursStart: string | undefined;
-  setClusterWorkingHoursStart: (time: string | undefined) => void;
-
-  clusterWorkingHoursEnd: string | undefined;
-  setClusterWorkingHoursEnd: (time: string | undefined) => void;
-
-  clusterAvailabilityMode: "default" | "publication";
-  setClusterAvailabilityMode: (mode: "default" | "publication") => void;
-
-  saveClusterSettings: () => void;
-  clusterSaving: boolean;
-
-  allStudents: StudentEntry[];
-  clusterStudentIds: string[];
-  setClusterStudentIds: React.Dispatch<React.SetStateAction<string[]>>;
-  clusterStudentSearch: string;
-  setClusterStudentSearch: (search: string) => void;
+  /** Ricarica gli slot agenda (dopo modifiche a disponibilità/malattia). */
+  refreshAgenda: () => void;
 }
 
-// ── Component ──────────────────────────────────────────────────────────────────
+// ── Componente principale ──────────────────────────────────────────────────────
 
 export default function InstructorsTab({
   instructors,
+  setInstructors,
   instructorWeeklyAvailability,
-  instructorAvailability,
-  openClusterPanel,
-  openInstructorAvailabilityDialog,
+  setInstructorWeeklyAvailability,
   setInviteInstructorOpen,
   changeInstructorColor,
-  setSickLeaveInstructor,
-  setSickLeaveStartDate,
-  setSickLeaveEndDate,
-  setSickLeaveHalfDay,
-  setSickLeaveStartTime,
-  clusterInstructor,
-  setClusterInstructor,
-  clusterAutonomous,
-  setClusterAutonomous,
-  clusterDurations,
-  setClusterDurations,
-  clusterRoundedHours,
-  setClusterRoundedHours,
-  clusterAppBookingActors,
-  setClusterAppBookingActors,
-  clusterInstructorBookingMode,
-  setClusterInstructorBookingMode,
-  clusterSwapEnabled,
-  setClusterSwapEnabled,
-  clusterStudentCancellationEnabled,
-  setClusterStudentCancellationEnabled,
-  clusterSwapNotifyMode,
-  setClusterSwapNotifyMode,
-  clusterBookingCutoffEnabled,
-  setClusterBookingCutoffEnabled,
-  clusterBookingCutoffTime,
-  setClusterBookingCutoffTime,
-  clusterWeeklyLimitEnabled,
-  setClusterWeeklyLimitEnabled,
-  clusterWeeklyLimit,
-  setClusterWeeklyLimit,
-  clusterEmptySlotEnabled,
-  setClusterEmptySlotEnabled,
-  clusterEmptySlotTarget,
-  setClusterEmptySlotTarget,
-  clusterEmptySlotTimes,
-  setClusterEmptySlotTimes,
-  clusterRestrictedTimeEnabled,
-  setClusterRestrictedTimeEnabled,
-  clusterRestrictedTimeStart,
-  setClusterRestrictedTimeStart,
-  clusterRestrictedTimeEnd,
-  setClusterRestrictedTimeEnd,
-  clusterWeeklyAbsenceEnabled,
-  setClusterWeeklyAbsenceEnabled,
-  clusterWorkingHoursStart,
-  setClusterWorkingHoursStart,
-  clusterWorkingHoursEnd,
-  setClusterWorkingHoursEnd,
-  clusterAvailabilityMode,
-  setClusterAvailabilityMode,
-  saveClusterSettings,
-  clusterSaving,
-  allStudents,
-  clusterStudentIds,
-  setClusterStudentIds,
-  clusterStudentSearch,
-  setClusterStudentSearch,
+  refreshAgenda,
 }: InstructorsTabProps) {
+  const toast = useFeedbackToast();
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [tab, setTab] = React.useState<"disp" | "malattia" | "autonoma">("disp");
+  const [colorPopAnchor, setColorPopAnchor] = React.useState<DOMRect | null>(null);
+
+  const selectedIndex = instructors.findIndex((i) => i.id === selectedId);
+  const selected = selectedIndex >= 0 ? instructors[selectedIndex] : null;
+
+  const reloadInstructors = React.useCallback(async () => {
+    const res = await getAutoscuolaInstructors();
+    if (res.success && res.data) setInstructors(res.data);
+  }, [setInstructors]);
+
+  // ── Vista LISTA ──
+  if (!selected) {
+    return (
+      <div data-testid="instructors-pane">
+        <div>
+          {instructors.map((instructor, i) => {
+            const summary = weeklySummary(instructorWeeklyAvailability[instructor.id]);
+            return (
+              <div
+                key={instructor.id}
+                className={cn(
+                  "flex items-start justify-between gap-4 py-[18px]",
+                  i < instructors.length - 1 && "border-b border-[#eeeeee]",
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="text-base font-semibold text-[#222222]">{instructor.name}</div>
+                  <div className={cn("mt-1 text-[13px] font-medium leading-normal", summary ? "text-[#929292]" : "italic text-[#a8a8a8]")}>
+                    {summary ?? "Nessuna disponibilità settimanale"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(instructor.id);
+                    setTab("disp");
+                  }}
+                  className="shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
+                >
+                  Gestisci
+                </button>
+              </div>
+            );
+          })}
+          {/* Invita istruttore */}
+          <button
+            type="button"
+            onClick={() => setInviteInstructorOpen(true)}
+            className="flex cursor-pointer items-center gap-3 py-[18px] text-navy-900 transition-opacity hover:opacity-75"
+          >
+            <span className="relative size-[46px] shrink-0">
+              <Image
+                src="/images/settings/istruttore-nuovo.png"
+                alt=""
+                width={46}
+                height={46}
+                className="size-[46px] object-contain"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full border-2 border-white bg-navy-900">
+                <Plus className="size-2.5 text-white" strokeWidth={2.6} />
+              </span>
+            </span>
+            <span className="text-sm font-semibold">Invita istruttore</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Vista DETTAGLIO ──
+  const color = effectiveColor(selected, selectedIndex);
+  const takenColors = instructors.filter((i) => i.id !== selected.id && i.color).map((i) => i.color as string);
+  const TABS = [
+    { key: "disp" as const, label: "Disponibilità" },
+    { key: "malattia" as const, label: "Malattia" },
+    { key: "autonoma" as const, label: "Gestione autonoma" },
+  ];
+
   return (
-    <>
-      <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-        {instructors.map((instructor) => {
-          const wa = instructorWeeklyAvailability[instructor.id] ?? null;
-          const ranges = instructorAvailability[instructor.id] ?? [];
-          const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
-          return (
-            <ResourceCard
-              key={instructor.id}
-              name={instructor.name}
-              inactive={instructor.status === "inactive"}
-              subtitle={(() => {
-                const parts: string[] = [];
-                if (instructor.autonomousMode) parts.push(`Autonomo · ${instructor._count?.assignedStudents ?? 0} allievi`);
-                if (instructor.autonomousMode && instructor.inviteCode) parts.push(`Codice ${instructor.inviteCode}`);
-                const s = (instructor.settings ?? {}) as Record<string, unknown>;
-                if (typeof s.workingHoursStart === "string" && typeof s.workingHoursEnd === "string") {
-                  parts.push(`Orario lavoro: ${s.workingHoursStart}–${s.workingHoursEnd}`);
-                }
-                if (s.availabilityMode === "publication") parts.push("Disponibilità a pubblicazione");
-                return parts.length ? parts.join(" · ") : undefined;
-              })()}
-              actions={
-                <>
-                  <ColorSwatchPicker
-                    value={instructor.color ?? null}
-                    title="Colore istruttore"
-                    onSelect={(hex) => changeInstructorColor(instructor, hex)}
-                  />
-                  <ResourceCardAction
-                    onClick={() => openClusterPanel(instructor)}
-                    title="Gestione autonoma"
-                  >
-                    <Settings2 className="size-[15px]" strokeWidth={1.8} />
-                  </ResourceCardAction>
-                  <ResourceCardAction
-                    onClick={() => openInstructorAvailabilityDialog(instructor)}
-                    title="Modifica disponibilità"
-                  >
-                    <Clock className="size-[15px]" strokeWidth={1.8} />
-                  </ResourceCardAction>
-                  <ResourceCardAction
-                    onClick={() => {
-                      setSickLeaveInstructor(instructor);
-                      const today = new Date();
-                      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-                      setSickLeaveStartDate(todayStr);
-                      setSickLeaveEndDate(todayStr);
-                      setSickLeaveHalfDay(false);
-                      setSickLeaveStartTime("14:00");
-                    }}
-                    title="Segna malattia"
-                  >
-                    {"🤒"}
-                  </ResourceCardAction>
-                </>
-              }
-              availabilitySummary={
-                wa ? (
-                  <span>
-                    {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
-                    {wa.daysOfWeek
-                      .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                ) : (
-                  <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
-                )
-              }
-              slots={
-                ranges.length > 0
-                  ? ranges.map((range) => (
-                      <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
-                        {formatTime(range.start)}–{formatTime(range.end)}
-                      </SlotPill>
-                    ))
-                  : undefined
-              }
-              totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
-            />
-          );
-        })}
-        {/* Card dashed "Aggiungi istruttore" (stile proto): crea l'account direttamente */}
+    <div data-testid="instructors-pane">
+      <button
+        type="button"
+        onClick={() => setSelectedId(null)}
+        className="mb-3.5 inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#6a6a6a] transition-colors hover:text-[#222222]"
+      >
+        <ChevronLeft className="size-4" strokeWidth={1.8} />
+        Istruttori
+      </button>
+
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-2xl font-bold tracking-[-0.3px] text-[#222222]">{selected.name}</div>
+          <div className="mt-0.5 text-[13.5px] font-medium text-[#929292]">
+            Gestisci le impostazioni dell&apos;istruttore
+          </div>
+        </div>
         <button
           type="button"
-          onClick={() => setInviteInstructorOpen(true)}
-          className="flex min-h-[150px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[14px] border-[1.5px] border-dashed border-[#d5d5d5] bg-transparent p-5 transition-colors hover:border-navy-900 hover:bg-navy-50"
-        >
-          <span className="relative size-[58px]">
-            <Image
-              src="/images/settings/istruttore-nuovo.png"
-              alt=""
-              width={58}
-              height={58}
-              className="size-[58px] rounded-full object-cover"
-            />
-            <span className="absolute -bottom-px -right-px flex size-[22px] items-center justify-center rounded-full border-2 border-white bg-navy-900">
-              <Plus className="size-3 text-white" strokeWidth={2.4} />
-            </span>
-          </span>
-          <span className="text-sm font-semibold text-navy-900">Aggiungi istruttore</span>
-        </button>
+          title="Cambia colore"
+          onClick={(e) => setColorPopAnchor(e.currentTarget.getBoundingClientRect())}
+          className="size-8 shrink-0 cursor-pointer rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.1)] transition-transform hover:scale-110"
+          style={{ background: color }}
+        />
+      </div>
+      {colorPopAnchor && (
+        <ColorPop
+          anchor={colorPopAnchor}
+          current={color}
+          taken={takenColors}
+          onPick={(hex) => {
+            setColorPopAnchor(null);
+            void changeInstructorColor(selected, hex);
+          }}
+          onClose={() => setColorPopAnchor(null)}
+        />
+      )}
+
+      <div className="mb-6 mt-5 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={cn(
+              "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
+              tab === t.key ? "border-[#222222] font-semibold text-[#222222]" : "border-transparent font-medium text-[#6a6a6a] hover:text-[#222222]",
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* ── Cluster panel dialog ── */}
-      <Dialog open={Boolean(clusterInstructor)} onOpenChange={(open) => !open && setClusterInstructor(null)}>
-        <DialogContent className="sm:max-w-[520px] gap-0 p-0 overflow-hidden max-h-[80vh] overflow-y-auto">
-          <div className="px-6 pt-5 pb-4 border-b border-border">
-            <DialogHeader>
-              <DialogTitle>Gestione autonoma — {clusterInstructor?.name}</DialogTitle>
-            </DialogHeader>
+      <div className="max-w-[680px]">
+        {tab === "disp" && (
+          <DisponibilitaTab
+            instructor={selected}
+            weekly={instructorWeeklyAvailability[selected.id] ?? null}
+            setInstructorWeeklyAvailability={setInstructorWeeklyAvailability}
+            setInstructors={setInstructors}
+            refreshAgenda={refreshAgenda}
+            toast={toast}
+          />
+        )}
+        {tab === "malattia" && (
+          <MalattiaTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
+        )}
+        {tab === "autonoma" && (
+          <AutonomaTab
+            instructor={selected}
+            instructors={instructors}
+            setInstructors={setInstructors}
+            reloadInstructors={reloadInstructors}
+            toast={toast}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+type ToastApi = ReturnType<typeof useFeedbackToast>;
+
+// ═══ TAB DISPONIBILITÀ ═════════════════════════════════════════════════════════
+
+function DisponibilitaTab({
+  instructor,
+  weekly,
+  setInstructorWeeklyAvailability,
+  setInstructors,
+  refreshAgenda,
+  toast,
+}: {
+  instructor: InstructorDetail;
+  weekly: WeeklyAvailability | null;
+  setInstructorWeeklyAvailability: React.Dispatch<React.SetStateAction<Record<string, WeeklyAvailability>>>;
+  setInstructors: React.Dispatch<React.SetStateAction<InstructorDetail[]>>;
+  refreshAgenda: () => void;
+  toast: ToastApi;
+}) {
+  const settings = (instructor.settings ?? {}) as Record<string, unknown>;
+  const [mode, setMode] = React.useState<"default" | "publication">(
+    settings.availabilityMode === "publication" ? "publication" : "default",
+  );
+  const [plan, setPlan] = React.useState<"pre" | "cal">("pre");
+
+  // Stato locale della settimana tipo (draft = server, auto-save a ogni modifica)
+  const [days, setDays] = React.useState<number[]>(weekly?.daysOfWeek ?? [1, 2, 3, 4, 5]);
+  const [ranges, setRanges] = React.useState<Range[]>(
+    weekly ? rangesOf(weekly) : [{ startMinutes: 9 * 60, endMinutes: 18 * 60 }],
+  );
+  const hasWeekly = Boolean(weekly);
+
+  // ── persistenza settimana tipo ──
+  const persistWeekly = async (nextDays: number[], nextRanges: Range[], rollback: () => void) => {
+    const res = await setAutoscuolaInstructorWeeklyAvailability({
+      instructorId: instructor.id,
+      daysOfWeek: nextDays,
+      startMinutes: nextRanges[0]?.startMinutes ?? 9 * 60,
+      endMinutes: nextRanges[0]?.endMinutes ?? 18 * 60,
+      ranges: nextRanges,
+    });
+    if (!res.success || !res.data) {
+      rollback();
+      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
+      return;
+    }
+    setInstructorWeeklyAvailability((prev) => ({ ...prev, [instructor.id]: res.data! }));
+    refreshAgenda();
+  };
+
+  const toggleDay = (day: number) => {
+    const next = days.includes(day) ? days.filter((d) => d !== day) : [...days, day].sort((a, b) => a - b);
+    if (!next.length) {
+      toast.error({ description: "Seleziona almeno un giorno attivo." });
+      return;
+    }
+    const prev = days;
+    setDays(next);
+    void persistWeekly(next, ranges, () => setDays(prev));
+  };
+
+  const setRangeSide = (i: number, side: "a" | "b", label: string) => {
+    const next = ranges.map((r) => ({ ...r }));
+    const v = labelToMm(label);
+    if (side === "a") next[i].startMinutes = v;
+    else next[i].endMinutes = v;
+    if (next[i].endMinutes <= next[i].startMinutes) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
+    const prev = ranges;
+    setRanges(next);
+    void persistWeekly(days, next, () => setRanges(prev));
+  };
+
+  const addRange = () => {
+    const last = ranges[ranges.length - 1];
+    const start = Math.min((last?.endMinutes ?? 9 * 60) + 60, 21 * 60);
+    const next = [...ranges.map((r) => ({ ...r })), { startMinutes: start, endMinutes: Math.min(start + 120, 23 * 60) }];
+    const prev = ranges;
+    setRanges(next);
+    void persistWeekly(days, next, () => setRanges(prev));
+  };
+
+  const removeAvailability = async () => {
+    if (ranges.length > 1) {
+      const next = ranges.slice(0, -1);
+      const prev = ranges;
+      setRanges(next);
+      void persistWeekly(days, next, () => setRanges(prev));
+      return;
+    }
+    if (!hasWeekly) return;
+    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo istruttore?")) return;
+    const res = await deleteAutoscuolaInstructorWeeklyAvailability(instructor.id);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere la disponibilità." });
+      return;
+    }
+    setInstructorWeeklyAvailability((prev) => {
+      const next = { ...prev };
+      delete next[instructor.id];
+      return next;
+    });
+    refreshAgenda();
+    toast.success({ description: "Disponibilità rimossa." });
+  };
+
+  // ── modalità disponibilità (predefinita / a pubblicazione) ──
+  const saveMode = async (next: "default" | "publication") => {
+    const prev = mode;
+    setMode(next);
+    const merged = { ...settings, availabilityMode: next };
+    const res = await updateAutoscuolaInstructor({
+      instructorId: instructor.id,
+      settings: merged as Parameters<typeof updateAutoscuolaInstructor>[0]["settings"],
+    });
+    if (!res.success) {
+      setMode(prev);
+      toast.error({ description: res.message ?? "Impossibile cambiare modalità." });
+      return;
+    }
+    setInstructors((list) => list.map((i) => (i.id === instructor.id ? { ...i, settings: merged } : i)));
+  };
+
+  return (
+    <div>
+      {/* Modalità disponibilità */}
+      <div className="mb-[22px] flex items-start justify-between gap-6">
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-semibold text-[#222222]">Modalità disponibilità</div>
+          <div className="mt-1 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+            In «A pubblicazione» è l&apos;istruttore a pubblicare la disponibilità settimana per settimana.
           </div>
-          <div className="px-6 py-5 space-y-5">
-            {/* ── Orario di lavoro ── */}
-            <div className="space-y-3">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Orario di lavoro</span>
-              <p className="text-xs text-muted-foreground -mt-1">Definisci la fascia lavorativa per identificare ore extra.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="mb-2 text-xs font-semibold text-[#555555]">Inizio</div>
-                  <TimePickerInput
-                    value={clusterWorkingHoursStart ?? null}
-                    onChange={(v) => setClusterWorkingHoursStart(v)}
-                    minTime="06:00"
-                    maxTime="23:00"
-                    placeholder="Non impostato"
-                    onClear={() => setClusterWorkingHoursStart(undefined)}
-                    clearLabel="Non impostato"
-                    className="w-full justify-between"
-                  />
+        </div>
+        <div className="w-[220px] shrink-0">
+          <OptField
+            value={mode}
+            onChange={(v) => void saveMode(v)}
+            options={[
+              { v: "default", l: "Predefinita" },
+              { v: "publication", l: "A pubblicazione" },
+            ]}
+          />
+        </div>
+      </div>
+
+      <div className={LBL}>Tipo di pianificazione</div>
+      <div className="mb-[22px]">
+        <Seg
+          options={[
+            { v: "pre", l: "Predefinito" },
+            { v: "cal", l: "Calendario" },
+          ]}
+          value={plan}
+          onChange={setPlan}
+        />
+      </div>
+
+      {plan === "pre" ? (
+        <div>
+          <div className={LBL}>Giorni attivi</div>
+          <div className="mb-[22px] flex flex-wrap gap-2">
+            {DAY_ORDER.map((d) => (
+              <BlueChip key={d} active={days.includes(d)} onClick={() => toggleDay(d)}>
+                {DAY_LABELS[d]}
+              </BlueChip>
+            ))}
+          </div>
+          <div className={LBL}>Fasce orarie</div>
+          <div className="mb-3 flex flex-col gap-2.5">
+            {ranges.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="min-w-0 flex-1">
+                  <TimeField value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} />
                 </div>
-                <div>
-                  <div className="mb-2 text-xs font-semibold text-[#555555]">Fine</div>
-                  <TimePickerInput
-                    value={clusterWorkingHoursEnd ?? null}
-                    onChange={(v) => setClusterWorkingHoursEnd(v)}
-                    minTime="06:00"
-                    maxTime="23:00"
-                    placeholder="Non impostato"
-                    onClear={() => setClusterWorkingHoursEnd(undefined)}
-                    clearLabel="Non impostato"
-                    className="w-full justify-between"
-                  />
+                <span className="text-[13px] text-[#999999]">–</span>
+                <div className="min-w-0 flex-1">
+                  <TimeField value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} />
                 </div>
               </div>
-            </div>
-
-            <FieldGroup label="Modalità disponibilità">
-              <Select value={clusterAvailabilityMode} onValueChange={(v) => setClusterAvailabilityMode(v as "default" | "publication")}>
-                <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default">Predefinita</SelectItem>
-                  <SelectItem value="publication">A pubblicazione</SelectItem>
-                </SelectContent>
-              </Select>
-              <span className="text-[13px] font-medium text-[#929292]">
-                In modalità pubblicazione, l&apos;istruttore imposta la disponibilità settimana per settimana.
-              </span>
-            </FieldGroup>
-
-            <div
-              className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-              onClick={() => setClusterAutonomous((prev) => !prev)}
+            ))}
+          </div>
+          <div className="mb-[22px] flex items-center justify-between">
+            <button
+              type="button"
+              onClick={addRange}
+              className="inline-flex cursor-pointer items-center gap-1.5 text-[13.5px] font-semibold text-navy-900"
             >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-semibold text-[#222222]">Modalità autonoma</span>
-                <span className="text-[13px] font-medium text-[#929292]">
-                  L&apos;istruttore gestisce i propri allievi e impostazioni.
-                </span>
-              </div>
-              <InlineToggle checked={clusterAutonomous} size="lg" />
+              <Plus className="size-3.5" strokeWidth={2.2} />
+              Aggiungi fascia
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeAvailability()}
+              className="cursor-pointer text-[13px] font-semibold text-[#c13515]"
+            >
+              Rimuovi disponibilità
+            </button>
+          </div>
+        </div>
+      ) : (
+        <CalendarOverrides
+          instructor={instructor}
+          weekly={weekly}
+          refreshAgenda={refreshAgenda}
+          toast={toast}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Pianificazione a calendario: override giornalieri con multi-selezione. */
+function CalendarOverrides({
+  instructor,
+  weekly,
+  refreshAgenda,
+  toast,
+}: {
+  instructor: InstructorDetail;
+  weekly: WeeklyAvailability | null;
+  refreshAgenda: () => void;
+  toast: ToastApi;
+}) {
+  const todayIso = ymd(new Date());
+  const [monthOffset, setMonthOffset] = React.useState(0);
+  const [selectedDays, setSelectedDays] = React.useState<string[]>([]);
+  // date ISO → ranges [] (vuoto = assente)
+  const [overrides, setOverrides] = React.useState<Record<string, Range[]>>({});
+  const [applyingRec, setApplyingRec] = React.useState(false);
+
+  const loadOverrides = React.useCallback(async () => {
+    const to = new Date();
+    to.setFullYear(to.getFullYear() + 1);
+    const res = await getDailyAvailabilityOverrides({
+      ownerType: "instructor",
+      ownerId: instructor.id,
+      to: ymd(to),
+    });
+    if (res.success && res.data) {
+      const map: Record<string, Range[]> = {};
+      for (const o of res.data as Array<{ date: string | Date; ranges: unknown }>) {
+        const iso = ymd(new Date(o.date));
+        map[iso] = Array.isArray(o.ranges) ? (o.ranges as Range[]) : [];
+      }
+      setOverrides(map);
+    }
+  }, [instructor.id]);
+
+  React.useEffect(() => {
+    void loadOverrides();
+  }, [loadOverrides]);
+
+  // ── griglia del mese ──
+  const base = new Date();
+  const view = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
+  const firstDow = (view.getDay() + 6) % 7; // Lun=0
+  const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  const cells: Array<string | null> = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, d) => ymd(new Date(view.getFullYear(), view.getMonth(), d + 1))),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  // ── stato del giorno selezionato (default dalla settimana tipo) ──
+  const defaultFor = (iso: string): { available: boolean; ranges: Range[] } => {
+    const dow = new Date(iso + "T00:00:00").getDay();
+    if (!weekly) return { available: false, ranges: [] };
+    const inWeek = weekly.daysOfWeek.includes(dow);
+    return { available: inWeek, ranges: inWeek ? rangesOf(weekly) : [] };
+  };
+  const stateFor = (iso: string): { available: boolean; ranges: Range[] } =>
+    iso in overrides ? { available: overrides[iso].length > 0, ranges: overrides[iso] } : defaultFor(iso);
+
+  const firstSel = selectedDays[0] ?? null;
+  const sel = firstSel ? stateFor(firstSel) : null;
+
+  const persistDays = async (isoList: string[], ranges: Range[]) => {
+    const results = await Promise.all(
+      isoList.map((date) =>
+        setDailyAvailabilityOverride({ ownerType: "instructor", ownerId: instructor.id, date, ranges }),
+      ),
+    );
+    const failed = results.find((r) => !r.success);
+    if (failed) {
+      toast.error({ description: ("message" in failed && failed.message) || "Impossibile salvare l'eccezione." });
+    }
+    await loadOverrides();
+    refreshAgenda();
+  };
+
+  const setAvailable = (on: boolean) => {
+    const current = sel;
+    const ranges = on
+      ? current && current.ranges.length
+        ? current.ranges
+        : rangesOf(weekly).length
+          ? rangesOf(weekly)
+          : [{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]
+      : [];
+    // ottimista: aggiorna subito i pallini
+    setOverrides((prev) => {
+      const next = { ...prev };
+      for (const iso of selectedDays) next[iso] = ranges;
+      return next;
+    });
+    void persistDays(selectedDays, ranges);
+  };
+
+  const setSelRange = (i: number, side: "a" | "b", label: string) => {
+    if (!sel) return;
+    const next = sel.ranges.map((r) => ({ ...r }));
+    const v = labelToMm(label);
+    if (side === "a") next[i].startMinutes = v;
+    else next[i].endMinutes = v;
+    if (next[i].endMinutes <= next[i].startMinutes) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
+    setOverrides((prev) => {
+      const nx = { ...prev };
+      for (const iso of selectedDays) nx[iso] = next;
+      return nx;
+    });
+    void persistDays(selectedDays, next);
+  };
+
+  const addSelRange = () => {
+    if (!sel) return;
+    const last = sel.ranges[sel.ranges.length - 1];
+    const start = Math.min((last?.endMinutes ?? 9 * 60) + 60, 21 * 60);
+    const next = [...sel.ranges.map((r) => ({ ...r })), { startMinutes: start, endMinutes: Math.min(start + 120, 23 * 60) }];
+    setOverrides((prev) => {
+      const nx = { ...prev };
+      for (const iso of selectedDays) nx[iso] = next;
+      return nx;
+    });
+    void persistDays(selectedDays, next);
+  };
+
+  const removeSelRange = () => {
+    if (!sel || !sel.ranges.length) return;
+    const next = sel.ranges.slice(0, -1);
+    setOverrides((prev) => {
+      const nx = { ...prev };
+      for (const iso of selectedDays) nx[iso] = next;
+      return nx;
+    });
+    void persistDays(selectedDays, next);
+  };
+
+  const applyRecurring = async () => {
+    if (!sel || !selectedDays.length) return;
+    setApplyingRec(true);
+    const results = await Promise.all(
+      selectedDays.map((iso) =>
+        setRecurringAvailabilityOverride({
+          ownerType: "instructor",
+          ownerId: instructor.id,
+          dayOfWeek: new Date(iso + "T00:00:00").getDay(),
+          ranges: sel.available ? sel.ranges : [],
+          fromDate: iso,
+        }),
+      ),
+    );
+    setApplyingRec(false);
+    const failed = results.find((r) => !r.success);
+    if (failed) {
+      toast.error({ description: ("message" in failed && failed.message) || "Impossibile applicare la ricorrenza." });
+      return;
+    }
+    toast.success({ description: "Ricorrenza applicata alle prossime settimane." });
+    await loadOverrides();
+    refreshAgenda();
+  };
+
+  const restoreDefault = async () => {
+    const targets = selectedDays.filter((iso) => iso in overrides);
+    if (!targets.length) return;
+    await Promise.all(
+      targets.map((date) => deleteDailyAvailabilityOverride({ ownerType: "instructor", ownerId: instructor.id, date })),
+    );
+    toast.success({ description: "Giorni ripristinati al predefinito." });
+    await loadOverrides();
+    refreshAgenda();
+  };
+
+  const selTitle =
+    selectedDays.length === 0
+      ? null
+      : selectedDays.length === 1
+        ? (() => {
+            const iso = selectedDays[0];
+            const d = new Date(iso + "T00:00:00");
+            return `${DAY_LABELS[d.getDay()]} ${pad2(d.getDate())} ${MONTHS_AB[d.getMonth()].charAt(0).toUpperCase()}${MONTHS_AB[d.getMonth()].slice(1)}`;
+          })()
+        : `${selectedDays.length} giorni selezionati`;
+
+  return (
+    <div>
+      {/* Mese */}
+      <div className="mb-3 flex items-center justify-between">
+        <button
+          type="button"
+          disabled={monthOffset <= 0}
+          onClick={() => setMonthOffset((m) => m - 1)}
+          className={cn("flex cursor-pointer p-1", monthOffset <= 0 && "cursor-default opacity-25")}
+        >
+          <ChevronLeft className="size-4 text-[#222222]" strokeWidth={1.8} />
+        </button>
+        <div className="text-base font-bold text-[#222222]">
+          {MONTHS[view.getMonth()]} {view.getFullYear()}
+        </div>
+        <button type="button" onClick={() => setMonthOffset((m) => m + 1)} className="flex cursor-pointer p-1">
+          <ChevronLeft className="size-4 rotate-180 text-[#222222]" strokeWidth={1.8} />
+        </button>
+      </div>
+      <div className="mb-1 grid grid-cols-7">
+        {["L", "M", "M", "G", "V", "S", "D"].map((w, i) => (
+          <div key={i} className="py-0.5 text-center text-[11px] font-semibold text-[#bbbbbb]">{w}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((iso, i) => {
+          if (!iso) return <div key={i} className="h-[46px]" />;
+          const past = iso < todayIso;
+          const isToday = iso === todayIso;
+          const selDay = selectedDays.includes(iso);
+          const ov = overrides[iso];
+          const dot = ov !== undefined ? (ov.length > 0 ? "#3f7fe0" : "#d64530") : null;
+          const dayNum = Number(iso.slice(-2));
+          return (
+            <div key={iso} className="flex h-[46px] flex-col items-center justify-center gap-px">
+              <button
+                type="button"
+                disabled={past}
+                onClick={() =>
+                  setSelectedDays((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]))
+                }
+                className={cn(
+                  "flex size-[38px] items-center justify-center rounded-full text-[15px] box-border",
+                  past ? "cursor-default text-[#cccccc]" : "cursor-pointer",
+                  selDay ? "bg-navy-900 font-bold text-white" : !past && "font-medium text-[#222222] hover:bg-[#f2f2f2]",
+                  isToday && !selDay && "border-2 border-[#93b4f0]",
+                )}
+              >
+                {dayNum}
+              </button>
+              <span className="size-[5px] rounded-full" style={{ background: dot && !selDay ? dot : "transparent" }} />
             </div>
+          );
+        })}
+      </div>
 
-            {clusterAutonomous ? (
+      {/* Pannello giorni selezionati */}
+      {!selectedDays.length ? (
+        <div className="mt-[18px] border-t border-[#f0f0f0] pb-1 pt-5 text-[13.5px] text-[#aaaaaa]">
+          Seleziona uno o più giorni.
+        </div>
+      ) : (
+        <>
+          <div className="mt-[18px] border-t border-[#f0f0f0] pb-[22px] pt-[18px]">
+            <div className="mb-1.5 text-[15px] font-bold text-[#222222]">{selTitle}</div>
+            <div className="flex items-center justify-between gap-3.5 py-2.5">
+              <span className="text-sm font-semibold text-[#222222]">Disponibile</span>
+              <InlineToggle checked={Boolean(sel?.available)} onChange={() => setAvailable(!sel?.available)} size="lg" />
+            </div>
+            {sel?.available && (
               <>
-                {/* ── Codice di invito istruttore ── */}
-                {clusterInstructor?.inviteCode ? (
-                  <div className="flex items-center gap-3 rounded-2xl border border-[#dddddd] bg-[#f7f7f7] px-5 py-3">
-                    <span className="text-sm text-muted-foreground">Codice istruttore:</span>
-                    <span className="text-base font-bold tracking-wider text-foreground">
-                      {clusterInstructor.inviteCode}
-                    </span>
-                    <button
-                      type="button"
-                      className="ml-auto cursor-pointer text-xs font-semibold text-[#222222] transition-opacity hover:opacity-70"
-                      onClick={() => {
-                        navigator.clipboard.writeText(clusterInstructor.inviteCode ?? "");
-                      }}
-                    >
-                      Copia
-                    </button>
-                  </div>
-                ) : null}
-
-                <FieldGroup label="Durata guide">
-                  <div className="flex flex-wrap gap-1.5">
-                    {BOOKING_DURATION_OPTIONS.map((dur) => (
-                      <ToggleChip
-                        key={dur}
-                        active={clusterDurations.includes(dur)}
-                        onClick={() =>
-                          setClusterDurations((prev) =>
-                            prev.includes(dur) ? prev.filter((d) => d !== dur) : [...prev, dur].sort((a, b) => a - b),
-                          )
-                        }
-                        size="sm"
-                      >
-                        {dur} min
-                      </ToggleChip>
-                    ))}
-                  </div>
-                </FieldGroup>
-
-                <div
-                  className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                  onClick={() => setClusterRoundedHours((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-semibold text-[#222222]">Solo orari tondi</span>
-                    <span className="text-[13px] font-medium text-[#929292]">
-                      Proponi solo slot che iniziano a ore piene.
-                    </span>
-                  </div>
-                  <InlineToggle checked={clusterRoundedHours} size="lg" />
-                </div>
-
-                {/* ── Governance prenotazione (override cluster) ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Governance prenotazione</span>
-                  <FieldGroup label="Chi prenota">
-                    <Select value={clusterAppBookingActors ?? ""} onValueChange={(v) => setClusterAppBookingActors((v || undefined) as "students" | "instructors" | "both" | undefined)}>
-                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="students">Solo allievi</SelectItem>
-                        <SelectItem value="instructors">Solo istruttori</SelectItem>
-                        <SelectItem value="both">Entrambi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                  <FieldGroup label="Modalità prenotazione istruttore">
-                    <Select value={clusterInstructorBookingMode ?? ""} onValueChange={(v) => setClusterInstructorBookingMode((v || undefined) as "manual_full" | "manual_engine" | undefined)}>
-                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="manual_full">Manuale totale</SelectItem>
-                        <SelectItem value="manual_engine">Manuale + motore annullamenti</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FieldGroup>
-                </div>
-
-                {/* ── Scambio guide ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Scambio guide</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterSwapEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Scambio guide</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterSwapEnabled === undefined ? "Default azienda" : clusterSwapEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterSwapEnabled ?? false} size="lg" />
-                  </div>
-                  {clusterSwapEnabled && (
-                    <FieldGroup label="Notifica scambio">
-                      <Select value={clusterSwapNotifyMode ?? ""} onValueChange={(v) => setClusterSwapNotifyMode((v || undefined) as "all" | "available_only" | undefined)}>
-                        <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Tutti gli allievi</SelectItem>
-                          <SelectItem value="available_only">Solo disponibili</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
+                <div className="mt-2.5 flex flex-col gap-2.5">
+                  {!sel.ranges.length && (
+                    <div className="text-[13px] italic text-[#aaaaaa]">Nessuna fascia impostata</div>
                   )}
+                  {sel.ranges.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <TimeField value={mmToLabel(r.startMinutes)} onChange={(v) => setSelRange(i, "a", v)} />
+                      </div>
+                      <span className="text-[13px] text-[#999999]">–</span>
+                      <div className="min-w-0 flex-1">
+                        <TimeField value={mmToLabel(r.endMinutes)} onChange={(v) => setSelRange(i, "b", v)} />
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                {/* ── Annullamento guide ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Annullamento guide</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterStudentCancellationEnabled((prev) => prev === undefined ? false : prev ? undefined : true)}
+                <div className="mt-3 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={addSelRange}
+                    className="inline-flex cursor-pointer items-center gap-1.5 text-[13.5px] font-semibold text-navy-900"
                   >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Annullamento guide allievi</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterStudentCancellationEnabled === undefined ? "Default azienda" : clusterStudentCancellationEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterStudentCancellationEnabled ?? true} size="lg" />
-                  </div>
-                </div>
-
-                {/* ── Cutoff prenotazione ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Cutoff prenotazione</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterBookingCutoffEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
+                    <Plus className="size-3.5" strokeWidth={2.2} />
+                    Aggiungi fascia
+                  </button>
+                  <button
+                    type="button"
+                    onClick={removeSelRange}
+                    className="cursor-pointer text-[13px] font-semibold text-[#c13515]"
                   >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Cutoff prenotazione</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterBookingCutoffEnabled === undefined ? "Default azienda" : clusterBookingCutoffEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterBookingCutoffEnabled ?? false} size="lg" />
-                  </div>
-                  {clusterBookingCutoffEnabled && (
-                    <FieldGroup label="Orario limite">
-                      <TimePickerInput
-                        value={clusterBookingCutoffTime ?? null}
-                        onChange={(v) => setClusterBookingCutoffTime(v)}
-                        minTime="12:00"
-                        maxTime="22:00"
-                        minuteStep={30}
-                        placeholder="Default azienda"
-                        onClear={() => setClusterBookingCutoffTime(undefined)}
-                        clearLabel="Default azienda"
-                        className="w-full justify-between"
-                      />
-                    </FieldGroup>
-                  )}
+                    Rimuovi disponibilità
+                  </button>
                 </div>
-
-                {/* ── Limite settimanale ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Limite guide settimanali</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterWeeklyLimitEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Limite settimanale</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterWeeklyLimitEnabled === undefined ? "Default azienda" : clusterWeeklyLimitEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterWeeklyLimitEnabled ?? false} size="lg" />
-                  </div>
-                  {clusterWeeklyLimitEnabled && (
-                    <FieldGroup label="Max guide a settimana">
-                      <input
-                        type="number"
-                        min={1}
-                        max={50}
-                        className={PROTO_INPUT}
-                        value={clusterWeeklyLimit ?? ""}
-                        onChange={(e) => setClusterWeeklyLimit(e.target.value ? Number(e.target.value) : undefined)}
-                      />
-                    </FieldGroup>
-                  )}
-                </div>
-
-                {/* ── Notifiche slot vuoti ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Notifiche slot vuoti</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterEmptySlotEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Notifiche slot vuoti</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterEmptySlotEnabled === undefined ? "Default azienda" : clusterEmptySlotEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterEmptySlotEnabled ?? false} size="lg" />
-                  </div>
-                  {clusterEmptySlotEnabled && (
-                    <>
-                      <FieldGroup label="Destinatari">
-                        <Select value={clusterEmptySlotTarget ?? ""} onValueChange={(v) => setClusterEmptySlotTarget((v || undefined) as "all" | "availability_matching" | undefined)}>
-                          <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Default azienda" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Tutti gli allievi</SelectItem>
-                            <SelectItem value="availability_matching">Solo con disponibilità</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      <FieldGroup label="Orari notifica">
-                        <div className="flex flex-wrap gap-1.5">
-                          {["08:00","10:00","12:00","14:00","16:00","18:00","20:00"].map((t) => (
-                            <ToggleChip
-                              key={t}
-                              active={(clusterEmptySlotTimes ?? []).includes(t)}
-                              onClick={() => setClusterEmptySlotTimes((prev) => {
-                                const current = prev ?? [];
-                                return current.includes(t) ? current.filter((x) => x !== t) : [...current, t].sort();
-                              })}
-                              size="sm"
-                            >
-                              {t}
-                            </ToggleChip>
-                          ))}
-                        </div>
-                      </FieldGroup>
-                    </>
-                  )}
-                </div>
-
-                {/* ── Fascia oraria ristretta ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Fascia oraria ristretta</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterRestrictedTimeEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Fascia oraria ristretta</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterRestrictedTimeEnabled === undefined ? "Default azienda" : clusterRestrictedTimeEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterRestrictedTimeEnabled ?? false} size="lg" />
-                  </div>
-                  {clusterRestrictedTimeEnabled && (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <FieldGroup label="Inizio fascia">
-                        <TimePickerInput
-                          value={clusterRestrictedTimeStart ?? null}
-                          onChange={(v) => setClusterRestrictedTimeStart(v)}
-                          minTime="06:00"
-                          maxTime="14:00"
-                          minuteStep={30}
-                          placeholder="Default azienda"
-                          onClear={() => setClusterRestrictedTimeStart(undefined)}
-                          clearLabel="Default azienda"
-                          className="w-full justify-between"
-                        />
-                      </FieldGroup>
-                      <FieldGroup label="Fine fascia">
-                        <TimePickerInput
-                          value={clusterRestrictedTimeEnd ?? null}
-                          onChange={(v) => setClusterRestrictedTimeEnd(v)}
-                          minTime="09:00"
-                          maxTime="16:00"
-                          minuteStep={30}
-                          placeholder="Default azienda"
-                          onClear={() => setClusterRestrictedTimeEnd(undefined)}
-                          clearLabel="Default azienda"
-                          className="w-full justify-between"
-                        />
-                      </FieldGroup>
-                    </div>
-                  )}
-                </div>
-
-                {/* ── Assenza settimanale (Task 8) ── */}
-                <div className="space-y-3 border-t border-border/40 pt-4">
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">Assenza settimanale</span>
-                  <div
-                    className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                    onClick={() => setClusterWeeklyAbsenceEnabled((prev) => prev === undefined ? true : prev ? false : undefined)}
-                  >
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-semibold text-[#222222]">Assenza settimanale allievi</span>
-                      <span className="text-[13px] font-medium text-[#929292]">{clusterWeeklyAbsenceEnabled === undefined ? "Default azienda" : clusterWeeklyAbsenceEnabled ? "Attivo" : "Disattivo"}</span>
-                    </div>
-                    <InlineToggle checked={clusterWeeklyAbsenceEnabled ?? false} size="lg" />
-                  </div>
-                </div>
-
-                <FieldGroup label={`Allievi assegnati (${clusterStudentIds.length})`}>
-                  <Input
-                    placeholder="Cerca allievo..."
-                    value={clusterStudentSearch}
-                    onChange={(e) => setClusterStudentSearch(e.target.value)}
-                    className="mb-2"
-                  />
-                  <div className="space-y-0.5 max-h-[280px] overflow-y-auto rounded-xl border border-border/60 bg-gray-50/30">
-                    {(() => {
-                      const q = clusterStudentSearch.toLowerCase().trim();
-                      const filtered = q
-                        ? allStudents.filter((s) =>
-                            `${s.firstName} ${s.lastName}`.toLowerCase().includes(q),
-                          )
-                        : allStudents;
-                      const sorted = [...filtered].sort((a, b) => {
-                        const aAssigned = clusterStudentIds.includes(a.id) ? 0 : 1;
-                        const bAssigned = clusterStudentIds.includes(b.id) ? 0 : 1;
-                        if (aAssigned !== bAssigned) return aAssigned - bAssigned;
-                        return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
-                      });
-                      if (!sorted.length) {
-                        return (
-                          <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
-                            {q ? "Nessun risultato." : "Nessun allievo trovato."}
-                          </div>
-                        );
-                      }
-                      return sorted.map((student) => {
-                        const isAssignedHere = clusterStudentIds.includes(student.id);
-                        const assignedToOther =
-                          !isAssignedHere &&
-                          student.assignedInstructorId &&
-                          student.assignedInstructorId !== clusterInstructor?.id;
-                        const otherInstructorName = assignedToOther
-                          ? instructors.find((i) => i.id === student.assignedInstructorId)?.name
-                          : null;
-                        return (
-                          <div
-                            key={student.id}
-                            className={cn(
-                              "flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors",
-                              isAssignedHere ? "bg-[#eeeef4]" : "hover:bg-white",
-                            )}
-                            onClick={() => {
-                              setClusterStudentIds((prev) =>
-                                prev.includes(student.id)
-                                  ? prev.filter((id) => id !== student.id)
-                                  : [...prev, student.id],
-                              );
-                            }}
-                          >
-                            <Checkbox checked={isAssignedHere} className="pointer-events-none" />
-                            <span className="text-sm flex-1 truncate">
-                              {student.firstName} {student.lastName}
-                            </span>
-                            {licenseTag(student) ? (
-                              <span className="text-[10px] shrink-0 rounded-full border border-border bg-white px-1.5 py-0.5 font-medium text-foreground/70">
-                                {licenseTag(student)}
-                              </span>
-                            ) : null}
-                            {assignedToOther ? (
-                              <span className="text-[10px] shrink-0 bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">
-                                {otherInstructorName ?? "altro"}
-                              </span>
-                            ) : null}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </FieldGroup>
               </>
-            ) : null}
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3.5 border-t border-[#f0f0f0] py-4">
+            <div className="min-w-0">
+              <div className="text-[14.5px] font-semibold text-[#222222]">
+                {sel?.available ? "Disponibilità ricorrente" : "Assenza ricorrente"}
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                {selectedDays.length === 1 && firstSel
+                  ? `Applica a tutti i ${DAY_FULL[new Date(firstSel + "T00:00:00").getDay()]} dal ${fmtIso(firstSel)} in poi`
+                  : "Applica ai giorni della settimana selezionati, da ogni data in poi"}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={applyingRec}
+              onClick={() => void applyRecurring()}
+              className="flex shrink-0 cursor-pointer items-center gap-2 rounded-[10px] bg-navy-900 px-5 py-2.5 text-[13.5px] font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+            >
+              {applyingRec && <Loader2 className="size-3.5 animate-spin" />}
+              Applica
+            </button>
+          </div>
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => void restoreDefault()}
+              className="cursor-pointer text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
+            >
+              Ripristina predefinito
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══ TAB MALATTIA ══════════════════════════════════════════════════════════════
+
+type SickPeriod = { ids: string[]; start: string; end: string; half: boolean; time: string | null };
+
+function MalattiaTab({
+  instructor,
+  refreshAgenda,
+  toast,
+}: {
+  instructor: InstructorDetail;
+  refreshAgenda: () => void;
+  toast: ToastApi;
+}) {
+  const todayIso = ymd(new Date());
+  const [startIso, setStartIso] = React.useState(todayIso);
+  const [endIso, setEndIso] = React.useState(todayIso);
+  const [half, setHalf] = React.useState(false);
+  const [time, setTime] = React.useState("14:00");
+  const [saving, setSaving] = React.useState(false);
+  const [periods, setPeriods] = React.useState<SickPeriod[]>([]);
+  const [loaded, setLoaded] = React.useState(false);
+
+  const loadPeriods = React.useCallback(async () => {
+    const res = await listInstructorSickLeaves(instructor.id);
+    if (!res.success || !res.data) {
+      setLoaded(true);
+      return;
+    }
+    // Raggruppa i blocchi giornalieri contigui in periodi.
+    const blocks = res.data
+      .map((b) => {
+        const starts = new Date(b.startsAt);
+        return { id: b.id, iso: ymd(starts), startMinutes: starts.getHours() * 60 + starts.getMinutes() };
+      })
+      .sort((a, b) => a.iso.localeCompare(b.iso));
+    const grouped: SickPeriod[] = [];
+    for (const b of blocks) {
+      const last = grouped[grouped.length - 1];
+      const prevDate = last ? new Date(last.end + "T00:00:00") : null;
+      if (prevDate) prevDate.setDate(prevDate.getDate() + 1);
+      if (last && prevDate && ymd(prevDate) === b.iso) {
+        last.end = b.iso;
+        last.ids.push(b.id);
+      } else {
+        grouped.push({
+          ids: [b.id],
+          start: b.iso,
+          end: b.iso,
+          half: b.startMinutes > 0,
+          time: b.startMinutes > 0 ? mmToLabel(b.startMinutes) : null,
+        });
+      }
+    }
+    setPeriods(grouped);
+    setLoaded(true);
+  }, [instructor.id]);
+
+  React.useEffect(() => {
+    void loadPeriods();
+  }, [loadPeriods]);
+
+  const save = async () => {
+    if (!startIso || !endIso) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/autoscuole/instructor-sick-leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructorId: instructor.id,
+          startDate: startIso,
+          endDate: endIso,
+          startTime: half ? time : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success({
+          description: `Assenza registrata. ${data.data.appointmentsCancelled} guide cancellate.`,
+        });
+        setStartIso(todayIso);
+        setEndIso(todayIso);
+        setHalf(false);
+        setTime("14:00");
+        await loadPeriods();
+        refreshAgenda();
+      } else {
+        toast.error({ description: data.message ?? "Errore nel salvataggio." });
+      }
+    } catch {
+      toast.error({ description: "Errore nel salvataggio." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removePeriod = async (p: SickPeriod) => {
+    const res = await deleteInstructorSickLeave(p.ids);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere l'assenza." });
+      return;
+    }
+    toast.success({ description: "Assenza rimossa. Le guide già cancellate non vengono ripristinate." });
+    await loadPeriods();
+    refreshAgenda();
+  };
+
+  return (
+    <div>
+      <div className="mb-[18px] flex gap-3">
+        <div className="flex-1">
+          <div className={LBL}>Data inizio</div>
+          <DatePickerInput
+            value={startIso}
+            onChange={(v) => {
+              setStartIso(v);
+              if (endIso < v) setEndIso(v);
+            }}
+            className="h-auto rounded-[10px] border-[1.5px] px-3.5 py-[11px]"
+          />
+        </div>
+        <div className="flex-1">
+          <div className={LBL}>Data fine</div>
+          <DatePickerInput
+            value={endIso}
+            onChange={(v) => {
+              setEndIso(v);
+              if (v < startIso) setStartIso(v);
+            }}
+            className="h-auto rounded-[10px] border-[1.5px] px-3.5 py-[11px]"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3.5 border-t border-[#f0f0f0] py-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-[#222222]">Mezza giornata</div>
+          <div className="mt-0.5 text-[12.5px] font-medium leading-snug text-[#929292]">
+            La malattia inizia a un orario specifico del primo giorno.
+          </div>
+        </div>
+        <InlineToggle checked={half} onChange={() => setHalf((v) => !v)} size="lg" />
+      </div>
+      {half && (
+        <div className="mt-1">
+          <div className={LBL}>Orario inizio malattia</div>
+          <TimeField value={time} onChange={setTime} />
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void save()}
+        className="mt-[18px] flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 p-[13px] text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+      >
+        {saving && <Loader2 className="size-4 animate-spin" />}
+        Aggiungi assenza
+      </button>
+
+      {loaded && periods.length > 0 && (
+        <>
+          <div className={cn(LBL, "mt-7")}>Assenze registrate</div>
+          <div className="flex flex-col">
+            {periods.map((p, i) => (
+              <div
+                key={p.ids[0]}
+                className={cn(
+                  "flex items-center gap-3 px-0.5 py-[13px]",
+                  i < periods.length - 1 && "border-b border-[#f2f2f2]",
+                )}
+              >
+                <span className="size-2 shrink-0 rounded-full bg-[#d64530]" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-[#222222]">
+                    {p.start === p.end ? fmtIso(p.start) : `${fmtIso(p.start)} → ${fmtIso(p.end)}`}
+                  </div>
+                  <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                    {p.half ? `Mezza giornata${p.time ? ` · dalle ${p.time}` : ""}` : "Giornata intera"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void removePeriod(p)}
+                  className="shrink-0 cursor-pointer text-sm font-semibold text-[#c1360f]"
+                >
+                  Rimuovi
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ═══ TAB GESTIONE AUTONOMA ═════════════════════════════════════════════════════
+
+type TriState = "default" | "on" | "off";
+const triOf = (v: unknown): TriState => (typeof v === "boolean" ? (v ? "on" : "off") : "default");
+const triToBool = (v: TriState): boolean | undefined => (v === "default" ? undefined : v === "on");
+
+const GOV_ROWS: Array<{ key: string; settingKey: string; title: string; sub: string }> = [
+  { key: "scambio", settingKey: "swapEnabled", title: "Scambio guide", sub: "Scambio o spostamento di guide tra slot" },
+  { key: "annullamento", settingKey: "studentCancellationEnabled", title: "Annullamento guide allievi", sub: "Gli allievi possono annullare le guide" },
+  { key: "cutoff", settingKey: "bookingCutoffEnabled", title: "Cutoff prenotazione", sub: "Termine minimo per prenotare o annullare" },
+  { key: "limite", settingKey: "weeklyBookingLimitEnabled", title: "Limite settimanale", sub: "Tetto massimo di guide a settimana" },
+  { key: "notifiche", settingKey: "emptySlotNotificationEnabled", title: "Notifiche slot vuoti", sub: "Avvisa quando restano slot liberi" },
+  { key: "fascia", settingKey: "restrictedTimeRangeEnabled", title: "Fascia oraria ristretta", sub: "Restringe la fascia oraria prenotabile" },
+  { key: "assenza", settingKey: "weeklyAbsenceEnabled", title: "Assenza settimanale allievi", sub: "Gestione assenza settimanale lato allievi" },
+];
+
+const WORK_TIME_OPTIONS = TIME_OPTIONS;
+const NOTIF_TIMES = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
+
+function AutonomaTab({
+  instructor,
+  instructors,
+  setInstructors,
+  reloadInstructors,
+  toast,
+}: {
+  instructor: InstructorDetail;
+  instructors: InstructorDetail[];
+  setInstructors: React.Dispatch<React.SetStateAction<InstructorDetail[]>>;
+  reloadInstructors: () => Promise<void>;
+  toast: ToastApi;
+}) {
+  // Draft locale dei settings (il backend RIMPIAZZA il JSON: si salva sempre l'oggetto intero)
+  const [settings, setSettings] = React.useState<Record<string, unknown>>(
+    () => ({ ...((instructor.settings ?? {}) as Record<string, unknown>) }),
+  );
+  const [autonomous, setAutonomous] = React.useState(instructor.autonomousMode ?? false);
+  const [students, setStudents] = React.useState<StudentEntry[]>([]);
+  const [assignedIds, setAssignedIds] = React.useState<string[]>([]);
+  const [studentsLoaded, setStudentsLoaded] = React.useState(false);
+  const [query, setQuery] = React.useState("");
+
+  React.useEffect(() => {
+    let active = true;
+    getAutoscuolaStudentsWithProgress().then((res) => {
+      if (!active || !res.success || !res.data) return;
+      const list = res.data.map((s) => ({
+        id: s.id,
+        firstName: s.firstName,
+        lastName: s.lastName,
+        assignedInstructorId: (s as Record<string, unknown>).assignedInstructorId as string | null,
+        licenseCategory: s.licenseCategory ?? null,
+        transmission: s.transmission ?? null,
+      }));
+      setStudents(list);
+      setAssignedIds(list.filter((s) => s.assignedInstructorId === instructor.id).map((s) => s.id));
+      setStudentsLoaded(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [instructor.id]);
+
+  /** Persiste l'istruttore (settings SEMPRE completi). Rollback su errore. */
+  const persist = async (
+    patch: { settings?: Record<string, unknown>; autonomousMode?: boolean; assignStudentIds?: string[] },
+    rollback: () => void,
+  ) => {
+    const res = await updateAutoscuolaInstructor({
+      instructorId: instructor.id,
+      ...(patch.autonomousMode !== undefined ? { autonomousMode: patch.autonomousMode } : {}),
+      ...(patch.settings !== undefined
+        ? { settings: patch.settings as Parameters<typeof updateAutoscuolaInstructor>[0]["settings"] }
+        : {}),
+      ...(patch.assignStudentIds !== undefined ? { assignStudentIds: patch.assignStudentIds } : {}),
+    });
+    if (!res.success) {
+      rollback();
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+      return;
+    }
+    if (patch.settings !== undefined || patch.autonomousMode !== undefined) {
+      setInstructors((list) =>
+        list.map((i) =>
+          i.id === instructor.id
+            ? {
+                ...i,
+                ...(patch.autonomousMode !== undefined ? { autonomousMode: patch.autonomousMode } : {}),
+                ...(patch.settings !== undefined ? { settings: patch.settings } : {}),
+              }
+            : i,
+        ),
+      );
+    }
+    if (patch.assignStudentIds !== undefined) void reloadInstructors();
+  };
+
+  const saveSetting = (key: string, value: unknown) => {
+    const prev = settings;
+    const next = { ...settings };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    setSettings(next);
+    void persist({ settings: next }, () => setSettings(prev));
+  };
+
+  const saveTri = (settingKey: string, v: TriState) => saveSetting(settingKey, triToBool(v));
+
+  const toggleAutonomous = () => {
+    const prev = autonomous;
+    const next = !prev;
+    setAutonomous(next);
+    void persist({ autonomousMode: next, settings }, () => setAutonomous(prev));
+  };
+
+  const toggleStudent = (id: string) => {
+    const prev = assignedIds;
+    const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+    setAssignedIds(next);
+    void persist({ assignStudentIds: next }, () => setAssignedIds(prev));
+  };
+
+  const durations = Array.isArray(settings.bookingSlotDurations)
+    ? (settings.bookingSlotDurations as number[])
+    : [30, 60];
+  const toggleDuration = (d: number) => {
+    const next = durations.includes(d) ? durations.filter((x) => x !== d) : [...durations, d].sort((a, b) => a - b);
+    if (!next.length) {
+      toast.error({ description: "Seleziona almeno una durata." });
+      return;
+    }
+    saveSetting("bookingSlotDurations", next);
+  };
+
+  const notifTimes = Array.isArray(settings.emptySlotNotificationTimes)
+    ? (settings.emptySlotNotificationTimes as string[])
+    : [];
+
+  const filteredStudents = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q ? students.filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q)) : students;
+    return [...base].sort((a, b) => {
+      const aa = assignedIds.includes(a.id) ? 0 : 1;
+      const bb = assignedIds.includes(b.id) ? 0 : 1;
+      if (aa !== bb) return aa - bb;
+      return `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`);
+    });
+  }, [students, query, assignedIds]);
+
+  const workTimeOpts = [{ v: "__none__", l: "Non impostato" }, ...WORK_TIME_OPTIONS.map((t) => ({ v: t, l: t }))];
+
+  return (
+    <div>
+      {/* Orario di lavoro */}
+      <div className={LBL}>Orario di lavoro</div>
+      <div className="mb-2 flex items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <OptField
+            value={(settings.workingHoursStart as string) ?? "__none__"}
+            onChange={(v) => saveSetting("workingHoursStart", v === "__none__" ? undefined : v)}
+            options={workTimeOpts}
+          />
+        </div>
+        <span className="text-[13px] text-[#999999]">–</span>
+        <div className="min-w-0 flex-1">
+          <OptField
+            value={(settings.workingHoursEnd as string) ?? "__none__"}
+            onChange={(v) => saveSetting("workingHoursEnd", v === "__none__" ? undefined : v)}
+            options={workTimeOpts}
+          />
+        </div>
+      </div>
+      <div className="mb-[22px] text-xs font-medium leading-normal text-[#929292]">
+        Definisci la fascia lavorativa per identificare le ore extra.
+      </div>
+
+      {/* Modalità autonoma */}
+      <Row
+        border
+        title="Modalità autonoma"
+        description="L'istruttore gestisce i propri allievi e impostazioni."
+        control={<InlineToggle checked={autonomous} onChange={toggleAutonomous} size="lg" />}
+      />
+
+      {autonomous && (
+        <div>
+          {/* Codice invito (funzionalità reale, non nel proto: resta discreta qui) */}
+          {instructor.inviteCode ? (
+            <div className="mb-4 flex items-center gap-3 rounded-[12px] border border-[#e8e8e8] bg-[#fafafa] px-4 py-3">
+              <span className="text-[13px] font-medium text-[#6a6a6a]">Codice istruttore</span>
+              <span className="text-sm font-bold tracking-wider text-[#222222]">{instructor.inviteCode}</span>
+              <button
+                type="button"
+                className="ml-auto cursor-pointer text-xs font-semibold text-[#222222] transition-opacity hover:opacity-70"
+                onClick={() => {
+                  void navigator.clipboard.writeText(instructor.inviteCode ?? "");
+                  toast.success({ description: "Codice copiato." });
+                }}
+              >
+                Copia
+              </button>
+            </div>
+          ) : null}
+
+          {/* Durata guide */}
+          <div className="border-t border-[#f0f0f0] py-5">
+            <div className="text-[15px] font-semibold text-[#222222]">Durata guide</div>
+            <div className="mt-0.5 text-[13px] font-medium text-[#929292]">Durate proponibili per le guide</div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[30, 45, 60, 90, 120].map((d) => (
+                <BlueChip key={d} active={durations.includes(d)} onClick={() => toggleDuration(d)}>
+                  {d} min
+                </BlueChip>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-            <Button variant="outline" onClick={() => setClusterInstructor(null)}>
-              Annulla
-            </Button>
-            <Button onClick={saveClusterSettings} disabled={clusterSaving}>
-              {clusterSaving ? "Salvataggio..." : "Salva"}
-            </Button>
+          <Row
+            border
+            title="Solo orari tondi"
+            description="Gli slot partono solo a ore intere (es. 16:00, 17:00)."
+            control={
+              <InlineToggle
+                checked={settings.roundedHoursOnly === true}
+                onChange={() => saveSetting("roundedHoursOnly", settings.roundedHoursOnly !== true)}
+                size="lg"
+              />
+            }
+          />
+
+          {/* Governance */}
+          <div className={cn(LBL, "mt-[22px]")}>Governance prenotazione</div>
+          <div className="mb-4 flex gap-2.5 rounded-xl bg-[#f6f7f9] px-[15px] py-[13px]">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="mt-px shrink-0">
+              <circle cx="8" cy="8" r="6.5" stroke="#8a8a8a" strokeWidth="1.4" />
+              <path d="M8 7.2v3.6" stroke="#8a8a8a" strokeWidth="1.4" strokeLinecap="round" />
+              <circle cx="8" cy="5" r="0.9" fill="#8a8a8a" />
+            </svg>
+            <div className="text-[12.5px] font-medium leading-normal text-[#6a6a6a]">
+              Le opzioni impostate su <b className="font-semibold text-[#444444]">Autoscuola</b> (o{" "}
+              <b className="font-semibold text-[#444444]">Default autoscuola</b>) ereditano l&apos;impostazione definita
+              dall&apos;autoscuola.
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </>
+
+          {/* Chi prenota */}
+          <div className="border-t border-[#f0f0f0] py-5">
+            <div className="text-[15px] font-semibold text-[#222222]">Chi prenota</div>
+            <div className="mt-4">
+              <OptField
+                value={(settings.appBookingActors as string) ?? "default"}
+                onChange={(v) => saveSetting("appBookingActors", v === "default" ? undefined : v)}
+                options={[
+                  { v: "default", l: "Default autoscuola" },
+                  { v: "students", l: "Solo allievi" },
+                  { v: "instructors", l: "Solo istruttori" },
+                  { v: "both", l: "Entrambi" },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Modalità prenotazione */}
+          <div className="border-t border-[#f0f0f0] py-5">
+            <div className="text-[15px] font-semibold text-[#222222]">Modalità prenotazione</div>
+            <div className="mt-4">
+              <OptField
+                value={(settings.instructorBookingMode as string) ?? "default"}
+                onChange={(v) => saveSetting("instructorBookingMode", v === "default" ? undefined : v)}
+                options={[
+                  { v: "default", l: "Default autoscuola" },
+                  { v: "manual_full", l: "Manuale totale" },
+                  { v: "manual_engine", l: "Manuale + motore annullamenti" },
+                ]}
+              />
+            </div>
+          </div>
+
+          {/* Righe governance con segmented Autoscuola/Sì/No */}
+          {GOV_ROWS.map((g) => {
+            const tri = triOf(settings[g.settingKey]);
+            return (
+              <div key={g.key} className="border-t border-[#f0f0f0]">
+                <div className="flex items-center gap-3.5 py-[18px]">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-[#222222]">{g.title}</div>
+                    <div className="mt-0.5 text-[12.5px] font-medium leading-snug text-[#929292]">{g.sub}</div>
+                  </div>
+                  <Seg
+                    small
+                    options={[
+                      { v: "default", l: "Autoscuola" },
+                      { v: "on", l: "Sì" },
+                      { v: "off", l: "No" },
+                    ]}
+                    value={tri}
+                    onChange={(v) => saveTri(g.settingKey, v)}
+                  />
+                </div>
+                {tri === "on" && (
+                  <div className="-mt-0.5 pb-[18px] pt-1">
+                    {g.key === "scambio" && (
+                      <div>
+                        <div className={LBL}>Notifica scambio</div>
+                        <OptField
+                          value={(settings.swapNotifyMode as string) ?? "default"}
+                          onChange={(v) => saveSetting("swapNotifyMode", v === "default" ? undefined : v)}
+                          options={[
+                            { v: "default", l: "Default autoscuola" },
+                            { v: "all", l: "Tutti gli allievi" },
+                            { v: "available_only", l: "Solo disponibili" },
+                          ]}
+                        />
+                      </div>
+                    )}
+                    {g.key === "cutoff" && (
+                      <div>
+                        <div className={LBL}>Orario limite</div>
+                        <OptField
+                          value={(settings.bookingCutoffTime as string) ?? "default"}
+                          onChange={(v) => saveSetting("bookingCutoffTime", v === "default" ? undefined : v)}
+                          options={[
+                            { v: "default", l: "Default autoscuola" },
+                            ...TIME_OPTIONS.filter((t) => t >= "12:00" && t <= "22:00").map((t) => ({ v: t, l: t })),
+                          ]}
+                        />
+                      </div>
+                    )}
+                    {g.key === "limite" && (
+                      <div>
+                        <div className={LBL}>Max guide a settimana</div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          placeholder="es. 10"
+                          className={PROTO_INPUT}
+                          defaultValue={typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : ""}
+                          onBlur={(e) =>
+                            saveSetting(
+                              "weeklyBookingLimit",
+                              e.target.value ? Math.max(1, Math.min(50, Number(e.target.value))) : undefined,
+                            )
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                          }}
+                        />
+                      </div>
+                    )}
+                    {g.key === "notifiche" && (
+                      <>
+                        <div>
+                          <div className={LBL}>Destinatari</div>
+                          <OptField
+                            value={(settings.emptySlotNotificationTarget as string) ?? "default"}
+                            onChange={(v) => saveSetting("emptySlotNotificationTarget", v === "default" ? undefined : v)}
+                            options={[
+                              { v: "default", l: "Default autoscuola" },
+                              { v: "all", l: "Tutti gli allievi" },
+                              { v: "availability_matching", l: "Solo con disponibilità" },
+                            ]}
+                          />
+                        </div>
+                        <div className="mt-4">
+                          <div className={LBL}>Orari notifica</div>
+                          <div className="flex flex-wrap gap-2">
+                            {NOTIF_TIMES.map((t) => (
+                              <BlueChip
+                                key={t}
+                                active={notifTimes.includes(t)}
+                                onClick={() =>
+                                  saveSetting(
+                                    "emptySlotNotificationTimes",
+                                    notifTimes.includes(t)
+                                      ? notifTimes.filter((x) => x !== t)
+                                      : [...notifTimes, t].sort(),
+                                  )
+                                }
+                              >
+                                {t}
+                              </BlueChip>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {g.key === "fascia" && (
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div className={LBL}>Inizio fascia</div>
+                          <TimeField
+                            value={(settings.restrictedTimeRangeStart as string) ?? "09:00"}
+                            onChange={(v) => saveSetting("restrictedTimeRangeStart", v)}
+                          />
+                        </div>
+                        <div className="flex-1">
+                          <div className={LBL}>Fine fascia</div>
+                          <TimeField
+                            value={(settings.restrictedTimeRangeEnd as string) ?? "13:00"}
+                            onChange={(v) => saveSetting("restrictedTimeRangeEnd", v)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Allievi assegnati */}
+          <div className="border-t border-[#f0f0f0] py-5">
+            <div className="text-[15px] font-semibold text-[#222222]">
+              Allievi assegnati ({assignedIds.length})
+            </div>
+            <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+              Assegna gli allievi gestiti da questo istruttore.
+            </div>
+            <div className="mt-3.5">
+              <div className="relative mb-2.5">
+                <input
+                  placeholder="Cerca allievo…"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className={cn(PROTO_INPUT, "pl-[38px]")}
+                />
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="absolute left-[13px] top-1/2 -translate-y-1/2">
+                  <circle cx="7" cy="7" r="5" stroke="#aaaaaa" strokeWidth="1.5" />
+                  <path d="M11 11l3 3" stroke="#aaaaaa" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </div>
+              <div className="flex max-h-[230px] flex-col overflow-y-auto rounded-xl border border-[#eeeeee]">
+                {!studentsLoaded ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="size-4 animate-spin text-[#929292]" />
+                  </div>
+                ) : !filteredStudents.length ? (
+                  <div className="p-4 text-center text-[13px] text-[#aaaaaa]">Nessun allievo trovato</div>
+                ) : (
+                  filteredStudents.map((s, i) => {
+                    const on = assignedIds.includes(s.id);
+                    const other =
+                      !on && s.assignedInstructorId && s.assignedInstructorId !== instructor.id
+                        ? instructors.find((x) => x.id === s.assignedInstructorId)?.name
+                        : null;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleStudent(s.id)}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-3 px-3.5 py-[11px] text-left",
+                          i < filteredStudents.length - 1 && "border-b border-[#f4f4f4]",
+                          on ? "bg-[#f7f8ff]" : "bg-white hover:bg-[#fafafa]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-md border-[1.5px]",
+                            on ? "border-navy-900 bg-navy-900" : "border-[#d5d5d5] bg-white",
+                          )}
+                        >
+                          {on && <Check className="size-3 text-white" strokeWidth={2.4} />}
+                        </span>
+                        <span className="flex-1 truncate text-[13.5px] font-semibold text-[#222222]">
+                          {s.firstName} {s.lastName}
+                        </span>
+                        {other ? (
+                          <span className="shrink-0 rounded-md bg-[#f0f0f0] px-[7px] py-0.5 text-[11px] font-bold text-[#888888]">
+                            {other}
+                          </span>
+                        ) : s.licenseCategory ? (
+                          <span className="shrink-0 rounded-md bg-[#f0f0f0] px-[7px] py-0.5 text-[11px] font-bold text-[#888888]">
+                            {s.licenseCategory}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
