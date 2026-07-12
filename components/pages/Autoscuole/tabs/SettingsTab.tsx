@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowRight,
@@ -416,9 +417,37 @@ function EmptySlotNotificationSection({
 }) {
   const toast = useFeedbackToast();
   const [sending, setSending] = React.useState(false);
+  // Overlay di esito del proto ("Notifica inviata!"): si auto-chiude dopo 3s.
+  const [sentOverlay, setSentOverlay] = React.useState(false);
+  React.useEffect(() => {
+    if (!sentOverlay) return;
+    const timer = setTimeout(() => setSentOverlay(false), 3000);
+    return () => clearTimeout(timer);
+  }, [sentOverlay]);
 
   return (
     <div className="mt-7">
+      {sentOverlay &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/[0.32]"
+            onClick={() => setSentOverlay(false)}
+          >
+            <div className="flex w-[380px] max-w-[90vw] flex-col items-center rounded-[20px] bg-white px-12 pb-9 pt-10 text-center shadow-[0_8px_32px_rgba(0,0,0,0.18)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/images/settings/notifica-inviata.png"
+                alt=""
+                className="mx-auto mb-5 block size-[100px] select-none object-contain mix-blend-multiply"
+              />
+              <div className="mb-2 text-xl font-bold text-[#222222]">Notifica inviata!</div>
+              <div className="text-sm font-medium text-[#929292]">
+                Gli allievi idonei riceveranno la notifica a breve.
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
       {/* Riga toggle */}
       <div className="flex items-center justify-between gap-4 border-b border-[#ebebeb] pb-[18px]">
         <div>
@@ -530,9 +559,7 @@ function EmptySlotNotificationSection({
                     try {
                       const res = await triggerEmptySlotNotification();
                       if (res.success && res.data) {
-                        toast.success({
-                          description: `Notifica inviata a ${res.data.notified} alliev${res.data.notified === 1 ? "o" : "i"}.`,
-                        });
+                        setSentOverlay(true);
                       } else {
                         toast.error({
                           description: res.message ?? "Impossibile inviare la notifica.",
