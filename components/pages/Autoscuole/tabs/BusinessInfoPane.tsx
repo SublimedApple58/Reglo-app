@@ -228,7 +228,9 @@ export function BusinessInfoPane() {
               {initials}
             </span>
           )}
-          <span className="absolute -bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#dddddd] bg-white px-3.5 py-1.5 shadow-[0_2px_8px_rgba(0,0,0,0.12)]">
+          {/* Pill dal proto (photoBtnStyle): niente bordo, all'hover si aggiunge
+              un ring 1px #d9d9d9 dentro la box-shadow */}
+          <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-[7px] whitespace-nowrap rounded-full bg-white px-[15px] py-2 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]">
             {uploading ? (
               <Loader2 className="size-4 animate-spin text-foreground" />
             ) : (
