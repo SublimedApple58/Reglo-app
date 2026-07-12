@@ -524,7 +524,7 @@ export function VoiceSettingsPane() {
                     setHandoffDraft(voiceHandoffPhone ?? "");
                     setHandoffEditing(true);
                   }}
-                  className="shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 hover:text-navy-900"
+                  className="shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2"
                 >
                   Modifica
                 </button>
