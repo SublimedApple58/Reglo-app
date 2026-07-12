@@ -70,6 +70,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **ALL features**: every feature sends push via `sendAutoscuolaPushToUsers()`
 - → **Mobile (full checklist for new kind)**: `NotificationOverlay`, `NotificationInboxScreen`, `notifications.ts` types, `notificationStore.ts`
 - → **Recovery endpoint**: `app/api/autoscuole/notifications/route.ts` — queries DB fields per kind
+- → **Web Settings**: pane "Promemoria e notifiche" (`tabs/SettingsTab.tsx` sezione reminders) — preavvisi, canali e card "Notifica slot vuoti" (`emptySlotNotification*`, spostata da Prenotazioni e allievi il 2026-07-12)
 
 ### Instructor Clusters
 - → **Student Phase + Quiz Seats**: instructor invite code accettato da `student-register` (assegna `assignedInstructorId` alla registrazione; valido solo se active+autonomousMode)

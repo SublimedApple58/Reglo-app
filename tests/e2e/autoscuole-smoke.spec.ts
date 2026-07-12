@@ -249,9 +249,10 @@ test.describe("Autoscuole smoke", () => {
     await expect(pane.getByText("Consenti scambi tra allievi")).toBeVisible();
     await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
 
-    // Sub-tab App allievi
+    // Sub-tab App allievi ("Notifica slot disponibili domani" è migrata nel
+    // pane Promemoria e notifiche — verificata più sotto)
     await pane.getByRole("button", { name: "App allievi", exact: true }).click();
-    await expect(pane.getByText("Notifica slot disponibili domani")).toBeVisible();
+    await expect(pane.getByText("Mostra note nell'app allievi")).toBeVisible();
     await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
 
     // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
@@ -299,6 +300,27 @@ test.describe("Autoscuole smoke", () => {
     await expectNoSaveError();
     await roundedSwitch.click();
     // il gotcha dev: lascia completare la server action prima di chiudere
+    await page.waitForTimeout(4000);
+    await expectNoSaveError();
+
+    // ── "Notifica slot disponibili domani" è migrata in Promemoria e notifiche ──
+    await page.goto("/it/user/autoscuole?tab=settings&pane=reminders");
+    const remindersCard = page.getByText("Notifica slot vuoti").first();
+    await expect(remindersCard).toBeVisible({ timeout: 30000 });
+    await remindersCard.click(); // apre l'accordion
+    await expect(page.getByText("Notifica slot disponibili domani")).toBeVisible();
+    // flip → auto-save senza errori → restore
+    const slotToggle = page
+      .locator("div")
+      .filter({ hasText: /^Notifica slot disponibili domani/ })
+      .filter({ has: page.locator('button[role="switch"]') })
+      .last()
+      .getByRole("switch")
+      .first();
+    await slotToggle.click();
+    await page.waitForTimeout(3000);
+    await expectNoSaveError();
+    await slotToggle.click();
     await page.waitForTimeout(4000);
     await expectNoSaveError();
   });

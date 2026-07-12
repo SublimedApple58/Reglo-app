@@ -28,6 +28,10 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 | `availability_published` | `AutoscuolaInstructorPublishedWeek` where `publishedAt >= since` |
 | `weekly_absence` | `AutoscuolaStudentWeeklyAbsence` where `createdAt >= since` |
 
+## Web settings (pane "Promemoria e notifiche")
+
+`components/pages/Autoscuole/tabs/SettingsTab.tsx`, sezione `reminders` (overlay Impostazioni, auto-save): preavvisi a minuti allievo/istruttore, promemoria mattutino e giorno prima (TimePickerInput), canali per promemoria/cancellazioni, e la card **"Notifica slot vuoti"** (accordion dal proto) con il setting "Notifica slot disponibili domani" (`emptySlotNotificationEnabled/Target/Times` + bottone "Invia ora per domani" → `triggerEmptySlotNotification`). Il setting è stato SPOSTATO qui da "Prenotazioni e allievi > App allievi" il 2026-07-12.
+
 ## Checklist for adding a new notification kind
 1. **Backend push**: add `sendAutoscuolaPushToUsers()` call with `data.kind` in the action file
 2. **Recovery**: add query to `app/api/autoscuole/notifications/route.ts`

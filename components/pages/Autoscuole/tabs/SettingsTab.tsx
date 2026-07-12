@@ -11,9 +11,15 @@ import {
   Coffee,
   MapPin,
   Moon,
+  Plus,
+  Send,
+  X,
 } from "lucide-react";
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { triggerEmptySlotNotification } from "@/lib/actions/autoscuole-settings.actions";
 
 import {
   Select,
@@ -43,6 +49,17 @@ const CHANNEL_OPTIONS = [
   { value: "email", label: "Email" },
 ] as const;
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+// Mezz'ore accettate dal backend per gli invii della notifica slot vuoti
+const NOTIFICATION_TIME_OPTIONS = [
+  "08:00", "08:30", "09:00", "09:30",
+  "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30",
+  "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30",
+  "20:00", "20:30", "21:00", "21:30",
+  "22:00",
+];
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },
@@ -119,6 +136,14 @@ export type SettingsTabProps = {
     studentReminderChannels?: ChannelValue[];
     instructorReminderChannels?: ChannelValue[];
   }) => Promise<void>;
+  // Notifica slot vuoti (card del proto nel pane reminders; spostata da
+  // "Prenotazioni e allievi > App allievi" il 2026-07-12)
+  emptySlotNotificationEnabled: boolean;
+  setEmptySlotNotificationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  emptySlotNotificationTarget: "all" | "availability_matching";
+  setEmptySlotNotificationTarget: (v: "all" | "availability_matching") => void;
+  emptySlotNotificationTimes: string[];
+  setEmptySlotNotificationTimes: React.Dispatch<React.SetStateAction<string[]>>;
   // Policy
   lessonPolicyEnabled: boolean;
   setLessonPolicyEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -371,6 +396,204 @@ function ReminderBanner({
   );
 }
 
+/** Card "Notifica slot vuoti" del proto (gacc-notifslot-card): header con
+ *  campanella in box grigio-blu + contenuto collassabile con il setting
+ *  "Notifica slot disponibili domani" (toggle, destinatari, orari, invio ora). */
+function EmptySlotNotificationCard({
+  enabled,
+  setEnabled,
+  target,
+  setTarget,
+  times,
+  setTimes,
+}: {
+  enabled: boolean;
+  setEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  target: "all" | "availability_matching";
+  setTarget: (v: "all" | "availability_matching") => void;
+  times: string[];
+  setTimes: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const toast = useFeedbackToast();
+  const [open, setOpen] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+
+  return (
+    <div className="mt-5 overflow-hidden rounded-[14px] border border-[#dddddd] bg-white">
+      {/* Header cliccabile (accordion come nel proto) */}
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full cursor-pointer items-center gap-4 px-6 py-5 text-left transition-colors hover:bg-[#fafafa]"
+      >
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] border border-[#cfcfdc] bg-[#eef0f6]">
+          <Bell className="size-4 text-navy-900" strokeWidth={1.8} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-[15px] font-semibold text-foreground">
+            Notifica slot vuoti
+          </span>
+          <span className="mt-0.5 block text-[13px] font-medium text-[#929292]">
+            Notifica automaticamente gli allievi quando ci sono guide disponibili per il
+            giorno dopo.
+          </span>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-[#929292] transition-transform duration-200",
+            open && "rotate-180",
+          )}
+          strokeWidth={1.5}
+        />
+      </button>
+
+      {open && (
+        <div className="border-t border-[#f5f5f5] px-6 pb-6 pt-1">
+          {/* Riga toggle */}
+          <div className="flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">
+            <div>
+              <div className="text-sm font-semibold text-foreground">
+                Notifica slot disponibili domani
+              </div>
+              <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere
+                per il giorno dopo.
+              </div>
+            </div>
+            <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
+          </div>
+
+          {enabled && (
+            <>
+              <div className="mt-4">
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Destinatari</div>
+                <Select
+                  value={target}
+                  onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
+                >
+                  <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[320px] max-w-full")}>
+                    <SelectValue placeholder="Destinatari" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="availability_matching">
+                      Solo allievi con disponibilità corrispondente
+                    </SelectItem>
+                    <SelectItem value="all">Tutti gli allievi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2.5 text-xs font-semibold text-[#555555]">Orari di invio</div>
+                {/* Un TimePicker per ogni invio della giornata: la "x" toglie
+                    l'orario (min 1), il "+" ne aggiunge un altro. Il backend
+                    accetta solo mezz'ore tra 08:00 e 22:00. */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {times.map((time) => (
+                    <div key={time} className="group relative">
+                      <TimePickerInput
+                        value={time}
+                        minTime="08:00"
+                        maxTime="22:00"
+                        minuteStep={30}
+                        onChange={(next) => {
+                          setTimes((prev) => {
+                            if (prev.includes(next)) {
+                              toast.error({
+                                description: `Le ${next} sono già tra gli orari di invio.`,
+                              });
+                              return prev;
+                            }
+                            return prev.map((t) => (t === time ? next : t)).sort();
+                          });
+                        }}
+                      />
+                      {times.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Rimuovi orario ${time}`}
+                          onClick={() => setTimes((prev) => prev.filter((t) => t !== time))}
+                          className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <X className="size-3" strokeWidth={2.4} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {times.length < NOTIFICATION_TIME_OPTIONS.length && (
+                    <button
+                      type="button"
+                      aria-label="Aggiungi orario di invio"
+                      onClick={() =>
+                        setTimes((prev) => {
+                          // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
+                          const last = prev[prev.length - 1];
+                          const free = [
+                            ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
+                            ...NOTIFICATION_TIME_OPTIONS,
+                          ].find((t) => !prev.includes(t));
+                          return free ? [...prev, free].sort() : prev;
+                        })
+                      }
+                      className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#fafafa]"
+                    >
+                      <Plus className="size-4" strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Invia ora per domani (riga del proto) */}
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">Invia ora per domani</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                    Invia subito la notifica di guide disponibili per domani a tutti gli
+                    allievi idonei.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={sending}
+                  onClick={async () => {
+                    setSending(true);
+                    try {
+                      const res = await triggerEmptySlotNotification();
+                      if (res.success && res.data) {
+                        toast.success({
+                          description: `Notifica inviata a ${res.data.notified} alliev${res.data.notified === 1 ? "o" : "i"}.`,
+                        });
+                      } else {
+                        toast.error({
+                          description: res.message ?? "Impossibile inviare la notifica.",
+                        });
+                      }
+                    } catch {
+                      toast.error({ description: "Impossibile inviare la notifica." });
+                    } finally {
+                      setSending(false);
+                    }
+                  }}
+                  className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-[8px] border-[1.5px] border-[#dddddd] px-4 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {sending ? (
+                    <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
+                  ) : (
+                    <>
+                      <Send className="size-[13px]" strokeWidth={1.7} />
+                      Invia notifica
+                    </>
+                  )}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 function SettingsTab({
@@ -387,6 +610,12 @@ function SettingsTab({
   studentReminderChannels,
   instructorReminderChannels,
   updateReminderSettings,
+  emptySlotNotificationEnabled,
+  setEmptySlotNotificationEnabled,
+  emptySlotNotificationTarget,
+  setEmptySlotNotificationTarget,
+  emptySlotNotificationTimes,
+  setEmptySlotNotificationTimes,
   lessonPolicyEnabled,
   setLessonPolicyEnabled,
   lessonRequiredTypesEnabled,
@@ -544,6 +773,16 @@ function SettingsTab({
                 Invia comunicato
               </span>
             </div>
+
+            {/* Card "Notifica slot vuoti" (proto, in fondo al pane) */}
+            <EmptySlotNotificationCard
+              enabled={emptySlotNotificationEnabled}
+              setEnabled={setEmptySlotNotificationEnabled}
+              target={emptySlotNotificationTarget}
+              setTarget={setEmptySlotNotificationTarget}
+              times={emptySlotNotificationTimes}
+              setTimes={setEmptySlotNotificationTimes}
+            />
           </div>
         </AccordionSection>
         )}

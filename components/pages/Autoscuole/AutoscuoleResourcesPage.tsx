@@ -4,7 +4,19 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Users, X, type LucideIcon } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
+
+import {
+  BellProtoIcon,
+  CalendarProtoIcon,
+  CarProtoIcon,
+  FoldedMapIcon,
+  NotepadProtoIcon,
+  PhoneProtoIcon,
+  UserRoundProtoIcon,
+  UsersProtoIcon,
+  type ProtoIcon,
+} from "@/components/ui/proto-icons";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -283,47 +295,25 @@ type ConfigPane =
 const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "vehicles"];
 const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
 
-/** Mappa piegata SQUADRATA del proto (cfgnav-sede): lucide `Map` moderna è la
- * variante arrotondata — il proto usa il path feather ad angoli dritti. */
-const FoldedMapIcon = ({
-  className,
-  strokeWidth = 1.9,
-}: {
-  className?: string;
-  strokeWidth?: number;
-}) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={strokeWidth}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-  >
-    <path d="M3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6z" />
-    <path d="M9 3v15" />
-    <path d="M15 6v15" />
-  </svg>
-);
-
+// Icone 1:1 dal proto (components/ui/proto-icons.tsx): lucide ha varianti
+// diverse dagli SVG del proto per quasi tutte le voci della sidebar.
 const CONFIG_PANE_GROUPS: Array<
-  Array<{ key: ConfigPane; label: string; icon: LucideIcon | typeof FoldedMapIcon }>
+  Array<{ key: ConfigPane; label: string; icon: LucideIcon | ProtoIcon }>
 > = [
   [
-    { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
+    { key: "business", label: "Informazioni aziendali", icon: UserRoundProtoIcon },
     { key: "locations", label: "Sede e luoghi", icon: FoldedMapIcon },
   ],
   [
-    { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarDays },
-    { key: "policy", label: "Policy tipi guida", icon: ClipboardList },
-    { key: "reminders", label: "Promemoria e notifiche", icon: Bell },
+    { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarProtoIcon },
+    { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
+    { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
   ],
   [
-    { key: "instructors", label: "Istruttori", icon: Users },
-    { key: "vehicles", label: "Veicoli", icon: Car },
+    { key: "instructors", label: "Istruttori", icon: UsersProtoIcon },
+    { key: "vehicles", label: "Veicoli", icon: CarProtoIcon },
   ],
-  [{ key: "voice", label: "Segretaria", icon: PhoneCall }],
+  [{ key: "voice", label: "Segretaria", icon: PhoneProtoIcon }],
 ];
 
 /**
@@ -443,7 +433,6 @@ export function AutoscuoleResourcesPage({
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
-  const [triggeringNotification, setTriggeringNotification] = React.useState(false);
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
@@ -1528,6 +1517,12 @@ export function AutoscuoleResourcesPage({
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
             updateReminderSettings={updateReminderSettings}
+            emptySlotNotificationEnabled={emptySlotNotificationEnabled}
+            setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
+            emptySlotNotificationTarget={emptySlotNotificationTarget}
+            setEmptySlotNotificationTarget={(v) => saveEmptySlotNotificationTarget(v as "all" | "availability_matching")}
+            emptySlotNotificationTimes={emptySlotNotificationTimes}
+            setEmptySlotNotificationTimes={saveEmptySlotNotificationTimes}
             lessonPolicyEnabled={lessonPolicyEnabled}
             setLessonPolicyEnabled={saveLessonPolicyEnabled}
             lessonRequiredTypesEnabled={lessonRequiredTypesEnabled}
@@ -1687,14 +1682,6 @@ export function AutoscuoleResourcesPage({
             setStudentNotesEnabled={saveStudentNotesEnabled}
             groupLessonsEnabled={groupLessonsEnabled}
             setGroupLessonsEnabled={saveGroupLessonsEnabled}
-            emptySlotNotificationEnabled={emptySlotNotificationEnabled}
-            setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
-            emptySlotNotificationTarget={emptySlotNotificationTarget}
-            setEmptySlotNotificationTarget={(v) => saveEmptySlotNotificationTarget(v as "all" | "availability_matching")}
-            emptySlotNotificationTimes={emptySlotNotificationTimes}
-            setEmptySlotNotificationTimes={saveEmptySlotNotificationTimes}
-            triggeringNotification={triggeringNotification}
-            setTriggeringNotification={setTriggeringNotification}
             instructorPreferenceEnabled={instructorPreferenceEnabled}
             setInstructorPreferenceEnabled={saveInstructorPreferenceEnabled}
             toast={toast}

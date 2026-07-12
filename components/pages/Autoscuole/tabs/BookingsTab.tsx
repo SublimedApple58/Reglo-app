@@ -1,8 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronDown, Loader2, Plus, Send, X } from "lucide-react";
-import { TimePickerInput } from "@/components/ui/time-picker";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import {
   Select,
@@ -24,7 +23,6 @@ import {
 import {
   getQuizSeatsContext,
   setAutoAssignQuizOnSignup,
-  triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 
 export type BookingsTabProps = {
@@ -82,14 +80,6 @@ export type BookingsTabProps = {
   // App allievi
   studentNotesEnabled: boolean;
   setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  emptySlotNotificationEnabled: boolean;
-  setEmptySlotNotificationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
-  emptySlotNotificationTarget: "all" | "availability_matching";
-  setEmptySlotNotificationTarget: (v: "all" | "availability_matching") => void;
-  emptySlotNotificationTimes: string[];
-  setEmptySlotNotificationTimes: React.Dispatch<React.SetStateAction<string[]>>;
-  triggeringNotification: boolean;
-  setTriggeringNotification: React.Dispatch<React.SetStateAction<boolean>>;
   instructorPreferenceEnabled: boolean;
   setInstructorPreferenceEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   toast: { success: (opts: { description: string }) => void; error: (opts: { description: string }) => void };
@@ -125,16 +115,6 @@ const CUTOFF_TIME_OPTIONS = [
   "22:00",
 ];
 
-const NOTIFICATION_TIME_OPTIONS = [
-  "08:00", "08:30", "09:00", "09:30",
-  "10:00", "10:30", "11:00", "11:30",
-  "12:00", "12:30", "13:00", "13:30",
-  "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30",
-  "18:00", "18:30", "19:00", "19:30",
-  "20:00", "20:30", "21:00", "21:30",
-  "22:00",
-];
 
 /** Riga setting flat (stile lista Airbnb): titolo 600 + descrizione grigia,
  * toggle navy grande a destra. Solo il toggle è cliccabile. */
@@ -485,14 +465,6 @@ export default function BookingsTab({
   setStudentNotesEnabled,
   groupLessonsEnabled,
   setGroupLessonsEnabled,
-  emptySlotNotificationEnabled,
-  setEmptySlotNotificationEnabled,
-  emptySlotNotificationTarget,
-  setEmptySlotNotificationTarget,
-  emptySlotNotificationTimes,
-  setEmptySlotNotificationTimes,
-  triggeringNotification,
-  setTriggeringNotification,
   instructorPreferenceEnabled,
   setInstructorPreferenceEnabled,
   toast,
@@ -872,131 +844,8 @@ export default function BookingsTab({
           />
         </div>
 
-        <div className="py-6">
-          <SettingRow
-            title="Notifica slot disponibili domani"
-            description="Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere per il giorno dopo."
-            checked={emptySlotNotificationEnabled}
-            onToggle={() => setEmptySlotNotificationEnabled((prev) => !prev)}
-          />
-          {emptySlotNotificationEnabled && (
-            <>
-              <FieldBlock label="Destinatari">
-                <Select
-                  value={emptySlotNotificationTarget}
-                  onValueChange={(value) => setEmptySlotNotificationTarget(value as "all" | "availability_matching")}
-                >
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[320px]")}>
-                    <SelectValue placeholder="Destinatari" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="availability_matching">Solo allievi con disponibilità corrispondente</SelectItem>
-                    <SelectItem value="all">Tutti gli allievi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </FieldBlock>
-
-              <FieldBlock label="Orari di invio">
-                {/* Un TimePicker per ogni invio della giornata: la "x" toglie
-                    l'orario (min 1), il "+" ne aggiunge un altro. Il backend
-                    accetta solo mezz'ore tra 08:00 e 22:00. */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  {emptySlotNotificationTimes.map((time) => (
-                    <div key={time} className="group relative">
-                      <TimePickerInput
-                        value={time}
-                        minTime="08:00"
-                        maxTime="22:00"
-                        minuteStep={30}
-                        onChange={(next) => {
-                          setEmptySlotNotificationTimes((prev) => {
-                            if (prev.includes(next)) {
-                              toast.error({ description: `Le ${next} sono già tra gli orari di invio.` });
-                              return prev;
-                            }
-                            return prev.map((t) => (t === time ? next : t)).sort();
-                          });
-                        }}
-                      />
-                      {emptySlotNotificationTimes.length > 1 && (
-                        <button
-                          type="button"
-                          aria-label={`Rimuovi orario ${time}`}
-                          onClick={() =>
-                            setEmptySlotNotificationTimes((prev) => prev.filter((t) => t !== time))
-                          }
-                          className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
-                        >
-                          <X className="size-3" strokeWidth={2.4} />
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  {emptySlotNotificationTimes.length < NOTIFICATION_TIME_OPTIONS.length && (
-                    <button
-                      type="button"
-                      aria-label="Aggiungi orario di invio"
-                      onClick={() =>
-                        setEmptySlotNotificationTimes((prev) => {
-                          // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
-                          const last = prev[prev.length - 1];
-                          const free = [
-                            ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
-                            ...NOTIFICATION_TIME_OPTIONS,
-                          ].find((t) => !prev.includes(t));
-                          return free ? [...prev, free].sort() : prev;
-                        })
-                      }
-                      className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#fafafa]"
-                    >
-                      <Plus className="size-4" strokeWidth={2.2} />
-                    </button>
-                  )}
-                </div>
-              </FieldBlock>
-
-              <div className="mt-5 rounded-[12px] border border-[#e8e8e8] px-5 py-4">
-                <div className="text-sm font-semibold text-foreground">Invia ora per domani</div>
-                <div className="mt-1 text-[13px] font-medium text-[#929292]">
-                  Invia subito la notifica di guide disponibili per domani a tutti gli allievi idonei.
-                </div>
-                <button
-                  type="button"
-                  disabled={triggeringNotification}
-                  onClick={async () => {
-                    setTriggeringNotification(true);
-                    try {
-                      const res = await triggerEmptySlotNotification();
-                      if (res.success && res.data) {
-                        toast.success({
-                          description: `Notifica inviata a ${res.data.notified} alliev${res.data.notified === 1 ? "o" : "i"}.`,
-                        });
-                      } else {
-                        toast.error({
-                          description: res.message ?? "Impossibile inviare la notifica.",
-                        });
-                      }
-                    } catch {
-                      toast.error({ description: "Impossibile inviare la notifica." });
-                    } finally {
-                      setTriggeringNotification(false);
-                    }
-                  }}
-                  className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-[8px] border-[1.5px] border-[#dddddd] px-4 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
-                >
-                  {triggeringNotification ? (
-                    <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
-                  ) : (
-                    <>
-                      <Send className="size-[13px]" strokeWidth={1.7} />
-                      Invia notifica
-                    </>
-                  )}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {/* "Notifica slot disponibili domani" è stata spostata nel pane
+            "Promemoria e notifiche" (card Notifica slot vuoti, 2026-07-12) */}
 
         <div className="py-6">
           <SettingRow
