@@ -333,3 +333,15 @@ Verificato con Playwright: apertura dal + (destra) → card a sinistra 460x796; 
 3. **Post-redesign**: allineare colori blocchi sul MOBILE (WeeklyAgendaView getLessonLook + DayItinerary) — vedi memoria project_lesson_block_colors_unification. Possibile feature futura emersa: tab "Esami" allievi con esiti Promosso/Bocciato (richiede backend nuovo).
 
 Promemoria operativi: dev server è dell'utente (NO pnpm build con dev attivo); verificare con typecheck+lint+Playwright (login titolare@reglo.it/RegloTest2026!, aspettare hydration 3.5s prima del fill); commit su feat/airbnb-redesign, NIENTE staging/prod fino a fine progetto; proto renderizzabile con `python3 -m http.server 8899` in ~/Downloads/dashboard + Playwright.
+
+---
+
+## SESSIONE 2026-07-12 (pomeriggio) — Assistenza, layout sidebar, Sede e luoghi, loading dots
+
+- **Centro assistenza**: composer textarea dal proto (`aiBoxStyle`: bordo 2px→#222 al focus, radius 16, min-h 92, freccia 36px che si accende con testo) + 3 FAQ preimpostate a risposta immediata con card "Percorso" (effimere, non scrivono al team; percorsi adattati alla NOSTRA app).
+- **Layout Airbnb Impostazioni + Area personale**: sidebar ancorata al bordo sinistro (400px, divider full-height), contenuto centrato `max-w-[860px]` nello spazio restante, header full-width (logo allineato alla sidebar). Prima tutto fluttuava in un blocco centrato max-1280.
+- **Pill "Modifica" foto** (Informazioni aziendali + Area personale): senza bordo, ombra proto, hover = ring `0 0 0 1px #d9d9d9` in box-shadow.
+- **Loading bottoni GLOBALE**: `<LoadingDots />` (`components/ui/loading-dots.tsx` + keyframes `loading-dots-pulse`): 3 puntini 7px bg-current, pulse 1s a cascata (proto `.ab-dots`). 33 sostituzioni/26 file, label mai mostrata in loading, icon-only ≤36px → `scale-[0.6]`. SOLO WEB: il mobile resta con ActivityIndicator (richiesta esplicita). Spinner di contenuto/pagina invariati.
+- **Sede e luoghi**: icona sidebar `Map` (import come `MapIcon`: il file usa `new Map()`!), dialog riscritto stile proto (card 480, illustrazioni sede-autoscuola/luogo-guida.png copiate dal proto in public/images/settings/, input #f7f8fa focus near-black, toggle Posizione precisa, CTA pill navy), card pane rifinite. Logica/Places invariati. Nuova doc `docs/features/locations.md`.
+- **Gotcha e2e**: in dev Next monta transitoriamente il DOM doppio durante le transizioni di route → strict mode Playwright vede 2 nodi. Fix nel test utenti: `.first()` + `toHaveCount(1)` prima dei click. I test possono flakare al primo run dopo tanti HMR.
+- Commit: `9a07b77` (assistenza), `0d10367` (layout), `d925d42` (pill hover), `08d0bea` (dots), `f94e031` (sede e luoghi).
