@@ -716,7 +716,8 @@ function SettingsTab({
         <AccordionSection
           icon={MapPin}
           title="Sede e luoghi"
-          description="Sede dell'autoscuola e luoghi extra per le guide. Mostrati agli allievi nel dettaglio della guida."
+          // Sottotitolo dentro LocationsSection: nell'onboarding non deve vedersi
+          description=""
           expanded={expandedSection === "locations"}
           onToggle={() => toggleSection("locations")}
           standalone={standalone}

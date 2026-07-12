@@ -210,6 +210,11 @@ export function LocationsSection() {
 
   return (
     <FadeIn className="space-y-3">
+      {/* Sottotitolo del pane: qui e non nel wrapper, così l'onboarding resta pulito */}
+      <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">
+        Sede dell&apos;autoscuola e luoghi extra per le guide. Mostrati agli allievi nel
+        dettaglio della guida.
+      </p>
       {/* ── Sede dell'autoscuola ── */}
       <div className="flex items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5">
         <div className="min-w-0">
