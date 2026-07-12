@@ -417,11 +417,11 @@ function EmptySlotNotificationSection({
 }) {
   const toast = useFeedbackToast();
   const [sending, setSending] = React.useState(false);
-  // Overlay di esito del proto ("Notifica inviata!"): si auto-chiude dopo 3s.
+  // Overlay di esito del proto ("Notifica inviata!"): si auto-chiude dopo 1.8s.
   const [sentOverlay, setSentOverlay] = React.useState(false);
   React.useEffect(() => {
     if (!sentOverlay) return;
-    const timer = setTimeout(() => setSentOverlay(false), 3000);
+    const timer = setTimeout(() => setSentOverlay(false), 1800);
     return () => clearTimeout(timer);
   }, [sentOverlay]);
   // Il portal è sempre montato (serve l'exit di AnimatePresence) → solo client.
