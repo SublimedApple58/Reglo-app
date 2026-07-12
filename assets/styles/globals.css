@@ -438,6 +438,17 @@
   }
 }
 
+/* Anello brand del login (auth/BrandCarousel) — rotazione continua del
+   cilindro di card, stile hero Bending Spoons */
+@keyframes brand-ring-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-360deg);
+  }
+}
+
 /* Skeleton shimmer — sweep di luce sui placeholder (skeleton "vivi") */
 @keyframes skeleton-shimmer {
   0% {

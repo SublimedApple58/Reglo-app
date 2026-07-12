@@ -35,7 +35,7 @@ export default function AuthLayout({
       </div>
 
       {/* ── Pannello brand ── */}
-      <div className="hidden items-center justify-center bg-[#1a1a2e] p-12 lg:flex">
+      <div className="hidden items-center justify-center overflow-hidden bg-[#1a1a2e] p-12 lg:flex">
         <div className="w-full max-w-[440px]">
           <h2 className="text-[26px] font-bold leading-snug tracking-[-0.4px] text-white">
             Gestisci la tua autoscuola
