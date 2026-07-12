@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
@@ -72,12 +73,6 @@ const DAY_LABELS: Record<number, string> = { 1: "Lun", 2: "Mar", 3: "Mer", 4: "G
 const DAY_FULL: Record<number, string> = { 1: "lunedì", 2: "martedì", 3: "mercoledì", 4: "giovedì", 5: "venerdì", 6: "sabato", 0: "domenica" };
 const MONTHS = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"];
 const MONTHS_AB = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
-
-// Fasce orarie a passi di 30' (06:00–23:00) per disponibilità e malattia.
-const TIME_OPTIONS = Array.from({ length: (23 - 6) * 2 + 1 }, (_, i) => {
-  const m = 6 * 60 + i * 30;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-});
 
 const LBL = "mb-2 text-[11px] font-bold uppercase tracking-[0.4px] text-[#929292]";
 
@@ -179,31 +174,6 @@ function Seg<T extends string>({
         );
       })}
     </div>
-  );
-}
-
-function TimeField({
-  value,
-  onChange,
-  options = TIME_OPTIONS,
-  placeholder = "Orario",
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options?: string[];
-  placeholder?: string;
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={PROTO_SELECT_TRIGGER}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {options.map((t) => (
-          <SelectItem key={t} value={t}>{t}</SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 
@@ -331,6 +301,8 @@ interface InstructorsTabProps {
   changeInstructorColor: (instructor: InstructorDetail, color: string | null) => Promise<void>;
   /** Ricarica gli slot agenda (dopo modifiche a disponibilità/malattia). */
   refreshAgenda: () => void;
+  /** Notifica il parent quando si entra/esce dal dettaglio (nasconde il titolo pane). */
+  onDetailOpenChange?: (open: boolean) => void;
 }
 
 // ── Componente principale ──────────────────────────────────────────────────────
@@ -343,6 +315,7 @@ export default function InstructorsTab({
   setInviteInstructorOpen,
   changeInstructorColor,
   refreshAgenda,
+  onDetailOpenChange,
 }: InstructorsTabProps) {
   const toast = useFeedbackToast();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -383,6 +356,7 @@ export default function InstructorsTab({
                   onClick={() => {
                     setSelectedId(instructor.id);
                     setTab("disp");
+                    onDetailOpenChange?.(true);
                   }}
                   className="shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:text-black hover:decoration-2"
                 >
@@ -409,7 +383,7 @@ export default function InstructorsTab({
                 <Plus className="size-2.5 text-white" strokeWidth={2.6} />
               </span>
             </span>
-            <span className="text-sm font-semibold">Invita istruttore</span>
+            <span className="text-sm font-semibold">Aggiungi istruttore</span>
           </button>
         </div>
       </div>
@@ -429,7 +403,10 @@ export default function InstructorsTab({
     <div data-testid="instructors-pane">
       <button
         type="button"
-        onClick={() => setSelectedId(null)}
+        onClick={() => {
+          setSelectedId(null);
+          onDetailOpenChange?.(false);
+        }}
         className="mb-3.5 inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#6a6a6a] transition-colors hover:text-[#222222]"
       >
         <ChevronLeft className="size-4" strokeWidth={1.8} />
@@ -691,13 +668,9 @@ function DisponibilitaTab({
           <div className="mb-3 flex flex-col gap-2.5">
             {ranges.map((r, i) => (
               <div key={i} className="flex items-center gap-2">
-                <div className="min-w-0 flex-1">
-                  <TimeField value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} />
-                </div>
+                <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                 <span className="text-[13px] text-[#999999]">–</span>
-                <div className="min-w-0 flex-1">
-                  <TimeField value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} />
-                </div>
+                <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
               </div>
             ))}
           </div>
@@ -996,13 +969,9 @@ function CalendarOverrides({
                   )}
                   {sel.ranges.map((r, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1">
-                        <TimeField value={mmToLabel(r.startMinutes)} onChange={(v) => setSelRange(i, "a", v)} />
-                      </div>
+                      <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setSelRange(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                       <span className="text-[13px] text-[#999999]">–</span>
-                      <div className="min-w-0 flex-1">
-                        <TimeField value={mmToLabel(r.endMinutes)} onChange={(v) => setSelRange(i, "b", v)} />
-                      </div>
+                      <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setSelRange(i, "b", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                     </div>
                   ))}
                 </div>
@@ -1208,7 +1177,7 @@ function MalattiaTab({
       {half && (
         <div className="mt-1">
           <div className={LBL}>Orario inizio malattia</div>
-          <TimeField value={time} onChange={setTime} />
+          <TimePickerInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
         </div>
       )}
 
@@ -1275,7 +1244,6 @@ const GOV_ROWS: Array<{ key: string; settingKey: string; title: string; sub: str
   { key: "assenza", settingKey: "weeklyAbsenceEnabled", title: "Assenza settimanale allievi", sub: "Gestione assenza settimanale lato allievi" },
 ];
 
-const WORK_TIME_OPTIONS = TIME_OPTIONS;
 const NOTIF_TIMES = ["08:00", "10:00", "12:00", "14:00", "16:00", "18:00", "20:00"];
 
 function AutonomaTab({
@@ -1409,28 +1377,32 @@ function AutonomaTab({
     });
   }, [students, query, assignedIds]);
 
-  const workTimeOpts = [{ v: "__none__", l: "Non impostato" }, ...WORK_TIME_OPTIONS.map((t) => ({ v: t, l: t }))];
-
   return (
     <div>
       {/* Orario di lavoro */}
       <div className={LBL}>Orario di lavoro</div>
       <div className="mb-2 flex items-center gap-2.5">
-        <div className="min-w-0 flex-1">
-          <OptField
-            value={(settings.workingHoursStart as string) ?? "__none__"}
-            onChange={(v) => saveSetting("workingHoursStart", v === "__none__" ? undefined : v)}
-            options={workTimeOpts}
-          />
-        </div>
+        <TimePickerInput
+          value={(settings.workingHoursStart as string) ?? null}
+          onChange={(v) => saveSetting("workingHoursStart", v)}
+          minTime="06:00"
+          maxTime="23:00"
+          placeholder="Non impostato"
+          onClear={() => saveSetting("workingHoursStart", undefined)}
+          clearLabel="Non impostato"
+          className="min-w-0 flex-1 justify-between py-[11px]"
+        />
         <span className="text-[13px] text-[#999999]">–</span>
-        <div className="min-w-0 flex-1">
-          <OptField
-            value={(settings.workingHoursEnd as string) ?? "__none__"}
-            onChange={(v) => saveSetting("workingHoursEnd", v === "__none__" ? undefined : v)}
-            options={workTimeOpts}
-          />
-        </div>
+        <TimePickerInput
+          value={(settings.workingHoursEnd as string) ?? null}
+          onChange={(v) => saveSetting("workingHoursEnd", v)}
+          minTime="06:00"
+          maxTime="23:00"
+          placeholder="Non impostato"
+          onClear={() => saveSetting("workingHoursEnd", undefined)}
+          clearLabel="Non impostato"
+          className="min-w-0 flex-1 justify-between py-[11px]"
+        />
       </div>
       <div className="mb-[22px] text-xs font-medium leading-normal text-[#929292]">
         Definisci la fascia lavorativa per identificare le ore extra.
@@ -1578,13 +1550,16 @@ function AutonomaTab({
                     {g.key === "cutoff" && (
                       <div>
                         <div className={LBL}>Orario limite</div>
-                        <OptField
-                          value={(settings.bookingCutoffTime as string) ?? "default"}
-                          onChange={(v) => saveSetting("bookingCutoffTime", v === "default" ? undefined : v)}
-                          options={[
-                            { v: "default", l: "Default autoscuola" },
-                            ...TIME_OPTIONS.filter((t) => t >= "12:00" && t <= "22:00").map((t) => ({ v: t, l: t })),
-                          ]}
+                        <TimePickerInput
+                          value={(settings.bookingCutoffTime as string) ?? null}
+                          onChange={(v) => saveSetting("bookingCutoffTime", v)}
+                          minTime="12:00"
+                          maxTime="22:00"
+                          minuteStep={30}
+                          placeholder="Default autoscuola"
+                          onClear={() => saveSetting("bookingCutoffTime", undefined)}
+                          clearLabel="Default autoscuola"
+                          className="w-full justify-between py-[11px]"
                         />
                       </div>
                     )}
@@ -1651,16 +1626,30 @@ function AutonomaTab({
                       <div className="flex gap-3">
                         <div className="flex-1">
                           <div className={LBL}>Inizio fascia</div>
-                          <TimeField
-                            value={(settings.restrictedTimeRangeStart as string) ?? "09:00"}
+                          <TimePickerInput
+                            value={(settings.restrictedTimeRangeStart as string) ?? null}
                             onChange={(v) => saveSetting("restrictedTimeRangeStart", v)}
+                            minTime="06:00"
+                            maxTime="14:00"
+                            minuteStep={30}
+                            placeholder="Default autoscuola"
+                            onClear={() => saveSetting("restrictedTimeRangeStart", undefined)}
+                            clearLabel="Default autoscuola"
+                            className="w-full justify-between py-[11px]"
                           />
                         </div>
                         <div className="flex-1">
                           <div className={LBL}>Fine fascia</div>
-                          <TimeField
-                            value={(settings.restrictedTimeRangeEnd as string) ?? "13:00"}
+                          <TimePickerInput
+                            value={(settings.restrictedTimeRangeEnd as string) ?? null}
                             onChange={(v) => saveSetting("restrictedTimeRangeEnd", v)}
+                            minTime="09:00"
+                            maxTime="16:00"
+                            minuteStep={30}
+                            placeholder="Default autoscuola"
+                            onClear={() => saveSetting("restrictedTimeRangeEnd", undefined)}
+                            clearLabel="Default autoscuola"
+                            className="w-full justify-between py-[11px]"
                           />
                         </div>
                       </div>

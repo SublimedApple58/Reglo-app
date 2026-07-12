@@ -275,7 +275,7 @@ test.describe("Autoscuole smoke", () => {
     // Lista flat: riga istruttore con Gestisci + riga Invita istruttore
     const gestisci = pane.getByRole("button", { name: "Gestisci" }).first();
     await expect(gestisci).toBeVisible({ timeout: 30000 });
-    await expect(pane.getByText("Invita istruttore")).toBeVisible();
+    await expect(pane.getByText("Aggiungi istruttore")).toBeVisible();
 
     // Hub Gestisci: tab Disponibilità (default), Malattia, Gestione autonoma
     await gestisci.click();

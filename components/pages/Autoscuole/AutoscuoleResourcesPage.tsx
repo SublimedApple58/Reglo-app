@@ -361,6 +361,8 @@ export function AutoscuoleResourcesPage({
   const [settingsLoaded, setSettingsLoaded] = React.useState(false);
   // dopo il primo paint, monta anche i pannelli non ancora visitati (prefetch)
   const [mountAllPanes, setMountAllPanes] = React.useState(false);
+  // Dettaglio istruttore aperto: l'hub ha il suo header, il titolo pane sparisce
+  const [instructorsDetailOpen, setInstructorsDetailOpen] = React.useState(false);
   const contentScrollRef = React.useRef<HTMLDivElement>(null);
 
   const goToPane = React.useCallback((pane: ConfigPane) => {
@@ -1573,9 +1575,11 @@ export function AutoscuoleResourcesPage({
 
           {/* ── Content ── */}
           <div ref={contentScrollRef} className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
-            <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
-              {CONFIG_PANE_TITLES[configTab]}
-            </h2>
+            {!(configTab === "instructors" && instructorsDetailOpen) && (
+              <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+                {CONFIG_PANE_TITLES[configTab]}
+              </h2>
+            )}
             {!paneReady && <SettingsPaneSkeleton />}
             <div className={paneReady ? undefined : "hidden"}>
           <FadeIn>
@@ -1596,6 +1600,7 @@ export function AutoscuoleResourcesPage({
             setInviteInstructorOpen={setInviteInstructorOpen}
             changeInstructorColor={changeInstructorColor}
             refreshAgenda={() => loadAvailability(date)}
+            onDetailOpenChange={setInstructorsDetailOpen}
           />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "bookings"} eager={mountAllPanes}>

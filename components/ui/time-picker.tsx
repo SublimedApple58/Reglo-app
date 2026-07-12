@@ -2,6 +2,7 @@
 
 import React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
+import { motion } from "motion/react";
 import { Clock } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -41,12 +42,15 @@ function TimeColumn({
   disabledValues,
   onSelect,
   format,
+  layoutKey,
 }: {
   values: number[];
   selected: number;
   disabledValues?: Set<number>;
   onSelect: (value: number) => void;
   format: (value: number) => string;
+  /** Id univoco per colonna: la pill near-black SCIVOLA tra i valori (layoutId). */
+  layoutKey: string;
 }) {
   const listRef = React.useRef<HTMLDivElement>(null);
   const selectedRef = React.useRef<HTMLButtonElement>(null);
@@ -88,14 +92,26 @@ function TimeColumn({
             disabled={isDisabled}
             onClick={() => onSelect(value)}
             className={cn(
-              "flex h-8 w-[52px] cursor-pointer select-none items-center justify-center rounded-[8px] text-sm font-medium transition-colors",
-              isSelected
-                ? "bg-[#222222] text-white"
-                : "text-[#222222] hover:bg-[#f5f5f5]",
-              isDisabled && "cursor-not-allowed text-[#cccccc] hover:bg-transparent",
+              "relative flex h-8 w-[52px] cursor-pointer select-none items-center justify-center rounded-[8px] text-sm font-medium",
+              !isSelected && !isDisabled && "hover:bg-[#f5f5f5]",
+              isDisabled && "cursor-not-allowed",
             )}
           >
-            {format(value)}
+            {isSelected && (
+              <motion.span
+                layoutId={layoutKey}
+                className="absolute inset-0 rounded-[8px] bg-[#222222]"
+                transition={{ type: "spring", stiffness: 550, damping: 38 }}
+              />
+            )}
+            <span
+              className={cn(
+                "relative z-10 transition-colors duration-150",
+                isSelected ? "text-white" : isDisabled ? "text-[#cccccc]" : "text-[#222222]",
+              )}
+            >
+              {format(value)}
+            </span>
           </button>
         );
       })}
@@ -132,6 +148,7 @@ export function TimePickerInput({
 }) {
   const [open, setOpen] = React.useState(false);
   const [draft, setDraft] = React.useState(() => parseTime(value ?? minTime ?? "09:00"));
+  const columnId = React.useId();
   // Con value null il pannello apre su un orario di comodo: senza interazione
   // la chiusura NON deve committare quel default.
   const touchedRef = React.useRef(false);
@@ -195,7 +212,13 @@ export function TimePickerInput({
           ) : (
             <span className="text-[#929292]">{placeholder ?? "—"}</span>
           )}
-          <Clock className="size-[15px] shrink-0 text-[#929292]" strokeWidth={1.8} />
+          <Clock
+            className={cn(
+              "size-[15px] shrink-0 transition-all duration-300 ease-out",
+              open ? "-rotate-[30deg] scale-110 text-[#222222]" : "text-[#929292]",
+            )}
+            strokeWidth={1.8}
+          />
         </button>
       </PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
@@ -215,6 +238,7 @@ export function TimePickerInput({
                 setDraft((prev) => ({ hour, minute: clampMinute(hour, prev.minute) }));
               }}
               format={pad}
+              layoutKey={`${columnId}-h`}
             />
             <TimeColumn
               values={minutes}
@@ -225,6 +249,7 @@ export function TimePickerInput({
                 setDraft((prev) => ({ ...prev, minute }));
               }}
               format={pad}
+              layoutKey={`${columnId}-m`}
             />
           </div>
           <div
