@@ -6,8 +6,8 @@ import Image from "next/image";
 /**
  * Carosello 3D del pannello brand auth: card centrale frontale spinta in
  * avanti (translateZ positivo), laterali angolate stile coverflow che
- * recedono dietro, avanzamento automatico. Con prefers-reduced-motion il
- * giro si ferma sulla prima card.
+ * recedono dietro, avanzamento automatico continuo (niente stop con
+ * prefers-reduced-motion: pannello decorativo, il movimento è il punto).
  */
 
 const TILES = [
@@ -47,7 +47,6 @@ export function BrandCarousel() {
   const [active, setActive] = React.useState(0);
 
   React.useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = setInterval(() => setActive((a) => (a + 1) % TILES.length), STEP_MS);
     return () => clearInterval(timer);
   }, []);
