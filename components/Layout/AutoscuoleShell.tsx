@@ -329,7 +329,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
                   {/* Novità: timeline changelog */}
                   <div className="px-3 pb-1 pt-1.5">
-                    <div className="mb-2.5 text-[13px] font-semibold tracking-[0.2px] text-[#929292]">
+                    <div className="mb-2.5 text-left text-[13px] font-semibold tracking-[0.2px] text-[#929292]">
                       Novità
                     </div>
                     <div className="relative flex flex-col">
@@ -348,7 +348,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                                 : "border-[#c4c4c4] bg-white",
                             )}
                           />
-                          <span className="text-[14px] font-semibold leading-tight text-foreground">
+                          <span className="text-left text-[14px] font-semibold leading-tight text-foreground">
                             {item.title}
                           </span>
                         </DropdownMenuItem>
