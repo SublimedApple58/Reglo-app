@@ -382,80 +382,11 @@ const autoscuolaSettingsPatchSchema = z
     studentCancellationEnabled: z.boolean().optional(),
   })
   .refine(
-    (value) =>
-      value.availabilityWeeks !== undefined ||
-      value.studentReminderMinutes !== undefined ||
-      value.studentReminderMorningEnabled !== undefined ||
-      value.studentReminderMorningTime !== undefined ||
-      value.studentReminderDayBeforeEnabled !== undefined ||
-      value.studentReminderDayBeforeTime !== undefined ||
-      value.instructorReminderMinutes !== undefined ||
-      value.instructorReminderEnabled !== undefined ||
-      value.slotFillChannels !== undefined ||
-      value.studentReminderChannels !== undefined ||
-      value.instructorReminderChannels !== undefined ||
-      value.autoPaymentsEnabled !== undefined ||
-      value.lessonCreditFlowEnabled !== undefined ||
-      value.lessonCreditsRequired !== undefined ||
-      value.lessonPrice30 !== undefined ||
-      value.lessonPrice60 !== undefined ||
-      value.penaltyCutoffHoursPreset !== undefined ||
-      value.penaltyPercentPreset !== undefined ||
-      value.paymentNotificationChannels !== undefined ||
-      value.ficVatTypeId !== undefined ||
-      value.ficPaymentMethodId !== undefined ||
-      value.stripeConnectedAccountId !== undefined ||
-      value.lessonPolicyEnabled !== undefined ||
-      value.lessonRequiredTypesEnabled !== undefined ||
-      value.lessonRequiredTypes !== undefined ||
-      value.lessonTypeConstraints !== undefined ||
-      value.bookingSlotDurations !== undefined ||
-      value.appBookingActors !== undefined ||
-      value.instructorBookingMode !== undefined ||
-      value.swapEnabled !== undefined ||
-      value.swapNotifyMode !== undefined ||
-      value.bookingCutoffEnabled !== undefined ||
-      value.bookingCutoffTime !== undefined ||
-      value.emptySlotNotificationEnabled !== undefined ||
-      value.emptySlotNotificationTarget !== undefined ||
-      value.emptySlotNotificationTimes !== undefined ||
-      value.weeklyBookingLimitEnabled !== undefined ||
-      value.weeklyBookingLimit !== undefined ||
-      value.examPriorityEnabled !== undefined ||
-      value.examPriorityDaysBeforeExam !== undefined ||
-      value.examPriorityPausedUntil !== undefined ||
-      value.examPriorityBlockNonExam !== undefined ||
-      value.restrictedTimeRangeEnabled !== undefined ||
-      value.restrictedTimeRangeStart !== undefined ||
-      value.restrictedTimeRangeEnd !== undefined ||
-      value.instructorPreferenceEnabled !== undefined ||
-      value.voiceAssistantEnabled !== undefined ||
-      value.voiceBookingEnabled !== undefined ||
-      value.voiceLanguage !== undefined ||
-      value.voiceLegalGreetingEnabled !== undefined ||
-      value.voiceOfficeHours !== undefined ||
-      value.voiceHandoffPhone !== undefined ||
-      value.voiceHandoffDuringCallEnabled !== undefined ||
-      value.voiceHandoffDuringCallInstructions !== undefined ||
-      value.voiceFallbackMode !== undefined ||
-      value.voiceRecordingEnabled !== undefined ||
-      value.voiceTranscriptionEnabled !== undefined ||
-      value.voiceRetentionDays !== undefined ||
-      value.voiceInstructions !== undefined ||
-      value.voiceAllowedActions !== undefined ||
-      value.voiceCustomGreeting !== undefined ||
-      value.studentNotesEnabled !== undefined ||
-      value.autoCheckinEnabled !== undefined ||
-      value.vehiclesEnabled !== undefined ||
-      value.nationalHolidaysEnabled !== undefined ||
-      value.nationalHolidaysDisabled !== undefined ||
-      value.defaultLicenseCategory !== undefined ||
-      value.defaultTransmission !== undefined ||
-      value.followCarMotoEnabled !== undefined ||
-      value.followCarRules !== undefined ||
-      value.groupLessonsEnabled !== undefined ||
-      value.quizEnabled !== undefined ||
-      value.studentCancellationEnabled !== undefined,
+    // Almeno un campo presente: check generico su tutte le chiavi dello schema
+    // (la vecchia lista esplicita si era gia' dimenticata bookingMinStartDate,
+    // roundedHoursOnly e voiceAssistantVoice -> "Nessuna impostazione da
+    // aggiornare" su auto-save di quei singoli campi).
+    (value) => Object.values(value).some((v) => v !== undefined),
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {

@@ -20,6 +20,8 @@ type Location = {
   placeId: string | null;
   isDefault: boolean;
   isPrecise: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 function toNumber(value: string | number | null | undefined): number | null {
@@ -60,6 +62,17 @@ export function LocationsSection() {
 
   const sede = locations.find((l) => l.isDefault) ?? null;
   const customs = locations.filter((l) => !l.isDefault);
+
+  // La registrazione crea SEMPRE una sede default automatica ("Sede {nome}",
+  // senza indirizzo né posizione): per l'onboarding conta come NON configurata
+  // finché il titolare non la salva dal dialog (qualsiasi salvataggio bumpa
+  // updatedAt; la tolleranza 5s copre lo scarto create client/DB).
+  const sedeConfigured =
+    !!sede &&
+    (sede.address != null ||
+      sede.placeId != null ||
+      sede.isPrecise ||
+      new Date(sede.updatedAt).getTime() - new Date(sede.createdAt).getTime() > 5000);
 
   const handleCreate = async (values: LocationFormValues) => {
     const res = await fetch("/api/autoscuole/locations", {
@@ -153,8 +166,8 @@ export function LocationsSection() {
     );
   }
 
-  // ── Onboarding: sede non ancora impostata (dal proto #config-tab-sede) ──
-  if (!sede) {
+  // ── Onboarding: sede non ancora impostata/configurata (proto #config-tab-sede) ──
+  if (!sede || !sedeConfigured) {
     return (
       <>
         <FadeIn className="flex min-h-[60vh] flex-col items-center justify-center px-5 py-10 text-center">
