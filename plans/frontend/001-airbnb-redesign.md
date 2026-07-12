@@ -324,6 +324,7 @@ Verificato con Playwright: apertura dal + (destra) → card a sinistra 460x796; 
 - Pulizia parent: −46 stati (cluster*, sickLeave*, instr*, avail*), −11 handler, −280 righe di dialog JSX. `availDialogTab`/`calendarMonth`/`calendarSelectedDate` RESTANO (usati dal dialog disponibilità VEICOLI).
 - e2e: nuovo test "istruttori lista + hub Gestisci" — suite smoke 7/7. Verifica live: auto-save "Solo orari tondi" flip→reload→persistito→ripristinato; switch modalità pubblicazione→editor rail→ritorno.
 - Docs: instructor-clusters.md (sezione hub), availability.md (dialog→tab), instructor-colors.md (ColorPop).
+- **Rifiniture approvate (`385439e`)**: "Invita istruttore"→"Aggiungi istruttore"; nel dettaglio Gestisci l'h2 del pane sparisce (prop `onDetailOpenChange` → parent nasconde il titolo quando configTab=instructors e dettaglio aperto); TUTTI gli orari usano `TimePickerInput` (fasce disponibilità min 06:00 max 23:00, malattia 06–20, orario lavoro con clear "Non impostato", cutoff 12–22 step 30 e fascia ristretta con clear "Default autoscuola"). **TimePicker animato** (`components/ui/time-picker.tsx`, vale ovunque): pill selezione near-black che SCIVOLA tra i valori (motion layoutId + spring 550/38, un layoutId per colonna via useId) + icona orologio che ruota -30° e si scurisce a pannello aperto. REGOLA UTENTE: ogni impostazione orario → sempre TimePickerInput, mai select di orari.
 
 ## Next steps
 
