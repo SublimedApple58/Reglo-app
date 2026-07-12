@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
-import { Check, ChevronLeft, Loader2, Plus } from "lucide-react";
+import { Check, ChevronLeft, Loader2, Plus, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -1287,6 +1287,7 @@ function AutonomaTab({
   const [assignedIds, setAssignedIds] = React.useState<string[]>([]);
   const [studentsLoaded, setStudentsLoaded] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [parcoOpen, setParcoOpen] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
@@ -1728,10 +1729,348 @@ function AutonomaTab({
                   })
                 )}
               </div>
+              <button
+                type="button"
+                onClick={() => setParcoOpen(true)}
+                className="mt-2.5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border-[1.5px] border-navy-900 bg-white px-3 py-[11px] text-[13.5px] font-semibold text-navy-900 transition-colors hover:bg-navy-50"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="4.5" cy="4.5" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+                  <circle cx="11.5" cy="4.5" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+                  <circle cx="8" cy="10.5" r="2.2" stroke="currentColor" strokeWidth="1.3" />
+                </svg>
+                Apri Parco Allievi
+              </button>
             </div>
           </div>
         </div>
       )}
+      {parcoOpen && (
+        <ParcoAllievi
+          students={students}
+          assignedIds={assignedIds}
+          onToggle={toggleStudent}
+          onClose={() => setParcoOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+// ═══ PARCO ALLIEVI — overlay fisheye a bolle esagonali ═════════════════════════
+
+const PARCO_PAL: Array<{ bg: string; fg: string }> = [
+  { bg: "#dbeafe", fg: "#1e3a5f" },
+  { bg: "#fce7f0", fg: "#be1250" },
+  { bg: "#dcfce7", fg: "#15803d" },
+  { bg: "#ede9fe", fg: "#5b21b6" },
+  { bg: "#fff0dd", fg: "#b45309" },
+  { bg: "#d9f2f4", fg: "#0e7490" },
+  { bg: "#ffe4e6", fg: "#be123c" },
+  { bg: "#e7eaf6", fg: "#3730a3" },
+];
+
+const initialsOf = (name: string) =>
+  name
+    .split(/[\s.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+
+/** Coordinate assiali di una spirale esagonale (centro incluso). */
+function hexSpiral(count: number): Array<[number, number]> {
+  const dirs: Array<[number, number]> = [[1, 0], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, -1]];
+  const cells: Array<[number, number]> = [[0, 0]];
+  for (let rad = 1; cells.length < count; rad++) {
+    let q = dirs[4][0] * rad;
+    let r = dirs[4][1] * rad;
+    for (let s = 0; s < 6; s++) {
+      for (let st = 0; st < rad; st++) {
+        if (cells.length < count) cells.push([q, r]);
+        q += dirs[s][0];
+        r += dirs[s][1];
+      }
+    }
+  }
+  return cells;
+}
+
+function ParcoAllievi({
+  students,
+  assignedIds,
+  onToggle,
+  onClose,
+}: {
+  students: StudentEntry[];
+  assignedIds: string[];
+  onToggle: (id: string) => void;
+  onClose: () => void;
+}) {
+  const gridRef = React.useRef<HTMLDivElement>(null);
+  const bubbleRefs = React.useRef(new Map<string, HTMLDivElement>());
+  const mouse = React.useRef({ x: 0.5, y: 0.5 });
+  const pan = React.useRef({ x: 0, y: 0 });
+  const [detailId, setDetailId] = React.useState<string | null>(null);
+  const [addOpen, setAddOpen] = React.useState(false);
+  const [addQuery, setAddQuery] = React.useState("");
+
+  const colorOf = React.useCallback(
+    (id: string) => {
+      const i = students.findIndex((s) => s.id === id);
+      return PARCO_PAL[(i < 0 ? 0 : i) % PARCO_PAL.length];
+    },
+    [students],
+  );
+
+  const assigned = assignedIds
+    .map((id) => students.find((s) => s.id === id))
+    .filter((s): s is StudentEntry => Boolean(s));
+  // prima bolla = "aggiungi", poi gli assegnati in spirale
+  const items: Array<{ add: true } | StudentEntry> = [{ add: true as const }, ...assigned];
+  const coords = hexSpiral(items.length);
+  const SZ = 52;
+  const BUB = 74;
+
+  // blocco scroll body + Escape
+  React.useEffect(() => {
+    const prevHtml = document.documentElement.style.overflow;
+    const prevBody = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.documentElement.style.overflow = prevHtml;
+      document.body.style.overflow = prevBody;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  // parallax + fisheye (rAF, niente re-render React)
+  React.useEffect(() => {
+    let alive = true;
+    const onMove = (e: MouseEvent) => {
+      if (addOpen) return; // fermo mentre si cerca
+      mouse.current = { x: e.clientX / window.innerWidth, y: e.clientY / window.innerHeight };
+    };
+    window.addEventListener("mousemove", onMove);
+    const frame = () => {
+      if (!alive) return;
+      const bubbles = Array.from(bubbleRefs.current.values());
+      let extX = 0;
+      let extY = 0;
+      for (const b of bubbles) {
+        extX = Math.max(extX, Math.abs(Number(b.dataset.bx)));
+        extY = Math.max(extY, Math.abs(Number(b.dataset.by)));
+      }
+      const tx = -(mouse.current.x - 0.5) * (extX * 1.1 + 80) * 2;
+      const ty = -(mouse.current.y - 0.5) * (extY * 1.1 + 80) * 2;
+      pan.current.x += (tx - pan.current.x) * 0.12;
+      pan.current.y += (ty - pan.current.y) * 0.12;
+      if (gridRef.current) gridRef.current.style.transform = `translate(${pan.current.x}px, ${pan.current.y}px)`;
+      const cw = window.innerWidth / 2;
+      const ch = window.innerHeight / 2;
+      for (const b of bubbles) {
+        const sx = Number(b.dataset.bx) + pan.current.x + cw;
+        const sy = Number(b.dataset.by) + pan.current.y + ch;
+        const d = Math.hypot(sx - cw, sy - ch);
+        const sc = Math.max(0.4, Math.min(1.25, 1.25 - d / 460));
+        b.style.transform = `scale(${sc})`;
+        b.style.zIndex = String(Math.round(sc * 100));
+        b.style.opacity = String(Math.max(0.35, Math.min(1, sc)));
+      }
+      requestAnimationFrame(frame);
+    };
+    const raf = requestAnimationFrame(frame);
+    return () => {
+      alive = false;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMove);
+    };
+  }, [addOpen]);
+
+  const detail = detailId ? students.find((s) => s.id === detailId) ?? null : null;
+  const addable = students.filter(
+    (s) =>
+      !assignedIds.includes(s.id) &&
+      (addQuery.trim() ? `${s.firstName} ${s.lastName}`.toLowerCase().includes(addQuery.trim().toLowerCase()) : true),
+  );
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[80] overflow-hidden"
+      style={{ background: "radial-gradient(circle at 50% 40%, #ffffff 0%, #eceef2 78%)", fontFamily: "inherit" }}
+    >
+      {/* Header */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-[5] flex items-center justify-between px-7 py-[22px]">
+        <div className="pointer-events-auto">
+          <div className="text-xl font-bold tracking-[-0.3px] text-[#222222]">Parco Allievi</div>
+          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+            Muovi il mouse per esplorare · clicca per i dettagli
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="pointer-events-auto flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
+        >
+          <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
+        </button>
+      </div>
+
+      {/* Stage */}
+      <div className="absolute inset-0">
+        <div ref={gridRef} className="absolute left-1/2 top-1/2 will-change-transform">
+          {items.map((it, i) => {
+            const [q, r] = coords[i];
+            const x = SZ * Math.sqrt(3) * (q + r / 2);
+            const y = SZ * 1.5 * r;
+            const key = "add" in it ? "__add__" : it.id;
+            return (
+              <div
+                key={key}
+                ref={(el) => {
+                  if (el) bubbleRefs.current.set(key, el);
+                  else bubbleRefs.current.delete(key);
+                }}
+                data-bx={x}
+                data-by={y}
+                className="absolute flex cursor-pointer items-center justify-center will-change-transform"
+                style={{ width: BUB, height: BUB, left: x - BUB / 2, top: y - BUB / 2, borderRadius: "50%" }}
+                onClick={() => {
+                  if ("add" in it) {
+                    setDetailId(null);
+                    setAddOpen(true);
+                    setAddQuery("");
+                  } else {
+                    setAddOpen(false);
+                    setDetailId(it.id);
+                  }
+                }}
+              >
+                {"add" in it ? (
+                  <div className="flex size-full items-center justify-center rounded-full border-2 border-dashed border-[#c4c4cc] bg-black/[0.03]">
+                    <Plus className="size-6 text-[#7a7a7a]" strokeWidth={2.2} />
+                  </div>
+                ) : (
+                  (() => {
+                    const col = colorOf(it.id);
+                    return (
+                      <div
+                        className="flex size-full items-center justify-center rounded-full text-[22px] font-bold"
+                        style={{ background: col.bg, color: col.fg }}
+                      >
+                        {initialsOf(`${it.firstName} ${it.lastName}`)}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Card dettaglio allievo */}
+      {detail && (
+        <div className="absolute bottom-9 left-1/2 z-20 w-[340px] max-w-[90vw] -translate-x-1/2 rounded-[22px] border border-[#ececec] bg-white p-[22px] shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+          <button
+            type="button"
+            onClick={() => setDetailId(null)}
+            className="absolute right-3.5 top-3.5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
+          >
+            <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
+          </button>
+          <div className="mb-[18px] flex items-center gap-3.5 pr-[38px]">
+            <div
+              className="flex size-[52px] shrink-0 items-center justify-center rounded-full text-[19px] font-bold"
+              style={{ background: colorOf(detail.id).bg, color: colorOf(detail.id).fg }}
+            >
+              {initialsOf(`${detail.firstName} ${detail.lastName}`)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[17px] font-bold text-[#222222]">
+                {detail.firstName} {detail.lastName}
+              </div>
+              <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                {detail.licenseCategory ? `Patente ${detail.licenseCategory} · ` : ""}
+                {assignedIds.includes(detail.id) ? "Assegnato" : "Non assegnato"}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => onToggle(detail.id)}
+            className={cn(
+              "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl p-[13px] text-sm font-semibold transition-colors",
+              assignedIds.includes(detail.id)
+                ? "bg-[#f4f4f4] text-[#c13515] hover:bg-[#eeeeee]"
+                : "bg-navy-900 text-white hover:bg-navy-800",
+            )}
+          >
+            {assignedIds.includes(detail.id) ? "Rimuovi dall'istruttore" : "Assegna all'istruttore"}
+          </button>
+        </div>
+      )}
+
+      {/* Card aggiungi allievo */}
+      {addOpen && (
+        <div className="absolute bottom-9 left-1/2 z-20 w-[360px] max-w-[90vw] -translate-x-1/2 rounded-[22px] border border-[#ececec] bg-white p-[22px] shadow-[0_16px_50px_rgba(0,0,0,0.18)]">
+          <button
+            type="button"
+            onClick={() => setAddOpen(false)}
+            className="absolute right-3.5 top-3.5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#f0f0f0]"
+          >
+            <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
+          </button>
+          <div className="mb-3.5 pr-[38px] text-base font-bold text-[#222222]">Aggiungi allievo</div>
+          <div className="relative mb-2.5">
+            <input
+              autoFocus
+              placeholder="Cerca allievo…"
+              value={addQuery}
+              onChange={(e) => setAddQuery(e.target.value)}
+              className={cn(PROTO_INPUT, "pl-[38px]")}
+            />
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="absolute left-[13px] top-1/2 -translate-y-1/2">
+              <circle cx="7" cy="7" r="5" stroke="#aaaaaa" strokeWidth="1.5" />
+              <path d="M11 11l3 3" stroke="#aaaaaa" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div className="flex max-h-[220px] flex-col overflow-y-auto rounded-xl border border-[#eeeeee]">
+            {!addable.length ? (
+              <div className="p-4 text-center text-[13px] text-[#aaaaaa]">Nessun allievo trovato</div>
+            ) : (
+              addable.map((s, i) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => onToggle(s.id)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-3 px-3.5 py-[11px] text-left hover:bg-[#fafafa]",
+                    i < addable.length - 1 && "border-b border-[#f4f4f4]",
+                  )}
+                >
+                  <span className="flex-1 truncate text-[13.5px] font-semibold text-[#222222]">
+                    {s.firstName} {s.lastName}
+                  </span>
+                  {s.licenseCategory ? (
+                    <span className="shrink-0 rounded-md bg-[#f0f0f0] px-[7px] py-0.5 text-[11px] font-bold text-[#888888]">
+                      {s.licenseCategory}
+                    </span>
+                  ) : null}
+                  <Plus className="size-3.5 shrink-0 text-navy-900" strokeWidth={2} />
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body,
   );
 }
