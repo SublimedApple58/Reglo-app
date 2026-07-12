@@ -1605,10 +1605,10 @@ export function AutoscuoleAgendaPage({
                   <Plus className="size-[18px]" strokeWidth={2.2} />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-dropdown">
+              <DropdownMenuContent align="end" className="w-52 rounded-[12px] shadow-dropdown">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(normalizeDay(dayFocus)) })); setCreateOpen(true); }}
                 >
                   <Plus className="size-4 text-foreground" strokeWidth={1.7} />
@@ -1616,7 +1616,7 @@ export function AutoscuoleAgendaPage({
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
                   <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
@@ -1624,7 +1624,7 @@ export function AutoscuoleAgendaPage({
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                   onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
@@ -1633,7 +1633,7 @@ export function AutoscuoleAgendaPage({
                 {groupLessonsEnabled && (
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
                     onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setCreateGroupLessonOpen(true); }}
                   >
                     <Users className="size-4 text-foreground" strokeWidth={1.7} />
@@ -1646,7 +1646,7 @@ export function AutoscuoleAgendaPage({
                     {holidaySet.has(formatYmd(dayFocus)) ? (
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
+                        className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
                         onClick={() => { setPlusMenuOpen(false); setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
                       >
                         <Ban className="size-4" strokeWidth={1.7} />
@@ -1655,7 +1655,7 @@ export function AutoscuoleAgendaPage({
                     ) : (
                       <button
                         type="button"
-                        className="flex w-full items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
+                        className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
                         onClick={() => { setPlusMenuOpen(false); setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
                       >
                         <Ban className="size-4" strokeWidth={1.7} />
@@ -1816,7 +1816,7 @@ export function AutoscuoleAgendaPage({
                   initial={{ opacity: 0, scale: 0.96, y: -4 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ duration: 0.12, ease: "easeOut" }}
-                  className="absolute rounded-xl border border-border bg-white p-1.5 shadow-dropdown"
+                  className="absolute rounded-[12px] border border-border bg-white p-1.5 shadow-dropdown"
                   style={{ left, top, width: MENU_WIDTH }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1832,7 +1832,7 @@ export function AutoscuoleAgendaPage({
                     <button
                       key={option.key}
                       type="button"
-                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
                       onClick={option.onSelect}
                     >
                       {option.icon}
