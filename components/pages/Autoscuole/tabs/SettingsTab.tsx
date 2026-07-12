@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
   ArrowRight,
@@ -19,6 +18,7 @@ import {
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { triggerEmptySlotNotification } from "@/lib/actions/autoscuole-settings.actions";
 
@@ -417,54 +417,19 @@ function EmptySlotNotificationSection({
 }) {
   const toast = useFeedbackToast();
   const [sending, setSending] = React.useState(false);
-  // Overlay di esito del proto ("Notifica inviata!"): si auto-chiude dopo 1.8s.
+  // Overlay di esito del proto ("Notifica inviata!")
   const [sentOverlay, setSentOverlay] = React.useState(false);
-  React.useEffect(() => {
-    if (!sentOverlay) return;
-    const timer = setTimeout(() => setSentOverlay(false), 1800);
-    return () => clearTimeout(timer);
-  }, [sentOverlay]);
-  // Il portal è sempre montato (serve l'exit di AnimatePresence) → solo client.
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
 
   return (
     <div className="mt-7">
-      {mounted &&
-        createPortal(
-        <AnimatePresence>
-          {sentOverlay && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/[0.32]"
-              onClick={() => setSentOverlay(false)}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 6 }}
-                transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                className="flex w-[380px] max-w-[90vw] flex-col items-center rounded-[20px] bg-white px-12 pb-9 pt-10 text-center shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/images/settings/notifica-inviata.png"
-                  alt=""
-                  className="mx-auto mb-5 block size-[100px] select-none object-contain mix-blend-multiply"
-                />
-                <div className="mb-2 text-xl font-bold text-[#222222]">Notifica inviata!</div>
-                <div className="text-sm font-medium text-[#929292]">
-                  Gli allievi idonei riceveranno la notifica a breve.
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>,
-        document.body,
-      )}
+      <SuccessOverlay
+        open={sentOverlay}
+        onClose={() => setSentOverlay(false)}
+        image="/images/settings/notifica-inviata.png"
+        title="Notifica inviata!"
+        subtitle="Gli allievi idonei riceveranno la notifica a breve."
+        blend
+      />
       {/* Riga toggle */}
       <div className="flex items-center justify-between gap-4 border-b border-[#ebebeb] pb-[18px]">
         <div>

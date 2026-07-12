@@ -3,6 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronLeft, Loader2, Plus, X } from "lucide-react";
 import {
   Select,
@@ -17,6 +18,7 @@ import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import {
   updateAutoscuolaInstructor,
@@ -1050,6 +1052,8 @@ function MalattiaTab({
   const [half, setHalf] = React.useState(false);
   const [time, setTime] = React.useState("14:00");
   const [saving, setSaving] = React.useState(false);
+  // Overlay di esito del proto (_istrInfoBanner): "Assenza aggiunta/rimossa"
+  const [overlay, setOverlay] = React.useState<{ title: string; subtitle: string } | null>(null);
   const [periods, setPeriods] = React.useState<SickPeriod[]>([]);
   const [loaded, setLoaded] = React.useState(false);
 
@@ -1108,8 +1112,10 @@ function MalattiaTab({
       });
       const data = await res.json();
       if (data.success) {
-        toast.success({
-          description: `Assenza registrata. ${data.data.appointmentsCancelled} guide cancellate.`,
+        const cancelled = data.data.appointmentsCancelled as number;
+        setOverlay({
+          title: "Assenza aggiunta",
+          subtitle: `Il periodo di malattia è stato registrato.${cancelled > 0 ? ` ${cancelled} guide cancellate.` : ""}`,
         });
         setStartIso(todayIso);
         setEndIso(todayIso);
@@ -1133,13 +1139,23 @@ function MalattiaTab({
       toast.error({ description: res.message ?? "Impossibile rimuovere l'assenza." });
       return;
     }
-    toast.success({ description: "Assenza rimossa. Le guide già cancellate non vengono ripristinate." });
+    setOverlay({
+      title: "Assenza rimossa",
+      subtitle: "L'assenza è stata eliminata. Le guide già cancellate non vengono ripristinate.",
+    });
     await loadPeriods();
     refreshAgenda();
   };
 
   return (
     <div>
+      <SuccessOverlay
+        open={overlay != null}
+        onClose={() => setOverlay(null)}
+        image="/images/settings/malattia-icon.png"
+        title={overlay?.title ?? ""}
+        subtitle={overlay?.subtitle}
+      />
       <div className="mb-[18px] flex gap-3">
         <div className="flex-1">
           <div className={LBL}>Data inizio</div>
@@ -1190,38 +1206,54 @@ function MalattiaTab({
         {saving ? <LoadingDots className="min-h-5" /> : "Aggiungi assenza"}
       </button>
 
-      {loaded && periods.length > 0 && (
-        <>
-          <div className={cn(LBL, "mt-7")}>Assenze registrate</div>
-          <div className="flex flex-col">
-            {periods.map((p, i) => (
-              <div
-                key={p.ids[0]}
-                className={cn(
-                  "flex items-center gap-3 px-0.5 py-[13px]",
-                  i < periods.length - 1 && "border-b border-[#f2f2f2]",
-                )}
-              >
-                <span className="size-2 shrink-0 rounded-full bg-[#d64530]" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-[#222222]">
-                    {p.start === p.end ? fmtIso(p.start) : `${fmtIso(p.start)} → ${fmtIso(p.end)}`}
-                  </div>
-                  <div className="mt-px text-[12.5px] font-medium text-[#929292]">
-                    {p.half ? `Mezza giornata${p.time ? ` · dalle ${p.time}` : ""}` : "Giornata intera"}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void removePeriod(p)}
-                  className="shrink-0 cursor-pointer text-sm font-semibold text-[#c1360f]"
-                >
-                  Rimuovi
-                </button>
+      {loaded && (
+        <AnimatePresence initial={false}>
+          {periods.length > 0 && (
+            <motion.div
+              key="sick-list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <div className={cn(LBL, "mt-7")}>Assenze registrate</div>
+              <div className="flex flex-col">
+                {/* Righe animate: entrano/escono con fade + height (dolce) */}
+                <AnimatePresence initial={false}>
+                  {periods.map((p) => (
+                    <motion.div
+                      key={p.ids[0]}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.28, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center gap-3 border-b border-[#f2f2f2] px-0.5 py-[13px]">
+                        <span className="size-2 shrink-0 rounded-full bg-[#d64530]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-[#222222]">
+                            {p.start === p.end ? fmtIso(p.start) : `${fmtIso(p.start)} → ${fmtIso(p.end)}`}
+                          </div>
+                          <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                            {p.half ? `Mezza giornata${p.time ? ` · dalle ${p.time}` : ""}` : "Giornata intera"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void removePeriod(p)}
+                          className="shrink-0 cursor-pointer text-sm font-semibold text-[#c1360f]"
+                        >
+                          Rimuovi
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
-            ))}
-          </div>
-        </>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
     </div>
   );
