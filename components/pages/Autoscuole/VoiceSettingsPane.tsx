@@ -678,7 +678,7 @@ export function VoiceSettingsPane() {
       {activeSubTab === "orari" && (
         <div>
           <div className={fieldLabelClass}>Giorni attivi</div>
-          <div className="mb-4 flex flex-wrap gap-1.5">
+          <div className="mb-4 flex flex-wrap gap-2">
             {WEEKDAY_OPTIONS.map((day) => {
               const active = voiceOfficeDays.includes(day.value);
               return (
@@ -688,10 +688,10 @@ export function VoiceSettingsPane() {
                   onClick={() => toggleDay(day.value)}
                   disabled={savingKey === `day-${day.value}`}
                   className={cn(
-                    "cursor-pointer select-none rounded-[50px] border-[1.5px] px-[18px] py-2 text-sm font-medium transition-all",
+                    "cursor-pointer select-none rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
                     active
-                      ? "border-[#222222] bg-[#222222] text-white"
-                      : "border-[#dddddd] bg-white text-[#555555] hover:border-[#c1c1c1]",
+                      ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                      : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
                     savingKey === `day-${day.value}` && "opacity-60",
                   )}
                 >
