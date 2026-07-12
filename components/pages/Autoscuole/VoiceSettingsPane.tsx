@@ -13,13 +13,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoadingDots } from "@/components/ui/loading-dots";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { VoiceLineTutorialModal } from "./dialogs/VoiceLineTutorialModal";
 import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
@@ -64,9 +58,6 @@ const VOICE_ALLOWED_ACTION_OPTIONS = [
   { value: "booking" as const, label: "Prenota guida", description: "Prenotazione diretta sull'agenda" },
 ];
 
-const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
-const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => (i + 1) * 30);
-
 const SUB_TABS: Array<{ key: SegSubTab; label: string }> = [
   { key: "linea", label: "Linea" },
   { key: "comportamento", label: "Comportamento ed azioni" },
@@ -79,6 +70,10 @@ const SUB_TABS: Array<{ key: SegSubTab; label: string }> = [
 const pad = (n: number) => String(n).padStart(2, "0");
 const formatMinutes = (totalMinutes: number) =>
   `${pad(Math.floor(totalMinutes / 60))}:${pad(totalMinutes % 60)}`;
+const labelToMinutes = (label: string) => {
+  const [h, m] = label.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
 
 const normalizeDays = (days: number[]) =>
   Array.from(new Set(days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))).sort(
@@ -538,21 +533,21 @@ export function VoiceSettingsPane() {
                   onChange={(e) => setHandoffDraft(e.target.value)}
                   placeholder="+39..."
                   autoFocus
-                  className="mt-3 w-full max-w-[420px] rounded-xl border-[1.5px] border-[#222222] bg-white px-3.5 py-3 text-[15px] font-medium text-foreground outline-none"
+                  className="mt-3 w-full max-w-[420px] rounded-[12px] border-[1.5px] border-[#222222] bg-white px-3.5 py-3 text-[15px] font-medium text-foreground outline-none"
                 />
                 <div className="mt-3.5 flex items-center gap-2.5">
                   <button
                     type="button"
                     onClick={saveHandoff}
                     disabled={savingKey === "handoff"}
-                    className="inline-flex min-h-10 min-w-[78px] cursor-pointer items-center justify-center gap-2 rounded-lg bg-navy-900 px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+                    className="inline-flex min-h-10 min-w-[78px] cursor-pointer items-center justify-center gap-2 rounded-[8px] bg-navy-900 px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
                   >
                     {savingKey === "handoff" ? <LoadingDots /> : "Salva"}
                   </button>
                   <button
                     type="button"
                     onClick={() => setHandoffEditing(false)}
-                    className="cursor-pointer rounded-lg px-[18px] py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#f2f2f2]"
+                    className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-[#f2f2f2]"
                   >
                     Annulla
                   </button>
@@ -597,7 +592,7 @@ export function VoiceSettingsPane() {
                   onClick={() => toggleAction(option.value)}
                   disabled={saving}
                   className={cn(
-                    "cursor-pointer rounded-xl border-[1.5px] px-3.5 py-3 text-left transition-all",
+                    "cursor-pointer rounded-[12px] border-[1.5px] px-3.5 py-3 text-left transition-all",
                     active
                       ? "border-navy-900 bg-white"
                       : "border-[#dddddd] bg-white hover:border-[#c1c1c1]",
@@ -704,41 +699,25 @@ export function VoiceSettingsPane() {
           <div className="mb-4 grid grid-cols-2 gap-4">
             <div>
               <div className={fieldLabelClass}>Inizio</div>
-              <Select
-                value={String(voiceOfficeStartMinutes)}
-                onValueChange={(v) => saveHours(Number(v), voiceOfficeEndMinutes)}
-                disabled={savingKey === "hours"}
-              >
-                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {START_TIME_OPTIONS.map((m) => (
-                    <SelectItem key={`vs-${m}`} value={String(m)}>
-                      {formatMinutes(m)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TimePickerInput
+                value={formatMinutes(voiceOfficeStartMinutes)}
+                onChange={(v) => saveHours(labelToMinutes(v), voiceOfficeEndMinutes)}
+                minTime="00:00"
+                maxTime="23:30"
+                minuteStep={30}
+                className="w-full justify-between py-[11px]"
+              />
             </div>
             <div>
               <div className={fieldLabelClass}>Fine</div>
-              <Select
-                value={String(voiceOfficeEndMinutes)}
-                onValueChange={(v) => saveHours(voiceOfficeStartMinutes, Number(v))}
-                disabled={savingKey === "hours"}
-              >
-                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] text-sm font-medium">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {END_TIME_OPTIONS.map((m) => (
-                    <SelectItem key={`ve-${m}`} value={String(m)}>
-                      {formatMinutes(m)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TimePickerInput
+                value={formatMinutes(voiceOfficeEndMinutes)}
+                onChange={(v) => saveHours(voiceOfficeStartMinutes, labelToMinutes(v))}
+                minTime="00:00"
+                maxTime="23:30"
+                minuteStep={30}
+                className="w-full justify-between py-[11px]"
+              />
             </div>
           </div>
 

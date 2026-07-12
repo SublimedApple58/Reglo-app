@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -105,16 +106,6 @@ const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
   { value: "manual_full", label: "Manuale totale" },
   { value: "manual_engine", label: "Manuale + motore annullamenti" },
 ] as const;
-
-const CUTOFF_TIME_OPTIONS = [
-  "12:00", "12:30", "13:00", "13:30",
-  "14:00", "14:30", "15:00", "15:30",
-  "16:00", "16:30", "17:00", "17:30",
-  "18:00", "18:30", "19:00", "19:30",
-  "20:00", "20:30", "21:00", "21:30",
-  "22:00",
-];
-
 
 /** Riga setting flat (stile lista Airbnb): titolo 600 + descrizione grigia,
  * toggle navy grande a destra. Solo il toggle è cliccabile. */
@@ -648,16 +639,15 @@ export default function BookingsTab({
           />
           {bookingCutoffEnabled && (
             <FieldBlock label="Orario di chiusura">
-              <Select value={bookingCutoffTime} onValueChange={setBookingCutoffTime}>
-                <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[200px]")}>
-                  <SelectValue placeholder="Orario" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CUTOFF_TIME_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <TimePickerInput
+                value={bookingCutoffTime}
+                onChange={setBookingCutoffTime}
+                minTime="12:00"
+                maxTime="22:00"
+                minuteStep={30}
+                placeholder="Orario"
+                className="w-[200px] justify-between py-[11px]"
+              />
             </FieldBlock>
           )}
         </div>
@@ -742,28 +732,26 @@ export default function BookingsTab({
           {restrictedTimeRangeEnabled && (
             <div className="flex flex-wrap gap-5">
               <FieldBlock label="Inizio fascia">
-                <Select value={restrictedTimeRangeStart} onValueChange={setRestrictedTimeRangeStart}>
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[180px]")}>
-                    <SelectValue placeholder="Inizio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["06:00", "07:00", "08:00", "09:00", "10:00", "11:00", "12:00", "13:00", "14:00"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimePickerInput
+                  value={restrictedTimeRangeStart}
+                  onChange={setRestrictedTimeRangeStart}
+                  minTime="06:00"
+                  maxTime="14:00"
+                  minuteStep={60}
+                  placeholder="Inizio"
+                  className="w-[180px] justify-between py-[11px]"
+                />
               </FieldBlock>
               <FieldBlock label="Fine fascia">
-                <Select value={restrictedTimeRangeEnd} onValueChange={setRestrictedTimeRangeEnd}>
-                  <SelectTrigger className={cn(SELECT_TRIGGER_CLASS, "w-[180px]")}>
-                    <SelectValue placeholder="Fine" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00"].map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <TimePickerInput
+                  value={restrictedTimeRangeEnd}
+                  onChange={setRestrictedTimeRangeEnd}
+                  minTime="09:00"
+                  maxTime="16:00"
+                  minuteStep={60}
+                  placeholder="Fine"
+                  className="w-[180px] justify-between py-[11px]"
+                />
               </FieldBlock>
             </div>
           )}
