@@ -43,6 +43,9 @@ import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
+// Sezione "Novità" del menu utente nascosta temporaneamente (2026-07-12).
+const SHOW_NOVITA = false;
+
 function companyInitials(name: string | null | undefined) {
   const trimmed = (name ?? "").trim();
   if (!trimmed) return "R";
@@ -326,8 +329,11 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                       className="h-16 w-16 shrink-0 object-contain"
                     />
                   </div>
+                  {/* Novità: timeline changelog — nascosta temporaneamente (2026-07-12,
+                      richiesta utente); per riattivarla rimetti SHOW_NOVITA a true. */}
+                  {SHOW_NOVITA && (
+                  <>
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
-                  {/* Novità: timeline changelog */}
                   <div className="px-3 pb-1 pt-1.5">
                     <div className="mb-2.5 text-left text-[13px] font-semibold tracking-[0.2px] text-[#929292]">
                       Novità
@@ -355,6 +361,8 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                       ))}
                     </div>
                   </div>
+                  </>
+                  )}
                   <DropdownMenuSeparator className="my-2 bg-[#ededed]" />
                   <DropdownMenuItem
                     onClick={() => signOutUser()}
