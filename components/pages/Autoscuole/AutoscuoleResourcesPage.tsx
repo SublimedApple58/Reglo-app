@@ -768,6 +768,10 @@ export function AutoscuoleResourcesPage({
   }));
   const saveAppBookingActors = persistField(appBookingActors, setAppBookingActors, (v) => ({
     appBookingActors: v,
+    // Il backend pretende la modalità istruttore insieme all'attivazione degli
+    // istruttori ("Seleziona la modalità prenotazione istruttore."): il patch
+    // singolo campo non basta, alleghiamo il valore corrente della select.
+    ...(v === "instructors" || v === "both" ? { instructorBookingMode } : {}),
   }));
   const saveInstructorBookingMode = persistField(
     instructorBookingMode,

@@ -261,6 +261,46 @@ test.describe("Autoscuole smoke", () => {
 
     // Tutte le impostazioni sono auto-save: la CTA "Salva configurazione" non esiste più
     await expect(pane.getByRole("button", { name: "Salva configurazione" })).toHaveCount(0);
+
+    // ── Auto-save REALE (regressioni: patch singolo campo rifiutato dal backend) ──
+    const expectNoSaveError = async () => {
+      // le due bocciature note della server action updateAutoscuolaSettings
+      await expect(page.getByText("Nessuna impostazione da aggiornare.")).toHaveCount(0);
+      await expect(page.getByText(/Seleziona la modalità prenotazione istruttore/)).toHaveCount(0);
+      await expect(page.getByText("Impossibile salvare l'impostazione.")).toHaveCount(0);
+    };
+
+    await pane.getByRole("button", { name: "Generali", exact: true }).click();
+
+    // 1) "Chi può prenotare dall'app": il backend pretende instructorBookingMode
+    //    insieme a instructors/both — il patch deve allegarlo da solo.
+    const actorsTrigger = pane.getByRole("combobox").first();
+    const originalActors = ((await actorsTrigger.textContent()) ?? "").trim();
+    const flipTo = originalActors === "Entrambi" ? "Solo allievi" : "Entrambi";
+    await actorsTrigger.click();
+    await page.getByRole("option", { name: flipTo, exact: true }).click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+    await actorsTrigger.click();
+    await page.getByRole("option", { name: originalActors, exact: true }).click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+
+    // 2) "Solo orari tondi" (roundedHoursOnly mancava dal refine dello schema)
+    const roundedSwitch = pane
+      .locator("div")
+      .filter({ hasText: /^Solo orari tondi/ })
+      .filter({ has: page.locator('button[role="switch"]') })
+      .last()
+      .getByRole("switch")
+      .first();
+    await roundedSwitch.click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+    await roundedSwitch.click();
+    // il gotcha dev: lascia completare la server action prima di chiudere
+    await page.waitForTimeout(4000);
+    await expectNoSaveError();
   });
 
   test("impostazioni: istruttori lista + hub Gestisci @smoke", async ({ page }) => {
