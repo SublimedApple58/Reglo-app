@@ -175,7 +175,7 @@ export function LocationsSection() {
           <button
             type="button"
             onClick={startEditSede}
-            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-black px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#1a1a1a]"
+            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-[#1a1a2e] px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
           >
             Imposta la sede
           </button>
@@ -210,7 +210,7 @@ export function LocationsSection() {
         <button
           type="button"
           onClick={startEditSede}
-          className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2"
+          className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-colors hover:text-black hover:decoration-2"
         >
           Modifica
         </button>
@@ -222,13 +222,13 @@ export function LocationsSection() {
           <div>
             <div className="text-sm font-semibold text-foreground">Altri luoghi guida</div>
             <div className="mt-0.5 text-xs font-medium text-[#929292]">
-              Luoghi extra dove le guide possono partire. Anche gli istruttori possono aggiungere i propri.
+              Luoghi extra dove le guide possono partire.
             </div>
           </div>
           <button
             type="button"
             onClick={() => setEditing({ mode: "custom" })}
-            className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2"
+            className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-colors hover:text-black hover:decoration-2"
           >
             Aggiungi
           </button>

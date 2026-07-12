@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, MapPin, Users, X, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Map as MapIcon, Users, X, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -286,7 +286,7 @@ const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
 const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
   [
     { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
-    { key: "locations", label: "Sede e luoghi", icon: MapPin },
+    { key: "locations", label: "Sede e luoghi", icon: MapIcon },
   ],
   [
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarDays },

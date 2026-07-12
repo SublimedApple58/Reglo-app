@@ -14,6 +14,7 @@
 | Payments & Credits | [payments.md](features/payments.md) | `payments.ts`, `stripe-connect.ts` |
 | Swaps | [swaps.md](features/swaps.md) | `autoscuole-swap.actions.ts` |
 | Holidays | [holidays.md](features/holidays.md) | `autoscuole-holidays.actions.ts` |
+| Locations (Sede e luoghi) | [locations.md](features/locations.md) | `api/autoscuole/locations/*`, `locations/LocationsSection.tsx`, `locations/LocationFormDialog.tsx` |
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
