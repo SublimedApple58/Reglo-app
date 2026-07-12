@@ -3,7 +3,23 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowUp, Loader2, MessageCircle, Phone } from "lucide-react";
+import {
+  ArrowUp,
+  Calendar,
+  Check,
+  ChevronRight,
+  Clock,
+  IdCard,
+  Loader2,
+  MessageCircle,
+  Phone,
+  Plus,
+  Send,
+  Settings,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import {
   getSupportConversation,
@@ -20,11 +36,95 @@ const SUPPORT_PHONE = "+39 347 775 6855";
 
 const POLL_INTERVAL_MS = 10_000;
 
-const QUICK_REPLIES = [
-  "Come funzionano i crediti guida?",
-  "Ho un problema con una prenotazione",
-  "Vorrei essere richiamato",
+type FaqPathStep = { icon: LucideIcon; label: string };
+
+type Faq = {
+  question: string;
+  answer: string;
+  path: { title: string; steps: FaqPathStep[] };
+};
+
+/**
+ * Domande preimpostate con risposta IMMEDIATA (dal proto, aiQuickReplies +
+ * aiReply): il click NON scrive al team, appende in locale la coppia
+ * domanda/risposta con la card "Percorso". Effimere come il benvenuto.
+ * I percorsi riflettono la NOSTRA app (auto-save, pane unificati), non il proto.
+ */
+const FAQS: Faq[] = [
+  {
+    question: "Come apro le prenotazioni?",
+    answer:
+      "Ecco come aprire le prenotazioni. Imposta le settimane prenotabili e la data di apertura: il salvataggio è automatico e gli allievi idonei ricevono subito la notifica.",
+    path: {
+      title: "Apri le prenotazioni",
+      steps: [
+        { icon: Settings, label: "Impostazioni" },
+        { icon: Calendar, label: "Prenotazioni e allievi" },
+        { icon: Clock, label: "Prenotazioni aperte dal" },
+        { icon: Check, label: "Si salva da solo" },
+      ],
+    },
+  },
+  {
+    question: "Aggiungere un allievo",
+    answer:
+      "Per aggiungere un allievo usa “Invita allievo”: inserisci nome e contatto e riceverà il link per registrarsi da solo.",
+    path: {
+      title: "Aggiungi un allievo",
+      steps: [
+        { icon: Users, label: "Allievi" },
+        { icon: UserPlus, label: "Invita allievo" },
+        { icon: IdCard, label: "Nome e contatto" },
+        { icon: Send, label: "Invia link" },
+      ],
+    },
+  },
+  {
+    question: "Creare una guida di gruppo",
+    answer:
+      "La guida di gruppo si crea dall'Agenda. Scegli giorno, durata e capienza, poi pre-inserisci gli allievi o apri i posti agli inviti.",
+    path: {
+      title: "Crea una guida di gruppo",
+      steps: [
+        { icon: Calendar, label: "Agenda" },
+        { icon: Plus, label: "Clic su uno slot" },
+        { icon: Users, label: "Guida di gruppo" },
+        { icon: Check, label: "Apri i posti" },
+      ],
+    },
+  },
 ];
+
+/** Card "Percorso" sotto la risposta automatica (proto aiPathCard). */
+function FaqPathCard({ path }: { path: Faq["path"] }) {
+  return (
+    <div className="mt-2 rounded-[14px] border border-[#ececec] bg-white px-[17px] py-[15px] shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+      <div className="mb-[13px] flex items-center gap-[7px]">
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.5px] text-[#1a1a2e]">
+          Percorso
+        </span>
+        <span className="text-[13px] font-bold text-foreground">{path.title}</span>
+      </div>
+      <div className="flex flex-wrap items-start gap-0.5">
+        {path.steps.map((step, i) => (
+          <React.Fragment key={step.label}>
+            {i > 0 && (
+              <ChevronRight className="mt-[13px] size-[13px] shrink-0 text-[#d4d4d4]" strokeWidth={2.4} />
+            )}
+            <div className="flex w-[66px] flex-col items-center gap-[7px]">
+              <div className="flex size-[38px] shrink-0 items-center justify-center rounded-[11px] bg-[#eeeef4]">
+                <step.icon className="size-[18px] text-[#1a1a2e]" strokeWidth={1.8} />
+              </div>
+              <div className="text-center text-[11px] font-semibold leading-[1.25] text-[#444444]">
+                {step.label}
+              </div>
+            </div>
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const WELCOME_TEXT =
   "Ciao! Qui parli direttamente con il team Reglo: scrivici qualsiasi cosa e ti rispondiamo in questa chat. Se preferisci, ci trovi anche su WhatsApp o al telefono.";
@@ -129,7 +229,10 @@ export function AutoscuoleAssistenzaPage() {
   const [loaded, setLoaded] = React.useState(false);
   const [input, setInput] = React.useState("");
   const [sending, setSending] = React.useState(false);
+  // FAQ cliccate: coppie domanda/risposta immediate, solo in memoria.
+  const [faqLog, setFaqLog] = React.useState<Faq[]>([]);
   const messagesRef = React.useRef<HTMLDivElement>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement>(null);
   const sendingRef = React.useRef(false);
 
   const refresh = React.useCallback(async () => {
@@ -160,7 +263,7 @@ export function AutoscuoleAssistenzaPage() {
 
   React.useEffect(() => {
     messagesRef.current?.scrollTo({ top: messagesRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, sending]);
+  }, [messages, sending, faqLog]);
 
   const send = async (text: string) => {
     const trimmed = text.trim();
@@ -174,6 +277,7 @@ export function AutoscuoleAssistenzaPage() {
         return;
       }
       setInput("");
+      if (inputRef.current) inputRef.current.style.height = "auto";
       setMessages((prev) => [...prev, res.data]);
     } finally {
       setSending(false);
@@ -302,48 +406,87 @@ export function AutoscuoleAssistenzaPage() {
                     ))}
                   </React.Fragment>
                 ))}
+
+                {/* FAQ: domanda dell'utente + risposta automatica con Percorso */}
+                {faqLog.map((faq, i) => (
+                  <React.Fragment key={`faq-${i}`}>
+                    <div className="flex justify-end">
+                      <div className="max-w-[560px] rounded-2xl bg-[#222222] px-4 py-3 text-[14.5px] font-medium leading-relaxed text-white">
+                        {faq.question}
+                      </div>
+                    </div>
+                    <div className="flex items-end gap-2.5">
+                      <AssistantAvatar size={30} />
+                      <div className="flex max-w-[560px] flex-col">
+                        <div className="mb-1 ml-1 text-xs font-semibold text-[#929292]">
+                          Assistente Reglo · Risposta automatica
+                        </div>
+                        <div className="rounded-2xl border border-[#ececec] bg-white px-4 py-3 text-[14.5px] font-medium leading-relaxed text-[#333333]">
+                          {faq.answer}
+                        </div>
+                        <FaqPathCard path={faq.path} />
+                      </div>
+                    </div>
+                  </React.Fragment>
+                ))}
               </FadeIn>
             )}
             </div>
           </div>
 
-          {/* Quick replies + input */}
-          {loaded && messages.length === 0 && (
+          {/* Domande preimpostate (risposta immediata) + input */}
+          {loaded && (
             <div className="mx-auto flex w-full max-w-[860px] shrink-0 flex-wrap gap-2 px-6 pt-3.5">
-              {QUICK_REPLIES.map((qr) => (
+              {FAQS.filter((faq) => !faqLog.includes(faq)).map((faq) => (
                 <button
-                  key={qr}
+                  key={faq.question}
                   type="button"
-                  onClick={() => void send(qr)}
+                  onClick={() => setFaqLog((prev) => [...prev, faq])}
                   className="cursor-pointer rounded-[20px] border border-[#e3e3e3] bg-white px-3.5 py-2 text-[13px] font-medium text-[#444444] transition-all hover:-translate-y-px hover:border-[#222222] hover:bg-[#f3f3f3] hover:text-foreground hover:shadow-[0_2px_6px_rgba(0,0,0,0.08)]"
                 >
-                  {qr}
+                  {faq.question}
                 </button>
               ))}
             </div>
           )}
+          {/* Box messaggio dal proto (aiBoxStyle): bordo 2px, radius 16, min-h 92, freccia in basso a dx */}
           <div className="mx-auto w-full max-w-[860px] shrink-0 px-6 pb-5 pt-3.5">
-            <div className="flex items-center gap-2 rounded-[26px] border-[1.5px] border-[#dddddd] bg-white py-1.5 pl-5 pr-1.5 transition-colors focus-within:border-[#222222]">
-              <input
+            <div className="relative min-h-[92px] rounded-[16px] border-2 border-[#dddddd] bg-white px-[17px] pb-[15px] pt-4 transition-colors focus-within:border-[#222222]">
+              <textarea
+                ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") void send(input);
+                rows={1}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  const el = e.currentTarget;
+                  el.style.height = "auto";
+                  el.style.height = `${Math.min(el.scrollHeight, 120)}px`;
                 }}
-                placeholder="Scrivi al team Reglo"
-                className="min-w-0 flex-1 border-none bg-transparent text-[15px] font-medium text-foreground outline-none placeholder:text-[#929292]"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void send(input);
+                  }
+                }}
+                placeholder="Scrivi un messaggio..."
+                className="block min-h-[34px] w-full resize-none border-none bg-transparent pr-11 text-[15px] font-medium leading-normal text-foreground outline-none placeholder:text-[#929292]"
               />
               <button
                 type="button"
                 onClick={() => void send(input)}
                 disabled={!input.trim() || sending}
                 aria-label="Invia"
-                className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800 disabled:cursor-default disabled:opacity-40"
+                className={cn(
+                  "absolute bottom-3 right-3 flex size-9 items-center justify-center rounded-full transition-colors",
+                  input.trim()
+                    ? "cursor-pointer bg-[#222222] text-white hover:bg-black"
+                    : "cursor-default bg-[#ebebeb] text-[#b0b0b0]",
+                )}
               >
                 {sending ? (
-                  <Loader2 className="size-4 animate-spin" strokeWidth={2} />
+                  <Loader2 className="size-[18px] animate-spin" strokeWidth={2} />
                 ) : (
-                  <ArrowUp className="size-4" strokeWidth={2} />
+                  <ArrowUp className="size-[18px]" strokeWidth={2} />
                 )}
               </button>
             </div>

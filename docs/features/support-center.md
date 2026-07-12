@@ -31,7 +31,9 @@ Nessuna email all'autoscuola quando il team risponde: la risposta appare in chat
 
 ## Web app
 
-- `components/pages/Autoscuole/AutoscuoleAssistenzaPage.tsx` — chat reale: welcome statico (non persistito) con card WhatsApp/telefono, messaggi raggruppati per giorno (Oggi/Ieri/data), polling 10s + refresh su visibilitychange, invio con spinner (niente optimistic: append solo dopo risposta server). Quick replies mostrate solo a conversazione vuota. `sendingRef` evita che il polling "mangi" il messaggio appena inviato.
+- `components/pages/Autoscuole/AutoscuoleAssistenzaPage.tsx` — chat reale: welcome statico (non persistito) con card WhatsApp/telefono, messaggi raggruppati per giorno (Oggi/Ieri/data), polling 10s + refresh su visibilitychange, invio con spinner (niente optimistic: append solo dopo risposta server). `sendingRef` evita che il polling "mangi" il messaggio appena inviato.
+- **Composer dal proto** (`aiBoxStyle`): textarea box (bordo 2px `#dddddd` → `#222` al focus, radius 16px, min-h 92px, auto-grow fino a 120px), freccia tonda 36px in basso a dx (`#ebebeb`/grigia se vuoto, near-black se c'è testo), Invio invia / Shift+Invio a capo.
+- **FAQ con risposta immediata** (`FAQS`): 3 chips sempre visibili sopra il composer ("Come apro le prenotazioni?", "Aggiungere un allievo", "Creare una guida di gruppo"). Il click NON scrive al team: appende in locale (effimero, come il welcome) la bolla domanda + risposta "Assistente Reglo · Risposta automatica" con card **Percorso** (`FaqPathCard`: step con icone lucide + chevron). I percorsi riflettono l'app reale (pane unificato "Prenotazioni e allievi", auto-save). La chip cliccata scompare.
 - `components/Layout/AutoscuoleShell.tsx` — `getSupportUnreadCount` on mount + ogni 60s + al cambio pathname: pallino rosso sull'hamburger e conteggio sulla voce "Centro assistenza".
 - `components/Layout/FeedbackDialog.tsx` — submit → `submitProductFeedback` (spinner, toast su errore), poi gli esiti proto (5★ video testimonial / 4★ / 1-3★) invariati.
 
