@@ -581,7 +581,7 @@ export function VoiceSettingsPane() {
                   className={cn(
                     "cursor-pointer rounded-xl border-[1.5px] px-3.5 py-3 text-left transition-all",
                     active
-                      ? "border-navy-900 bg-[#eeeef4]"
+                      ? "border-navy-900 bg-white"
                       : "border-[#dddddd] bg-white hover:border-[#c1c1c1]",
                     saving && "opacity-60",
                   )}
