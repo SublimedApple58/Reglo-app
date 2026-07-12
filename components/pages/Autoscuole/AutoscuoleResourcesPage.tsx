@@ -1519,8 +1519,8 @@ export function AutoscuoleResourcesPage({
       {tabs}
       {/* ── Header overlay ── */}
       <div className="h-[72px] shrink-0 border-b border-[#dddddd]">
-        {/* Stesso container della top bar principale: logo sempre nello stesso punto */}
-        <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between px-4 lg:px-10">
+        {/* Header full-width: il logo si allinea alla sidebar ancorata a sinistra (Airbnb) */}
+        <div className="flex h-full items-center justify-between px-4 lg:px-10">
         <Image
           src="/images/nav/logo-reglo-tight.png"
           alt="Reglo"
@@ -1538,10 +1538,11 @@ export function AutoscuoleResourcesPage({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
-        <div className="grid min-h-0 w-full max-w-[1280px] grid-rows-[auto_1fr] lg:grid-rows-1 grid-cols-1 lg:grid-cols-[380px_1fr]">
+      {/* Layout Airbnb: sidebar ancorata al bordo sinistro (divider full-height),
+          contenuto centrato nello spazio rimanente — regge ogni larghezza schermo. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {/* ── Sidebar ── */}
-          <div className="min-h-0 overflow-x-auto border-b border-[#ebebeb] px-4 py-3 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-0 lg:py-12 lg:pr-10">
+          <div className="min-h-0 shrink-0 overflow-x-auto border-b border-[#ebebeb] px-4 py-3 lg:w-[400px] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-10 lg:py-12">
             <h1 className="mb-8 hidden text-[28px] font-bold tracking-[-0.6px] text-foreground lg:block">
               Impostazioni dell&apos;account
             </h1>
@@ -1574,7 +1575,8 @@ export function AutoscuoleResourcesPage({
           </div>
 
           {/* ── Content ── */}
-          <div ref={contentScrollRef} className="relative min-h-0 overflow-y-auto px-6 py-8 lg:py-12 lg:pl-12 lg:pr-8">
+          <div ref={contentScrollRef} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[860px] px-6 py-8 lg:px-8 lg:py-12">
             {!(configTab === "instructors" && instructorsDetailOpen) && (
               <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
                 {CONFIG_PANE_TITLES[configTab]}

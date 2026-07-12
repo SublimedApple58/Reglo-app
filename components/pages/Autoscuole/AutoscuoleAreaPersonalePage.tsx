@@ -756,8 +756,8 @@ export function AutoscuoleAreaPersonalePage() {
     >
       {/* ── Header overlay ── */}
       <div className="h-[72px] shrink-0 border-b border-[#dddddd]">
-        {/* Stesso container della top bar principale: logo sempre nello stesso punto */}
-        <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between px-4 lg:px-10">
+        {/* Header full-width: il logo si allinea alla sidebar ancorata a sinistra (Airbnb) */}
+        <div className="flex h-full items-center justify-between px-4 lg:px-10">
         <Image
           src="/images/nav/logo-reglo-tight.png"
           alt="Reglo"
@@ -775,14 +775,15 @@ export function AutoscuoleAreaPersonalePage() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 justify-center overflow-hidden">
-        <div className="grid w-full max-w-[1280px] min-h-0 grid-cols-1 md:grid-cols-[400px_1fr]">
+      {/* Layout Airbnb: sidebar ancorata al bordo sinistro (divider full-height),
+          contenuto centrato nello spazio rimanente — regge ogni larghezza schermo. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
           {/* ── Sidebar ── */}
-          <div className="min-h-0 overflow-y-auto border-b border-[#ebebeb] px-6 py-6 md:border-b-0 md:border-r md:py-12 md:pl-10 md:pr-12 lg:pl-0">
+          <div className="min-h-0 shrink-0 overflow-y-auto border-b border-[#ebebeb] px-6 py-6 lg:w-[400px] lg:border-b-0 lg:border-r lg:px-10 lg:py-12">
             <h1 className="mb-8 text-[28px] font-bold tracking-[-0.6px] text-foreground">
               Area personale
             </h1>
-            <div className="flex flex-row gap-1 overflow-x-auto md:flex-col md:gap-0.5">
+            <div className="flex flex-row gap-1 overflow-x-auto lg:flex-col lg:gap-0.5">
               {PANES.map((item) => (
                 <button
                   key={item.key}
@@ -803,14 +804,15 @@ export function AutoscuoleAreaPersonalePage() {
           </div>
 
           {/* ── Content ── */}
-          <div className="min-h-0 min-w-0 overflow-y-auto px-6 py-8 md:px-10 md:py-12 lg:pl-12 lg:pr-0">
-            {pane === "profilo" && <ProfiloPane />}
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[860px] px-6 py-8 lg:px-8 lg:py-12">
+              {pane === "profilo" && <ProfiloPane />}
 
-            {pane === "documenti" && <DocumentiPane />}
+              {pane === "documenti" && <DocumentiPane />}
 
-            {pane === "abbonamento" && <AbbonamentoPane />}
+              {pane === "abbonamento" && <AbbonamentoPane />}
+            </div>
           </div>
-        </div>
       </div>
     </div>
   );

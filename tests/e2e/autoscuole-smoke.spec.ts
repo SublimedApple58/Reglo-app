@@ -124,8 +124,15 @@ test.describe("Autoscuole smoke", () => {
     await page.waitForURL(/\/user\//, { timeout: 90_000 });
 
     await page.goto("/it/admin/users");
-    await expect(page.getByTestId("admin-users-page")).toBeVisible({ timeout: 60000 });
-    await expect(page.getByText(/Sono registrati in autoscuola/)).toBeVisible();
+    // .first(): in dev, durante la transizione di route, Next monta per un
+    // istante il DOM doppio → lo strict mode vedrebbe 2 nodi e fallirebbe.
+    await expect(page.getByTestId("admin-users-page").first()).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/Sono registrati in autoscuola/).first()).toBeVisible({
+      timeout: 30000,
+    });
+    // Lascia esaurire la transizione: il nodo doppio sparisce e i click
+    // successivi colpiscono l'albero definitivo.
+    await expect(page.getByTestId("admin-users-page")).toHaveCount(1, { timeout: 30000 });
 
     // Filtro ruoli
     await page.getByRole("button", { name: "Filtri" }).click();
