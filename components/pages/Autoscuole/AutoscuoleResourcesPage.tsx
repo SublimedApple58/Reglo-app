@@ -4,7 +4,7 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Map as MapIcon, Users, X, type LucideIcon } from "lucide-react";
+import { Bell, CalendarDays, Car, CircleUserRound, ClipboardList, PhoneCall, Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Users, X, type LucideIcon } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
@@ -283,10 +283,36 @@ type ConfigPane =
 const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "vehicles"];
 const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
 
-const CONFIG_PANE_GROUPS: Array<Array<{ key: ConfigPane; label: string; icon: LucideIcon }>> = [
+/** Mappa piegata SQUADRATA del proto (cfgnav-sede): lucide `Map` moderna è la
+ * variante arrotondata — il proto usa il path feather ad angoli dritti. */
+const FoldedMapIcon = ({
+  className,
+  strokeWidth = 1.9,
+}: {
+  className?: string;
+  strokeWidth?: number;
+}) => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21 3 6z" />
+    <path d="M9 3v15" />
+    <path d="M15 6v15" />
+  </svg>
+);
+
+const CONFIG_PANE_GROUPS: Array<
+  Array<{ key: ConfigPane; label: string; icon: LucideIcon | typeof FoldedMapIcon }>
+> = [
   [
     { key: "business", label: "Informazioni aziendali", icon: CircleUserRound },
-    { key: "locations", label: "Sede e luoghi", icon: MapIcon },
+    { key: "locations", label: "Sede e luoghi", icon: FoldedMapIcon },
   ],
   [
     { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarDays },
