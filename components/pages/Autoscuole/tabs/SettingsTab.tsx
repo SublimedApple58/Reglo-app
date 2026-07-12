@@ -345,8 +345,8 @@ function ChannelCard({
   );
 }
 
-/** Banner grigio del proto (Promemoria mattutino / giorno prima) con toggle e
- *  orario di invio rivelato quando attivo. */
+/** Riga FLAT del proto (Promemoria mattutino / giorno prima): icona+titolo,
+ *  sub grigio, toggle a destra, divider sotto; orario rivelato quando attivo. */
 function ReminderBanner({
   icon: Icon,
   title,
@@ -370,19 +370,19 @@ function ReminderBanner({
   onTimeChange: (v: string) => void;
 }) {
   return (
-    <div className="rounded-[10px] bg-[#f8f8f8] p-4">
+    <div className="border-b border-[#ebebeb] py-[18px]">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#222222]">
-            <Icon className="size-4 shrink-0" strokeWidth={2} />
+          <div className="flex items-center gap-2 text-[15px] font-semibold text-[#222222]">
+            <Icon className="size-[17px] shrink-0" strokeWidth={2} />
             {title}
           </div>
-          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
+          <div className="mt-0.5 text-sm font-medium text-[#929292]">{description}</div>
         </div>
         <InlineToggle checked={checked} onChange={onToggle} size="lg" />
       </div>
       {checked && (
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-black/[0.06] pt-3">
+        <div className="mt-3 flex items-center justify-between gap-3">
           <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
           <TimePickerInput
             value={timeValue}
@@ -396,10 +396,10 @@ function ReminderBanner({
   );
 }
 
-/** Card "Notifica slot vuoti" del proto (gacc-notifslot-card): header con
- *  campanella in box grigio-blu + contenuto collassabile con il setting
- *  "Notifica slot disponibili domani" (toggle, destinatari, orari, invio ora). */
-function EmptySlotNotificationCard({
+/** Sezione FLAT "Notifica slot disponibili domani" del proto: riga
+ *  titolo+sub+toggle con divider, poi Destinatari, Orari di invio e la riga
+ *  "Invia ora per domani" con bottone pill outline. Nessuna card. */
+function EmptySlotNotificationSection({
   enabled,
   setEnabled,
   target,
@@ -415,56 +415,26 @@ function EmptySlotNotificationCard({
   setTimes: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
   const toast = useFeedbackToast();
-  const [open, setOpen] = React.useState(false);
   const [sending, setSending] = React.useState(false);
 
   return (
-    <div className="mt-5 overflow-hidden rounded-[14px] border border-[#dddddd] bg-white">
-      {/* Header cliccabile (accordion come nel proto) */}
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full cursor-pointer items-center gap-4 px-6 py-5 text-left transition-colors hover:bg-[#fafafa]"
-      >
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-[8px] border border-[#cfcfdc] bg-[#eef0f6]">
-          <Bell className="size-4 text-navy-900" strokeWidth={1.8} />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-[15px] font-semibold text-foreground">
-            Notifica slot vuoti
-          </span>
-          <span className="mt-0.5 block text-[13px] font-medium text-[#929292]">
-            Notifica automaticamente gli allievi quando ci sono guide disponibili per il
-            giorno dopo.
-          </span>
-        </span>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-[#929292] transition-transform duration-200",
-            open && "rotate-180",
-          )}
-          strokeWidth={1.5}
-        />
-      </button>
-
-      {open && (
-        <div className="border-t border-[#f5f5f5] px-6 pb-6 pt-1">
-          {/* Riga toggle */}
-          <div className="flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                Notifica slot disponibili domani
-              </div>
-              <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
-                Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere
-                per il giorno dopo.
-              </div>
-            </div>
-            <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
+    <div className="mt-7">
+      {/* Riga toggle */}
+      <div className="flex items-center justify-between gap-4 border-b border-[#ebebeb] pb-[18px]">
+        <div>
+          <div className="text-[15px] font-semibold text-foreground">
+            Notifica slot disponibili domani
           </div>
+          <div className="mt-0.5 text-sm font-medium text-[#929292]">
+            Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere
+            per il giorno dopo.
+          </div>
+        </div>
+        <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
+      </div>
 
-          {enabled && (
-            <>
+      {enabled && (
+        <>
               <div className="mt-4">
                 <div className="mb-2 text-xs font-semibold text-[#555555]">Destinatari</div>
                 <Select
@@ -574,21 +544,19 @@ function EmptySlotNotificationCard({
                       setSending(false);
                     }
                   }}
-                  className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-[8px] border-[1.5px] border-[#dddddd] px-4 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
+                  className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-[15px] font-semibold text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
                 >
                   {sending ? (
                     <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
                   ) : (
                     <>
-                      <Send className="size-[13px]" strokeWidth={1.7} />
+                      <Send className="size-[15px]" strokeWidth={1.7} />
                       Invia notifica
                     </>
                   )}
                 </button>
               </div>
-            </>
-          )}
-        </div>
+        </>
       )}
     </div>
   );
@@ -696,8 +664,8 @@ function SettingsTab({
               </div>
             </div>
 
-            {/* Banner promemoria extra */}
-            <div className="space-y-3">
+            {/* Righe flat promemoria extra (proto) */}
+            <div className="mt-1">
               <ReminderBanner
                 icon={Coffee}
                 title="Promemoria mattutino"
@@ -733,7 +701,7 @@ function SettingsTab({
             </div>
 
             {/* Modalità di invio */}
-            <div className="mb-2.5 mt-5">
+            <div className="mb-2.5 mt-6">
               <div className="text-[13px] font-semibold text-[#222222]">Modalità di invio</div>
               <div className="mt-0.5 text-xs font-medium text-[#929292]">
                 Sconsigliamo l&apos;email per la scarsa leggibilità.
@@ -759,8 +727,8 @@ function SettingsTab({
               />
             </div>
 
-            {/* Rimando a Invia comunicato */}
-            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-[10px] bg-[#f8f8f8] px-4 py-[13px] text-[13px] font-medium text-[#6a6a6a]">
+            {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
+            <div className="mt-6 flex flex-wrap items-center gap-2 text-sm font-medium text-[#6a6a6a]">
               <span>Per inviare un comunicato personalizzato vai su</span>
               <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#e0e0e0] bg-white">
                 <svg width="14" height="11" viewBox="0 0 18 13" fill="none">
@@ -774,8 +742,8 @@ function SettingsTab({
               </span>
             </div>
 
-            {/* Card "Notifica slot vuoti" (proto, in fondo al pane) */}
-            <EmptySlotNotificationCard
+            {/* Notifica slot disponibili domani (flat, in fondo al pane) */}
+            <EmptySlotNotificationSection
               enabled={emptySlotNotificationEnabled}
               setEnabled={setEmptySlotNotificationEnabled}
               target={emptySlotNotificationTarget}
