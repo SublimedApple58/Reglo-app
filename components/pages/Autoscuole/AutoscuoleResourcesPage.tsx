@@ -59,7 +59,6 @@ import {
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
-import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
 
 /** Availability mode from the instructor settings JSON ("default" unless explicitly "publication"). */
 const readAvailabilityMode = (settings: unknown): "default" | "publication" =>

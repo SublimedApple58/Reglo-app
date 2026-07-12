@@ -31,6 +31,7 @@ import {
   deleteDailyAvailabilityOverride,
   setRecurringAvailabilityOverride,
 } from "@/lib/actions/autoscuole-availability.actions";
+import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
 import { cn } from "@/lib/utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -654,6 +655,16 @@ function DisponibilitaTab({
         </div>
       </div>
 
+      {mode === "publication" ? (
+        // In modalità pubblicazione è l'istruttore a compilare le settimane:
+        // il titolare vede/gestisce il rail di pubblicazione (editor esistente).
+        <InstructorPublicationEditor
+          instructorId={instructor.id}
+          base={weekly ?? null}
+          onChanged={refreshAgenda}
+        />
+      ) : (
+        <>
       <div className={LBL}>Tipo di pianificazione</div>
       <div className="mb-[22px]">
         <Seg
@@ -715,6 +726,8 @@ function DisponibilitaTab({
           refreshAgenda={refreshAgenda}
           toast={toast}
         />
+      )}
+        </>
       )}
     </div>
   );

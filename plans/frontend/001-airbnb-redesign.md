@@ -310,6 +310,21 @@ Richieste utente sul flusso "Nuovo appuntamento" (CreateEventPopover, condiviso 
 
 Verificato con Playwright: apertura dal + (destra) → card a sinistra 460x796; resize a 630x726 dal grip; scelta allievo → focus su combobox Istruttore.
 
+## ⇒ SEZIONE ISTRUTTORI RINNOVATA SUL NUOVO PROTO (2026-07-12)
+
+**NUOVO PROTO** (da 2026-07-12): `~/Desktop/Reglo Dashboard/Dashboard.dc.html` (cartella .dc: servire con http.server; i painter JS in coda al file — `openIstrManage`, `_paintDisponibilita/Malattia/Autonoma`, `_openParcoAllievi` — SONO la specifica, HTML con stili inline). NB nel runtime del proto la config si naviga male via Playwright: leggere i painter è più affidabile.
+
+**Fatto** (`94b2abe` + `be6efeb` + pubblicazione/e2e/docs):
+- `tabs/InstructorsTab.tsx` RISCRITTO self-contained (importa le server action direttamente; da AutoscuoleResourcesPage solo instructors/weekly + setter, invito, colore, refreshAgenda): lista flat proto (nome + riepilogo "09:00–18:00, 14:00–18:00 · Lun–Ven" con giorni contigui compressi + Gestisci) + riga "Invita istruttore" (avatar 3D + badge +) → dialog invito esistente (SALTATO il flusso pagamento posto del proto: zona paywall).
+- Hub "Gestisci" inline: back, header nome + swatch colore 32px → ColorPop (16 tinte `INSTRUCTOR_COLOR_CHOICES`, prese disabilitate), tab underline Disponibilità / Malattia / Gestione autonoma.
+- **Disponibilità**: riga modalità (Predefinita/A pubblicazione, salva `settings.availabilityMode`); in publication rende l'`InstructorPublicationEditor` esistente (⚠️ regressione sfiorata: era dentro il vecchio dialog ritirato — riagganciato); altrimenti seg Predefinito/Calendario: chips giorni blu + fasce multiple auto-save (`setAutoscuolaInstructorWeeklyAvailability`, guard min 1 giorno / fine>inizio; "Rimuovi disponibilità" poppa l'ultima fascia, con una sola chiede conferma e cancella tutto), Calendario = multi-selezione giorni con pallini blu/rossi (override via `setDailyAvailabilityOverride`, ranges []=assente), ricorrenza (`setRecurringAvailabilityOverride` con `fromDate`), "Ripristina predefinito" (delete override sui selezionati).
+- **Malattia**: form date + mezza giornata + orario → POST `/api/autoscuole/instructor-sick-leave` (esistente) + lista "Assenze registrate" (NUOVE action `listInstructorSickLeaves` + `deleteInstructorSickLeave` in autoscuole.actions: blocchi reason sick_leave raggruppati per giorni contigui; mezza giornata = primo blocco con orario ≠ 00:00). "Modifica" del proto NON fatta (solo Rimuovi; edit = rimuovi+ricrea).
+- **Gestione autonoma**: ex drawer cluster → inline AUTO-SAVE per controllo. ⚠️ `updateAutoscuolaInstructor.settings` RIMPIAZZA il JSON → si persiste sempre l'oggetto settings COMPLETO; `assignStudentIds` solo quando cambia la lista; autonoma OFF non svuota più le assegnazioni (il vecchio Salva mandava []). Governance = segmented Autoscuola/Sì/No (tri-state ↔ undefined/true/false), extra sotto quando Sì (notifica scambio, orario cutoff, max settimana su blur, destinatari+orari notifiche, fascia). Allievi assegnati: ricerca + checklist (assegnati in testa, badge nome istruttore altrui).
+- **Parco Allievi**: overlay full-screen radial-gradient, spirale esagonale (SZ 52 / bolle 74), parallax mouse + fisheye (scale 1.25−d/460 clamp 0.4..1.25, rAF su refs senza re-render), bolla "+" dashed → card ricerca/aggiungi, click bolla → card dettaglio con Assegna/Rimuovi. Esc chiude.
+- Pulizia parent: −46 stati (cluster*, sickLeave*, instr*, avail*), −11 handler, −280 righe di dialog JSX. `availDialogTab`/`calendarMonth`/`calendarSelectedDate` RESTANO (usati dal dialog disponibilità VEICOLI).
+- e2e: nuovo test "istruttori lista + hub Gestisci" — suite smoke 7/7. Verifica live: auto-save "Solo orari tondi" flip→reload→persistito→ripristinato; switch modalità pubblicazione→editor rail→ritorno.
+- Docs: instructor-clusters.md (sezione hub), availability.md (dialog→tab), instructor-colors.md (ColorPop).
+
 ## Next steps
 
 1. **⇒ IN CORSO: revisione "pezzo pezzo" con l'utente** di tutto il redesign (sua richiesta 2026-07-08) — poi QA su staging (da concordare: ambiente condiviso) e rilascio. L'Area personale si riempie quando ci sarà il backend.

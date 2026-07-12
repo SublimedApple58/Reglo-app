@@ -255,4 +255,42 @@ test.describe("Autoscuole smoke", () => {
     // Tutte le impostazioni sono auto-save: la CTA "Salva configurazione" non esiste più
     await expect(pane.getByRole("button", { name: "Salva configurazione" })).toHaveCount(0);
   });
+
+  test("impostazioni: istruttori lista + hub Gestisci @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole?tab=settings&pane=instructors");
+    const pane = page.getByTestId("instructors-pane");
+    await expect(pane).toBeVisible({ timeout: 60000 });
+
+    // Lista flat: riga istruttore con Gestisci + riga Invita istruttore
+    const gestisci = pane.getByRole("button", { name: "Gestisci" }).first();
+    await expect(gestisci).toBeVisible({ timeout: 30000 });
+    await expect(pane.getByText("Invita istruttore")).toBeVisible();
+
+    // Hub Gestisci: tab Disponibilità (default), Malattia, Gestione autonoma
+    await gestisci.click();
+    await expect(pane.getByText("Modalità disponibilità")).toBeVisible({ timeout: 20000 });
+    await expect(pane.getByText("Tipo di pianificazione")).toBeVisible();
+
+    await pane.getByRole("button", { name: "Malattia", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Aggiungi assenza" })).toBeVisible();
+
+    await pane.getByRole("button", { name: "Gestione autonoma", exact: true }).click();
+    await expect(pane.getByText("Orario di lavoro")).toBeVisible();
+    await expect(pane.getByText("Modalità autonoma")).toBeVisible();
+
+    // Back alla lista
+    await pane.getByRole("button", { name: "Istruttori", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Gestisci" }).first()).toBeVisible();
+  });
 });

@@ -15,7 +15,7 @@ back to the legacy positional palette when unset.
 |------|------|
 | `lib/autoscuole/instructor-colors.ts` | Curated palette (16 swatches) + tint derivation (`instructorTintStyles`: band alpha 0.10, avatar alpha 0.16, darkened text) |
 | `components/ui/color-swatch-picker.tsx` | `ColorSwatchPicker` — custom picker (no native input): 7×7 trigger dot + dropdown swatch grid + "Automatico" reset; awaits `onSelect` with spinner |
-| `components/pages/Autoscuole/tabs/InstructorsTab.tsx` | Picker as first action on the instructor `ResourceCard` (before gear/clock/sick) |
+| `components/pages/Autoscuole/tabs/InstructorsTab.tsx` | Swatch 32px nell'header dell'hub Gestisci → `ColorPop` (palette 16 tinte da `INSTRUCTOR_COLOR_CHOICES`, colori di altri istruttori disabilitati). `ColorSwatchPicker` non più usato qui (2026-07-12) |
 | `components/pages/Autoscuole/AutoscuoleResourcesPage.tsx` | `changeInstructorColor` handler → `updateAutoscuolaInstructor({ instructorId, color })` + local state sync |
 | `lib/actions/autoscuole.actions.ts` | `updateInstructorSchema.color` (hex regex, nullable) — OWNER only (stripped for self-instructor); persisted in `updateAutoscuolaInstructor` |
 | `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` | `instructorColorMap` resolves stored hex → inline-style tints, else positional `INSTRUCTOR_COLORS`; `tintFor(id, idx)` fallback. Used by week/day avatars + availability bands |
