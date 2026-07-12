@@ -3,10 +3,10 @@
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Loader2 } from 'lucide-react';
 import { signInWithCredentials } from '@/lib/actions/user.actions';
 import { useSearchParams } from 'next/navigation';
 import { PROTO_INPUT } from '@/components/ui/proto-styles';
+import { LoadingDots } from '@/components/ui/loading-dots';
 
 const CredentialsSignInForm = () => {
   const [data, action] = useActionState(signInWithCredentials, {
@@ -25,10 +25,9 @@ const CredentialsSignInForm = () => {
       <button
         type="submit"
         disabled={pending}
-        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-black py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#1a1a1a] disabled:opacity-70"
+        className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-[#222222] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-black disabled:opacity-70"
       >
-        {pending && <Loader2 className="size-4 animate-spin" />}
-        Accedi
+        {pending ? <LoadingDots /> : "Accedi"}
       </button>
     );
   };
