@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Search as SearchIcon, Send, StickyNote, Trash2 } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Plus, Search as SearchIcon, Send, StickyNote, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
@@ -202,7 +203,9 @@ export function GroupLessonManageDialog({
   const [loading, setLoading] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [eligible, setEligible] = React.useState<ResourceOption[]>([]);
-  // Aggiunta allievi: filtro di ricerca + riga in aggiunta + invito in corso.
+  // Aggiunta allievi: pannello laterale + filtro di ricerca + riga in
+  // aggiunta + invito in corso.
+  const [addPanelOpen, setAddPanelOpen] = React.useState(false);
   const [addSearch, setAddSearch] = React.useState("");
   const [addingId, setAddingId] = React.useState<string | null>(null);
   const [inviting, setInviting] = React.useState(false);
@@ -261,6 +264,7 @@ export function GroupLessonManageDialog({
       setConfirmCancel(false);
       setNoteEditing(null);
       setEditingField(null);
+      setAddPanelOpen(false);
       setAddSearch("");
     }
   }, [open, groupLessonId, reload]);
@@ -441,7 +445,10 @@ export function GroupLessonManageDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-[520px] gap-0 overflow-y-auto rounded-[20px] p-7 pb-6">
+      {/* overflow-visible sul Content: il pannello "Aggiungi allievi" sporge
+          a destra della card; lo scroll vive sul wrapper interno. */}
+      <DialogContent className="max-w-[520px] gap-0 overflow-visible rounded-[20px] p-0">
+        <div className="max-h-[88vh] overflow-y-auto rounded-[20px] p-7 pb-6">
         {/* ── Header ── */}
         <div className="flex items-center gap-2.5 pr-10">
           <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
@@ -733,7 +740,7 @@ export function GroupLessonManageDialog({
               </div>
             )}
 
-            {/* ── Aggiungi allievi: lista idonei con azione sulla riga ── */}
+            {/* ── Aggiungi allievi: trigger del pannello laterale ── */}
             {lesson.openSeats > 0 ? (
               <>
                 <div className="mb-2 mt-6 text-[15px] font-semibold text-foreground">Aggiungi allievi</div>
@@ -742,57 +749,19 @@ export function GroupLessonManageDialog({
                     Nessun allievo idoneo da aggiungere in questo momento.
                   </p>
                 ) : (
-                  <>
-                    {eligible.length > 5 && (
-                      <div className="mb-2 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
-                        <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
-                        <input
-                          value={addSearch}
-                          onChange={(e) => setAddSearch(e.target.value)}
-                          placeholder="Cerca un allievo idoneo"
-                          className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
-                        />
-                      </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddPanelOpen((v) => !v)}
+                    className={cn(
+                      "inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] px-[22px] py-[11px] text-sm font-semibold transition-colors",
+                      addPanelOpen
+                        ? "border-[#222222] bg-[#f7f7f7] text-foreground"
+                        : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
                     )}
-                    <div className="max-h-[224px] overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
-                      {filteredEligible.length === 0 ? (
-                        <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
-                          Nessun allievo trovato per &laquo;{addSearch}&raquo;.
-                        </p>
-                      ) : (
-                        filteredEligible.map((e, idx) => (
-                          <div
-                            key={e.id}
-                            className={cn(
-                              "flex items-center justify-between gap-3 px-4 py-2.5",
-                              idx > 0 && "border-t border-[#f0f0f0]",
-                            )}
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
-                                {initialsOf(e.name)}
-                              </span>
-                              <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
-                            </span>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => handleAdd(e.id)}
-                              className="flex min-w-[92px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
-                            >
-                              {addingId === e.id ? (
-                                <LoadingDots className="scale-[0.6]" />
-                              ) : (
-                                <>
-                                  <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </>
+                  >
+                    <Plus className="size-4" strokeWidth={2} />
+                    Sfoglia allievi idonei · {eligible.length}
+                  </button>
                 )}
 
                 {/* Invito in app agli idonei non ancora iscritti */}
@@ -856,6 +825,86 @@ export function GroupLessonManageDialog({
             )}
           </div>
         )}
+        </div>
+
+        {/* ── Pannello laterale "Aggiungi allievi": card gemella a destra ── */}
+        <AnimatePresence>
+          {addPanelOpen && lesson && lesson.openSeats > 0 && eligible.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">
+                  Aggiungi allievi
+                </span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setAddPanelOpen(false)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                >
+                  <X className="size-3.5 text-foreground" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                Idonei per questa guida · {lesson.openSeats}{" "}
+                {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
+              </p>
+              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                <input
+                  value={addSearch}
+                  onChange={(e) => setAddSearch(e.target.value)}
+                  placeholder="Cerca un allievo"
+                  autoFocus
+                  className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                />
+              </div>
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {filteredEligible.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    Nessun allievo trovato per &laquo;{addSearch}&raquo;.
+                  </p>
+                ) : (
+                  filteredEligible.map((e, idx) => (
+                    <div
+                      key={e.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 px-3.5 py-2.5",
+                        idx > 0 && "border-t border-[#f0f0f0]",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                          {initialsOf(e.name)}
+                        </span>
+                        <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleAdd(e.id)}
+                        className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
+                      >
+                        {addingId === e.id ? (
+                          <LoadingDots className="scale-[0.6]" />
+                        ) : (
+                          <>
+                            <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );
