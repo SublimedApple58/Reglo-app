@@ -101,6 +101,92 @@ const durationOf = (startIso: string, endIso: string | null) => {
   if (!endIso) return 180;
   return Math.max(60, Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000));
 };
+const fmtTime = (d: Date) => d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+const fmtWhen = (startIso: string, endIso: string | null) => {
+  const start = new Date(startIso);
+  const date = start.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  return `${date.charAt(0).toUpperCase()}${date.slice(1)} · ${fmtTime(start)}${endIso ? ` – ${fmtTime(new Date(endIso))}` : ""}`;
+};
+const initialsOf = (name: string | null | undefined) =>
+  (name ?? "Allievo")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "A";
+
+/** Riga di dettaglio stile Informazioni aziendali: label + valore + "Modifica";
+ *  in modifica la riga si espande con l'editor passato come children. */
+function DetailRow({
+  label,
+  value,
+  editing,
+  onEdit,
+  children,
+}: {
+  label: string;
+  value: React.ReactNode;
+  editing: boolean;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-[#ebebeb] py-4">
+      {editing ? (
+        <div>
+          <p className="mb-2.5 text-[15px] font-semibold text-foreground">{label}</p>
+          {children}
+        </div>
+      ) : (
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <p className="text-[15px] font-semibold text-foreground">{label}</p>
+            <p className="mt-0.5 text-[13.5px] font-medium leading-snug text-[#6a6a6a]">{value}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-6 shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2"
+          >
+            Modifica
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Footer degli editor inline: Salva near-black + Annulla testo. */
+function EditFooter({
+  busy,
+  onSave,
+  onCancel,
+}: {
+  busy: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-3.5 flex items-center gap-2.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onSave}
+        className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+      >
+        {busy ? <LoadingDots /> : "Salva"}
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onCancel}
+        className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+      >
+        Annulla
+      </button>
+    </div>
+  );
+}
 
 export function GroupLessonManageDialog({
   open,
@@ -132,6 +218,11 @@ export function GroupLessonManageDialog({
   const [allVehicles, setAllVehicles] = React.useState<VehicleWithLicense[]>([]);
   // Conferma annullamento inline (niente window.confirm).
   const [confirmCancel, setConfirmCancel] = React.useState(false);
+  // Riga dei dettagli attualmente in modifica (pattern Informazioni aziendali:
+  // una riga alla volta, editor inline con Salva/Annulla).
+  const [editingField, setEditingField] = React.useState<
+    null | "when" | "capacity" | "instructor" | "vehicle" | "fleet" | "follow"
+  >(null);
 
   const reload = React.useCallback(async () => {
     if (!groupLessonId) return;
@@ -162,7 +253,13 @@ export function GroupLessonManageDialog({
 
   React.useEffect(() => {
     if (open && groupLessonId) reload();
-    if (!open) { setLesson(null); setEligible([]); setConfirmCancel(false); setNoteEditing(null); }
+    if (!open) {
+      setLesson(null);
+      setEligible([]);
+      setConfirmCancel(false);
+      setNoteEditing(null);
+      setEditingField(null);
+    }
   }, [open, groupLessonId, reload]);
 
   // Full vehicle list (with license + access info) for the moto fleet /
@@ -275,18 +372,18 @@ export function GroupLessonManageDialog({
   };
   const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
-    if (!groupLessonId || !startLocal) return;
+    if (!groupLessonId || !startLocal) return false;
     if (!instructorId) {
       toast.error({ description: "Seleziona l'istruttore della guida di gruppo." });
-      return;
+      return false;
     }
     if (isMoto && fleetIds.length === 0) {
       toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
-      return;
+      return false;
     }
     const start = new Date(startLocal);
     const end = new Date(start.getTime() + Number(durationMin) * 60 * 1000);
-    if (await run(
+    const ok = await run(
       () => updateGroupLesson({
         groupLessonId,
         startsAt: start.toISOString(),
@@ -300,7 +397,25 @@ export function GroupLessonManageDialog({
           : { vehicleId: vehicleId || null }),
       }),
       "Guida di gruppo aggiornata.",
-    )) reload();
+    );
+    if (ok) reload();
+    return ok;
+  };
+  // Apre l'editor di una riga risincronizzando i draft dallo stato salvato
+  // (una modifica annullata in precedenza non deve lasciare valori sporchi).
+  const startEditField = (field: NonNullable<typeof editingField>) => {
+    if (!lesson) return;
+    setStartLocal(toLocalInput(lesson.startsAt));
+    setDurationMin(String(durationOf(lesson.startsAt, lesson.endsAt)));
+    setCapacityStr(String(lesson.capacity ?? 3));
+    setInstructorId(lesson.instructorId ?? "");
+    setVehicleId(lesson.vehicleId ?? "");
+    setFleetIds((lesson.fleet ?? []).map((f) => f.id));
+    setFollowId(lesson.followVehicleId ?? "");
+    setEditingField(field);
+  };
+  const saveEditingField = async () => {
+    if (await handleSaveEdit()) setEditingField(null);
   };
   const handleCancelLesson = async () => {
     if (!groupLessonId) return;
@@ -335,9 +450,176 @@ export function GroupLessonManageDialog({
             <LoadingDots className="text-[#929292]" />
           </div>
         ) : (
-          <div className="mt-6">
+          <div className="mt-4">
+            {/* ── Dettagli della guida: righe con Modifica inline ── */}
+            <DetailRow
+              label="Data e ora"
+              value={fmtWhen(lesson.startsAt, lesson.endsAt)}
+              editing={editingField === "when"}
+              onEdit={() => startEditField("when")}
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="datetime-local"
+                  autoFocus
+                  value={startLocal}
+                  onChange={(e) => setStartLocal(e.target.value)}
+                  className={cn(PROTO_INPUT, "cursor-pointer")}
+                />
+                <Select value={durationMin} onValueChange={setDurationMin}>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {DURATIONS.map((d) => (
+                      <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            <DetailRow
+              label="Capienza"
+              value={`${lesson.capacity} ${lesson.capacity === 1 ? "posto" : "posti"} · ${lesson.filledSeats} ${lesson.filledSeats === 1 ? "occupato" : "occupati"}`}
+              editing={editingField === "capacity"}
+              onEdit={() => startEditField("capacity")}
+            >
+              <input
+                type="number"
+                autoFocus
+                min={Math.max(1, lesson.filledSeats)}
+                max={12}
+                value={capacityStr}
+                onChange={(e) => setCapacityStr(e.target.value)}
+                className={cn(PROTO_INPUT, "max-w-[140px]")}
+              />
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            <DetailRow
+              label="Istruttore"
+              value={lesson.instructorName ?? "Da assegnare"}
+              editing={editingField === "instructor"}
+              onEdit={() => startEditField("instructor")}
+            >
+              <Select value={instructorId} onValueChange={setInstructorId}>
+                <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                  <SelectValue placeholder="Seleziona istruttore" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instructors.map((i) => (
+                    <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            {vehiclesEnabled && !isMoto ? (
+              <DetailRow
+                label="Veicolo"
+                value={lesson.vehicleName ?? "Nessuno"}
+                editing={editingField === "vehicle"}
+                onEdit={() => startEditField("vehicle")}
+              >
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                    <SelectValue placeholder="Nessuno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {standardVehicles.map((v) => (
+                      <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+              </DetailRow>
+            ) : null}
+
+            {isMoto ? (
+              <>
+                <DetailRow
+                  label="Moto della guida"
+                  value={
+                    (lesson.fleet ?? []).length
+                      ? (lesson.fleet ?? []).map((f) => f.name).join(", ")
+                      : "Nessuna moto"
+                  }
+                  editing={editingField === "fleet"}
+                  onEdit={() => startEditField("fleet")}
+                >
+                  <div className="flex flex-wrap gap-2">
+                    {fleetOptions.map((v) => {
+                      const checked = fleetIds.includes(v.id);
+                      // Una moto già assegnata a un partecipante non può uscire dal parco.
+                      const locked = checked && assignedMotoIds.has(v.id);
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          disabled={busy || locked}
+                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
+                          onClick={() =>
+                            setFleetIds((prev) =>
+                              prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
+                            )
+                          }
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                            checked
+                              ? "border-[#f0c49a] bg-[#fdf0e3] text-[#9a5b1f]"
+                              : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                            locked && "cursor-not-allowed opacity-70",
+                          )}
+                        >
+                          <span className="max-w-[160px] truncate">{v.name}</span>
+                          {v.licenseCategory ? (
+                            <span className="text-[11px] font-medium text-[#a3a3a3]">{v.licenseCategory}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+                </DetailRow>
+
+                <DetailRow
+                  label="Auto al seguito"
+                  value={lesson.followVehicleName ?? "Nessuna"}
+                  editing={editingField === "follow"}
+                  onEdit={() => startEditField("follow")}
+                >
+                  <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                      <SelectValue placeholder="Nessuna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
+                      {carVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                      ))}
+                      {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
+                        <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+                    La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
+                  </p>
+                  <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+                </DetailRow>
+              </>
+            ) : null}
+
             {/* ── Partecipanti ── */}
-            <div className="mb-2 text-[13px] font-semibold text-foreground">Partecipanti</div>
+            <div className="mb-3 mt-6 flex items-baseline justify-between">
+              <span className="text-[15px] font-semibold text-foreground">Partecipanti</span>
+              <span className="text-[12.5px] font-medium text-[#929292]">
+                {lesson.openSeats > 0
+                  ? `${lesson.openSeats} ${lesson.openSeats === 1 ? "posto libero" : "posti liberi"}`
+                  : "Posti esauriti"}
+              </span>
+            </div>
             {lesson.participants.length === 0 ? (
               <p className="text-[12.5px] font-medium text-[#929292]">
                 Nessun iscritto. Aggiungi un allievo o invia gli inviti.
@@ -347,20 +629,25 @@ export function GroupLessonManageDialog({
                 {lesson.participants.map((p, idx) => (
                   <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
-                        {isMoto ? (
-                          <span className="block text-[12px] font-medium text-[#929292]">
-                            {p.vehicleName ? (
-                              <>
-                                {p.vehicleName}
-                                {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
-                              </>
-                            ) : (
-                              "Moto a rotazione"
-                            )}
-                          </span>
-                        ) : null}
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                          {initialsOf(p.studentName)}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
+                          {isMoto ? (
+                            <span className="block text-[12px] font-medium text-[#929292]">
+                              {p.vehicleName ? (
+                                <>
+                                  {p.vehicleName}
+                                  {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
+                                </>
+                              ) : (
+                                "Moto a rotazione"
+                              )}
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
                       <div className="flex shrink-0 items-center gap-0.5">
                         <button
@@ -466,140 +753,7 @@ export function GroupLessonManageDialog({
                   Invita allievi idonei ({lesson.openSeats} {lesson.openSeats === 1 ? "posto" : "posti"})
                 </button>
               </>
-            ) : (
-              <p className="mt-4 text-[12.5px] font-medium text-[#929292]">Posti esauriti.</p>
-            )}
-
-            {/* ── Modifica guida (vale per tutti) ── */}
-            <div className="mt-6 border-t border-[#ebebeb] pt-5">
-              <div className="text-[15px] font-semibold text-foreground">Modifica guida</div>
-              <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">Vale per tutti gli iscritti.</div>
-              <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4">
-                <div>
-                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Inizio</div>
-                  <input
-                    type="datetime-local"
-                    value={startLocal}
-                    onChange={(e) => setStartLocal(e.target.value)}
-                    className={cn(PROTO_INPUT, "cursor-pointer")}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Durata</div>
-                  <Select value={durationMin} onValueChange={setDurationMin}>
-                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DURATIONS.map((d) => (
-                        <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Capienza</div>
-                  <input
-                    type="number"
-                    min={Math.max(1, lesson?.filledSeats ?? 1)}
-                    max={12}
-                    value={capacityStr}
-                    onChange={(e) => setCapacityStr(e.target.value)}
-                    className={PROTO_INPUT}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">
-                    Istruttore <span className="font-medium text-[#929292]">(obbligatorio)</span>
-                  </div>
-                  <Select value={instructorId} onValueChange={setInstructorId}>
-                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
-                    <SelectContent>
-                      {instructors.map((i) => (
-                        <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {vehiclesEnabled && !isMoto ? (
-                  <div>
-                    <div className="mb-1.5 text-[13px] font-semibold text-foreground">Veicolo</div>
-                    <Select value={vehicleId} onValueChange={setVehicleId}>
-                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Nessuno" /></SelectTrigger>
-                      <SelectContent>
-                        {standardVehicles.map((v) => (
-                          <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-              </div>
-
-              {/* Moto: parco moto della guida + auto al seguito condivisa */}
-              {isMoto ? (
-                <>
-                  <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">Moto della guida</div>
-                  <div className="flex flex-wrap gap-2">
-                    {fleetOptions.map((v) => {
-                      const checked = fleetIds.includes(v.id);
-                      // Una moto già assegnata a un partecipante non può uscire dal parco.
-                      const locked = checked && assignedMotoIds.has(v.id);
-                      return (
-                        <button
-                          key={v.id}
-                          type="button"
-                          disabled={busy || locked}
-                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
-                          onClick={() =>
-                            setFleetIds((prev) =>
-                              prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
-                            )
-                          }
-                          className={cn(
-                            "flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
-                            checked
-                              ? "border-[#f0c49a] bg-[#fdf0e3] text-[#9a5b1f]"
-                              : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
-                            locked && "cursor-not-allowed opacity-70",
-                          )}
-                        >
-                          <span className="max-w-[160px] truncate">{v.name}</span>
-                          {v.licenseCategory ? (
-                            <span className="text-[11px] font-medium text-[#a3a3a3]">{v.licenseCategory}</span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mb-1.5 mt-5 text-[13px] font-semibold text-foreground">
-                    Auto al seguito <span className="font-medium text-[#929292]">(facoltativa)</span>
-                  </div>
-                  <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
-                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Nessuna" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
-                      {carVehicles.map((v) => (
-                        <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
-                      ))}
-                      {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
-                        <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
-                      ) : null}
-                    </SelectContent>
-                  </Select>
-                  <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
-                    La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
-                  </p>
-                </>
-              ) : null}
-
-              <button
-                type="button"
-                disabled={busy}
-                onClick={handleSaveEdit}
-                className="mt-5 flex w-full cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] p-[13px] text-sm font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
-              >
-                {busy ? <LoadingDots /> : "Salva modifiche"}
-              </button>
-            </div>
+            ) : null}
 
             {/* ── Annulla guida (conferma inline) ── */}
             {confirmCancel ? (
