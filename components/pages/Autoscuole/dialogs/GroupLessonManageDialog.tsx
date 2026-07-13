@@ -203,12 +203,13 @@ export function GroupLessonManageDialog({
   const [loading, setLoading] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [eligible, setEligible] = React.useState<ResourceOption[]>([]);
-  // Aggiunta allievi: pannello laterale + filtro di ricerca + riga in
-  // aggiunta + invito in corso.
-  const [addPanelOpen, setAddPanelOpen] = React.useState(false);
+  // Pannello laterale (uno alla volta): elenco allievi idonei o parco moto.
+  const [sidePanel, setSidePanel] = React.useState<null | "students" | "fleet">(null);
   const [addSearch, setAddSearch] = React.useState("");
   const [addingId, setAddingId] = React.useState<string | null>(null);
   const [inviting, setInviting] = React.useState(false);
+  const [fleetSearch, setFleetSearch] = React.useState("");
+  const [togglingMotoId, setTogglingMotoId] = React.useState<string | null>(null);
   // Per-student note editing: which seat appointment is open + its draft text.
   const [noteEditing, setNoteEditing] = React.useState<string | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
@@ -264,8 +265,9 @@ export function GroupLessonManageDialog({
       setConfirmCancel(false);
       setNoteEditing(null);
       setEditingField(null);
-      setAddPanelOpen(false);
+      setSidePanel(null);
       setAddSearch("");
+      setFleetSearch("");
     }
   }, [open, groupLessonId, reload]);
 
@@ -391,6 +393,46 @@ export function GroupLessonManageDialog({
     const q = addSearch.trim().toLowerCase();
     return q ? eligible.filter((e) => e.name.toLowerCase().includes(q)) : eligible;
   }, [eligible, addSearch]);
+  // Parco moto nel pannello: in guida prima, poi le altre; filtro per nome.
+  const fleetPanelRows = React.useMemo(() => {
+    const inFleet = new Set((lesson?.fleet ?? []).map((f) => f.id));
+    const q = fleetSearch.trim().toLowerCase();
+    return fleetOptions
+      .filter((v) => !q || v.name.toLowerCase().includes(q))
+      .map((v) => ({ ...v, inFleet: inFleet.has(v.id) }))
+      .sort((a, b) => Number(b.inFleet) - Number(a.inFleet));
+  }, [fleetOptions, lesson, fleetSearch]);
+  // Toggle immediato di una moto nel parco: salva subito (payload dai valori
+  // salvati della guida, non dai draft) e ricarica.
+  const toggleFleetMoto = async (motoId: string) => {
+    if (!groupLessonId || !lesson) return;
+    const current = (lesson.fleet ?? []).map((f) => f.id);
+    const inFleet = current.includes(motoId);
+    const next = inFleet ? current.filter((x) => x !== motoId) : [...current, motoId];
+    if (!next.length) {
+      toast.error({ description: "La guida deve avere almeno una moto." });
+      return;
+    }
+    setTogglingMotoId(motoId);
+    try {
+      if (await run(
+        () => updateGroupLesson({
+          groupLessonId,
+          startsAt: lesson.startsAt,
+          endsAt:
+            lesson.endsAt ??
+            new Date(new Date(lesson.startsAt).getTime() + 180 * 60000).toISOString(),
+          instructorId: lesson.instructorId ?? null,
+          capacity: lesson.capacity,
+          vehicleIds: next,
+          followVehicleId: lesson.followVehicleId ?? null,
+        }),
+        inFleet ? "Moto rimossa dalla guida." : "Moto aggiunta alla guida.",
+      )) reload();
+    } finally {
+      setTogglingMotoId(null);
+    }
+  };
   const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
     if (!groupLessonId || !startLocal) return false;
@@ -562,6 +604,7 @@ export function GroupLessonManageDialog({
 
             {isMoto ? (
               <>
+                {/* Il parco moto si gestisce nel pannello laterale (come gli allievi). */}
                 <DetailRow
                   label="Moto della guida"
                   value={
@@ -569,42 +612,10 @@ export function GroupLessonManageDialog({
                       ? (lesson.fleet ?? []).map((f) => f.name).join(", ")
                       : "Nessuna moto"
                   }
-                  editing={editingField === "fleet"}
-                  onEdit={() => startEditField("fleet")}
+                  editing={false}
+                  onEdit={() => setSidePanel((v) => (v === "fleet" ? null : "fleet"))}
                 >
-                  <div className="flex flex-wrap gap-2">
-                    {fleetOptions.map((v) => {
-                      const checked = fleetIds.includes(v.id);
-                      // Una moto già assegnata a un partecipante non può uscire dal parco.
-                      const locked = checked && assignedMotoIds.has(v.id);
-                      return (
-                        <button
-                          key={v.id}
-                          type="button"
-                          disabled={busy || locked}
-                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
-                          onClick={() =>
-                            setFleetIds((prev) =>
-                              prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
-                            )
-                          }
-                          className={cn(
-                            "flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
-                            checked
-                              ? "border-[#f0c49a] bg-[#fdf0e3] text-[#9a5b1f]"
-                              : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
-                            locked && "cursor-not-allowed opacity-70",
-                          )}
-                        >
-                          <span className="max-w-[160px] truncate">{v.name}</span>
-                          {v.licenseCategory ? (
-                            <span className="text-[11px] font-medium text-[#a3a3a3]">{v.licenseCategory}</span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+                  <></>
                 </DetailRow>
 
                 <DetailRow
@@ -751,10 +762,10 @@ export function GroupLessonManageDialog({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setAddPanelOpen((v) => !v)}
+                    onClick={() => setSidePanel((v) => (v === "students" ? null : "students"))}
                     className={cn(
                       "inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] px-[22px] py-[11px] text-sm font-semibold transition-colors",
-                      addPanelOpen
+                      sidePanel === "students"
                         ? "border-[#222222] bg-[#f7f7f7] text-foreground"
                         : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
                     )}
@@ -829,8 +840,9 @@ export function GroupLessonManageDialog({
 
         {/* ── Pannello laterale "Aggiungi allievi": card gemella a destra ── */}
         <AnimatePresence>
-          {addPanelOpen && lesson && lesson.openSeats > 0 && eligible.length > 0 && (
+          {sidePanel === "students" && lesson && lesson.openSeats > 0 && eligible.length > 0 && (
             <motion.div
+              key="students-panel"
               initial={{ opacity: 0, x: -14 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -10 }}
@@ -844,7 +856,7 @@ export function GroupLessonManageDialog({
                 <button
                   type="button"
                   aria-label="Chiudi elenco"
-                  onClick={() => setAddPanelOpen(false)}
+                  onClick={() => setSidePanel(null)}
                   className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
                 >
                   <X className="size-3.5 text-foreground" strokeWidth={2} />
@@ -900,6 +912,113 @@ export function GroupLessonManageDialog({
                       </button>
                     </div>
                   ))
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── Pannello laterale "Moto della guida": toggle immediato ── */}
+          {sidePanel === "fleet" && lesson && isMoto && (
+            <motion.div
+              key="fleet-panel"
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">
+                  Moto della guida
+                </span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setSidePanel(null)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                >
+                  <X className="size-3.5 text-foreground" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                Le modifiche si salvano subito · {(lesson.fleet ?? []).length} moto in guida
+              </p>
+              {fleetOptions.length > 5 && (
+                <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                  <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                  <input
+                    value={fleetSearch}
+                    onChange={(e) => setFleetSearch(e.target.value)}
+                    placeholder="Cerca una moto"
+                    className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                  />
+                </div>
+              )}
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {fleetPanelRows.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    {fleetSearch
+                      ? `Nessuna moto trovata per «${fleetSearch}».`
+                      : "Nessuna moto utilizzabile dall'istruttore selezionato."}
+                  </p>
+                ) : (
+                  fleetPanelRows.map((v, idx) => {
+                    // Una moto già assegnata a un partecipante non può uscire dal parco.
+                    const locked = v.inFleet && assignedMotoIds.has(v.id);
+                    return (
+                      <div
+                        key={v.id}
+                        className={cn(
+                          "flex items-center justify-between gap-3 px-3.5 py-2.5",
+                          idx > 0 && "border-t border-[#f0f0f0]",
+                        )}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={cn(
+                              "flex size-8 shrink-0 select-none items-center justify-center rounded-full text-[11px] font-bold",
+                              v.inFleet ? "bg-[#fdf0e3] text-[#9a5b1f]" : "bg-[#f2f2f2] text-[#555555]",
+                            )}
+                          >
+                            {v.licenseCategory ?? initialsOf(v.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-foreground">{v.name}</span>
+                            {locked && (
+                              <span className="block text-[11px] font-medium text-[#a3a3a3]">
+                                Assegnata a un partecipante
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy || locked}
+                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
+                          onClick={() => toggleFleetMoto(v.id)}
+                          className={cn(
+                            "flex min-w-[88px] shrink-0 select-none items-center justify-center gap-1 rounded-full border-[1.5px] px-3 py-1.5 text-[13px] font-semibold transition-colors",
+                            locked
+                              ? "cursor-not-allowed border-[#eeeeee] text-[#c1c1c1]"
+                              : v.inFleet
+                                ? "cursor-pointer border-[#dddddd] text-[#c13515] hover:border-[#c13515] hover:bg-[#fdf3f1]"
+                                : "cursor-pointer border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
+                            busy && !locked && "opacity-50",
+                          )}
+                        >
+                          {togglingMotoId === v.id ? (
+                            <LoadingDots className="scale-[0.6]" />
+                          ) : v.inFleet ? (
+                            "Rimuovi"
+                          ) : (
+                            <>
+                              <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
             </motion.div>
