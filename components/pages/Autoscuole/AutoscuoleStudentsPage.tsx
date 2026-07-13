@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { KeyRound, Plus, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -399,16 +399,45 @@ function EmptyList({ title = "Nessun risultato", subtitle = "Nessun allievo trov
 
 const PAGE_SIZE = 25;
 
-function LoadMoreButton({ remaining, onClick }: { remaining: number; onClick: () => void }) {
+/** Pagina corrente della lista, con la pagina clampata al range disponibile. */
+function pageSlice<T>(list: T[], page: number): T[] {
+  const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const clamped = Math.min(Math.max(1, page), totalPages);
+  return list.slice((clamped - 1) * PAGE_SIZE, clamped * PAGE_SIZE);
+}
+
+/** Navigazione pagine "‹ 01 / N ›" in alto a sinistra della tabella (come Utenti). */
+function TablePager({
+  page,
+  totalPages,
+  onPage,
+}: {
+  page: number;
+  totalPages: number;
+  onPage: (page: number) => void;
+}) {
   return (
-    <div className="flex justify-center pb-2 pt-6">
+    <div className="flex shrink-0 select-none items-center gap-2 text-[13px] font-medium text-[#929292]">
       <button
         type="button"
-        onClick={onClick}
-        className="flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-sm font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7]"
+        onClick={() => onPage(page - 1)}
+        disabled={page <= 1}
+        aria-label="Pagina precedente"
+        className="cursor-pointer px-0.5 text-[#929292] transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-40"
       >
-        <Plus className="size-[15px]" />
-        Carica altri {Math.min(PAGE_SIZE, remaining)} · {remaining} rimanenti
+        <ChevronLeft className="size-4" strokeWidth={1.8} />
+      </button>
+      <span>
+        {String(page).padStart(2, "0")} / {Math.max(totalPages, 1)}
+      </span>
+      <button
+        type="button"
+        onClick={() => onPage(page + 1)}
+        disabled={page >= totalPages}
+        aria-label="Pagina successiva"
+        className="cursor-pointer px-0.5 text-[#929292] transition-colors hover:text-navy-900 disabled:cursor-default disabled:opacity-40"
+      >
+        <ChevronRight className="size-4" strokeWidth={1.8} />
       </button>
     </div>
   );
@@ -498,11 +527,11 @@ export function AutoscuoleStudentsPage({
   const [phaseTab, setPhaseTab] = React.useState<PhaseTab>("pratica");
   const [praticaSubTab, setPraticaSubTab] = React.useState<PraticaSubTab>("lista");
   const [lateCancellationsCount, setLateCancellationsCount] = React.useState(0);
-  const [visibleCounts, setVisibleCounts] = React.useState<Record<PhaseTab, number>>({
-    attesa: PAGE_SIZE,
-    teoria: PAGE_SIZE,
-    pratica: PAGE_SIZE,
-    patentati: PAGE_SIZE,
+  const [pages, setPages] = React.useState<Record<PhaseTab, number>>({
+    attesa: 1,
+    teoria: 1,
+    pratica: 1,
+    patentati: 1,
   });
 
   // Panel tabs
@@ -594,7 +623,7 @@ export function AutoscuoleStudentsPage({
   }, [search]);
 
   React.useEffect(() => {
-    setVisibleCounts({ attesa: PAGE_SIZE, teoria: PAGE_SIZE, pratica: PAGE_SIZE, patentati: PAGE_SIZE });
+    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
   }, [debouncedSearch]);
 
   const load = React.useCallback(async (isSearch = false) => {
@@ -946,7 +975,7 @@ export function AutoscuoleStudentsPage({
     if (list.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in attesa di attivazione"} />;
     }
-    const visible = list.slice(0, visibleCounts.attesa);
+    const visible = pageSlice(list, pages.attesa);
     const noSeatsLeft = quizCtx !== null && quizCtx.available <= 0;
     return (
       <div>
@@ -977,12 +1006,6 @@ export function AutoscuoleStudentsPage({
             </div>
           );
         })}
-        {list.length > visibleCounts.attesa && (
-          <LoadMoreButton
-            remaining={list.length - visibleCounts.attesa}
-            onClick={() => setVisibleCounts((prev) => ({ ...prev, attesa: prev.attesa + PAGE_SIZE }))}
-          />
-        )}
       </div>
     );
   };
@@ -992,7 +1015,7 @@ export function AutoscuoleStudentsPage({
     if (list.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase teoria"} />;
     }
-    const visible = list.slice(0, visibleCounts.teoria);
+    const visible = pageSlice(list, pages.teoria);
     return (
       <div>
         {visible.map((student) => {
@@ -1033,12 +1056,6 @@ export function AutoscuoleStudentsPage({
             </div>
           );
         })}
-        {list.length > visibleCounts.teoria && (
-          <LoadMoreButton
-            remaining={list.length - visibleCounts.teoria}
-            onClick={() => setVisibleCounts((prev) => ({ ...prev, teoria: prev.teoria + PAGE_SIZE }))}
-          />
-        )}
       </div>
     );
   };
@@ -1048,7 +1065,7 @@ export function AutoscuoleStudentsPage({
     if (list.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
     }
-    const visible = list.slice(0, visibleCounts.pratica);
+    const visible = pageSlice(list, pages.pratica);
     return (
       <div>
         {visible.map((student) => {
@@ -1083,12 +1100,6 @@ export function AutoscuoleStudentsPage({
             </div>
           );
         })}
-        {list.length > visibleCounts.pratica && (
-          <LoadMoreButton
-            remaining={list.length - visibleCounts.pratica}
-            onClick={() => setVisibleCounts((prev) => ({ ...prev, pratica: prev.pratica + PAGE_SIZE }))}
-          />
-        )}
       </div>
     );
   };
@@ -1098,7 +1109,7 @@ export function AutoscuoleStudentsPage({
     if (list.length === 0) {
       return <EmptyList subtitle="Nessun allievo patentato" />;
     }
-    const visible = list.slice(0, visibleCounts.patentati);
+    const visible = pageSlice(list, pages.patentati);
     return (
       <div>
         {visible.map((student) => (
@@ -1119,12 +1130,6 @@ export function AutoscuoleStudentsPage({
             </div>
           </div>
         ))}
-        {list.length > visibleCounts.patentati && (
-          <LoadMoreButton
-            remaining={list.length - visibleCounts.patentati}
-            onClick={() => setVisibleCounts((prev) => ({ ...prev, patentati: prev.patentati + PAGE_SIZE }))}
-          />
-        )}
       </div>
     );
   };
@@ -1945,6 +1950,35 @@ export function AutoscuoleStudentsPage({
                   </div>
                 </section>
               )}
+
+              {/* ── Paginazione tabella (in alto a sinistra, come Utenti) ── */}
+              {!(phaseTab === "pratica" && praticaSubTab === "cancellazioni") &&
+                (() => {
+                  const activeList =
+                    phaseTab === "attesa"
+                      ? studentsByPhase.awaiting
+                      : phaseTab === "teoria"
+                        ? studentsByPhase.teoria
+                        : phaseTab === "pratica"
+                          ? studentsByPhase.pratica
+                          : studentsByPhase.patentato;
+                  const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
+                  const page = Math.min(Math.max(1, pages[phaseTab]), totalPages);
+                  return (
+                    <div className="flex items-center">
+                      <TablePager
+                        page={page}
+                        totalPages={totalPages}
+                        onPage={(next) =>
+                          setPages((prev) => ({
+                            ...prev,
+                            [phaseTab]: Math.min(Math.max(1, next), totalPages),
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })()}
 
               {/* ── Content ── */}
               <div className="relative">
