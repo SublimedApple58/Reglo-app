@@ -1670,19 +1670,26 @@ export function AutoscuoleAgendaPage({
         </div>
 
         {outOfAvailAppointments.length > 0 && (
-          <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
-            <AlertTriangle className="size-5 shrink-0 text-yellow-600" />
-            <span className="text-sm font-medium text-yellow-800">
-              <strong>{outOfAvailAppointments.length}</strong> guid{outOfAvailAppointments.length === 1 ? "a" : "e"} fuori disponibilità
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto border-yellow-300 bg-white text-yellow-800 hover:bg-yellow-100"
+          <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f8fa] px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <AlertTriangle className="size-[18px] shrink-0 text-[#d97706]" strokeWidth={1.8} />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-foreground">
+                  {outOfAvailAppointments.length} guid{outOfAvailAppointments.length === 1 ? "a" : "e"} fuori
+                  disponibilità
+                </p>
+                <p className="text-[12px] font-medium leading-snug text-[#929292]">
+                  Prenotate fuori dagli orari di disponibilità dell&apos;istruttore.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
               onClick={() => setOutOfAvailSheetOpen(true)}
+              className="flex shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
             >
               Gestisci
-            </Button>
+            </button>
           </div>
         )}
 
