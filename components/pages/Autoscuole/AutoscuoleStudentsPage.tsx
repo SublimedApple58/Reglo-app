@@ -1843,6 +1843,32 @@ export function AutoscuoleStudentsPage({
             <FadeIn className="space-y-6">
               {/* ── Toolbar ── */}
               <div className="flex flex-wrap items-center gap-2.5">
+                {/* Paginazione tabella, primo elemento a sinistra (come Utenti) */}
+                {!(phaseTab === "pratica" && praticaSubTab === "cancellazioni") &&
+                  (() => {
+                    const activeList =
+                      phaseTab === "attesa"
+                        ? studentsByPhase.awaiting
+                        : phaseTab === "teoria"
+                          ? studentsByPhase.teoria
+                          : phaseTab === "pratica"
+                            ? studentsByPhase.pratica
+                            : studentsByPhase.patentato;
+                    const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
+                    const page = Math.min(Math.max(1, pages[phaseTab]), totalPages);
+                    return (
+                      <TablePager
+                        page={page}
+                        totalPages={totalPages}
+                        onPage={(next) =>
+                          setPages((prev) => ({
+                            ...prev,
+                            [phaseTab]: Math.min(Math.max(1, next), totalPages),
+                          }))
+                        }
+                      />
+                    );
+                  })()}
                 <SegmentedPill
                   value={phaseTab}
                   onChange={(next) => setPhaseTab(next)}
@@ -1950,35 +1976,6 @@ export function AutoscuoleStudentsPage({
                   </div>
                 </section>
               )}
-
-              {/* ── Paginazione tabella (in alto a sinistra, come Utenti) ── */}
-              {!(phaseTab === "pratica" && praticaSubTab === "cancellazioni") &&
-                (() => {
-                  const activeList =
-                    phaseTab === "attesa"
-                      ? studentsByPhase.awaiting
-                      : phaseTab === "teoria"
-                        ? studentsByPhase.teoria
-                        : phaseTab === "pratica"
-                          ? studentsByPhase.pratica
-                          : studentsByPhase.patentato;
-                  const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
-                  const page = Math.min(Math.max(1, pages[phaseTab]), totalPages);
-                  return (
-                    <div className="flex items-center">
-                      <TablePager
-                        page={page}
-                        totalPages={totalPages}
-                        onPage={(next) =>
-                          setPages((prev) => ({
-                            ...prev,
-                            [phaseTab]: Math.min(Math.max(1, next), totalPages),
-                          }))
-                        }
-                      />
-                    </div>
-                  );
-                })()}
 
               {/* ── Content ── */}
               <div className="relative">
