@@ -126,6 +126,9 @@ type LessonEntry = {
   createdAt: string | Date | null;
 };
 
+/** Filtri client-side del tab Guide del drawer allievo. */
+type LessonFilter = "all" | "upcoming" | "unpaid" | "completed" | "cancelled";
+
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
@@ -536,6 +539,7 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
+  const [lessonFilter, setLessonFilter] = React.useState<LessonFilter>("all");
 
   // Booking block toggle
   const [blockSaving, setBlockSaving] = React.useState(false);
@@ -693,6 +697,7 @@ export function AutoscuoleStudentsPage({
     (studentId: string) => {
       setSelectedStudentId(studentId);
       setDrawerTab("summary");
+      setLessonFilter("all");
       setPanelOpen(true);
       void loadRegister(studentId);
       void loadCredits(studentId);
@@ -1644,9 +1649,57 @@ export function AutoscuoleStudentsPage({
         </div>
       );
     }
+
+    // ── Filtri client-side (criteri logici sulle guide già caricate) ──
+    const nowMs = Date.now();
+    const startMs = (l: LessonEntry) =>
+      (l.startsAt instanceof Date ? l.startsAt : new Date(l.startsAt)).getTime();
+    const lessonUnpaid = (l: LessonEntry) =>
+      l.manualPaymentStatus !== "paid" &&
+      (
+        (["completed", "checked_in"].includes(l.status) && manualMode) ||
+        l.manualPaymentStatus === "unpaid" ||
+        (["cancelled", "no_show"].includes(l.status) &&
+          l.lateCancellationAction === "charged" &&
+          l.manualPaymentStatus === "unpaid")
+      );
+    const predicates: Record<LessonFilter, (l: LessonEntry) => boolean> = {
+      all: () => true,
+      upcoming: (l) => ["scheduled", "confirmed"].includes(l.status) && startMs(l) > nowMs,
+      unpaid: lessonUnpaid,
+      completed: (l) => ["completed", "checked_in"].includes(l.status),
+      cancelled: (l) => ["cancelled", "no_show"].includes(l.status),
+    };
+    // "Da pagare" ha senso solo in modalità pagamento manuale (come i badge).
+    const filterDefs: Array<{ value: LessonFilter; label: string }> = [
+      { value: "all", label: "Tutte" },
+      { value: "upcoming", label: "Future" },
+      ...(manualMode ? [{ value: "unpaid" as LessonFilter, label: "Da pagare" }] : []),
+      { value: "completed", label: "Completate" },
+      { value: "cancelled", label: "Annullate" },
+    ];
+    const activeFilter = filterDefs.some((f) => f.value === lessonFilter) ? lessonFilter : "all";
+    const filteredLessons = sortedLessons.filter(predicates[activeFilter]);
+
     return (
       <div>
-        {sortedLessons.map((lesson) => {
+        <div className="mb-4 flex overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <SegmentedPill
+            value={activeFilter}
+            onChange={setLessonFilter}
+            options={filterDefs.map((f) => ({
+              value: f.value,
+              label: f.label,
+              count: register.lessons.filter(predicates[f.value]).length,
+            }))}
+          />
+        </div>
+        {filteredLessons.length === 0 ? (
+          <div className="pt-8 text-center">
+            <p className="text-[13px] font-medium text-[#929292]">Nessuna guida per questo filtro.</p>
+          </div>
+        ) : (
+          filteredLessons.map((lesson) => {
           const isCompleted = lesson.status === "completed";
           const isCheckedIn = lesson.status === "checked_in";
           const isCancelled = lesson.status === "cancelled";
@@ -1746,7 +1799,8 @@ export function AutoscuoleStudentsPage({
               </div>
             </div>
           );
-        })}
+          })
+        )}
       </div>
     );
   };
