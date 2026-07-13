@@ -30,9 +30,12 @@ function pad(value: number) {
 function parseTime(value: string): { hour: number; minute: number } {
   const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
   if (!match) return { hour: 0, minute: 0 };
+  // 24 è ammesso come confine di fine giornata (24:00 = mezzanotte): l'unico
+  // minuto valido nell'ora 24 è :00. Va abilitato dal chiamante con maxTime="24:00".
+  const hour = Math.min(24, Number(match[1]));
   return {
-    hour: Math.min(23, Number(match[1])),
-    minute: Math.min(59, Number(match[2])),
+    hour,
+    minute: hour === 24 ? 0 : Math.min(59, Number(match[2])),
   };
 }
 

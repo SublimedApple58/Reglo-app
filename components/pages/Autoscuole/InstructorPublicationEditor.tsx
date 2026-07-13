@@ -356,7 +356,7 @@ export function InstructorPublicationEditor({
                               value={r.endMinutes === 1440 ? "24:00" : fmtMin(r.endMinutes)}
                               onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, endMinutes: labelToMin(v) } : x)))}
                               minTime="00:30"
-                              maxTime="23:30"
+                              maxTime="24:00"
                               minuteStep={30}
                               className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
                             />

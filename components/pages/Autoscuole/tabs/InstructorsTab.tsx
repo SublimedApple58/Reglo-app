@@ -673,7 +673,7 @@ function DisponibilitaTab({
               <div key={i} className="flex items-center gap-2">
                 <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setRangeSide(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                 <span className="text-[13px] text-[#999999]">–</span>
-                <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
+                <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setRangeSide(i, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[11px]" />
               </div>
             ))}
           </div>
@@ -974,7 +974,7 @@ function CalendarOverrides({
                     <div key={i} className="flex items-center gap-2">
                       <TimePickerInput value={mmToLabel(r.startMinutes)} onChange={(v) => setSelRange(i, "a", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                       <span className="text-[13px] text-[#999999]">–</span>
-                      <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setSelRange(i, "b", v)} minTime="06:00" maxTime="23:00" className="min-w-0 flex-1 justify-between py-[11px]" />
+                      <TimePickerInput value={mmToLabel(r.endMinutes)} onChange={(v) => setSelRange(i, "b", v)} minTime="06:00" maxTime="24:00" className="min-w-0 flex-1 justify-between py-[11px]" />
                     </div>
                   ))}
                 </div>
@@ -1428,7 +1428,7 @@ function AutonomaTab({
           value={(settings.workingHoursEnd as string) ?? null}
           onChange={(v) => saveSetting("workingHoursEnd", v)}
           minTime="06:00"
-          maxTime="23:00"
+          maxTime="24:00"
           placeholder="Non impostato"
           onClear={() => saveSetting("workingHoursEnd", undefined)}
           clearLabel="Non impostato"
