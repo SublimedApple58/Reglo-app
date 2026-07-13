@@ -1656,8 +1656,11 @@ export function AutoscuoleStudentsPage({
     const startMs = (l: LessonEntry) =>
       (l.startsAt instanceof Date ? l.startsAt : new Date(l.startsAt)).getTime();
     // "Da pagare" = solo guide EFFETTUATE non pagate (o annullate con penale non
-    // pagata). NON le future programmate, anche se marcate da pagare.
+    // pagata). NON le future programmate (anche se marcate da pagare) e NON quelle
+    // coperte da credito (già saldate col pacchetto crediti → mostrano "Coperta da
+    // credito", non devono rientrare qui). Stessa definizione usata dal tag/bottone.
     const lessonUnpaid = (l: LessonEntry) =>
+      !l.creditApplied &&
       l.manualPaymentStatus !== "paid" &&
       (
         (["completed", "checked_in"].includes(l.status) && manualMode) ||
@@ -1770,7 +1773,7 @@ export function AutoscuoleStudentsPage({
                   {!isPenaltyCharged && !isPenaltyPaid && !lesson.creditApplied && lesson.manualPaymentStatus === "paid" && manualMode && (
                     <Pill tone="green">Pagata</Pill>
                   )}
-                  {!isPenaltyCharged && !isPenaltyPaid && lesson.manualPaymentStatus === "unpaid" && manualMode && !isCancelled && !isNoShow && (
+                  {!isPenaltyCharged && !isPenaltyPaid && !lesson.creditApplied && manualMode && (isCompleted || isCheckedIn) && lesson.manualPaymentStatus !== "paid" && (
                     <Pill tone="amber">Da pagare</Pill>
                   )}
                   {(showPaymentToggle || isPenaltyCharged || isPenaltyPaid) && !lesson.creditApplied && (
