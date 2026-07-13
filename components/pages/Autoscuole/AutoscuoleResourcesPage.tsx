@@ -2115,7 +2115,8 @@ export function AutoscuoleResourcesPage({
           {/* ── Content ── */}
           <div ref={contentScrollRef} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-[860px] px-6 py-8 lg:px-8 lg:py-12">
-            {!(configTab === "instructors" && instructorsDetailOpen) && (
+            {!(configTab === "instructors" && instructorsDetailOpen) &&
+              !(configTab === "vehicles" && vehicleDetail !== null) && (
               <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
                 {CONFIG_PANE_TITLES[configTab]}
               </h2>

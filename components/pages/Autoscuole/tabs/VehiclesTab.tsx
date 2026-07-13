@@ -247,22 +247,13 @@ export default function VehiclesTab({
                       {vehicleSubtitle(vehicle, wa)}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-4 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => openDetail(vehicle, "disp")}
-                      className={MANAGE_LINK}
-                    >
-                      Disponibilità
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => openDetail(vehicle, "dettagli")}
-                      className={MANAGE_LINK}
-                    >
-                      Gestisci
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => openDetail(vehicle, "disp")}
+                    className={cn(MANAGE_LINK, "pt-0.5")}
+                  >
+                    Gestisci
+                  </button>
                 </div>
               );
             })}
