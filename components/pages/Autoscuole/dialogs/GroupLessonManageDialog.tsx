@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Plus, Send, StickyNote, Trash2 } from "lucide-react";
+import { Plus, Search as SearchIcon, Send, StickyNote, Trash2 } from "lucide-react";
 
 import {
   Dialog,
@@ -202,7 +202,10 @@ export function GroupLessonManageDialog({
   const [loading, setLoading] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [eligible, setEligible] = React.useState<ResourceOption[]>([]);
-  const [addId, setAddId] = React.useState<string>("");
+  // Aggiunta allievi: filtro di ricerca + riga in aggiunta + invito in corso.
+  const [addSearch, setAddSearch] = React.useState("");
+  const [addingId, setAddingId] = React.useState<string | null>(null);
+  const [inviting, setInviting] = React.useState(false);
   // Per-student note editing: which seat appointment is open + its draft text.
   const [noteEditing, setNoteEditing] = React.useState<string | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
@@ -244,7 +247,6 @@ export function GroupLessonManageDialog({
       }
       if (elig.success && elig.data) {
         setEligible(elig.data.map((e) => ({ id: e.id, name: e.name ?? "Allievo" })));
-        setAddId("");
       }
     } finally {
       setLoading(false);
@@ -259,6 +261,7 @@ export function GroupLessonManageDialog({
       setConfirmCancel(false);
       setNoteEditing(null);
       setEditingField(null);
+      setAddSearch("");
     }
   }, [open, groupLessonId, reload]);
 
@@ -362,14 +365,28 @@ export function GroupLessonManageDialog({
       "Nota salvata.",
     )) { setNoteEditing(null); reload(); }
   };
-  const handleAdd = async () => {
-    if (!groupLessonId || !addId) return;
-    if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId: addId }), "Allievo aggiunto.")) reload();
+  const handleAdd = async (studentId: string) => {
+    if (!groupLessonId || !studentId) return;
+    setAddingId(studentId);
+    try {
+      if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId }), "Allievo aggiunto.")) reload();
+    } finally {
+      setAddingId(null);
+    }
   };
   const handleInvite = async () => {
     if (!groupLessonId) return;
-    await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
+    setInviting(true);
+    try {
+      await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
+    } finally {
+      setInviting(false);
+    }
   };
+  const filteredEligible = React.useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    return q ? eligible.filter((e) => e.name.toLowerCase().includes(q)) : eligible;
+  }, [eligible, addSearch]);
   const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
     if (!groupLessonId || !startLocal) return false;
@@ -716,42 +733,89 @@ export function GroupLessonManageDialog({
               </div>
             )}
 
-            {/* ── Aggiungi allievo ── */}
+            {/* ── Aggiungi allievi: lista idonei con azione sulla riga ── */}
             {lesson.openSeats > 0 ? (
               <>
-                <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">Aggiungi allievo</div>
-                <div className="flex items-stretch gap-2">
-                  <Select value={addId} onValueChange={setAddId}>
-                    <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "min-w-0 flex-1")}>
-                      <SelectValue placeholder={eligible.length ? "Seleziona allievo idoneo" : "Nessun allievo idoneo"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eligible.map((e) => (
-                        <SelectItem key={e.id} value={e.id} className="cursor-pointer">{e.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="mb-2 mt-6 text-[15px] font-semibold text-foreground">Aggiungi allievi</div>
+                {eligible.length === 0 ? (
+                  <p className="text-[12.5px] font-medium text-[#929292]">
+                    Nessun allievo idoneo da aggiungere in questo momento.
+                  </p>
+                ) : (
+                  <>
+                    {eligible.length > 5 && (
+                      <div className="mb-2 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                        <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                        <input
+                          value={addSearch}
+                          onChange={(e) => setAddSearch(e.target.value)}
+                          placeholder="Cerca un allievo idoneo"
+                          className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                        />
+                      </div>
+                    )}
+                    <div className="max-h-[224px] overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                      {filteredEligible.length === 0 ? (
+                        <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                          Nessun allievo trovato per &laquo;{addSearch}&raquo;.
+                        </p>
+                      ) : (
+                        filteredEligible.map((e, idx) => (
+                          <div
+                            key={e.id}
+                            className={cn(
+                              "flex items-center justify-between gap-3 px-4 py-2.5",
+                              idx > 0 && "border-t border-[#f0f0f0]",
+                            )}
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                {initialsOf(e.name)}
+                              </span>
+                              <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
+                            </span>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => handleAdd(e.id)}
+                              className="flex min-w-[92px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3.5 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
+                            >
+                              {addingId === e.id ? (
+                                <LoadingDots className="scale-[0.6]" />
+                              ) : (
+                                <>
+                                  <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* Invito in app agli idonei non ancora iscritti */}
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f8fa] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Send className="size-4 shrink-0 text-[#6a6a6a]" strokeWidth={1.8} />
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground">Invita gli allievi idonei</p>
+                      <p className="text-[12px] font-medium leading-snug text-[#929292]">
+                        Notifica in app a chi può partecipare · {lesson.openSeats}{" "}
+                        {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    disabled={busy || !addId}
-                    onClick={handleAdd}
-                    className={cn(
-                      "flex shrink-0 select-none items-center gap-1.5 rounded-full px-5 text-sm font-semibold text-white transition-colors",
-                      busy || !addId ? "cursor-not-allowed bg-[#c4c4d4]" : "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]",
-                    )}
+                    disabled={busy}
+                    onClick={handleInvite}
+                    className="flex min-w-[84px] shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
                   >
-                    <Plus className="size-4" strokeWidth={2} /> Aggiungi
+                    {inviting ? <LoadingDots className="scale-[0.6]" /> : "Invita"}
                   </button>
                 </div>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleInvite}
-                  className="mt-2.5 inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-sm font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-60"
-                >
-                  <Send className="size-4" strokeWidth={1.8} />
-                  Invita allievi idonei ({lesson.openSeats} {lesson.openSeats === 1 ? "posto" : "posti"})
-                </button>
               </>
             ) : null}
 
