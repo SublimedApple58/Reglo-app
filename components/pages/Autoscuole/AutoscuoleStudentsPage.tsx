@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -1654,11 +1655,12 @@ export function AutoscuoleStudentsPage({
     const nowMs = Date.now();
     const startMs = (l: LessonEntry) =>
       (l.startsAt instanceof Date ? l.startsAt : new Date(l.startsAt)).getTime();
+    // "Da pagare" = solo guide EFFETTUATE non pagate (o annullate con penale non
+    // pagata). NON le future programmate, anche se marcate da pagare.
     const lessonUnpaid = (l: LessonEntry) =>
       l.manualPaymentStatus !== "paid" &&
       (
         (["completed", "checked_in"].includes(l.status) && manualMode) ||
-        l.manualPaymentStatus === "unpaid" ||
         (["cancelled", "no_show"].includes(l.status) &&
           l.lateCancellationAction === "charged" &&
           l.manualPaymentStatus === "unpaid")
@@ -1683,8 +1685,8 @@ export function AutoscuoleStudentsPage({
 
     return (
       <div>
-        <div className="mb-4 flex overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <SegmentedPill
+        <div className="mb-4 flex justify-center overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <SegmentedControl
             value={activeFilter}
             onChange={setLessonFilter}
             options={filterDefs.map((f) => ({
