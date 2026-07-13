@@ -17,6 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -524,22 +526,37 @@ export function GroupLessonManageDialog({
               editing={editingField === "when"}
               onEdit={() => startEditField("when")}
             >
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="datetime-local"
-                  autoFocus
-                  value={startLocal}
-                  onChange={(e) => setStartLocal(e.target.value)}
-                  className={cn(PROTO_INPUT, "cursor-pointer")}
-                />
-                <Select value={durationMin} onValueChange={setDurationMin}>
-                  <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {DURATIONS.map((d) => (
-                      <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-2.5">
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Data</div>
+                  <DatePickerInput
+                    value={startLocal.slice(0, 10)}
+                    onChange={(d) => setStartLocal(`${d}T${startLocal.slice(11, 16) || "09:00"}`)}
+                    className="h-auto rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Inizio</div>
+                  <TimePickerInput
+                    value={startLocal.slice(11, 16) || null}
+                    onChange={(t) => setStartLocal(`${startLocal.slice(0, 10)}T${t}`)}
+                    minTime="06:00"
+                    maxTime="22:00"
+                    minuteStep={30}
+                    className="w-full justify-between py-[11px]"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Durata</div>
+                  <Select value={durationMin} onValueChange={setDurationMin}>
+                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {DURATIONS.map((d) => (
+                        <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
             </DetailRow>
