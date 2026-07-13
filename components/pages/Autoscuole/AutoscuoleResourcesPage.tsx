@@ -39,6 +39,8 @@ import {
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { DatePickerInput } from "@/components/ui/date-picker";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 
 // Import statici: i pane dell'overlay restano montati (keep-alive) e non
 // devono scaricare chunk al cambio sezione — il lazy-loading qui causava lo
@@ -500,6 +502,15 @@ export function AutoscuoleResourcesPage({
   const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
   const [editVehicleTransmission, setEditVehicleTransmission] = React.useState<string>("manual");
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
+
+  // ── Dettaglio veicolo inline (proto veic-detail-view): quale veicolo e tab.
+  const [vehicleDetail, setVehicleDetail] = React.useState<
+    { vehicleId: string; tab: "disp" | "dettagli" } | null
+  >(null);
+  // Conferme inline a due step (niente window.confirm).
+  const [confirmDeactivateVehicle, setConfirmDeactivateVehicle] = React.useState(false);
+  const [confirmDeleteAvail, setConfirmDeleteAvail] = React.useState(false);
+  const [confirmResetOverride, setConfirmResetOverride] = React.useState(false);
 
   // ── Availability edit dialog
   const [availVehicle, setAvailVehicle] = React.useState<VehicleDetail | null>(null);
@@ -1247,25 +1258,21 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: res.message ?? "Impossibile aggiornare il veicolo." });
       return;
     }
+    const nextVehicle = {
+      name: res.data!.name,
+      plate: res.data!.plate ?? null,
+      status: res.data!.status,
+      assignedInstructorId: res.data!.assignedInstructorId ?? null,
+      poolInstructorIds: poolIds,
+      followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
+      licenseCategory: res.data!.licenseCategory ?? "B",
+      transmission: res.data!.transmission ?? "manual",
+    };
     setVehicles((prev) =>
-      prev.map((v) =>
-        v.id === editVehicle.id
-          ? {
-              ...v,
-              name: res.data!.name,
-              plate: res.data!.plate ?? null,
-              status: res.data!.status,
-              assignedInstructorId: res.data!.assignedInstructorId ?? null,
-              poolInstructorIds: poolIds,
-              followsInstructorAvailability:
-                res.data!.followsInstructorAvailability ?? true,
-              licenseCategory: res.data!.licenseCategory ?? "B",
-              transmission: res.data!.transmission ?? "manual",
-            }
-          : v,
-      ),
+      prev.map((v) => (v.id === editVehicle.id ? { ...v, ...nextVehicle } : v)),
     );
-    setEditVehicle(null);
+    // Si resta nel dettaglio inline: aggiorna il veicolo in modifica.
+    setEditVehicle((prev) => (prev ? { ...prev, ...nextVehicle } : prev));
     toast.success({ description: "Veicolo aggiornato." });
   };
 
@@ -1290,7 +1297,7 @@ export function AutoscuoleResourcesPage({
 
   const handleDeactivateVehicle = async () => {
     if (!editVehicle) return;
-    if (!window.confirm(`Disattivare "${editVehicle.name}"? Gli appuntamenti futuri verranno riprogrammati.`)) return;
+    setConfirmDeactivateVehicle(false);
     setSavingEditVehicle(true);
     const res = await updateAutoscuolaVehicle({
       vehicleId: editVehicle.id,
@@ -1308,7 +1315,9 @@ export function AutoscuoleResourcesPage({
           : v,
       ),
     );
-    setEditVehicle(null);
+    setEditVehicle((prev) =>
+      prev ? { ...prev, status: "inactive", assignedInstructorId: null } : prev,
+    );
     toast.success({ description: "Veicolo disattivato." });
   };
 
@@ -1329,7 +1338,7 @@ export function AutoscuoleResourcesPage({
         v.id === editVehicle.id ? { ...v, status: "active" } : v,
       ),
     );
-    setEditVehicle(null);
+    setEditVehicle((prev) => (prev ? { ...prev, status: "active" } : prev));
     toast.success({ description: "Veicolo riattivato." });
   };
 
@@ -1442,14 +1451,13 @@ export function AutoscuoleResourcesPage({
       ...prev,
       [availVehicle.id]: res.data!,
     }));
-    setAvailVehicle(null);
     toast.success({ description: "Disponibilità salvata." });
     loadAvailability(date);
   };
 
   const handleResetVehOverride = async () => {
     if (!availVehicle || !vehSelectedWeek) return;
-    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
+    setConfirmResetOverride(false);
     setSavingAvailability(true);
     const res = await deleteWeeklyAvailabilityOverride({
       ownerType: "vehicle",
@@ -1472,7 +1480,7 @@ export function AutoscuoleResourcesPage({
 
   const handleDeleteAvailability = async () => {
     if (!availVehicle) return;
-    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo veicolo?")) return;
+    setConfirmDeleteAvail(false);
     setSavingAvailability(true);
     const res = await deleteAutoscuolaVehicleWeeklyAvailability(availVehicle.id);
     setSavingAvailability(false);
@@ -1485,9 +1493,514 @@ export function AutoscuoleResourcesPage({
       delete next[availVehicle.id];
       return next;
     });
-    setAvailVehicle(null);
     toast.success({ description: "Disponibilità rimossa." });
     loadAvailability(date);
+  };
+
+  /** Salva del pannello disponibilità: default settimanale o override del
+   *  giorno selezionato in calendario (logica invariata dal vecchio dialog). */
+  const handleAvailabilitySaveClick = async () => {
+    if (availDialogTab === "calendar" && calendarSelectedDate && availVehicle) {
+      const dateObj = new Date(calendarSelectedDate);
+      const ws = getWeekStart(dateObj);
+      const weekStartStr = ws.toISOString().slice(0, 10);
+      const dayOfWeek = dateObj.getUTCDay();
+
+      if (!calendarDayEnabled) {
+        setSavingAvailability(true);
+        const res = await setWeeklyAvailabilityOverride({
+          ownerType: "vehicle",
+          ownerId: availVehicle.id,
+          weekStart: weekStartStr,
+          schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
+        });
+        setSavingAvailability(false);
+        if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+      } else {
+        const schedule: DayScheduleEntry[] = [{
+          dayOfWeek,
+          startMinutes: calendarDayRanges[0].startMinutes,
+          endMinutes: calendarDayRanges[0].endMinutes,
+          ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
+        }];
+        setSavingAvailability(true);
+        const res = await setWeeklyAvailabilityOverride({
+          ownerType: "vehicle",
+          ownerId: availVehicle.id,
+          weekStart: weekStartStr,
+          schedule,
+        });
+        setSavingAvailability(false);
+        if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+        setVehOverrides((prev) => {
+          const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
+          return [...filtered, { weekStart: weekStartStr, schedule }];
+        });
+      }
+      toast.success({ description: "Override salvato." });
+      loadAvailability(date);
+    } else {
+      handleSaveAvailability();
+    }
+  };
+
+  // ── Dettaglio veicolo inline: apre/chiude e semina entrambi gli editor.
+  const openVehicleDetail = (vehicle: VehicleDetail, tab: "disp" | "dettagli") => {
+    openEditVehicle(vehicle);
+    openAvailabilityDialog(vehicle);
+    setConfirmDeactivateVehicle(false);
+    setConfirmDeleteAvail(false);
+    setConfirmResetOverride(false);
+    setVehicleDetail({ vehicleId: vehicle.id, tab });
+  };
+  const closeVehicleDetail = () => {
+    setVehicleDetail(null);
+    setEditVehicle(null);
+    setAvailVehicle(null);
+  };
+  const setVehicleDetailTab = (tab: "disp" | "dettagli") =>
+    setVehicleDetail((prev) => (prev ? { ...prev, tab } : prev));
+
+  // Label uppercase dei campi veicolo (LBL del proto _paintVeicDettagli).
+  const VEIC_LBL = "mb-2 text-[11px] font-bold uppercase tracking-[0.4px] text-[#929292]";
+
+  /** Tab "Dettagli" del dettaglio veicolo inline (ex dialog Modifica veicolo). */
+  const renderVehicleDetailsForm = () => {
+    if (!editVehicle) return null;
+    return (
+      <div>
+        <div className={VEIC_LBL}>Nome veicolo</div>
+        <input
+          placeholder="es. Fiat 500"
+          value={editVehicleName}
+          onChange={(e) => setEditVehicleName(e.target.value)}
+          className={cn(PROTO_INPUT, "mb-[18px]")}
+        />
+        <div className={VEIC_LBL}>Targa (opzionale)</div>
+        <input
+          placeholder="es. AB123CD"
+          value={editVehiclePlate}
+          onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
+          className={cn(PROTO_INPUT, "mb-[18px]")}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className={VEIC_LBL}>Categoria</div>
+            <Select value={editVehicleCategory} onValueChange={setEditVehicleCategory}>
+              <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LICENSE_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <div className={VEIC_LBL}>Cambio</div>
+            <Select value={editVehicleTransmission} onValueChange={setEditVehicleTransmission}>
+              <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSMISSIONS.map((t) => (
+                  <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Modalità di utilizzo: segmented proto + extra per modalità */}
+        <div className={cn(VEIC_LBL, "mt-[22px]")}>Modalità di utilizzo</div>
+        <div className="flex gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+          {(
+            [
+              ["open", "Aperto"],
+              ["pool", "Pool"],
+              ["exclusive", "Esclusivo"],
+            ] as Array<[VehicleUsageMode, string]>
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              data-testid={`vehicle-mode-${mode}`}
+              data-active={editVehicleMode === mode}
+              onClick={() => setEditVehicleMode(mode)}
+              className={cn(
+                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                editVehicleMode === mode
+                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                  : "font-medium text-[#888888] hover:text-[#555555]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3">
+          {editVehicleMode === "open" && (
+            <p className="text-[12.5px] font-medium leading-normal text-[#929292]">
+              Tutti gli istruttori possono usarlo. È l&apos;impostazione predefinita.
+            </p>
+          )}
+          {editVehicleMode === "pool" && (
+            <>
+              <p className="mb-2.5 text-[12.5px] font-medium leading-normal text-[#929292]">
+                Solo gli istruttori selezionati possono usare questo veicolo.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {instructors
+                  .filter((ins) => ins.status !== "inactive")
+                  .map((ins) => {
+                    const active = editVehiclePoolIds.includes(ins.id);
+                    return (
+                      <button
+                        key={ins.id}
+                        type="button"
+                        onClick={() =>
+                          setEditVehiclePoolIds((prev) =>
+                            active ? prev.filter((id) => id !== ins.id) : [...prev, ins.id],
+                          )
+                        }
+                        className={cn(
+                          "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                          active
+                            ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                            : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                        )}
+                      >
+                        {ins.name}
+                      </button>
+                    );
+                  })}
+              </div>
+            </>
+          )}
+          {editVehicleMode === "exclusive" && (
+            <>
+              <Select
+                value={editVehicleInstructorId || "none"}
+                onValueChange={(v) => setEditVehicleInstructorId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger data-testid="vehicle-exclusive-instructor" className={PROTO_SELECT_TRIGGER}>
+                  <SelectValue placeholder="Scegli istruttore" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Scegli istruttore</SelectItem>
+                  {instructors
+                    .filter((ins) => ins.status !== "inactive")
+                    .map((ins) => (
+                      <SelectItem key={ins.id} value={ins.id}>{ins.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-[12.5px] font-medium leading-normal text-[#929292]">
+                Riservato a un istruttore, nascosto agli altri. Un istruttore può avere più mezzi
+                esclusivi (es. la sua auto e la sua moto).
+              </p>
+            </>
+          )}
+        </div>
+
+        {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
+          <div
+            role="switch"
+            tabIndex={0}
+            aria-checked={editVehicleFollowsAvailability}
+            onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setEditVehicleFollowsAvailability((prev) => !prev);
+              }
+            }}
+            className="mt-4 flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded-[12px] border-[1.5px] border-[#ededed] px-4 py-[15px]"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">
+                Disponibilità: segue l&apos;istruttore
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+                {editVehicleFollowsAvailability
+                  ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
+                  : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
+              </div>
+            </div>
+            <InlineToggle checked={editVehicleFollowsAvailability} size="lg" />
+          </div>
+        ) : null}
+
+        {/* Stato: riga titolo+descrizione a sinistra, select a destra (proto) */}
+        {editVehicle.status !== "inactive" && (
+          <div className="mt-[26px] flex items-start justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold text-foreground">Stato</div>
+              <div className="mt-1 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                {editVehicle.status === "maintenance"
+                  ? "Escluso dalle nuove prenotazioni; gli appuntamenti già fissati restano."
+                  : "Il veicolo è prenotabile normalmente."}
+              </div>
+            </div>
+            <Select
+              value={editVehicle.status === "maintenance" ? "maintenance" : "active"}
+              onValueChange={(v) => void handleSetVehicleMaintenance(v === "maintenance")}
+            >
+              <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[220px] shrink-0")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Attivo</SelectItem>
+                <SelectItem value="maintenance">Manutenzione</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Disattiva / Riattiva (conferma inline) */}
+        <div className="mt-6">
+          {editVehicle.status !== "inactive" ? (
+            confirmDeactivateVehicle ? (
+              <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#fdf3f1] px-4 py-3">
+                <span className="text-[13px] font-medium leading-snug text-[#7a2e1d]">
+                  Disattivare &laquo;{editVehicle.name}&raquo;? Gli appuntamenti futuri verranno riprogrammati.
+                </span>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <button
+                    type="button"
+                    disabled={savingEditVehicle}
+                    onClick={() => setConfirmDeactivateVehicle(false)}
+                    className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingEditVehicle}
+                    onClick={handleDeactivateVehicle}
+                    className="flex min-w-[110px] cursor-pointer items-center justify-center rounded-full bg-[#c13515] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d12] disabled:opacity-60"
+                  >
+                    {savingEditVehicle ? <LoadingDots className="scale-[0.6]" /> : "Sì, disattiva"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={savingEditVehicle}
+                onClick={() => setConfirmDeactivateVehicle(true)}
+                className="cursor-pointer text-[13.5px] font-semibold text-[#c13515] transition-colors hover:text-[#a52d12] disabled:opacity-50"
+              >
+                Disattiva veicolo
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              disabled={savingEditVehicle}
+              onClick={handleReactivateVehicle}
+              className="cursor-pointer text-[13.5px] font-semibold text-[#0f7a4d] transition-colors hover:text-[#0a5c3a] disabled:opacity-50"
+            >
+              Riattiva veicolo
+            </button>
+          )}
+        </div>
+
+        {/* Footer: Salva near-black + Annulla che torna alla lista */}
+        <div className="mt-7 flex items-center gap-2.5 border-t border-[#eeeeee] pt-5">
+          <button
+            type="button"
+            data-testid="vehicle-save"
+            disabled={savingEditVehicle || !editVehicleName.trim()}
+            onClick={handleSaveEditVehicle}
+            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+          >
+            {savingEditVehicle ? <LoadingDots /> : "Salva"}
+          </button>
+          <button
+            type="button"
+            disabled={savingEditVehicle}
+            onClick={closeVehicleDetail}
+            className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+          >
+            Annulla
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /** Tab "Disponibilità" del dettaglio veicolo inline (ex dialog disponibilità). */
+  const renderVehicleAvailabilityEditor = () => {
+    if (!availVehicle) return null;
+    const hasWeekly = Boolean(vehicleWeeklyAvailability[availVehicle.id]);
+    return (
+      <div>
+        {availVehicle.assignedInstructorId && availVehicle.followsInstructorAvailability && (
+          <div className="mb-5 rounded-[12px] bg-[#f7f8fa] px-4 py-3 text-[12.5px] font-medium leading-normal text-[#6a6a6a]">
+            Questo veicolo segue la disponibilità dell&apos;istruttore esclusivo: finché
+            l&apos;opzione è attiva (tab Dettagli), gli orari qui sotto vengono ignorati.
+          </div>
+        )}
+
+        {/* Tipo di pianificazione (segmented proto) */}
+        <div className={VEIC_LBL}>Tipo di pianificazione</div>
+        <div className="mb-[22px] flex max-w-[320px] gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+          {(
+            [
+              ["default", "Predefinito"],
+              ["calendar", "Calendario"],
+            ] as Array<["default" | "calendar", string]>
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setAvailDialogTab(key);
+                if (key === "default") setVehSelectedWeek(null);
+              }}
+              className={cn(
+                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                availDialogTab === key
+                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                  : "font-medium text-[#888888] hover:text-[#555555]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {availDialogTab === "default" ? (
+          <>
+            <div className={VEIC_LBL}>Giorni attivi</div>
+            <div className="mb-[22px] flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map((day) => {
+                const active = availDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => toggleAvailDay(day.value)}
+                    className={cn(
+                      "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                      active
+                        ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                        : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                    )}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className={VEIC_LBL}>Fasce orarie</div>
+            <TimeRangeRows
+              ranges={vehDefaultRanges}
+              onChange={(next) => {
+                setVehDefaultRanges(next);
+                if (next.length) {
+                  setAvailStartMinutes(next[0].startMinutes);
+                  setAvailEndMinutes(next[0].endMinutes);
+                }
+              }}
+            />
+          </>
+        ) : (
+          <AvailabilityCalendar
+            calendarMonth={calendarMonth}
+            setCalendarMonth={setCalendarMonth}
+            selectedDate={calendarSelectedDate}
+            setSelectedDate={setCalendarSelectedDate}
+            overrides={vehOverrides}
+            ranges={calendarDayRanges}
+            setRanges={setCalendarDayRanges}
+            dayEnabled={calendarDayEnabled}
+            setDayEnabled={setCalendarDayEnabled}
+            defaultAvailability={vehicleWeeklyAvailability[availVehicle.id] ?? null}
+          />
+        )}
+
+        {/* Footer flat: azione secondaria a sinistra, Salva a destra */}
+        <div className="mt-7 flex items-center justify-between gap-3 border-t border-[#eeeeee] pt-5">
+          {availDialogTab === "default" ? (
+            confirmDeleteAvail ? (
+              <div className="flex items-center gap-2.5">
+                <span className="text-[13px] font-medium text-[#7a2e1d]">Rimuovere tutta la disponibilità?</span>
+                <button
+                  type="button"
+                  disabled={savingAvailability}
+                  onClick={() => setConfirmDeleteAvail(false)}
+                  className="cursor-pointer px-1 text-[13px] font-semibold text-foreground hover:text-[#555555]"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  disabled={savingAvailability}
+                  onClick={handleDeleteAvailability}
+                  className="cursor-pointer text-[13px] font-semibold text-[#c13515] underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+                >
+                  Sì, rimuovi
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAvail(true)}
+                disabled={savingAvailability || !hasWeekly}
+                className="cursor-pointer text-[13px] font-semibold text-[#c13515] transition-colors hover:text-[#a52d12] disabled:cursor-default disabled:opacity-40"
+              >
+                Rimuovi disponibilità
+              </button>
+            )
+          ) : confirmResetOverride ? (
+            <div className="flex items-center gap-2.5">
+              <span className="text-[13px] font-medium text-[#555555]">Tornare al predefinito per questa settimana?</span>
+              <button
+                type="button"
+                disabled={savingAvailability}
+                onClick={() => setConfirmResetOverride(false)}
+                className="cursor-pointer px-1 text-[13px] font-semibold text-foreground hover:text-[#555555]"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                disabled={savingAvailability}
+                onClick={() => { if (calendarSelectedDate) handleResetVehOverride(); }}
+                className="cursor-pointer text-[13px] font-semibold text-navy-900 underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+              >
+                Sì, ripristina
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmResetOverride(true)}
+              disabled={savingAvailability || !calendarSelectedDate}
+              className="cursor-pointer text-[13px] font-semibold text-navy-900 transition-colors hover:text-navy-700 disabled:cursor-default disabled:opacity-40"
+            >
+              Ripristina predefinito
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleAvailabilitySaveClick()}
+            disabled={
+              savingAvailability ||
+              (availDialogTab === "default" &&
+                (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) ||
+              (availDialogTab === "calendar" && !calendarSelectedDate)
+            }
+            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+          >
+            {savingAvailability ? <LoadingDots /> : "Salva"}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const toggleSection = (key: string) =>
@@ -1699,8 +2212,12 @@ export function AutoscuoleResourcesPage({
             followCarMotoEnabled={followCarMotoEnabled}
             updateVehicleSettings={updateVehicleSettings}
             openCreateVehicle={openCreateVehicle}
-            openEditVehicle={openEditVehicle}
-            openAvailabilityDialog={openAvailabilityDialog}
+            detailView={vehicleDetail}
+            openDetail={openVehicleDetail}
+            closeDetail={closeVehicleDetail}
+            setDetailTab={setVehicleDetailTab}
+            detailsForm={renderVehicleDetailsForm()}
+            availabilityEditor={renderVehicleAvailabilityEditor()}
           />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>
@@ -1723,440 +2240,91 @@ export function AutoscuoleResourcesPage({
           onCreated={() => void loadResources()}
         />
 
-        {/* ── Create vehicle dialog */}
+        {/* ── Nuovo veicolo: modale stile proto (veicoloModalOpen, come LocationFormDialog) */}
         <Dialog open={createVehicleOpen} onOpenChange={setCreateVehicleOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Nuovo veicolo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
-                <Input
-                  placeholder="es. Fiat 500"
-                  value={newVehicleName}
-                  onChange={(e) => setNewVehicleName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
-                <Input
-                  placeholder="es. AB123CD"
-                  value={newVehiclePlate}
-                  onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FieldGroup label="Categoria patente">
-                  <Select value={newVehicleCategory} onValueChange={setNewVehicleCategory}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LICENSE_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {LICENSE_CATEGORY_LABELS[cat]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-                <FieldGroup label="Cambio">
-                  <Select value={newVehicleTransmission} onValueChange={setNewVehicleTransmission}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TRANSMISSIONS.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {TRANSMISSION_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
+          <DialogContent className="max-w-[480px] gap-0 rounded-[20px] p-7 pb-6">
+            <div className="mb-[22px] flex flex-col items-center px-2 text-center">
+              <Image
+                src="/images/settings/veicolo-nuovo.png"
+                alt=""
+                width={118}
+                height={118}
+                className="mb-1.5 block size-[118px] select-none object-contain"
+              />
+              <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
+                Nuovo veicolo
+              </DialogTitle>
+              <div className="mt-[3px] text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+                Aggiungi un veicolo alla flotta della tua autoscuola.
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateVehicleOpen(false)} disabled={creatingVehicle}>
+            <div className="mb-2 text-[13px] font-semibold text-foreground">Nome veicolo</div>
+            <input
+              placeholder="Es. Polo, T-cross…"
+              value={newVehicleName}
+              autoFocus
+              onChange={(e) => setNewVehicleName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+            />
+            <div className="mb-2 mt-4 text-[13px] font-semibold text-foreground">Targa (opzionale)</div>
+            <input
+              placeholder="Es. AB123CD"
+              value={newVehiclePlate}
+              onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+            />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-2 text-[13px] font-semibold text-foreground">Categoria</div>
+                <Select value={newVehicleCategory} onValueChange={setNewVehicleCategory}>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LICENSE_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="mb-2 text-[13px] font-semibold text-foreground">Cambio</div>
+                <Select value={newVehicleTransmission} onValueChange={setNewVehicleTransmission}>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSMISSIONS.map((t) => (
+                      <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="mt-[26px] flex items-center justify-end gap-3.5">
+              <button
+                type="button"
+                onClick={() => setCreateVehicleOpen(false)}
+                disabled={creatingVehicle}
+                className="cursor-pointer select-none px-2 py-[11px] text-sm font-semibold text-foreground transition-colors hover:text-[#555555]"
+              >
                 Annulla
-              </Button>
-              <Button onClick={handleCreateVehicle} disabled={creatingVehicle || !newVehicleName.trim()}>
-                {creatingVehicle ? "Creazione..." : "Crea veicolo"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Edit vehicle dialog */}
-        <Dialog open={Boolean(editVehicle)} onOpenChange={(open) => !open && setEditVehicle(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Modifica veicolo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
-                <Input
-                  placeholder="es. Fiat 500"
-                  value={editVehicleName}
-                  onChange={(e) => setEditVehicleName(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
-                <Input
-                  placeholder="es. AB123CD"
-                  value={editVehiclePlate}
-                  onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
-                />
-              </div>
-
-              {/* ── Categoria patente + cambio ── */}
-              <div className="grid grid-cols-2 gap-3">
-                <FieldGroup label="Categoria patente">
-                  <Select
-                    value={editVehicleCategory}
-                    onValueChange={setEditVehicleCategory}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LICENSE_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {LICENSE_CATEGORY_LABELS[cat]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-                <FieldGroup label="Cambio">
-                  <Select
-                    value={editVehicleTransmission}
-                    onValueChange={setEditVehicleTransmission}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TRANSMISSIONS.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {TRANSMISSION_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              </div>
-
-              {/* ── Modalità di utilizzo (Aperto / Pool / Esclusivo) ── */}
-              <FieldGroup label="Modalità di utilizzo">
-                <div className="flex gap-1 rounded-xl border border-border bg-muted/60 p-1">
-                  {(
-                    [
-                      ["open", "Aperto"],
-                      ["pool", "Pool"],
-                      ["exclusive", "Esclusivo"],
-                    ] as Array<[VehicleUsageMode, string]>
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      data-testid={`vehicle-mode-${mode}`}
-                      data-active={editVehicleMode === mode}
-                      onClick={() => setEditVehicleMode(mode)}
-                      className={cn(
-                        "flex-1 cursor-pointer rounded-lg py-2 text-[13px] transition-all duration-150",
-                        editVehicleMode === mode
-                          ? "bg-white font-semibold text-foreground shadow-sm"
-                          : "font-medium text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {editVehicleMode === "open" && (
-                  <span className="text-xs text-muted-foreground">
-                    Tutti gli istruttori possono usarlo. È l&apos;impostazione predefinita.
-                  </span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateVehicle}
+                disabled={creatingVehicle || !newVehicleName.trim()}
+                className={cn(
+                  "flex min-w-[150px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
+                  newVehicleName.trim() && !creatingVehicle
+                    ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                    : "cursor-not-allowed bg-[#c4c4d4]",
                 )}
-
-                {editVehicleMode === "pool" && (
-                  <div className="space-y-2">
-                    <span className="text-xs text-muted-foreground">
-                      Solo gli istruttori selezionati possono usare questo veicolo.
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {instructors
-                        .filter((ins) => ins.status !== "inactive")
-                        .map((ins) => {
-                          const active = editVehiclePoolIds.includes(ins.id);
-                          return (
-                            <ToggleChip
-                              key={ins.id}
-                              active={active}
-                              onClick={() =>
-                                setEditVehiclePoolIds((prev) =>
-                                  active
-                                    ? prev.filter((id) => id !== ins.id)
-                                    : [...prev, ins.id],
-                                )
-                              }
-                            >
-                              {ins.name}
-                            </ToggleChip>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-                {editVehicleMode === "exclusive" && (
-                  <div className="space-y-2">
-                    <Select
-                      value={editVehicleInstructorId || "none"}
-                      onValueChange={(v) =>
-                        setEditVehicleInstructorId(v === "none" ? "" : v)
-                      }
-                    >
-                      <SelectTrigger data-testid="vehicle-exclusive-instructor">
-                        <SelectValue placeholder="Scegli istruttore" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Scegli istruttore</SelectItem>
-                        {instructors
-                          .filter((ins) => ins.status !== "inactive")
-                          .map((ins) => (
-                            <SelectItem key={ins.id} value={ins.id}>
-                              {ins.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <span className="text-xs text-muted-foreground">
-                      Riservato a un istruttore, nascosto agli altri. Un istruttore
-                      può avere più mezzi esclusivi (es. la sua auto e la sua moto).
-                    </span>
-                  </div>
-                )}
-              </FieldGroup>
-
-              {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
-                <div
-                  className="flex cursor-pointer items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4"
-                  onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5 pr-3">
-                    <span className="text-sm font-medium">
-                      Disponibilità: segue l&apos;istruttore
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {editVehicleFollowsAvailability
-                        ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
-                        : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
-                    </span>
-                  </div>
-                  <InlineToggle checked={editVehicleFollowsAvailability} size="lg" />
-                </div>
-              ) : null}
-
-              {/* ── Stato: Attivo / Manutenzione ── */}
-              {editVehicle && editVehicle.status !== "inactive" && (
-                <FieldGroup label="Stato">
-                  <div className="flex gap-2">
-                    {(
-                      [
-                        ["active", "Attivo"],
-                        ["maintenance", "Manutenzione"],
-                      ] as Array<[string, string]>
-                    ).map(([value, label]) => {
-                      const active = (editVehicle.status ?? "active") === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          disabled={savingEditVehicle}
-                          onClick={() =>
-                            handleSetVehicleMaintenance(value === "maintenance")
-                          }
-                          className={cn(
-                            "cursor-pointer rounded-full border px-4 py-2 text-[13px] font-medium transition-colors duration-150 disabled:opacity-50",
-                            active && value === "active" &&
-                              "border-foreground bg-foreground text-white",
-                            active && value === "maintenance" &&
-                              "border-amber-300 bg-amber-100 text-amber-800",
-                            !active && "border-border bg-white text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {editVehicle.status === "maintenance" && (
-                    <span className="text-xs text-muted-foreground">
-                      Escluso dalle nuove prenotazioni; gli appuntamenti già fissati restano.
-                    </span>
-                  )}
-                </FieldGroup>
-              )}
-
-              {editVehicle && (
-                <div className="pt-1">
-                  {editVehicle.status !== "inactive" ? (
-                    <button
-                      type="button"
-                      onClick={handleDeactivateVehicle}
-                      disabled={savingEditVehicle}
-                      className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-50"
-                    >
-                      Disattiva veicolo
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleReactivateVehicle}
-                      disabled={savingEditVehicle}
-                      className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline disabled:opacity-50"
-                    >
-                      Riattiva veicolo
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditVehicle(null)} disabled={savingEditVehicle}>
-                Annulla
-              </Button>
-              <Button data-testid="vehicle-save" onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
-                {savingEditVehicle ? "Salvataggio..." : "Salva"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Vehicle availability dialog */}
-        <Dialog open={Boolean(availVehicle)} onOpenChange={(open) => !open && setAvailVehicle(null)}>
-          <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
-            <DialogTitle className="sr-only">Disponibilità — {availVehicle?.name}</DialogTitle>
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availVehicle?.name}</h3>
-              <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                <button type="button" onClick={() => { setAvailDialogTab("default"); setVehSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Predefinito
-                </button>
-                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-white text-foreground border border-[#e0e0e0] shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Calendario
-                </button>
-              </div>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              {availDialogTab === "default" ? (
-                <>
-                  <FieldGroup label="Giorni attivi">
-                    <div className="flex flex-wrap gap-1.5">
-                      {WEEKDAY_OPTIONS.map((day) => (
-                        <ToggleChip key={day.value} active={availDays.includes(day.value)} onClick={() => toggleAvailDay(day.value)}>
-                          {day.label}
-                        </ToggleChip>
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="Fasce orarie">
-                    <TimeRangeRows
-                      ranges={vehDefaultRanges}
-                      onChange={(next) => {
-                        setVehDefaultRanges(next);
-                        if (next.length) {
-                          setAvailStartMinutes(next[0].startMinutes);
-                          setAvailEndMinutes(next[0].endMinutes);
-                        }
-                      }}
-                    />
-                  </FieldGroup>
-                </>
-              ) : (
-                <AvailabilityCalendar
-                  calendarMonth={calendarMonth}
-                  setCalendarMonth={setCalendarMonth}
-                  selectedDate={calendarSelectedDate}
-                  setSelectedDate={setCalendarSelectedDate}
-                  overrides={vehOverrides}
-                  ranges={calendarDayRanges}
-                  setRanges={setCalendarDayRanges}
-                  dayEnabled={calendarDayEnabled}
-                  setDayEnabled={setCalendarDayEnabled}
-                  defaultAvailability={availVehicle ? vehicleWeeklyAvailability[availVehicle.id] ?? null : null}
-                />
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {availDialogTab === "default" ? (
-                <button type="button" onClick={handleDeleteAvailability} disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
-                  Rimuovi disponibilità
-                </button>
-              ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availVehicle) handleResetVehOverride(); }} disabled={savingAvailability || !calendarSelectedDate} className="text-xs text-navy-900 hover:text-navy-700 hover:underline disabled:opacity-40">
-                  Ripristina predefinito
-                </button>
-              )}
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailVehicle(null)} disabled={savingAvailability}>Annulla</Button>
-                <Button type="button" size="sm" onClick={async () => {
-                  if (availDialogTab === "calendar" && calendarSelectedDate && availVehicle) {
-                    const dateObj = new Date(calendarSelectedDate);
-                    const ws = getWeekStart(dateObj);
-                    const weekStartStr = ws.toISOString().slice(0, 10);
-                    const dayOfWeek = dateObj.getUTCDay();
-
-                    if (!calendarDayEnabled) {
-                      setSavingAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "vehicle",
-                        ownerId: availVehicle.id,
-                        weekStart: weekStartStr,
-                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
-                      });
-                      setSavingAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                    } else {
-                      const schedule: DayScheduleEntry[] = [{
-                        dayOfWeek,
-                        startMinutes: calendarDayRanges[0].startMinutes,
-                        endMinutes: calendarDayRanges[0].endMinutes,
-                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
-                      }];
-                      setSavingAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "vehicle",
-                        ownerId: availVehicle.id,
-                        weekStart: weekStartStr,
-                        schedule,
-                      });
-                      setSavingAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      setVehOverrides((prev) => {
-                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
-                        return [...filtered, { weekStart: weekStartStr, schedule }];
-                      });
-                    }
-                    toast.success({ description: "Override salvato." });
-                    loadAvailability(date);
-                  } else {
-                    handleSaveAvailability();
-                  }
-                }} disabled={savingAvailability || (availDialogTab === "default" && (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
-                  {savingAvailability ? "Salvataggio..." : "Salva"}
-                </Button>
-              </div>
+              >
+                {creatingVehicle ? <LoadingDots /> : "Aggiungi veicolo"}
+              </button>
             </div>
           </DialogContent>
         </Dialog>

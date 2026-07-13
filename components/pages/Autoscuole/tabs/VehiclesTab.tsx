@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { Plus } from "lucide-react";
+import { ChevronLeft, Plus } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import {
   Select,
@@ -50,8 +51,14 @@ export type VehiclesTabProps = {
     followCarMotoEnabled?: boolean;
   }) => void;
   openCreateVehicle: () => void;
-  openEditVehicle: (vehicle: VehicleDetail) => void;
-  openAvailabilityDialog: (vehicle: VehicleDetail) => void;
+  /** Dettaglio veicolo inline (proto veic-detail-view): stato e azioni. */
+  detailView: { vehicleId: string; tab: "disp" | "dettagli" } | null;
+  openDetail: (vehicle: VehicleDetail, tab: "disp" | "dettagli") => void;
+  closeDetail: () => void;
+  setDetailTab: (tab: "disp" | "dettagli") => void;
+  /** Contenuti dei tab, costruiti dalla pagina (dove vive lo stato). */
+  detailsForm: React.ReactNode;
+  availabilityEditor: React.ReactNode;
 };
 
 const pad = (value: number) => value.toString().padStart(2, "0");
@@ -91,9 +98,60 @@ export default function VehiclesTab({
   followCarMotoEnabled,
   updateVehicleSettings,
   openCreateVehicle,
-  openEditVehicle,
-  openAvailabilityDialog,
+  detailView,
+  openDetail,
+  closeDetail,
+  setDetailTab,
+  detailsForm,
+  availabilityEditor,
 }: VehiclesTabProps) {
+  // ── Vista DETTAGLIO inline (proto veic-detail-view) ──
+  const detailVehicle = detailView
+    ? vehicles.find((v) => v.id === detailView.vehicleId) ?? null
+    : null;
+  if (detailView && detailVehicle) {
+    const TABS = [
+      { key: "disp" as const, label: "Disponibilità" },
+      { key: "dettagli" as const, label: "Dettagli" },
+    ];
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={closeDetail}
+          className="mb-3.5 inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#6a6a6a] transition-colors hover:text-[#222222]"
+        >
+          <ChevronLeft className="size-4" strokeWidth={1.8} />
+          Veicoli
+        </button>
+        <div className="text-2xl font-bold tracking-[-0.3px] text-[#222222]">{detailVehicle.name}</div>
+        <div className="mt-[3px] text-[13.5px] font-medium text-[#929292]">
+          Gestisci disponibilità e dati del veicolo
+        </div>
+        <div className="mb-6 mt-5 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setDetailTab(t.key)}
+              className={cn(
+                "-mb-px cursor-pointer select-none whitespace-nowrap border-b-[2.5px] px-px pb-3 text-[15px] transition-colors",
+                detailView.tab === t.key
+                  ? "border-[#222222] font-semibold text-[#222222]"
+                  : "border-transparent font-medium text-[#6a6a6a] hover:text-[#222222]",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="max-w-[640px]">
+          {detailView.tab === "disp" ? availabilityEditor : detailsForm}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* ── Modulo veicoli (riga flat dal proto) ── */}
@@ -192,14 +250,14 @@ export default function VehiclesTab({
                   <div className="flex shrink-0 items-center gap-4 pt-0.5">
                     <button
                       type="button"
-                      onClick={() => openAvailabilityDialog(vehicle)}
+                      onClick={() => openDetail(vehicle, "disp")}
                       className={MANAGE_LINK}
                     >
                       Disponibilità
                     </button>
                     <button
                       type="button"
-                      onClick={() => openEditVehicle(vehicle)}
+                      onClick={() => openDetail(vehicle, "dettagli")}
                       className={MANAGE_LINK}
                     >
                       Gestisci
