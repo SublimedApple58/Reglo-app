@@ -1449,8 +1449,44 @@ type DrivingRegisterLessonRow = {
   instructor?: { name: string } | null;
   vehicle?: { name: string } | null;
   manualPaymentStatus?: string | null;
+  creditApplied?: boolean | null;
   lateCancellationAction?: string | null;
 };
+
+// "Da pagare" = guida che la scuola deve ancora incassare. Stessa definizione del
+// tab guide del drawer allievo (AutoscuoleStudentsPage): effettuata (o penale
+// addebitata), NON coperta da credito, non ancora saldata. Il ramo "effettuata"
+// vale solo in pagamento manuale. Tenere allineato con il predicato client.
+function isCompanyManualMode(config: {
+  enabled: boolean;
+  lessonCreditFlowEnabled: boolean;
+  lessonCreditsRequired: boolean;
+}): boolean {
+  return (
+    (!config.enabled && !config.lessonCreditFlowEnabled) ||
+    (config.lessonCreditFlowEnabled && !config.lessonCreditsRequired)
+  );
+}
+
+function isLessonUnpaid(
+  l: {
+    status: string;
+    manualPaymentStatus?: string | null;
+    creditApplied?: boolean | null;
+    lateCancellationAction?: string | null;
+  },
+  manualMode: boolean,
+): boolean {
+  if (l.creditApplied) return false;
+  if (l.manualPaymentStatus === "paid") return false;
+  const s = normalizeStatus(l.status);
+  return (
+    (["completed", "checked_in"].includes(s) && manualMode) ||
+    (["cancelled", "no_show"].includes(s) &&
+      l.lateCancellationAction === "charged" &&
+      l.manualPaymentStatus === "unpaid")
+  );
+}
 
 const buildDrivingRegisterData = ({
   cases,
@@ -1593,11 +1629,16 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
           startsAt: true,
           endsAt: true,
           manualPaymentStatus: true,
+          creditApplied: true,
           lateCancellationAction: true,
         },
         take: 5000,
       }),
     ]);
+
+    const manualMode = isCompanyManualMode(
+      await getAutoscuolaPaymentConfig({ companyId }),
+    );
 
     const casesByStudent = new Map<string, DrivingRegisterCaseRow[]>();
     for (const item of cases) {
@@ -1620,17 +1661,7 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
         lessons: lessonsByStudent.get(student.id) ?? [],
       });
       const studentLessons = lessonsByStudent.get(student.id) ?? [];
-      const manualUnpaid = studentLessons.filter(
-        (l) => {
-          const s = (l.status ?? "").trim().toLowerCase();
-          return (
-            (s === "completed" && l.manualPaymentStatus === "unpaid") ||
-            (["cancelled", "no_show"].includes(s) &&
-              l.lateCancellationAction === "charged" &&
-              l.manualPaymentStatus !== "paid")
-          );
-        },
-      ).length;
+      const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
       const latestCase = studentCases
         .slice()
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
@@ -1803,14 +1834,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         ["scheduled", "confirmed"].includes(normalizeStatus(l.status)) &&
         l.startsAt > now,
     ).length;
-    const manualUnpaid = lessons.filter(
-      (l) =>
-        (normalizeStatus(l.status) === "completed" &&
-          l.manualPaymentStatus === "unpaid") ||
-        (["cancelled", "no_show"].includes(normalizeStatus(l.status)) &&
-          l.lateCancellationAction === "charged" &&
-          l.manualPaymentStatus === "unpaid"),
-    ).length;
+    const manualMode = isCompanyManualMode(
+      await getAutoscuolaPaymentConfig({ companyId }),
+    );
+    const manualUnpaid = lessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
 
     const latestCaseTheoryExamAt = cases
       .slice()
