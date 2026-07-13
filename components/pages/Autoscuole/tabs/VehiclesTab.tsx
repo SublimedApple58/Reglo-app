@@ -1,9 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { Plus, Clock, Pencil, Car } from "lucide-react";
+import { Plus } from "lucide-react";
 import { InlineToggle } from "@/components/ui/inline-toggle";
-import { ResourceCard, SlotPill, ResourceCardAction } from "@/components/ui/resource-card";
 import {
   Select,
   SelectContent,
@@ -11,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -54,171 +54,37 @@ export type VehiclesTabProps = {
   openAvailabilityDialog: (vehicle: VehicleDetail) => void;
 };
 
-const WEEKDAY_OPTIONS = [
-  { value: 1, label: "Lun" },
-  { value: 2, label: "Mar" },
-  { value: 3, label: "Mer" },
-  { value: 4, label: "Gio" },
-  { value: 5, label: "Ven" },
-  { value: 6, label: "Sab" },
-  { value: 0, label: "Dom" },
-] as const;
+const pad = (value: number) => value.toString().padStart(2, "0");
+const formatMinutes = (totalMinutes: number) =>
+  `${pad(Math.floor(totalMinutes / 60))}:${pad(totalMinutes % 60)}`;
 
-function pad(value: number) {
-  return value.toString().padStart(2, "0");
+/** Sottotitolo riga veicolo dal proto: "HA996EF · B · Manuale · 00:00–23:30". */
+function vehicleSubtitle(vehicle: VehicleDetail, wa: VehicleWeeklyAvailability | null) {
+  const parts: string[] = [];
+  if (vehicle.plate) parts.push(vehicle.plate);
+  parts.push(vehicle.licenseCategory);
+  parts.push(TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission);
+  if (wa) parts.push(`${formatMinutes(wa.startMinutes)}–${formatMinutes(wa.endMinutes)}`);
+  if (vehicle.assignedInstructorId) parts.push("Esclusivo");
+  else if (vehicle.poolInstructorIds.length) parts.push(`Pool · ${vehicle.poolInstructorIds.length}`);
+  if (vehicle.status === "maintenance") parts.push("In manutenzione");
+  if (vehicle.status === "inactive") parts.push("Inattivo");
+  return parts.join(" · ");
 }
 
-function formatMinutes(totalMinutes: number) {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${pad(hours)}:${pad(minutes)}`;
-}
+/** Link azione stile "Gestisci" del proto (underline che si ispessisce). */
+const MANAGE_LINK =
+  "shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-foreground underline underline-offset-2 decoration-1 transition-colors hover:text-black hover:decoration-2";
 
-function formatTime(date: Date) {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function diffMinutes(a: Date, b: Date) {
-  return (a.getTime() - b.getTime()) / 60000;
-}
-
-function VehiclesTabContent({
-  vehicles,
-  vehicleWeeklyAvailability,
-  vehicleAvailability,
-  loading,
-  openCreateVehicle,
-  openEditVehicle,
-  openAvailabilityDialog,
-}: {
-  vehicles: VehicleDetail[];
-  vehicleWeeklyAvailability: Record<string, VehicleWeeklyAvailability>;
-  vehicleAvailability: Record<string, AvailabilityRange[]>;
-  loading: boolean;
-  openCreateVehicle: () => void;
-  openEditVehicle: (vehicle: VehicleDetail) => void;
-  openAvailabilityDialog: (vehicle: VehicleDetail) => void;
-}) {
-  return (
-    <>
-      <div className="grid gap-3.5 [grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
-        {vehicles.map((vehicle) => {
-          const wa = vehicleWeeklyAvailability[vehicle.id] ?? null;
-          const ranges = vehicleAvailability[vehicle.id] ?? [];
-          const totalMinutes = ranges.reduce((sum, r) => sum + diffMinutes(r.end, r.start), 0);
-          return (
-            <ResourceCard
-              key={vehicle.id}
-              testId="vehicle-card"
-              name={vehicle.name}
-              subtitle={
-                <span className="flex items-center gap-1.5">
-                  {vehicle.plate ? (
-                    <span className="flex items-center gap-1">
-                      <Car className="size-3" />
-                      {vehicle.plate}
-                    </span>
-                  ) : null}
-                  <span className="rounded-[6px] bg-[#f2f2f2] px-[7px] py-0.5 text-[11px] font-semibold text-[#6a6a6a]">
-                    {vehicle.licenseCategory} ·{" "}
-                    {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ??
-                      vehicle.transmission}
-                  </span>
-                  {vehicle.assignedInstructorId ? (
-                    <span className="rounded-[6px] border border-[#cfe0fb] bg-[#eaf2fd] px-[7px] py-0.5 text-[11px] font-semibold text-[#1a2b45]">
-                      Esclusivo
-                    </span>
-                  ) : vehicle.poolInstructorIds.length ? (
-                    <span className="rounded-[6px] border border-[#cfe0fb] bg-[#eaf2fd] px-[7px] py-0.5 text-[11px] font-semibold text-[#1a2b45]">
-                      Pool · {vehicle.poolInstructorIds.length}
-                    </span>
-                  ) : (
-                    <span className="rounded-[6px] bg-[#f2f2f2] px-[7px] py-0.5 text-[11px] font-semibold text-[#6a6a6a]">
-                      Aperto
-                    </span>
-                  )}
-                  {vehicle.status === "maintenance" ? (
-                    <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      Manutenzione
-                    </span>
-                  ) : null}
-                </span>
-              }
-              inactive={vehicle.status === "inactive"}
-              actions={
-                <>
-                  <ResourceCardAction
-                    onClick={() => openAvailabilityDialog(vehicle)}
-                    title="Modifica disponibilità"
-                  >
-                    <Clock className="size-3.5" />
-                  </ResourceCardAction>
-                  <ResourceCardAction
-                    onClick={() => openEditVehicle(vehicle)}
-                    title="Modifica veicolo"
-                  >
-                    <Pencil className="size-3.5" />
-                  </ResourceCardAction>
-                </>
-              }
-              availabilitySummary={
-                wa ? (
-                  <span>
-                    {formatMinutes(wa.startMinutes)}–{formatMinutes(wa.endMinutes)} ·{" "}
-                    {wa.daysOfWeek
-                      .map((d) => WEEKDAY_OPTIONS.find((w) => w.value === d)?.label ?? "")
-                      .filter(Boolean)
-                      .join(", ")}
-                  </span>
-                ) : (
-                  <span className="italic opacity-60">Nessuna disponibilità settimanale</span>
-                )
-              }
-              slots={
-                ranges.length > 0
-                  ? ranges.map((range) => (
-                      <SlotPill key={`${range.start.toISOString()}-${range.end.toISOString()}`}>
-                        {formatTime(range.start)}–{formatTime(range.end)}
-                      </SlotPill>
-                    ))
-                  : undefined
-              }
-              totalLabel={totalMinutes > 0 ? `${Math.round(totalMinutes)} min` : undefined}
-            />
-          );
-        })}
-        {/* Card dashed "Nuovo veicolo" (stile proto) */}
-        <button
-          type="button"
-          onClick={openCreateVehicle}
-          className="flex min-h-[150px] cursor-pointer flex-col items-center justify-center gap-3 rounded-[14px] border-[1.5px] border-dashed border-[#d5d5d5] bg-transparent p-5 transition-colors hover:border-navy-900 hover:bg-navy-50"
-        >
-          <span className="relative size-[58px]">
-            <span className="flex size-[58px] items-center justify-center overflow-hidden rounded-full bg-[#eef3f7]">
-              <Image
-                src="/images/settings/veicolo-nuovo.png"
-                alt=""
-                width={52}
-                height={52}
-                className="size-[52px] object-contain"
-              />
-            </span>
-            <span className="absolute -bottom-px -right-px flex size-[22px] items-center justify-center rounded-full border-2 border-white bg-navy-900">
-              <Plus className="size-3 text-white" strokeWidth={2.4} />
-            </span>
-          </span>
-          <span className="text-sm font-semibold text-navy-900">Nuovo veicolo</span>
-        </button>
-      </div>
-    </>
-  );
-}
-
+/**
+ * Pane Veicoli dal proto (config-tab-veicoli): riga flat "Modulo veicoli" con
+ * toggle, card "Percorso patente di default", riga flat "Auto al seguito",
+ * lista veicoli a righe flat con link Gestisci/Disponibilità e riga "Nuovo
+ * veicolo" con illustrazione. Le azioni aprono i dialog esistenti.
+ */
 export default function VehiclesTab({
   vehicles,
   vehicleWeeklyAvailability,
-  vehicleAvailability,
-  loading,
   vehiclesEnabled,
   defaultLicenseCategory,
   defaultTransmission,
@@ -229,14 +95,15 @@ export default function VehiclesTab({
   openAvailabilityDialog,
 }: VehiclesTabProps) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-6 rounded-[14px] border border-[#e8e8e8] px-6 py-5">
-        <div>
-          <div className="text-[15px] font-semibold text-foreground">Modulo veicoli</div>
-          <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
+    <div>
+      {/* ── Modulo veicoli (riga flat dal proto) ── */}
+      <div className="mb-5 flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">Modulo veicoli</div>
+          <div className="mt-0.5 text-[13px] font-medium leading-normal text-[#929292]">
             {vehiclesEnabled
-              ? "Attivo — i veicoli vengono tracciati e assegnati alle guide"
-              : "Disattivo — le guide non richiedono un veicolo"}
+              ? "Attivo — i veicoli vengono tracciati e assegnati alle guide."
+              : "Disattivo — le guide non richiedono un veicolo."}
           </div>
         </div>
         <InlineToggle
@@ -245,75 +112,125 @@ export default function VehiclesTab({
           size="lg"
         />
       </div>
+
       {vehiclesEnabled && (
-        <div className="rounded-[14px] border border-[#e8e8e8] px-6 py-5">
-          <div className="text-[15px] font-semibold text-foreground">Percorso patente di default</div>
-          <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
-            Assegnato ai nuovi allievi alla registrazione. Le autoscuole moto
-            possono impostarlo una volta sola (es. A1 · Manuale).
-          </div>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <div>
-              <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
-              <Select
-                value={defaultLicenseCategory}
-                onValueChange={(v) => updateVehicleSettings({ defaultLicenseCategory: v })}
-              >
-                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {LICENSE_CATEGORIES.map((cat) => (
-                    <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <>
+          {/* ── Percorso patente di default (card dal proto) ── */}
+          <div className="mb-5 rounded-[14px] border border-[#dddddd] bg-white px-6 py-5">
+            <div className="text-[15px] font-semibold text-foreground">Percorso patente di default</div>
+            <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+              Assegnato ai nuovi allievi alla registrazione.
             </div>
-            <div>
-              <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
-              <Select
-                value={defaultTransmission}
-                onValueChange={(v) => updateVehicleSettings({ defaultTransmission: v })}
-              >
-                <SelectTrigger className="h-11 w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 text-sm font-medium text-foreground shadow-none hover:border-[#929292] focus:border-[#222222] focus:ring-0">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TRANSMISSIONS.map((t) => (
-                    <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      )}
-      {vehiclesEnabled && (
-        <div className="flex items-center justify-between gap-6 rounded-[14px] border border-[#e8e8e8] px-6 py-5">
-          <div>
-            <div className="text-[15px] font-semibold text-foreground">Auto al seguito (moto)</div>
-            <div className="mt-0.5 text-[13.5px] font-medium text-[#6a6a6a]">
-              Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito;
-              entrambi i veicoli risultano occupati in agenda.
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Categoria</div>
+                <Select
+                  value={defaultLicenseCategory}
+                  onValueChange={(v) => updateVehicleSettings({ defaultLicenseCategory: v })}
+                >
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LICENSE_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Cambio</div>
+                <Select
+                  value={defaultTransmission}
+                  onValueChange={(v) => updateVehicleSettings({ defaultTransmission: v })}
+                >
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSMISSIONS.map((t) => (
+                      <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
-          <InlineToggle
-            checked={followCarMotoEnabled}
-            onChange={() => updateVehicleSettings({ followCarMotoEnabled: !followCarMotoEnabled })}
-            size="lg"
-          />
-        </div>
-      )}
-      {vehiclesEnabled && (
-        <VehiclesTabContent
-          vehicles={vehicles}
-          vehicleWeeklyAvailability={vehicleWeeklyAvailability}
-          vehicleAvailability={vehicleAvailability}
-          loading={loading}
-          openCreateVehicle={openCreateVehicle}
-          openEditVehicle={openEditVehicle}
-          openAvailabilityDialog={openAvailabilityDialog}
-        />
+
+          {/* ── Auto al seguito (riga flat dal proto) ── */}
+          <div className="mb-1 flex items-center justify-between gap-4 border-b border-[#eeeeee] py-3.5">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">Auto al seguito (moto)</div>
+              <div className="mt-0.5 text-[13px] font-medium leading-normal text-[#929292]">
+                Quando attivo, ogni guida moto prenota anche un&apos;auto al seguito; entrambi i
+                veicoli risultano occupati in agenda.
+              </div>
+            </div>
+            <InlineToggle
+              checked={followCarMotoEnabled}
+              onChange={() => updateVehicleSettings({ followCarMotoEnabled: !followCarMotoEnabled })}
+              size="lg"
+            />
+          </div>
+
+          {/* ── Lista veicoli (righe flat dal proto) ── */}
+          <div className="max-w-[760px]">
+            {vehicles.map((vehicle) => {
+              const wa = vehicleWeeklyAvailability[vehicle.id] ?? null;
+              return (
+                <div
+                  key={vehicle.id}
+                  data-testid="vehicle-card"
+                  className="flex items-start justify-between gap-4 border-b border-[#eeeeee] py-[18px]"
+                >
+                  <div className={vehicle.status === "inactive" ? "min-w-0 opacity-50" : "min-w-0"}>
+                    <div className="text-base font-semibold text-foreground">{vehicle.name}</div>
+                    <div className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
+                      {vehicleSubtitle(vehicle, wa)}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-4 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => openAvailabilityDialog(vehicle)}
+                      className={MANAGE_LINK}
+                    >
+                      Disponibilità
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openEditVehicle(vehicle)}
+                      className={MANAGE_LINK}
+                    >
+                      Gestisci
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Riga "Nuovo veicolo" con illustrazione (dal proto) */}
+            <button
+              type="button"
+              onClick={openCreateVehicle}
+              className="flex cursor-pointer items-center gap-3 py-[18px] text-navy-900 transition-opacity hover:opacity-75"
+            >
+              <span className="relative size-[46px] shrink-0">
+                <Image
+                  src="/images/settings/veicolo-nuovo.png"
+                  alt=""
+                  width={46}
+                  height={46}
+                  className="block size-[46px] object-contain"
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 flex size-5 items-center justify-center rounded-full border-2 border-white bg-navy-900">
+                  <Plus className="size-2.5 text-white" strokeWidth={2.6} />
+                </span>
+              </span>
+              <span className="text-sm font-semibold">Nuovo veicolo</span>
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
