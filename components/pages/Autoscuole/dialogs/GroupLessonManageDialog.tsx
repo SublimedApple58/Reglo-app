@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Send, StickyNote, Trash2, X } from "lucide-react";
+import { Plus, Send, StickyNote, Trash2 } from "lucide-react";
 
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -17,11 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import {
@@ -135,6 +130,8 @@ export function GroupLessonManageDialog({
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
   const [followId, setFollowId] = React.useState<string>("");
   const [allVehicles, setAllVehicles] = React.useState<VehicleWithLicense[]>([]);
+  // Conferma annullamento inline (niente window.confirm).
+  const [confirmCancel, setConfirmCancel] = React.useState(false);
 
   const reload = React.useCallback(async () => {
     if (!groupLessonId) return;
@@ -165,7 +162,7 @@ export function GroupLessonManageDialog({
 
   React.useEffect(() => {
     if (open && groupLessonId) reload();
-    if (!open) { setLesson(null); setEligible([]); }
+    if (!open) { setLesson(null); setEligible([]); setConfirmCancel(false); setNoteEditing(null); }
   }, [open, groupLessonId, reload]);
 
   // Full vehicle list (with license + access info) for the moto fleet /
@@ -307,107 +304,138 @@ export function GroupLessonManageDialog({
   };
   const handleCancelLesson = async () => {
     if (!groupLessonId) return;
-    if (!window.confirm("Annullare la guida di gruppo? Tutti i partecipanti verranno avvisati.")) return;
     if (await run(() => cancelGroupLesson(groupLessonId), "Guida di gruppo annullata.")) onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      <DialogContent className="max-h-[88vh] max-w-[520px] gap-0 overflow-y-auto rounded-[20px] p-7 pb-6">
+        {/* ── Header ── */}
+        <div className="flex items-center gap-2.5 pr-10">
+          <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
             {lesson?.kind === "moto" ? "Guida di gruppo moto" : "Guida di gruppo"}
-            {lesson ? (
-              <Badge
-                variant="secondary"
-                className={lesson.kind === "moto" ? "border-orange-200 bg-orange-100 text-orange-700" : "border-teal-200 bg-teal-100 text-teal-700"}
-              >
-                {lesson.filledSeats}/{lesson.capacity} posti
-              </Badge>
-            ) : null}
           </DialogTitle>
-          <DialogDescription>
-            Gestisci i partecipanti, l&apos;istruttore, il veicolo e l&apos;orario. Le modifiche valgono per tutti gli iscritti.
-          </DialogDescription>
-        </DialogHeader>
+          {lesson ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold tracking-[0.3px]",
+                lesson.kind === "moto" ? "bg-[#fdeedd] text-[#b45309]" : "bg-[#f2f2f2] text-[#555555]",
+              )}
+            >
+              {lesson.filledSeats}/{lesson.capacity} posti
+            </span>
+          ) : null}
+        </div>
+        <DialogDescription className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
+          Gestisci i partecipanti, l&apos;istruttore, il veicolo e l&apos;orario. Le modifiche valgono per tutti gli iscritti.
+        </DialogDescription>
 
         {loading || !lesson ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="flex justify-center py-14">
+            <LoadingDots className="text-[#929292]" />
           </div>
         ) : (
-          <div className="space-y-5">
-            {/* Roster */}
-            <div className="space-y-2">
-              <Label>Partecipanti</Label>
-              {lesson.participants.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nessun iscritto. Aggiungi un allievo o invia gli inviti.</p>
-              ) : (
-                <div className="space-y-1.5">
-                  {lesson.participants.map((p) => (
-                    <div key={p.appointmentId} className="rounded-xl border border-border/60 bg-white px-3 py-2">
-                      <div className="flex items-center justify-between">
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
-                          {isMoto ? (
-                            <span className="block text-[11px] text-muted-foreground">
-                              {p.vehicleName ? (
-                                <>
-                                  {p.vehicleName}
-                                  {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
-                                </>
-                              ) : (
-                                "Moto a rotazione"
-                              )}
-                            </span>
-                          ) : null}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-teal-700 hover:bg-teal-50" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)} title="Nota per l'allievo">
-                            <StickyNote className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-rose-600 hover:bg-rose-50" disabled={busy} onClick={() => handleRemove(p.studentId)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+          <div className="mt-6">
+            {/* ── Partecipanti ── */}
+            <div className="mb-2 text-[13px] font-semibold text-foreground">Partecipanti</div>
+            {lesson.participants.length === 0 ? (
+              <p className="text-[12.5px] font-medium text-[#929292]">
+                Nessun iscritto. Aggiungi un allievo o invia gli inviti.
+              </p>
+            ) : (
+              <div className="rounded-[12px] border-[1.5px] border-[#ededed]">
+                {lesson.participants.map((p, idx) => (
+                  <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
+                        {isMoto ? (
+                          <span className="block text-[12px] font-medium text-[#929292]">
+                            {p.vehicleName ? (
+                              <>
+                                {p.vehicleName}
+                                {p.licenseCategory ? ` · ${p.licenseCategory}` : ""}
+                              </>
+                            ) : (
+                              "Moto a rotazione"
+                            )}
+                          </span>
+                        ) : null}
+                      </span>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          title="Nota per l'allievo"
+                          disabled={busy}
+                          onClick={() => startEditNote(p.appointmentId, p.notes)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#6a6a6a] transition-colors hover:bg-[#f7f7f7] hover:text-foreground disabled:opacity-50"
+                        >
+                          <StickyNote className="size-4" strokeWidth={1.8} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Rimuovi dalla guida"
+                          disabled={busy}
+                          onClick={() => handleRemove(p.studentId)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-50"
+                        >
+                          <Trash2 className="size-4" strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    </div>
+                    {noteEditing === p.appointmentId ? (
+                      <div className="mt-2">
+                        <textarea
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          rows={3}
+                          maxLength={2000}
+                          placeholder="Nota per questo allievo (la vedrà nella sua app)"
+                          className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
+                        />
+                        <div className="mt-1.5 flex items-center justify-end gap-3">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setNoteEditing(null)}
+                            className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => handleSaveNote(p.appointmentId)}
+                            className="flex min-w-[96px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+                          >
+                            {busy ? <LoadingDots className="scale-[0.6]" /> : "Salva nota"}
+                          </button>
                         </div>
                       </div>
-                      {noteEditing === p.appointmentId ? (
-                        <div className="mt-2 space-y-2">
-                          <Textarea
-                            value={noteDraft}
-                            onChange={(e) => setNoteDraft(e.target.value)}
-                            rows={3}
-                            maxLength={2000}
-                            placeholder="Nota per questo allievo (la vedrà nella sua app)"
-                            className="text-sm"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" size="sm" className="cursor-pointer" disabled={busy} onClick={() => setNoteEditing(null)}>Annulla</Button>
-                            <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={() => handleSaveNote(p.appointmentId)}>
-                              {busy ? <LoadingDots /> : "Salva nota"}
-                            </Button>
-                          </div>
-                        </div>
-                      ) : p.notes?.trim() ? (
-                        <p className="mt-1.5 whitespace-pre-wrap text-xs text-muted-foreground">{p.notes.trim()}</p>
-                      ) : (
-                        <button type="button" className="mt-1 cursor-pointer text-xs text-teal-700 hover:underline" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)}>
-                          + Aggiungi nota
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                    ) : p.notes?.trim() ? (
+                      <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] font-medium text-[#929292]">{p.notes.trim()}</p>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => startEditNote(p.appointmentId, p.notes)}
+                        className="mt-1 cursor-pointer text-[12.5px] font-semibold text-foreground underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+                      >
+                        + Aggiungi nota
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {/* Add participant */}
+            {/* ── Aggiungi allievo ── */}
             {lesson.openSeats > 0 ? (
-              <div className="space-y-2">
-                <Label>Aggiungi allievo</Label>
-                <div className="flex gap-2">
+              <>
+                <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">Aggiungi allievo</div>
+                <div className="flex items-stretch gap-2">
                   <Select value={addId} onValueChange={setAddId}>
-                    <SelectTrigger className="cursor-pointer">
+                    <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "min-w-0 flex-1")}>
                       <SelectValue placeholder={eligible.length ? "Seleziona allievo idoneo" : "Nessun allievo idoneo"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -416,30 +444,50 @@ export function GroupLessonManageDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button type="button" size="sm" className="cursor-pointer shrink-0" disabled={busy || !addId} onClick={handleAdd}>
-                    <Plus className="mr-1 h-4 w-4" /> Aggiungi
-                  </Button>
+                  <button
+                    type="button"
+                    disabled={busy || !addId}
+                    onClick={handleAdd}
+                    className={cn(
+                      "flex shrink-0 select-none items-center gap-1.5 rounded-full px-5 text-sm font-semibold text-white transition-colors",
+                      busy || !addId ? "cursor-not-allowed bg-[#c4c4d4]" : "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]",
+                    )}
+                  >
+                    <Plus className="size-4" strokeWidth={2} /> Aggiungi
+                  </button>
                 </div>
-                <Button type="button" variant="outline" size="sm" className="cursor-pointer" disabled={busy} onClick={handleInvite}>
-                  <Send className="mr-1.5 h-4 w-4" /> Invita allievi idonei ({lesson.openSeats} {lesson.openSeats === 1 ? "posto" : "posti"})
-                </Button>
-              </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleInvite}
+                  className="mt-2.5 inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-sm font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-60"
+                >
+                  <Send className="size-4" strokeWidth={1.8} />
+                  Invita allievi idonei ({lesson.openSeats} {lesson.openSeats === 1 ? "posto" : "posti"})
+                </button>
+              </>
             ) : (
-              <p className="text-xs text-muted-foreground">Posti esauriti.</p>
+              <p className="mt-4 text-[12.5px] font-medium text-[#929292]">Posti esauriti.</p>
             )}
 
-            {/* Edit time / instructor / vehicle */}
-            <div className="space-y-3 rounded-2xl border border-border/60 bg-gray-50/50 p-3">
-              <Label>Modifica guida (vale per tutti)</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Inizio</span>
-                  <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} className="cursor-pointer" />
+            {/* ── Modifica guida (vale per tutti) ── */}
+            <div className="mt-6 border-t border-[#ebebeb] pt-5">
+              <div className="text-[15px] font-semibold text-foreground">Modifica guida</div>
+              <div className="mt-0.5 text-[12.5px] font-medium text-[#929292]">Vale per tutti gli iscritti.</div>
+              <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4">
+                <div>
+                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Inizio</div>
+                  <input
+                    type="datetime-local"
+                    value={startLocal}
+                    onChange={(e) => setStartLocal(e.target.value)}
+                    className={cn(PROTO_INPUT, "cursor-pointer")}
+                  />
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Durata</span>
+                <div>
+                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Durata</div>
                   <Select value={durationMin} onValueChange={setDurationMin}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {DURATIONS.map((d) => (
                         <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
@@ -447,21 +495,23 @@ export function GroupLessonManageDialog({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Capienza</span>
-                  <Input
+                <div>
+                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">Capienza</div>
+                  <input
                     type="number"
                     min={Math.max(1, lesson?.filledSeats ?? 1)}
                     max={12}
                     value={capacityStr}
                     onChange={(e) => setCapacityStr(e.target.value)}
-                    className="cursor-pointer"
+                    className={PROTO_INPUT}
                   />
                 </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Istruttore (obbligatorio)</span>
+                <div>
+                  <div className="mb-1.5 text-[13px] font-semibold text-foreground">
+                    Istruttore <span className="font-medium text-[#929292]">(obbligatorio)</span>
+                  </div>
                   <Select value={instructorId} onValueChange={setInstructorId}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
+                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
                     <SelectContent>
                       {instructors.map((i) => (
                         <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
@@ -470,10 +520,10 @@ export function GroupLessonManageDialog({
                   </Select>
                 </div>
                 {vehiclesEnabled && !isMoto ? (
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">Veicolo</span>
+                  <div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-foreground">Veicolo</div>
                     <Select value={vehicleId} onValueChange={setVehicleId}>
-                      <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuno" /></SelectTrigger>
+                      <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Nessuno" /></SelectTrigger>
                       <SelectContent>
                         {standardVehicles.map((v) => (
                           <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
@@ -484,73 +534,108 @@ export function GroupLessonManageDialog({
                 ) : null}
               </div>
 
-              {/* Moto group: editable fleet + shared follow car (mirrors mobile). */}
+              {/* Moto: parco moto della guida + auto al seguito condivisa */}
               {isMoto ? (
-                <div className="space-y-3 rounded-xl border border-border/50 bg-white px-3 py-2.5">
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] text-muted-foreground">Moto della guida</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {fleetOptions.map((v) => {
-                        const checked = fleetIds.includes(v.id);
-                        // A moto already ridden by a participant can't be dropped.
-                        const locked = checked && assignedMotoIds.has(v.id);
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            disabled={busy || locked}
-                            title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
-                            onClick={() =>
-                              setFleetIds((prev) =>
-                                prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
-                              )
-                            }
-                            className={cn(
-                              "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                              checked
-                                ? "border-orange-300 bg-orange-50 text-orange-800"
-                                : "border-border/60 bg-white text-foreground hover:bg-gray-50",
-                              locked && "cursor-not-allowed opacity-70",
-                            )}
-                          >
-                            <span className="max-w-[160px] truncate">{v.name}</span>
-                            {v.licenseCategory ? (
-                              <span className="text-[10px] text-muted-foreground">{v.licenseCategory}</span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
-                    </div>
+                <>
+                  <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">Moto della guida</div>
+                  <div className="flex flex-wrap gap-2">
+                    {fleetOptions.map((v) => {
+                      const checked = fleetIds.includes(v.id);
+                      // Una moto già assegnata a un partecipante non può uscire dal parco.
+                      const locked = checked && assignedMotoIds.has(v.id);
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          disabled={busy || locked}
+                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
+                          onClick={() =>
+                            setFleetIds((prev) =>
+                              prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
+                            )
+                          }
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                            checked
+                              ? "border-[#f0c49a] bg-[#fdf0e3] text-[#9a5b1f]"
+                              : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                            locked && "cursor-not-allowed opacity-70",
+                          )}
+                        >
+                          <span className="max-w-[160px] truncate">{v.name}</span>
+                          {v.licenseCategory ? (
+                            <span className="text-[11px] font-medium text-[#a3a3a3]">{v.licenseCategory}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">Auto al seguito (facoltativa)</span>
-                    <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuna" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
-                        {carVehicles.map((v) => (
-                          <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
-                        ))}
-                        {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
-                          <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
-                        ) : null}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">
-                      La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
-                    </p>
+                  <div className="mb-1.5 mt-5 text-[13px] font-semibold text-foreground">
+                    Auto al seguito <span className="font-medium text-[#929292]">(facoltativa)</span>
                   </div>
-                </div>
+                  <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue placeholder="Nessuna" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
+                      {carVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                      ))}
+                      {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
+                        <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+                    La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
+                  </p>
+                </>
               ) : null}
-              <Button type="button" size="sm" className="w-full cursor-pointer" disabled={busy} onClick={handleSaveEdit}>
+
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleSaveEdit}
+                className="mt-5 flex w-full cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] p-[13px] text-sm font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+              >
                 {busy ? <LoadingDots /> : "Salva modifiche"}
-              </Button>
+              </button>
             </div>
 
-            {/* Cancel */}
-            <Button type="button" variant="ghost" size="sm" className="w-full cursor-pointer text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={busy} onClick={handleCancelLesson}>
-              <X className="mr-1.5 h-4 w-4" /> Annulla guida di gruppo
-            </Button>
+            {/* ── Annulla guida (conferma inline) ── */}
+            {confirmCancel ? (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-[#fdf3f1] px-4 py-3">
+                <span className="text-[13px] font-medium leading-snug text-[#7a2e1d]">
+                  Annullare la guida? Tutti i partecipanti verranno avvisati.
+                </span>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmCancel(false)}
+                    className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleCancelLesson}
+                    className="flex min-w-[100px] cursor-pointer items-center justify-center rounded-full bg-[#c13515] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d12] disabled:opacity-60"
+                  >
+                    {busy ? <LoadingDots className="scale-[0.6]" /> : "Sì, annulla"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmCancel(true)}
+                className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-full py-3 text-sm font-semibold text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-60"
+              >
+                Annulla guida di gruppo
+              </button>
+            )}
           </div>
         )}
       </DialogContent>

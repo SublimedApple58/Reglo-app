@@ -44,8 +44,9 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="reglo-focus-ring absolute right-4 top-4 rounded-full border border-border bg-white p-1.5 text-muted-foreground transition-colors duration-[var(--motion-fast)] hover:text-foreground disabled:pointer-events-none">
-        <X className="h-4 w-4" />
+      {/* X tonda dal proto (come LocationFormDialog): #f7f7f7 che scurisce in hover */}
+      <DialogPrimitive.Close className="reglo-focus-ring absolute right-5 top-5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9] disabled:pointer-events-none">
+        <X className="size-3.5 text-foreground" strokeWidth={2} />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
