@@ -16,8 +16,8 @@ export const dynamic = "force-dynamic";
  * so app version == runtimeVersion). Current floor: 2.0.0 on both platforms.
  */
 const MIN_SUPPORTED_VERSION = {
-  ios: "2.0.0",
-  android: "2.0.0",
+  ios: "2.1.0",
+  android: "2.1.0",
 } as const;
 
 export async function GET() {
