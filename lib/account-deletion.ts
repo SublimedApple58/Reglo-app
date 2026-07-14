@@ -1,6 +1,14 @@
 import { prisma } from "@/db/prisma";
+import { cancelOpenLessonsForDeletedStudent } from "@/lib/autoscuole/operational-cancellation";
 
 const DELETED_USER_NAME = "Account eliminato";
+
+/** Chi/cosa ha innescato la cancellazione — per l'audit e la diagnostica. */
+export type AccountDeletionContext = {
+  trigger?: "self_delete" | "directory_removal" | "orphan_release";
+  actorUserId?: string | null;
+  companyId?: string | null;
+};
 
 const buildDeletedEmail = (userId: string) =>
   `deleted+${userId}@deleted.reglo.local`;
@@ -27,11 +35,14 @@ export async function releaseEmailIfOrphaned(email: string): Promise<boolean> {
   });
   if (memberships > 0) return false;
 
-  await deleteAndAnonymizeUserAccount(existing.id);
+  await deleteAndAnonymizeUserAccount(existing.id, { trigger: "orphan_release" });
   return true;
 }
 
-export async function deleteAndAnonymizeUserAccount(userId: string) {
+export async function deleteAndAnonymizeUserAccount(
+  userId: string,
+  context?: AccountDeletionContext,
+) {
   const existingUser = await prisma.user.findUnique({
     where: { id: userId },
     select: {
@@ -42,6 +53,20 @@ export async function deleteAndAnonymizeUserAccount(userId: string) {
 
   if (!existingUser) {
     throw new Error("Utente non trovato.");
+  }
+
+  // Annulla le guide ancora aperte dell'allievo PRIMA di svuotare l'account, così
+  // nessuna guida (futura o "da confermare") resta appesa a "Account eliminato" e
+  // gli slot futuri tornano liberi. Best-effort: non deve bloccare la cancellazione.
+  let lessonsCancelled = 0;
+  try {
+    const res = await cancelOpenLessonsForDeletedStudent({
+      studentId: userId,
+      actorUserId: context?.actorUserId ?? null,
+    });
+    lessonsCancelled = res.cancelled;
+  } catch (error) {
+    console.error("Account deletion: cancellazione guide fallita", error);
   }
 
   await prisma.$transaction(async (tx) => {
@@ -85,4 +110,20 @@ export async function deleteAndAnonymizeUserAccount(userId: string) {
       },
     });
   });
+
+  // Audit best-effort: chi ha innescato la cancellazione e quante guide ha
+  // annullato. Serve a scoprire la fonte reale delle "Account eliminato".
+  try {
+    await prisma.accountDeletionAudit.create({
+      data: {
+        deletedUserId: userId,
+        trigger: context?.trigger ?? "unknown",
+        actorUserId: context?.actorUserId ?? null,
+        companyId: context?.companyId ?? null,
+        lessonsCancelled,
+      },
+    });
+  } catch (error) {
+    console.error("Account deletion: scrittura audit fallita", error);
+  }
 }

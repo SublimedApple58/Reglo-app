@@ -1502,3 +1502,21 @@ model CompanyLicensePurchase {
 
   @@index([companyId, purchasedAt])
 }
+
+// Traccia ogni cancellazione/anonimizzazione di un account, per capire CHI la
+// innesca (allievi via self-delete, titolari via Directory, o rilascio email in
+// fase di ri-registrazione). Nessuna FK: l'utente resta (anonimizzato), non viene
+// eliminato. `trigger`: self_delete | directory_removal | orphan_release | unknown.
+model AccountDeletionAudit {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deletedUserId    String   @db.Uuid
+  trigger          String
+  actorUserId      String?  @db.Uuid
+  companyId        String?  @db.Uuid
+  lessonsCancelled Int      @default(0)
+  createdAt        DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([createdAt])
+  @@index([trigger])
+  @@index([deletedUserId])
+}

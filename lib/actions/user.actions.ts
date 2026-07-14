@@ -465,7 +465,11 @@ export async function deleteUser(id: string) {
       where: { userId: id },
     });
     if (remainingMemberships === 0) {
-      await deleteAndAnonymizeUserAccount(id);
+      await deleteAndAnonymizeUserAccount(id, {
+        trigger: "directory_removal",
+        actorUserId: context.userId,
+        companyId: context.companyId,
+      });
     }
 
     revalidatePath('/admin/users');

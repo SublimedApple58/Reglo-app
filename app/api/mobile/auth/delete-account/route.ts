@@ -30,7 +30,10 @@ export async function POST(request: Request) {
     const payload = await request.json().catch(() => ({}));
     deleteAccountSchema.parse(payload);
 
-    await deleteAndAnonymizeUserAccount(mobileToken.userId);
+    await deleteAndAnonymizeUserAccount(mobileToken.userId, {
+      trigger: "self_delete",
+      actorUserId: mobileToken.userId,
+    });
 
     return NextResponse.json({
       success: true,

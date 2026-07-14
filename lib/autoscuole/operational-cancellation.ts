@@ -210,12 +210,15 @@ export async function operationallyCancelAppointment({
   appointmentId,
   reason,
   actorUserId,
+  notify = true,
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
   appointmentId: string;
   reason: string;
   actorUserId?: string | null;
+  /** Set false to skip the student notification (e.g. the account is being deleted). */
+  notify?: boolean;
 }): Promise<{ success: boolean; message?: string }> {
   const now = new Date();
 
@@ -279,13 +282,15 @@ export async function operationallyCancelAppointment({
     });
   }
 
-  await notifyOperationalCancellation({
-    companyId,
-    studentId: appointment.studentId,
-    startsAt: appointment.startsAt,
-    reason,
-    instructorId: appointment.instructorId,
-  });
+  if (notify) {
+    await notifyOperationalCancellation({
+      companyId,
+      studentId: appointment.studentId,
+      startsAt: appointment.startsAt,
+      reason,
+      instructorId: appointment.instructorId,
+    });
+  }
 
   await invalidateAutoscuoleCache({
     companyId,
@@ -339,6 +344,77 @@ export async function operationallyCancelAppointmentsByResource({
       actorUserId,
     });
     if (response.success) cancelled += 1;
+  }
+
+  return { cancelled };
+}
+
+/**
+ * Cancel every still-open lesson of a student whose account is being deleted /
+ * anonymised, across ALL their companies. Without this the lessons stay pinned
+ * to the now-"Account eliminato" user and clutter the agenda (and keep the slot
+ * booked). Covers BOTH future bookings and "da confermare" lessons (past start,
+ * still scheduled/confirmed). The student is NOT notified — the account is gone.
+ *
+ * Future lessons go through the full operational cancel (slots freed, credit
+ * refunded, cache invalidated); already-elapsed "da confermare" lessons are just
+ * flipped to cancelled (no slot to free, no refund on a past lesson).
+ */
+export async function cancelOpenLessonsForDeletedStudent({
+  prisma = defaultPrisma,
+  studentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  studentId: string;
+  actorUserId?: string | null;
+}): Promise<{ cancelled: number }> {
+  const now = new Date();
+  const lessons = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      studentId,
+      status: { in: Array.from(ACTIVE_CANCELLABLE_STATUSES) },
+    },
+    select: { id: true, companyId: true, startsAt: true },
+  });
+
+  let cancelled = 0;
+  const pastCompanies = new Set<string>();
+
+  for (const lesson of lessons) {
+    if (lesson.startsAt.getTime() > now.getTime()) {
+      const res = await operationallyCancelAppointment({
+        prisma,
+        companyId: lesson.companyId,
+        appointmentId: lesson.id,
+        reason: "student_account_deleted",
+        actorUserId,
+        notify: false,
+      });
+      if (res.success) cancelled += 1;
+    } else {
+      await prisma.autoscuolaAppointment.update({
+        where: { id: lesson.id },
+        data: {
+          status: "cancelled",
+          cancelledAt: now,
+          cancelledByUserId: actorUserId ?? null,
+          cancellationKind: "operational_cancel",
+          cancellationReason: "student_account_deleted",
+        },
+      });
+      cancelled += 1;
+      pastCompanies.add(lesson.companyId);
+    }
+  }
+
+  // Future lessons already invalidated the cache inside operationallyCancelAppointment;
+  // do it for the companies that only had past "da confermare" lessons.
+  for (const companyId of pastCompanies) {
+    await invalidateAutoscuoleCache({
+      companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+    });
   }
 
   return { cancelled };
