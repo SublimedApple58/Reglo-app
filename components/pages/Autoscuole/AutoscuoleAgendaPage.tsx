@@ -4157,11 +4157,12 @@ function isProposalStatus(appointment: AppointmentRow) {
 
 function canUpdateStatus(appointment: AppointmentRow) {
   const normalized = (appointment.status ?? "").toLowerCase();
-  // pending_review can be acted on at any time (no time window)
-  if (normalized === "pending_review") return true;
-  const endTime = getAppointmentEnd(appointment);
-  const isPast = endTime.getTime() < Date.now();
-  return !isPast && !["cancelled", "completed", "no_show"].includes(normalized);
+  // Presente/Assente restano disponibili anche sulle guide PASSATE e per
+  // correggere un esito già dato (no_show / completed): il titolare sistema i
+  // record a posteriori — es. annullare un'assenza messa per sbaglio. Nessun
+  // limite temporale. Solo 'cancelled' resta escluso (si ripristina con
+  // l'azione di annullamento dedicata).
+  return normalized !== "cancelled";
 }
 
 function canCompleteStatus(appointment: AppointmentRow) {

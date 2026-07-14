@@ -379,19 +379,6 @@ const computeAppointmentEnd = (appointment: {
   endsAt: Date | null;
 }) => appointment.endsAt ?? new Date(appointment.startsAt.getTime() + 30 * 60 * 1000);
 
-const isWithinInstructorStatusWindow = (
-  appointment: { startsAt: Date; endsAt: Date | null },
-  now: Date,
-) => {
-  const startsAt = appointment.startsAt;
-  const startsWindow = new Date(startsAt.getTime() - 10 * 60 * 1000);
-  const dayEnd = new Date(startsAt);
-  dayEnd.setHours(23, 59, 59, 999);
-  if (now < startsWindow) return false;
-  if (now > dayEnd) return false;
-  return true;
-};
-
 const getInstructorWindowOpenTimeLabel = (startsAt: Date) =>
   new Date(startsAt.getTime() - 10 * 60 * 1000).toLocaleTimeString("it-IT", {
     hour: "2-digit",
@@ -4375,9 +4362,13 @@ export async function updateAutoscuolaAppointmentStatus(
         };
       }
       const now = new Date();
-      // pending_review lessons can be acted on at any time (no time window)
-      if (currentStatus !== "pending_review" && !isWithinInstructorStatusWindow(appointment, now)) {
-        if (now < new Date(appointment.startsAt.getTime() - 10 * 60 * 1000)) {
+      // Unica guardia: "troppo presto" (prima di 10 min dall'inizio non si segna
+      // presenza/assenza). NESSUN limite superiore: l'istruttore può CORREGGERE
+      // l'esito delle proprie guide anche a giornata/data passata — es. annullare
+      // un'assenza messa per sbaglio. I pending_review restano senza finestra.
+      if (currentStatus !== "pending_review") {
+        const opensAt = new Date(appointment.startsAt.getTime() - 10 * 60 * 1000);
+        if (now < opensAt) {
           return {
             success: false,
             message: `Azione disponibile dalle ${getInstructorWindowOpenTimeLabel(
@@ -4385,10 +4376,6 @@ export async function updateAutoscuolaAppointmentStatus(
             )}.`,
           };
         }
-        return {
-          success: false,
-          message: "Azione non disponibile oltre la fine della giornata guida.",
-        };
       }
     }
 
