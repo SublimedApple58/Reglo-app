@@ -3293,6 +3293,7 @@ export function AutoscuoleAgendaPage({
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
                 {[
+                  { label: "Cambio automatico", className: "bg-[#CFFAFE] shadow-[0_3px_8px_rgba(6,182,212,0.35)]" },
                   { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
                   { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
                   { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },
@@ -4206,7 +4207,20 @@ function buildLocalDateTime(day: string, time: string) {
 // annullata/assente muted. Stile: NIENTE bordo, sfondo vivo, ombra in tinta
 // (opacity .22). Gli override moto/automatico sono stati RIMOSSI; il ≤30 min è
 // blu (il teal è riservato alle guide di gruppo). Lo stato vive sul badge.
+// Guide a CAMBIO AUTOMATICO: colore dedicato (ciano) che SOSTITUISCE quello di
+// durata, così si distinguono a colpo d'occhio. Automatica se il veicolo usato è
+// automatico o, in mancanza, se l'allievo segue il percorso automatico.
+const AUTOMATIC_CLASS = "bg-[#CFFAFE] shadow-[0_5px_14px_rgba(6,182,212,0.22)]";
+
+function isAutomaticLesson(appointment: AppointmentRow): boolean {
+  return (
+    appointment.vehicle?.transmission === "automatic" ||
+    appointment.student?.transmission === "automatic"
+  );
+}
+
 function getScheduledDurationClass(appointment: AppointmentRow): string {
+  if (isAutomaticLesson(appointment)) return AUTOMATIC_CLASS;
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
