@@ -364,16 +364,34 @@ export function GroupLessonManageDialog({
     if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload();
   };
   // Presence outcome for a single seat (present/absent). Pure record-keeping —
-  // does not change the "da pagare" charge.
+  // does not change the "da pagare" charge. We patch local state in place (no
+  // reload) so the dialog doesn't flash a full-content loader on every tap.
   const handleSetOutcome = async (appointmentId: string, outcome: "present" | "absent") => {
-    if (await run(
+    const ok = await run(
       () => setGroupLessonSeatOutcome({ appointmentId, outcome }),
       outcome === "present" ? "Segnato presente." : "Segnato assente.",
-    )) reload();
+    );
+    if (ok) {
+      setLesson((prev) =>
+        prev
+          ? {
+              ...prev,
+              participants: prev.participants.map((p) =>
+                p.appointmentId === appointmentId ? { ...p, attendance: outcome } : p,
+              ),
+            }
+          : prev,
+      );
+    }
   };
   const handleAllPresent = async () => {
     if (!groupLessonId) return;
-    if (await run(() => markGroupLessonAllPresent({ groupLessonId }), "Tutti segnati presenti.")) reload();
+    const ok = await run(() => markGroupLessonAllPresent({ groupLessonId }), "Tutti segnati presenti.");
+    if (ok) {
+      setLesson((prev) =>
+        prev ? { ...prev, participants: prev.participants.map((p) => ({ ...p, attendance: "present" as const })) } : prev,
+      );
+    }
   };
   const startEditNote = (appointmentId: string, current: string | null) => {
     setNoteEditing(appointmentId);
