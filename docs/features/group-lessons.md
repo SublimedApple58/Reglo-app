@@ -48,7 +48,10 @@ Ogni seat è un `AutoscuolaAppointment`, quindi la presenza vive sul suo `status
 - `markGroupLessonAllPresent({ groupLessonId })` — segna tutte le seat non annullate come presenti in un colpo.
 - `getGroupLesson` espone `participants[].attendance` (`"present"|"absent"|"pending"`, helper `groupLessonAttendance`). `"pending"` = upcoming o past-but-unreviewed (`pending_review`).
 - **API mobile**: `POST /api/autoscuole/group-lessons/[id]/attendance` — body `{ all: true }` (tutti presenti) o `{ appointmentId, outcome }` (singola).
-- **UI** (tint-aware: teal auto / arancio moto, "Assente" grigio neutro): web `GroupLessonManageDialog` (pill sotto ogni allievo + "Segna tutti presenti" nell'header); mobile `manage-group-lesson-participants` (stessa pill + scorciatoia, spinner→refetch, no optimistic).
+- **UI** (tint-aware: teal auto / arancio moto, "Assente" grigio neutro): web `GroupLessonManageDialog` (pill sotto ogni allievo + "Segna tutti presenti" nell'header); mobile `manage-group-lesson-participants` (stessa pill + scorciatoia, spinner→refetch, no optimistic). Roster ordinato `createdAt asc` (`getGroupLesson`/`getGroupLessonsForAgenda`) così non si rimescola al cambio esito; il web patcha lo stato locale (niente reload/flash), il mobile congela l'ordine mostrato (`keepOrder`).
+
+## Storico guide allievo — badge "gruppo · N/M" (2026-07-15)
+Le seat di gruppo compaiono già nello storico (type=`group_lesson`, incluso da `isDrivingLessonType`). Helper condiviso `fetchGroupLessonFill(groupLessonIds)` (in `autoscuole.actions.ts`) → `{filled, capacity, kind}` per gruppo (filled = conteggio `GROUP_LESSON_ENROLLED_STATUSES`). Esposto da: `getAutoscuolaStudentDrivingRegister` (web, campo `lessons[].group`) e `getAutoscuolaAppointmentsFiltered` (mobile, campi `groupLessonFilled/Capacity/Kind` — light + full). UI: web `AutoscuoleStudentsPage` (badge teal/arancio al posto del tipo grezzo, tab Guide + Note); mobile `StudentNotesDetailScreen` (chip nello storico).
 
 ## Invite actions (`lib/actions/autoscuole-availability.actions.ts`)
 - `broadcastGroupLessonInvite({companyId, groupLessonId, expiresAt})` — recipients = opted-in + license-compatible + available + no conflict + not enrolled; push `data.kind:"group_lesson_invite"` (also email/whatsapp per `slotFillChannels`).
