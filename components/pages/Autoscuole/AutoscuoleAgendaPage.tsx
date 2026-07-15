@@ -554,7 +554,12 @@ export function AutoscuoleAgendaPage({
     const glMap = new Map<string, AppointmentRow[]>();
     for (const a of appointments) {
       if (a.type === "esame" && a.status !== "cancelled") {
-        const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}`;
+        // Group by time AND instructor: an exam session is one accompanying
+        // instructor + N students. Two exams at the same time with DIFFERENT
+        // instructors must stay separate (own card on each instructor column) —
+        // keying by time only merged them onto the first instructor (Macchiavello
+        // bug, 2026-07-15). Exams without an instructor group under "none".
+        const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}|${a.instructor?.id ?? "none"}`;
         const list = examMap.get(key) ?? [];
         list.push(a);
         examMap.set(key, list);
