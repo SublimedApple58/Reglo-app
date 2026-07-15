@@ -458,3 +458,35 @@
     transform: translateX(100%);
   }
 }
+
+/* Agenda a schermo intero: quando la griglia è in modalità fullscreen scaliamo
+   il testo dei blocchi insieme allo zoom verticale (--agenda-fs-scale = fattore
+   di zoom). Le utility Tailwind di font-size stanno in @layer, quindi queste
+   regole unlayered vincono senza bisogno di !important. */
+.agenda-grid-zoom {
+  --agenda-fs-scale: 1;
+}
+.agenda-grid-zoom .text-xs {
+  font-size: calc(0.75rem * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[8px\] {
+  font-size: calc(8px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[9px\] {
+  font-size: calc(9px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[10px\] {
+  font-size: calc(10px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[11px\] {
+  font-size: calc(11px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[12px\] {
+  font-size: calc(12px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[13px\] {
+  font-size: calc(13px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[18px\] {
+  font-size: calc(18px * var(--agenda-fs-scale));
+}

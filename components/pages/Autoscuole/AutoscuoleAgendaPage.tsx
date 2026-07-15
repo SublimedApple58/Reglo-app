@@ -3,7 +3,8 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History } from "lucide-react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
@@ -163,9 +164,69 @@ const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
 // Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
 const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180", "210", "240", "270", "300"];
-const PIXELS_PER_MINUTE = 1.6;
-const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
+const BASE_PIXELS_PER_MINUTE = 1.6;
+// Scala base della griglia (px per minuto). In fullscreen il componente ombreggia
+// questa costante con un fattore di zoom; qui resta la base usata dallo skeleton.
+const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE;
+// Preferenze di visualizzazione agenda (giorni + fascia oraria) persistite in
+// localStorage, indipendenti dai filtri dati. Si resettano solo con "Ripristina".
+// `totalMinutes` è ridefinito nel componente (dipende dalla fascia oraria scelta);
+// DAY_START_HOUR/DAY_END_HOUR restano 0/24 qui per gli orari prenotabili completi.
+const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number };
+// days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24 };
+const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
+  { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
+  { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
+];
+const hourToTime = (h: number) => `${pad(h)}:00`;
+const timeToHour = (t: string) => Number.parseInt(t.split(":")[0] ?? "0", 10);
+function readAgendaViewPrefs(): AgendaViewPrefs {
+  if (typeof window === "undefined") return DEFAULT_VIEW_PREFS;
+  try {
+    const raw = window.localStorage.getItem(AGENDA_VIEW_PREFS_KEY);
+    if (!raw) return DEFAULT_VIEW_PREFS;
+    const p = JSON.parse(raw) as Partial<AgendaViewPrefs>;
+    const days = Array.isArray(p.days)
+      ? p.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      : DEFAULT_VIEW_PREFS.days;
+    const startHour =
+      Number.isInteger(p.startHour) && (p.startHour as number) >= 0 && (p.startHour as number) <= 23
+        ? (p.startHour as number)
+        : DEFAULT_VIEW_PREFS.startHour;
+    let endHour =
+      Number.isInteger(p.endHour) && (p.endHour as number) >= 1 && (p.endHour as number) <= 24
+        ? (p.endHour as number)
+        : DEFAULT_VIEW_PREFS.endHour;
+    if (endHour <= startHour) endHour = DEFAULT_VIEW_PREFS.endHour;
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour };
+  } catch {
+    return DEFAULT_VIEW_PREFS;
+  }
+}
+
+// Persistenza dei filtri agenda in localStorage: restano applicati tra refresh e
+// uscita/rientro nella sezione, si azzerano solo esplicitamente ("Rimuovi filtri").
+const AGENDA_FILTERS_KEY = "reglo-agenda-filters";
+type PersistedAgendaFilters = { instructor: string[]; vehicle: string[]; status: string[]; type: string[] };
+function readAgendaFilters(): PersistedAgendaFilters {
+  const empty: PersistedAgendaFilters = { instructor: [], vehicle: [], status: [], type: [] };
+  if (typeof window === "undefined") return empty;
+  try {
+    const raw = window.localStorage.getItem(AGENDA_FILTERS_KEY);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as Partial<PersistedAgendaFilters>;
+    return {
+      instructor: Array.isArray(parsed.instructor) ? parsed.instructor : [],
+      vehicle: Array.isArray(parsed.vehicle) ? parsed.vehicle : [],
+      status: Array.isArray(parsed.status) ? parsed.status : [],
+      type: Array.isArray(parsed.type) ? parsed.type : [],
+    };
+  } catch {
+    return empty;
+  }
+}
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
   { value: "manovre", label: "Manovre" },
@@ -434,27 +495,104 @@ export function AutoscuoleAgendaPage({
   // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
   // Applicati client-side sul bootstrap già caricato — cambiare filtro non
   // rifà la fetch.
-  const [instructorFilter, setInstructorFilter] = React.useState<string[]>([]);
-  const [vehicleFilter, setVehicleFilter] = React.useState<string[]>([]);
-  const [statusFilter, setStatusFilter] = React.useState<string[]>([]);
-  const [typeFilter, setTypeFilter] = React.useState<string[]>([]);
+  const [instructorFilter, setInstructorFilter] = React.useState<string[]>(() => readAgendaFilters().instructor);
+  const [vehicleFilter, setVehicleFilter] = React.useState<string[]>(() => readAgendaFilters().vehicle);
+  const [statusFilter, setStatusFilter] = React.useState<string[]>(() => readAgendaFilters().status);
+  const [typeFilter, setTypeFilter] = React.useState<string[]>(() => readAgendaFilters().type);
+  // Salva i filtri a ogni cambio: persistono tra refresh e uscita/rientro nella
+  // sezione. Si azzerano solo con "Rimuovi filtri" (che scrive gli array vuoti).
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AGENDA_FILTERS_KEY,
+        JSON.stringify({ instructor: instructorFilter, vehicle: vehicleFilter, status: statusFilter, type: typeFilter }),
+      );
+    } catch {
+      /* localStorage non disponibile: ignora */
+    }
+  }, [instructorFilter, vehicleFilter, statusFilter, typeFilter]);
+  // Rimuove dai filtri gli ID che non esistono più (istruttore/veicolo cancellato
+  // o cambio autoscuola), così i filtri salvati non svuotano l'agenda per errore.
+  React.useEffect(() => {
+    if (loading) return;
+    if (instructors.length > 0) {
+      setInstructorFilter((prev) => {
+        const valid = prev.filter((id) => instructors.some((i) => i.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+    if (vehicles.length > 0) {
+      setVehicleFilter((prev) => {
+        const valid = prev.filter((id) => vehicles.some((v) => v.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+  }, [loading, instructors, vehicles]);
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
-  const [agendaMode, setAgendaMode] = React.useState<"instructor" | "classic">(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("reglo-agenda-mode") as "instructor" | "classic") || "instructor";
+  // Schermo intero: overlay `fixed inset-0` (NON la Fullscreen API del browser,
+  // che metterebbe i popup Radix — portati su document.body — sotto al top-layer
+  // rendendoli invisibili). z-40 copre header (z-30) e sidebar (z-10) dell'app ma
+  // resta sotto a dialog/menu/popover (z-50+), che restano cliccabili. Stessa
+  // identica agenda, solo a tutta viewport: il container perde il max-width così
+  // le colonne si allargano.
+  const [isAgendaFullscreen, setIsAgendaFullscreen] = React.useState(false);
+  const toggleAgendaFullscreen = React.useCallback(() => setIsAgendaFullscreen((v) => !v), []);
+  React.useEffect(() => {
+    if (!isAgendaFullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isAgendaFullscreen]);
+  // Preferenze di visualizzazione (giorni + fascia oraria): persistite, resettabili
+  // solo da "Ripristina". Ombreggiamo DAY_START_HOUR/DAY_END_HOUR/totalMinutes così
+  // la griglia si "taglia" alla fascia scelta senza toccare i ~30 punti d'uso, che
+  // sono già parametrizzati su queste costanti.
+  const [viewPrefs, setViewPrefs] = React.useState<AgendaViewPrefs>(() => readAgendaViewPrefs());
+  const [viewPrefsOpen, setViewPrefsOpen] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(AGENDA_VIEW_PREFS_KEY, JSON.stringify(viewPrefs));
+    } catch {
+      /* localStorage non disponibile: ignora */
     }
-    return "instructor";
-  });
-  const toggleAgendaMode = React.useCallback(() => {
-    setAgendaMode((prev) => {
-      const next = prev === "instructor" ? "classic" : "instructor";
-      localStorage.setItem("reglo-agenda-mode", next);
-      return next;
-    });
-  }, []);
+  }, [viewPrefs]);
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const DAY_START_HOUR = viewPrefs.startHour;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const DAY_END_HOUR = viewPrefs.endHour;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
+  // Zoom dell'agenda (attivo solo in fullscreen): scala la densità verticale così
+  // i blocchi diventano più alti/leggibili. Ombreggiamo PIXELS_PER_MINUTE così
+  // tutti i calcoli (posizioni, altezze, drag/click, auto-scroll) si adeguano da
+  // soli. Il testo dei blocchi scala insieme via la CSS var --agenda-fs-scale.
+  const [agendaZoom, setAgendaZoom] = React.useState(1.3);
+  const agendaZoomFactor = isAgendaFullscreen ? agendaZoom : 1;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE * agendaZoomFactor;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
+  const agendaFrameClass = isAgendaFullscreen
+    ? "agenda-grid-zoom"
+    : "rounded-[14px] border border-[#dddddd]";
+  const agendaFrameStyle: React.CSSProperties | undefined = isAgendaFullscreen
+    ? ({ "--agenda-fs-scale": String(agendaZoomFactor) } as React.CSSProperties)
+    : undefined;
+  // Larghezza colonne in fullscreen: ogni colonna ha una larghezza minima comoda
+  // (base 180px) che scala con lo zoom. Quando le colonne eccedono lo schermo parte
+  // lo scroll orizzontale, altrimenti 1fr riempie. Così l'agenda "si apre" in
+  // larghezza già di default (soprattutto nel modo istruttori, prima a 80px).
+  // Fuori fullscreen fsCols() → undefined → template originale invariato.
+  const fsColMin = isAgendaFullscreen ? Math.round(90 * agendaZoom) : 0;
+  const fsCols = (n: number) =>
+    isAgendaFullscreen ? `56px repeat(${n}, minmax(${fsColMin}px, 1fr))` : undefined;
   const [createOpen, setCreateOpen] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
+  // Conferma "prenotazione nel passato" (vedi handleCreate): teniamo lo start
+  // scelto per mostrarlo nell'alert prima di procedere con allowPast.
+  const [pastConfirmOpen, setPastConfirmOpen] = React.useState(false);
+  const [pendingPastStart, setPendingPastStart] = React.useState<Date | null>(null);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
@@ -781,7 +919,7 @@ export function AutoscuoleAgendaPage({
       const scrollTarget = currentMinutes * PIXELS_PER_MINUTE - calendarScrollRef.current.clientHeight / 3;
       calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
     }
-  }, [loading]);
+  }, [loading, PIXELS_PER_MINUTE, DAY_START_HOUR]);
 
   // Close the slot menu with Escape.
   React.useEffect(() => {
@@ -932,7 +1070,7 @@ export function AutoscuoleAgendaPage({
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
-  }, [moveDraftTo]);
+  }, [moveDraftTo, PIXELS_PER_MINUTE, DAY_START_HOUR, totalMinutes]);
 
   // ── Draft ghost: anteprima live dell'evento in creazione ──
   // Derivato dal form del popover attivo; mostra in griglia il blocco che si
@@ -1028,7 +1166,7 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
 
   // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
   // sola, e scrolla verticalmente fino all'orario del ghost.
@@ -1196,7 +1334,7 @@ export function AutoscuoleAgendaPage({
     }, 160);
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (opts?: { allowPast?: boolean }) => {
     const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
     const needFollowCar =
       isMotoMode && Object.values(followCarRules).some((r) => r?.enabled === true);
@@ -1224,6 +1362,13 @@ export function AutoscuoleAgendaPage({
       toast.error({ description: "Data o orario non validi." });
       return;
     }
+    // Prenotazione nel passato: non blocchiamo più a priori. Chiediamo conferma
+    // esplicita e, se l'utente procede, ripassiamo con allowPast → il BE la crea.
+    if (!opts?.allowPast && startDate.getTime() < Date.now()) {
+      setPendingPastStart(startDate);
+      setPastConfirmOpen(true);
+      return;
+    }
     setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const makePayload = (skip?: boolean) => ({
@@ -1242,6 +1387,7 @@ export function AutoscuoleAgendaPage({
       locationId: form.locationId || null,
       notes: form.notes.trim() || undefined,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(opts?.allowPast ? { allowPast: true } : {}),
     });
     const res = await createAutoscuolaAppointment(makePayload());
     if (!res.success) {
@@ -1351,6 +1497,8 @@ export function AutoscuoleAgendaPage({
       endsAt: item.endsAt ?? null,
       status: item.status,
       type: item.type ?? null,
+      types: item.types ?? null,
+      rating: item.rating ?? null,
       notes: item.notes ?? null,
       student: {
         firstName: item.student.firstName,
@@ -1438,16 +1586,22 @@ export function AutoscuoleAgendaPage({
     [studentLicenseById],
   );
 
-  const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const allWeekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const visibleWeekDays = allWeekDays.filter((d) => viewPrefs.days.includes(d.getDay()));
+  const days = visibleWeekDays.length ? visibleWeekDays : allWeekDays;
   const visibleDays = viewMode === "week" ? days : [dayFocus];
+  // In fullscreen sopra la griglia resta solo la toolbar (niente header app né
+  // titolo), quindi recuperiamo lo spazio verticale liberato.
+  const agendaGridHeight = isAgendaFullscreen ? "calc(100vh - 132px)" : "calc(100vh - 240px)";
   const hourMarks = Array.from(
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
     (_, index) => DAY_START_HOUR + index,
   );
   const appointmentsByDay = visibleDays.map((day) => {
     const dayStart = new Date(day);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = addDays(dayStart, 1);
+    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+    const dayEnd = new Date(day);
+    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
     return filtered
       .filter((appointment) => {
         const start = toDate(appointment.startsAt);
@@ -1463,23 +1617,31 @@ export function AutoscuoleAgendaPage({
       subTitle="Agenda guide ed esami."
       hideHero
     >
-      <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
-        <div className="mx-auto max-w-7xl space-y-5">
-          <PageHeader
-            title="Agenda"
-            subtitle={(() => {
-              const activeCount = filtered.filter((a) => a.status !== "cancelled").length;
-              const todayCount = filtered.filter((a) => {
-                if (a.status === "cancelled") return false;
-                const start = toDate(a.startsAt);
-                return start >= todayNormalized && start < addDays(todayNormalized, 1);
-              }).length;
-              const periodo = viewMode === "week" ? "questa settimana" : "in giornata";
-              return viewMode === "week"
-                ? [`${todayCount} guide oggi`, `${activeCount} ${periodo}`]
-                : [`${activeCount} guide ${periodo}`];
-            })()}
-          />
+      <div
+        className={cn(
+          "space-y-5",
+          isAgendaFullscreen ? "fixed inset-0 z-40 overflow-y-auto bg-white px-6 py-4" : "relative w-full",
+        )}
+        data-testid="autoscuole-agenda-page"
+      >
+        <div className={cn("mx-auto space-y-5", isAgendaFullscreen ? "max-w-none" : "max-w-7xl")}>
+          {!isAgendaFullscreen && (
+            <PageHeader
+              title="Agenda"
+              subtitle={(() => {
+                const activeCount = filtered.filter((a) => a.status !== "cancelled").length;
+                const todayCount = filtered.filter((a) => {
+                  if (a.status === "cancelled") return false;
+                  const start = toDate(a.startsAt);
+                  return start >= todayNormalized && start < addDays(todayNormalized, 1);
+                }).length;
+                const periodo = viewMode === "week" ? "questa settimana" : "in giornata";
+                return viewMode === "week"
+                  ? [`${todayCount} guide oggi`, `${activeCount} ${periodo}`]
+                  : [`${activeCount} guide ${periodo}`];
+              })()}
+            />
+          )}
           {tabs}
         <div className="flex items-center gap-3">
           {/* Date nav */}
@@ -1511,16 +1673,6 @@ export function AutoscuoleAgendaPage({
             ]}
           />
 
-          {/* Mode toggle */}
-          <SegmentedPill
-            value={agendaMode}
-            onChange={(v) => { if (v !== agendaMode) toggleAgendaMode(); }}
-            options={[
-              { value: "classic", label: "Classica", icon: <CalendarDays className="size-[13px]" /> },
-              { value: "instructor", label: "Istruttori", icon: <Users className="size-[13px]" /> },
-            ]}
-          />
-
           <div className="min-w-2 flex-1" />
 
           {/* Legenda (icona info, proto) */}
@@ -1531,6 +1683,129 @@ export function AutoscuoleAgendaPage({
             className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
           >
             <Info className="size-4" strokeWidth={1.6} />
+          </button>
+
+          {/* Visualizzazione (giorni + fascia oraria) — Popover non-modale, così il
+              popover del TimePicker annidato scrolla (niente scroll-lock da Dialog). */}
+          <PopoverPrimitive.Root open={viewPrefsOpen} onOpenChange={setViewPrefsOpen} modal={false}>
+            <PopoverPrimitive.Trigger asChild>
+              <button
+                type="button"
+                title="Visualizzazione"
+                className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+              >
+                <LayoutGrid className="size-4" strokeWidth={1.6} />
+                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24) && (
+                  <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                )}
+              </button>
+            </PopoverPrimitive.Trigger>
+            <PopoverPrimitive.Portal>
+              <PopoverPrimitive.Content
+                align="end"
+                sideOffset={8}
+                collisionPadding={8}
+                className="z-[60] w-[320px] rounded-xl border border-[#ebebeb] bg-white p-4 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+              >
+                <div className="space-y-4">
+                  <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAY_CHIPS.map(({ dow, label }) => {
+                        const on = viewPrefs.days.includes(dow);
+                        return (
+                          <button
+                            key={dow}
+                            type="button"
+                            onClick={() =>
+                              setViewPrefs((p) => {
+                                const next = p.days.includes(dow)
+                                  ? p.days.filter((d) => d !== dow)
+                                  : [...p.days, dow];
+                                return next.length ? { ...p, days: next } : p;
+                              })
+                            }
+                            className={cn(
+                              "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
+                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">Nascondi i giorni in cui l&apos;autoscuola è chiusa.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Orario visibile</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-muted-foreground">Dalle</span>
+                      <TimePickerInput
+                        value={hourToTime(viewPrefs.startHour)}
+                        minuteStep={60}
+                        minTime="00:00"
+                        maxTime={hourToTime(viewPrefs.endHour - 1)}
+                        onChange={(v) => setViewPrefs((p) => ({ ...p, startHour: timeToHour(v) }))}
+                      />
+                      <span className="text-[13px] text-muted-foreground">alle</span>
+                      <TimePickerInput
+                        value={hourToTime(viewPrefs.endHour)}
+                        minuteStep={60}
+                        minTime={hourToTime(viewPrefs.startHour + 1)}
+                        maxTime="24:00"
+                        onChange={(v) => setViewPrefs((p) => ({ ...p, endHour: timeToHour(v) }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
+                    <button
+                      type="button"
+                      className="cursor-pointer text-[13px] font-semibold text-[#1a1a2e] underline underline-offset-2 hover:opacity-70"
+                      onClick={() => setViewPrefs(DEFAULT_VIEW_PREFS)}
+                    >
+                      Ripristina
+                    </button>
+                  </div>
+                </div>
+              </PopoverPrimitive.Content>
+            </PopoverPrimitive.Portal>
+          </PopoverPrimitive.Root>
+
+          {/* Zoom (solo in fullscreen) */}
+          {isAgendaFullscreen && (
+            <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
+              <button
+                type="button"
+                title="Riduci zoom"
+                onClick={() => setAgendaZoom((z) => Math.max(0.9, Math.round((z - 0.15) * 100) / 100))}
+                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              >
+                <ZoomOut className="size-4" strokeWidth={1.7} />
+              </button>
+              <span className="min-w-[40px] select-none text-center text-[12px] font-semibold tabular-nums text-[#555]">
+                {Math.round(agendaZoom * 100)}%
+              </span>
+              <button
+                type="button"
+                title="Aumenta zoom"
+                onClick={() => setAgendaZoom((z) => Math.min(2.2, Math.round((z + 0.15) * 100) / 100))}
+                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              >
+                <ZoomIn className="size-4" strokeWidth={1.7} />
+              </button>
+            </div>
+          )}
+
+          {/* Schermo intero */}
+          <button
+            type="button"
+            title={isAgendaFullscreen ? "Esci da schermo intero" : "Schermo intero"}
+            onClick={toggleAgendaFullscreen}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
           </button>
 
           {/* Filtri (menu unico, proto) */}
@@ -1860,260 +2135,11 @@ export function AutoscuoleAgendaPage({
         </div>
 
         {loading ? (
-          <AgendaGridSkeleton columns={viewMode === "week" ? 7 : agendaMode === "instructor" ? 4 : 1} />
+          <AgendaGridSkeleton columns={viewMode === "week" ? 7 : 4} />
         ) : (<FadeIn>
-        {/* ── CLASSIC VIEW ── */}
-        {agendaMode === "classic" && (
-          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <div ref={calendarScrollRef} className="overflow-y-auto rounded-[14px] border border-[#dddddd] bg-white" style={{ height: "100%" }}>
-              {/* Sticky day headers */}
-              <div
-                className={`sticky top-0 z-30 grid border-b border-[#eeeeee] bg-white/95 backdrop-blur-sm ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
-              >
-                <div className="border-r border-[#eeeeee] bg-[#fafafa]" />
-                {visibleDays.map((day) => (
-                  <AgendaDayHeader
-                    key={day.toISOString()}
-                    day={day}
-                    isToday={day.getTime() === todayNormalized.getTime()}
-                    isHoliday={holidaySet.has(formatYmd(day))}
-                  />
-                ))}
-              </div>
-              {/* Calendar body */}
-              <div className={`grid ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}>
-                {/* Time gutter */}
-                <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
-                  {hourMarks.map((hour) => (
-                    <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">{`${pad(hour)}:00`}</span>
-                    </div>
-                  ))}
-                  {(() => {
-                    const now = new Date(nowTick);
-                    const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                    const todayInView = visibleDays.some((d) => d.getTime() === todayNormalized.getTime());
-                    if (!todayInView || mins < 0 || mins > totalMinutes) return null;
-                    return (
-                      <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: mins * PIXELS_PER_MINUTE }}>
-                        <span className="w-full pr-1 text-right text-[10px] font-semibold tabular-nums text-red-500">{`${pad(now.getHours())}:${pad(now.getMinutes())}`}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* Day columns */}
-                {visibleDays.map((day, dayIndex) => {
-                  const dayStart = new Date(day); dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
-                  const dayEnd = new Date(day); dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
-                  const dayAppointments = appointmentsByDay[dayIndex] ?? [];
-                  const { laneMap, overflowGroups } = computeLanes(dayAppointments);
-                  const isDayToday = day.getTime() === todayNormalized.getTime();
-                  const now = new Date(nowTick);
-                  const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                  const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
-                  const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
-                  return (
-                    <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-[#eeeeee]", isWeekendDay ? "bg-[#fafafa]" : "bg-white")} style={{ height: calendarHeight }}
-                      data-agenda-col-day={formatYmd(day)}
-                      onClick={(event) => openSlotMenu(event, day)}
-                    >
-                      {renderSlotGhost(day, null)}
-                      {renderDraftGhost(day, null)}
-                      {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-[#f5f5f5]" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
-                      {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
-                      {dayAppointments.map((item) => {
-                        const laneInfo = laneMap.get(item.id);
-                        const lane = laneInfo?.lane ?? 0;
-                        const totalLanes = laneInfo?.totalLanes ?? 1;
-                        if (totalLanes > MAX_VISIBLE_LANES) return null;
-                        const start = toDate(item.startsAt); const end = getAppointmentEnd(item);
-                        const clippedStart = start < dayStart ? dayStart : start; const clippedEnd = end > dayEnd ? dayEnd : end;
-                        const offsetMinutes = Math.max(0, diffMinutes(clippedStart, dayStart));
-                        const durationMinutes = Math.max(15, diffMinutes(clippedEnd, clippedStart));
-                        const top = offsetMinutes * PIXELS_PER_MINUTE; const height = durationMinutes * PIXELS_PER_MINUTE;
-                        const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
-                        const isExam = item.type === "esame";
-                        const isGroupLesson = item.type === "group_lesson";
-                        const isCompact = height <= 56; const GAP_PX = 2;
-                        const licenseTag = licenseTagFor(item);
-                        const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
-                        const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
-                        const isPendingAction = pendingEventActionId === item.id;
-                        const glTint = groupLessonTint(item);
-                        const cardClassName = isExam
-                          ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
-                          : isGroupLesson
-                            ? glTint.card
-                            : statusMeta.className;
-                        return (
-                          <DropdownMenu modal={false} key={item.id}>
-                            <DropdownMenuTrigger asChild>
-                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
-                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? glTint.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? glTint.label : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? glTint.time : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"><DraggableEventPanel>
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>{item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}</div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className={glTint.detailBadge}>{glTint.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
-                              {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
-                              {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
-                              {isGroupLesson ? (
-                                <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
-                              ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                              )}
-                            </DraggableEventPanel></DropdownMenuContent>
-                          </DropdownMenu>
-                        );
-                      })}
-                      {overflowGroups.map((group) => {
-                        const blockTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
-                        const blockHeight = Math.max(30, group.spanMinutes * PIXELS_PER_MINUTE);
-                        const earliest = toDate(group.allItems[0].startsAt);
-                        const latest = group.allItems.reduce((acc, a) => { const e = getAppointmentEnd(a); return e > acc ? e : acc; }, earliest);
-                        return (
-                          <DropdownMenu key={`overflow-${group.clusterId}`}>
-                            <DropdownMenuTrigger asChild>
-                              <button type="button" className="absolute left-1 right-1 z-10 box-border flex flex-col items-start justify-center gap-0.5 overflow-hidden rounded-[7px] border border-[#0f172a] bg-[#1e293b] px-2.5 text-left transition hover:bg-[#26334a]" style={{ top: blockTop, height: blockHeight }} onClick={(e) => e.stopPropagation()}>
-                                <span className="flex items-baseline gap-1.5"><span className="text-[18px] font-bold leading-none text-white">{group.allItems.length}</span><span className="text-[11px] font-medium leading-none text-white/65">guide</span></span>
-                                <span className="text-[10px] text-white/65">{formatTimeRange(earliest, latest)}</span>
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.allItems.length} guide sovrapposte</div>
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                                {group.allItems.map((item) => {
-                                  const s = toDate(item.startsAt); const e = getAppointmentEnd(item);
-                                  const meta = getStatusMeta(item.status, item, new Date(nowTick));
-                                  return (
-                                    <div key={item.id} className={cn("rounded-lg border p-2.5 text-xs", meta.className)}>
-                                      <div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground truncate">{item.student.firstName} {item.student.lastName}</span><Badge variant="secondary" className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80">{meta.shortLabel}</Badge></div>
-                                      <div className="text-muted-foreground mt-0.5">{formatEventType(item.type)} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        );
-                      })}
-                      {/* Instructor blocks for this day */}
-                      {instructorBlocks
-                        .filter((b) => {
-                          const bStart = toDate(b.startsAt);
-                          return bStart >= dayStart && bStart < dayEnd;
-                        })
-                        .map((b) => {
-                          const bStart = toDate(b.startsAt);
-                          const bEnd = toDate(b.endsAt);
-                          const offsetMin = Math.max(0, diffMinutes(bStart < dayStart ? dayStart : bStart, dayStart));
-                          const durMin = Math.max(15, diffMinutes(bEnd > dayEnd ? dayEnd : bEnd, bStart < dayStart ? dayStart : bStart));
-                          const top = offsetMin * PIXELS_PER_MINUTE;
-                          const height = durMin * PIXELS_PER_MINUTE;
-                          const instrName = instructors.find((i) => i.id === b.instructorId)?.name ?? "";
-                          return (
-                            <DropdownMenu key={`block-${b.id}`}>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
-                                  style={{ top, height }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
-                                  <span className="truncate text-[10px] text-slate-500">{instrName} · {formatTimeRange(bStart, bEnd)}</span>
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                                <div className="space-y-2">
-                                  <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
-                                  <div className="text-xs text-muted-foreground">{instrName}</div>
-                                  <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
-                                </div>
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                  onClick={async () => {
-                                    if (b.recurrenceGroupId) {
-                                      setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                    } else {
-                                      setBlockDeleting(b.id);
-                                      const res = await deleteInstructorBlock(b.id);
-                                      setBlockDeleting(null);
-                                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                                      setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
-                                      toast.success({ description: "Evento eliminato." });
-                                    }
-                                  }}
-                                >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          );
-                        })}
-                      {/* Exam groups for this day */}
-                      {examGroups
-                        .filter((eg) => {
-                          const egStart = toDate(eg.startsAt);
-                          return egStart >= dayStart && egStart < dayEnd;
-                        })
-                        .map((eg) => {
-                          const egStart = toDate(eg.startsAt);
-                          const examHasTime = Boolean(eg.endsAt);
-                          const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
-                          if (!examHasTime) {
-                            // Timeless exam — fixed banner at top
-                            return (
-                              <button
-                                key={`exam-${eg.key}`}
-                                type="button"
-                                className="absolute left-1 right-1 z-20 box-border flex items-center gap-1.5 overflow-hidden rounded-[10px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] px-2 py-1.5 text-left transition hover:bg-[#EDE4FF] cursor-pointer"
-                                style={{ top: 0 }}
-                                onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
-                              >
-                                <GraduationCap className="size-3 text-violet-600 shrink-0" />
-                                <span className="text-[10px] font-bold text-violet-700">Esame</span>
-                                <span className="text-[9px] text-violet-500 ml-auto">{eg.appointments.length} all.</span>
-                              </button>
-                            );
-                          }
-                          const offsetMin = Math.max(0, diffMinutes(egStart < dayStart ? dayStart : egStart, dayStart));
-                          const durMin = Math.max(30, diffMinutes(egEnd > dayEnd ? dayEnd : egEnd, egStart < dayStart ? dayStart : egStart));
-                          const top = offsetMin * PIXELS_PER_MINUTE;
-                          const height = durMin * PIXELS_PER_MINUTE;
-                          return (
-                            <button
-                              key={`exam-${eg.key}`}
-                              type="button"
-                              className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] p-2 text-left transition hover:bg-[#EDE4FF] cursor-pointer"
-                              style={{ top, height }}
-                              onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <GraduationCap className="size-3.5 text-violet-600 shrink-0" />
-                                <span className="text-[11px] font-bold text-violet-700 uppercase tracking-wider">Esame</span>
-                                <Badge variant="secondary" className="ml-auto shrink-0 border-violet-200 bg-violet-200/60 text-violet-700 px-1.5 py-0 text-[9px] font-bold">
-                                  {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
-                                </Badge>
-                              </div>
-                              <div className="mt-1 text-[10px] text-violet-600">
-                                {formatTimeRange(egStart, egEnd)}
-                                {eg.instructor ? ` · ${eg.instructor.name}` : ""}
-                              </div>
-                              {height > 60 && (
-                                <div className="mt-1 text-[9px] text-violet-500 truncate">
-                                  {eg.appointments.map((a) => `${a.student.firstName} ${a.student.lastName.charAt(0)}.`).join(", ")}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* ── INSTRUCTOR WEEKLY VIEW ── */}
-        {agendaMode === "instructor" && viewMode === "week" && (() => {
+        {/* ── WEEKLY VIEW (istruttori) ── */}
+        {viewMode === "week" && (() => {
           const weekInstructorsAll = instructorAvailability.length > 0
             ? instructorAvailability
             : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
@@ -2122,14 +2148,14 @@ export function AutoscuoleAgendaPage({
             ? weekInstructorsAll.filter((i) => instructorFilter.includes(i.instructorId))
             : weekInstructorsAll;
           const instrCount = Math.max(1, weekInstructors.length);
-          const totalCols = instrCount * 7; // instructor sub-columns across 7 days
+          const totalCols = instrCount * days.length; // sotto-colonne istruttore per i giorni visibili
 
           return (
-          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <div className="flex flex-col overflow-hidden rounded-[14px] border border-[#dddddd] bg-white" style={{ height: "100%" }}>
+          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
+            <div className={cn("flex flex-col overflow-hidden bg-white", agendaFrameClass)} style={{ height: "100%", ...agendaFrameStyle }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
-                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
                 <div className="row-span-2" />
                 {days.map((day) => {
@@ -2192,7 +2218,7 @@ export function AutoscuoleAgendaPage({
               {/* Exam banners row — sticky between header and body */}
               {examGroups.length > 0 && (
                 <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
-                  <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                  <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                     <div />
                     {days.map((day, dayIdx) => {
                       const dateKey = formatYmd(day);
@@ -2241,7 +2267,7 @@ export function AutoscuoleAgendaPage({
               }}>
 
               {/* Calendar body */}
-              <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+              <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Time gutter — sticky left */}
                 <div className="sticky left-0 z-20 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
@@ -2505,8 +2531,8 @@ export function AutoscuoleAgendaPage({
         })()}
 
         {/* ── INSTRUCTOR DAY VIEW ── */}
-        {agendaMode === "instructor" && viewMode === "day" && (
-        <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+        {viewMode === "day" && (
+        <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
           {/* Holiday banner */}
           {holidaySet.has(formatYmd(dayFocus)) && (
             <div className="flex items-center justify-between gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 mb-2">
@@ -2530,14 +2556,14 @@ export function AutoscuoleAgendaPage({
           )}
           <div
             ref={calendarScrollRef}
-            className="overflow-y-auto rounded-[14px] border border-[#dddddd] bg-white"
-            style={{ height: "100%" }}
+            className={cn("bg-white", isAgendaFullscreen ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
+            style={{ height: "100%", ...agendaFrameStyle }}
           >
           {/* Sticky instructor headers */}
           {(
             <div
               className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
-              style={{ gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
+              style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
             >
               <div />
               {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
@@ -2571,7 +2597,7 @@ export function AutoscuoleAgendaPage({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
+              gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
             }}
           >
             {/* Time gutter */}
@@ -2934,6 +2960,7 @@ export function AutoscuoleAgendaPage({
         </DialogContent>
       </Dialog>
 
+
       <CreateEventPopover
         open={createOpen}
         onClose={() => { if (!creating) setCreateOpen(false); }}
@@ -2948,7 +2975,7 @@ export function AutoscuoleAgendaPage({
             <button
               type="button"
               disabled={creating || !form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)}
-              onClick={handleCreate}
+              onClick={() => handleCreate()}
               className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
             >
               {creating ? <LoadingDots className="min-h-5" /> : "Crea guida"}
@@ -3990,6 +4017,43 @@ export function AutoscuoleAgendaPage({
               }}
             >
               Rimuovi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Conferma prenotazione nel passato ── */}
+      <AlertDialog open={pastConfirmOpen} onOpenChange={setPastConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="mb-1 flex size-11 items-center justify-center rounded-[14px] border border-[#f3e2c0] bg-[#fff8ec]">
+              <History className="size-[22px] text-[#e8a020]" strokeWidth={2} />
+            </div>
+            <AlertDialogTitle>Stai prenotando nel passato</AlertDialogTitle>
+            <AlertDialogDescription>
+              L&apos;orario selezionato è già trascorso. Vuoi prenotare la guida comunque?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingPastStart ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#f3e2c0] bg-[#fff8ec] px-3 py-2 text-sm font-semibold text-[#8a6416]">
+              <History className="size-4 shrink-0 text-[#e8a020]" strokeWidth={2} />
+              <span className="capitalize">
+                {pendingPastStart.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+                {" · "}
+                {pendingPastStart.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#1a1a2e] hover:bg-[#0f0f22]"
+              onClick={() => {
+                setPastConfirmOpen(false);
+                void handleCreate({ allowPast: true });
+              }}
+            >
+              Prenota comunque
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

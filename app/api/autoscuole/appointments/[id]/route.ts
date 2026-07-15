@@ -18,6 +18,7 @@ export async function PATCH(
     extraMotoVehicleIds: payload.extraMotoVehicleIds,
     followVehicleId: payload.followVehicleId,
     instructorId: payload.instructorId,
+    durationMin: payload.durationMin,
   });
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }

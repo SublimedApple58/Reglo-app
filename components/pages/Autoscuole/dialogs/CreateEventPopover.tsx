@@ -21,6 +21,7 @@ export function CreateEventPopover({
   width = 600,
   children,
   footer,
+  sidePanel,
 }: {
   open: boolean;
   onClose: () => void;
@@ -32,6 +33,8 @@ export function CreateEventPopover({
   width?: number;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /** Card gemella che sporge a destra (es. "Aggiungi allievi"), si muove con il drag. */
+  sidePanel?: React.ReactNode;
 }) {
   const dragControls = useDragControls();
   const cardRef = React.useRef<HTMLDivElement>(null);
@@ -149,18 +152,20 @@ export function CreateEventPopover({
             bottom: vh - 72 - top,
           }}
           ref={cardRef}
-          className="fixed z-40 flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
-          style={{
-            left,
-            top,
-            width: size.w,
-            // finché l'utente non ridimensiona, l'altezza è naturale (capped)
-            height: size.h ?? undefined,
-            maxHeight: size.h ? undefined : maxHeight,
-          }}
+          className="fixed z-40"
+          style={{ left, top }}
           role="dialog"
           aria-label={title}
         >
+          <div
+            className="flex flex-col overflow-hidden rounded-[22px] border border-[#dddddd] bg-white shadow-[0_24px_64px_rgba(0,0,0,0.18)]"
+            style={{
+              width: size.w,
+              // finché l'utente non ridimensiona, l'altezza è naturale (capped)
+              height: size.h ?? undefined,
+              maxHeight: size.h ? undefined : maxHeight,
+            }}
+          >
           {/* Header — maniglia di trascinamento della card */}
           <div
             className="flex shrink-0 cursor-grab select-none items-start justify-between gap-3 px-5 pb-3 pt-[18px] active:cursor-grabbing"
@@ -242,6 +247,10 @@ export function CreateEventPopover({
               <path d="M12 1 1 12M12 6 6 12M12 10.5 10.5 12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
             </svg>
           </motion.div>
+          </div>
+          {sidePanel ? (
+            <div className="absolute left-full top-0 ml-3.5">{sidePanel}</div>
+          ) : null}
         </motion.div>
       )}
     </AnimatePresence>,

@@ -236,9 +236,13 @@ export function GroupLessonManageDialog({
     null | "when" | "capacity" | "instructor" | "vehicle" | "fleet" | "follow"
   >(null);
 
-  const reload = React.useCallback(async () => {
+  // silent = refetch in background senza rimettere il dialog in loading: niente
+  // flash/skeleton a ogni azione, si aggiornano solo i dati. Su silent NON
+  // resettiamo i campi dei form di modifica (rispecchiano già i valori appena
+  // salvati dall'utente); il reset serve solo al primo caricamento all'apertura.
+  const reload = React.useCallback(async (silent = false) => {
     if (!groupLessonId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [res, elig] = await Promise.all([
         getGroupLesson(groupLessonId),
@@ -246,19 +250,21 @@ export function GroupLessonManageDialog({
       ]);
       if (res.success && res.data) {
         setLesson(res.data);
-        setStartLocal(toLocalInput(res.data.startsAt));
-        setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
-        setCapacityStr(String(res.data.capacity ?? 3));
-        setInstructorId(res.data.instructorId ?? "");
-        setVehicleId(res.data.vehicleId ?? "");
-        setFleetIds((res.data.fleet ?? []).map((f) => f.id));
-        setFollowId(res.data.followVehicleId ?? "");
+        if (!silent) {
+          setStartLocal(toLocalInput(res.data.startsAt));
+          setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
+          setCapacityStr(String(res.data.capacity ?? 3));
+          setInstructorId(res.data.instructorId ?? "");
+          setVehicleId(res.data.vehicleId ?? "");
+          setFleetIds((res.data.fleet ?? []).map((f) => f.id));
+          setFollowId(res.data.followVehicleId ?? "");
+        }
       }
       if (elig.success && elig.data) {
         setEligible(elig.data.map((e) => ({ id: e.id, name: e.name ?? "Allievo" })));
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [groupLessonId]);
 
@@ -361,7 +367,7 @@ export function GroupLessonManageDialog({
 
   const handleRemove = async (studentId: string) => {
     if (!groupLessonId) return;
-    if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload();
+    if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload(true);
   };
   // Presence outcome for a single seat (present/absent). Pure record-keeping —
   // does not change the "da pagare" charge. We patch local state in place (no
@@ -404,13 +410,13 @@ export function GroupLessonManageDialog({
     if (await run(
       () => updateAutoscuolaAppointmentDetails({ appointmentId, notes: next || null }),
       "Nota salvata.",
-    )) { setNoteEditing(null); reload(); }
+    )) { setNoteEditing(null); reload(true); }
   };
   const handleAdd = async (studentId: string) => {
     if (!groupLessonId || !studentId) return;
     setAddingId(studentId);
     try {
-      if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId }), "Allievo aggiunto.")) reload();
+      if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId }), "Allievo aggiunto.")) reload(true);
     } finally {
       setAddingId(null);
     }
@@ -463,7 +469,7 @@ export function GroupLessonManageDialog({
           followVehicleId: lesson.followVehicleId ?? null,
         }),
         inFleet ? "Moto rimossa dalla guida." : "Moto aggiunta alla guida.",
-      )) reload();
+      )) reload(true);
     } finally {
       setTogglingMotoId(null);
     }
@@ -496,7 +502,7 @@ export function GroupLessonManageDialog({
       }),
       "Guida di gruppo aggiornata.",
     );
-    if (ok) reload();
+    if (ok) reload(true);
     return ok;
   };
   // Apre l'editor di una riga risincronizzando i draft dallo stato salvato

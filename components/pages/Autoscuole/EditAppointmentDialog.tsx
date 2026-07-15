@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CalendarDays, CheckCircle2, Loader2, UserCog } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Star, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -29,7 +29,9 @@ import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
   updateAutoscuolaAppointmentDetails,
+  updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
+import { cn } from "@/lib/utils";
 
 type StudentLite = {
   firstName: string;
@@ -60,6 +62,10 @@ export type EditAppointmentDialogAppointment = {
   endsAt?: string | Date | null;
   status: string;
   type: string | null;
+  /** Multi lesson-types ("cosa si è fatto"). Falls back to [type] when absent. */
+  types?: string[] | null;
+  /** Valutazione 1-5 (null = non valutata). */
+  rating?: number | null;
   notes?: string | null;
   student: StudentLite;
   instructor?: { id?: string | null; name: string } | null;
@@ -80,8 +86,10 @@ type Availability =
     }
   | { status: "error"; detail: string };
 
+// Attività della guida ("cosa si è fatto") — multi-selezione come su mobile
+// (src/utils/lessonTypes.ts). "guida"/"esame" NON sono attività: sono il tipo
+// base, non un dettaglio → non compaiono qui.
 const LESSON_TYPE_OPTIONS = [
-  { value: "guida", label: "Guida" },
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },
   { value: "extraurbano", label: "Extraurbano" },
@@ -90,6 +98,80 @@ const LESSON_TYPE_OPTIONS = [
   { value: "parcheggio", label: "Parcheggio" },
   { value: "altro", label: "Altro" },
 ] as const;
+const LESSON_TYPE_VALUES = new Set(LESSON_TYPE_OPTIONS.map((o) => o.value as string));
+
+// Attività iniziali: preferisci types[], altrimenti il singolo type se è
+// un'attività (mirror di resolveInitialLessonTypes mobile).
+const resolveInitialTypes = (
+  types?: string[] | null,
+  type?: string | null,
+): string[] => {
+  const fromArray = (types ?? [])
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => LESSON_TYPE_VALUES.has(t));
+  if (fromArray.length) return Array.from(new Set(fromArray));
+  const single = (type ?? "").trim().toLowerCase();
+  return LESSON_TYPE_VALUES.has(single) ? [single] : [];
+};
+
+// Esito corrente derivato dallo stato: Presente = checked_in/completed,
+// Assente = no_show, altrimenti nessun esito (guida non ancora effettuata).
+type Outcome = "checked_in" | "no_show" | null;
+const outcomeFromStatus = (status: string): Outcome => {
+  const s = status.toLowerCase();
+  if (s === "checked_in" || s === "completed") return "checked_in";
+  if (s === "no_show") return "no_show";
+  return null;
+};
+
+// Stelle 1-5 monocrome navy, tap-to-clear (come StarRating mobile).
+function StarRatingInput({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number | null;
+  onChange: (v: number | null) => void;
+  disabled?: boolean;
+}) {
+  const current = value ?? 0;
+  return (
+    <div className="flex items-center gap-1.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const filled = star <= current;
+        return (
+          <button
+            key={star}
+            type="button"
+            disabled={disabled}
+            aria-label={`${star} stell${star === 1 ? "a" : "e"}`}
+            onClick={() => onChange(star === current ? null : star)}
+            className="cursor-pointer p-0.5 transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Star
+              className={cn("size-7", filled ? "text-[#1a1a2e]" : "text-[#d7dbe2]")}
+              fill={filled ? "#1a1a2e" : "none"}
+              strokeWidth={filled ? 0 : 1.6}
+            />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Stesse durate del form di creazione (SLOT_OPTIONS in AutoscuoleAgendaPage).
+// La durata attuale della guida viene comunque aggiunta all'elenco a runtime,
+// così esami/guide più lunghe restano visibili e selezionabili.
+const DURATION_OPTIONS = [30, 45, 60, 90, 120];
+
+const formatDuration = (min: number) => {
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  if (m === 0) return h === 1 ? "1 ora" : `${h} ore`;
+  return `${h}h ${m}′`;
+};
 
 const pad = (n: number) => n.toString().padStart(2, "0");
 const toDateStr = (d: Date) =>
@@ -151,8 +233,18 @@ export function EditAppointmentDialog({
     return new Date(originalStart.getTime() + 30 * 60 * 1000);
   }, [appointment, originalStart]);
 
+  const originalDurationMin = React.useMemo(() => {
+    if (!originalStart || !originalEnd) return 60;
+    return Math.max(1, Math.round((originalEnd.getTime() - originalStart.getTime()) / 60000));
+  }, [originalStart, originalEnd]);
+
   const originalInstructorId = appointment?.instructor?.id ?? "";
-  const originalLessonType = appointment?.type ?? "guida";
+  const originalLessonTypes = React.useMemo(
+    () => resolveInitialTypes(appointment?.types, appointment?.type),
+    [appointment],
+  );
+  const originalRating = appointment?.rating ?? null;
+  const currentOutcome = outcomeFromStatus(appointment?.status ?? "");
   const originalVehicleId = appointment?.vehicle?.id ?? "";
   const originalFollowVehicleId = appointment?.followVehicle?.id ?? "";
   const originalExtraMotoVehicleIds = React.useMemo(
@@ -163,7 +255,9 @@ export function EditAppointmentDialog({
   const originalNotes = appointment?.notes ?? "";
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
-  const [lessonType, setLessonType] = React.useState(originalLessonType);
+  const [lessonTypes, setLessonTypes] = React.useState<string[]>(originalLessonTypes);
+  const [rating, setRating] = React.useState<number | null>(originalRating);
+  const [esito, setEsito] = React.useState<Outcome>(currentOutcome);
   const [vehicleId, setVehicleId] = React.useState(originalVehicleId);
   const [followVehicleId, setFollowVehicleId] = React.useState(originalFollowVehicleId);
   const [extraMotoVehicleIds, setExtraMotoVehicleIds] = React.useState<string[]>(
@@ -171,6 +265,7 @@ export function EditAppointmentDialog({
   );
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
+  const [durationMin, setDurationMin] = React.useState<number>(originalDurationMin);
   // Date/time staging — start from the appointment's current slot.
   const [newDate, setNewDate] = React.useState<string>(
     originalStart ? toDateStr(originalStart) : "",
@@ -187,12 +282,18 @@ export function EditAppointmentDialog({
     if (!open || !appointment) return;
     const start = new Date(appointment.startsAt);
     setInstructorId(appointment.instructor?.id ?? "");
-    setLessonType(appointment.type ?? "guida");
+    setLessonTypes(resolveInitialTypes(appointment.types, appointment.type));
+    setRating(appointment.rating ?? null);
+    setEsito(outcomeFromStatus(appointment.status ?? ""));
     setVehicleId(appointment.vehicle?.id ?? "");
     setFollowVehicleId(appointment.followVehicle?.id ?? "");
     setExtraMotoVehicleIds((appointment.extraMotoVehicles ?? []).map((v) => v.id));
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
+    const end = appointment.endsAt
+      ? new Date(appointment.endsAt)
+      : new Date(start.getTime() + 30 * 60 * 1000);
+    setDurationMin(Math.max(1, Math.round((end.getTime() - start.getTime()) / 60000)));
     setNewDate(toDateStr(start));
     setNewTime(toTimeStr(start));
     setAvailability({ status: "idle" });
@@ -210,15 +311,17 @@ export function EditAppointmentDialog({
     return new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0, 0);
   }, [newDate, newTime]);
 
-  const durationMs = React.useMemo(() => {
-    if (!originalStart || !originalEnd) return 60 * 60 * 1000;
-    return originalEnd.getTime() - originalStart.getTime();
-  }, [originalStart, originalEnd]);
+  // La durata ora è modificabile: l'intervallo effettivo deriva dalla durata
+  // scelta (non più solo da quella originale). Così sia il reschedule (quando
+  // cambia data/ora) sia il check disponibilità usano il nuovo endsAt.
+  const durationMs = durationMin * 60 * 1000;
 
   const effectiveEnd = React.useMemo(
     () => (effectiveStart ? new Date(effectiveStart.getTime() + durationMs) : null),
     [effectiveStart, durationMs],
   );
+
+  const durationChanged = durationMin !== originalDurationMin;
 
   const dateTimeChanged = React.useMemo(() => {
     if (!effectiveStart || !originalStart) return false;
@@ -255,14 +358,38 @@ export function EditAppointmentDialog({
       ? effectiveStart.getTime() < Date.now()
       : false;
 
+  // La durata influenza la disponibilità (e quindi va rivalidata live) solo su
+  // guide future/non concluse: sul passato è un record fix e il BE non blocca.
+  const durationAffectsAvailability = durationChanged && !originalInPast && !isConcluded;
+
   const instructorChanged = instructorId !== originalInstructorId && instructorId !== "";
+
+  const sortedTypesKey = (t: string[]) => [...t].sort().join(",");
+  const typesChanged = sortedTypesKey(lessonTypes) !== sortedTypesKey(originalLessonTypes);
+  const ratingChanged = rating !== originalRating;
+  const esitoChanged = esito !== currentOutcome;
+
+  // Esito modificabile: guide non annullate/non proposte e non troppo in
+  // anticipo (>10 min prima dell'inizio) — mirror del "correctable" mobile.
+  const showEsito =
+    normalizedStatus !== "cancelled" &&
+    normalizedStatus !== "proposal" &&
+    originalStart !== null &&
+    originalStart.getTime() - 10 * 60 * 1000 <= Date.now();
+
+  // Valutazione: solo su guide effettuate (checked_in/completed/no_show) — o se
+  // l'utente sta impostando ORA un esito Presente/Assente (che le renderà tali).
+  const showRating =
+    esito !== null || ["checked_in", "completed", "no_show"].includes(normalizedStatus);
 
   // Live availability check. We re-run whenever either the staged
   // instructor or the staged date/time changes. If neither has changed,
   // there's nothing to verify and the badge stays hidden.
   React.useEffect(() => {
     if (!open || !appointment || !effectiveStart || !effectiveEnd) return;
-    if (!instructorChanged && !dateTimeChanged) {
+    // La durata più lunga può creare sovrapposizioni: rivalidiamo anche quando
+    // cambia solo la durata (l'endsAt esteso viene già passato all'endpoint).
+    if (!instructorChanged && !dateTimeChanged && !durationAffectsAvailability) {
       setAvailability({ status: "idle" });
       return;
     }
@@ -335,6 +462,7 @@ export function EditAppointmentDialog({
     originalInstructorId,
     instructorChanged,
     dateTimeChanged,
+    durationAffectsAvailability,
   ]);
 
   if (!appointment || !originalStart || !originalEnd) return null;
@@ -346,7 +474,7 @@ export function EditAppointmentDialog({
   // be verified or is known to conflict. The availability badge already
   // explains the reason in plain language.
   const isAvailabilityBlockingSave =
-    (instructorChanged || dateTimeChanged) &&
+    (instructorChanged || dateTimeChanged || durationAffectsAvailability) &&
     (availability.status === "checking" ||
       availability.status === "unavailable" ||
       availability.status === "error");
@@ -427,13 +555,16 @@ export function EditAppointmentDialog({
 
   const hasChanges =
     instructorId !== originalInstructorId ||
-    lessonType !== originalLessonType ||
+    typesChanged ||
+    ratingChanged ||
+    esitoChanged ||
     vehicleId !== originalVehicleId ||
     effectiveFollowVehicleId !== originalFollowVehicleId ||
     extraMotosChanged ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
-    dateTimeChanged;
+    dateTimeChanged ||
+    durationChanged;
 
   // The global follow-car rule suggests the auto al seguito but doesn't force
   // it: owner/instructor may explicitly save a moto guide with "Nessuna".
@@ -464,7 +595,27 @@ export function EditAppointmentDialog({
         }
       }
 
-      // 2. Update details (instructor swap, lesson type, location, notes).
+      // 1.5 Esito / stato (Presente = checked_in, Assente = no_show). PRIMA dei
+      // dettagli, così la valutazione supera il controllo di stato del BE (il
+      // rating è accettato solo su guide effettuate). Il BE gestisce da solo
+      // past→completed e il riaccredito della guida quando si passa a no_show.
+      if (esitoChanged && esito) {
+        const stRes = await updateAutoscuolaAppointmentStatus({
+          appointmentId: appointment.id,
+          status: esito,
+        });
+        if (!stRes.success) {
+          const msg = dateTimeChanged
+            ? `Guida spostata, ma non sono riuscito ad aggiornare l'esito: ${stRes.message ?? ""}`.trim()
+            : stRes.message ?? "Impossibile aggiornare l'esito.";
+          setServerError(msg);
+          setPending(false);
+          if (dateTimeChanged) onSuccess?.();
+          return;
+        }
+      }
+
+      // 2. Update details (istruttore, tipi, valutazione, veicolo, luogo, note).
       const detailsPayload: Parameters<typeof updateAutoscuolaAppointmentDetails>[0] = {
         appointmentId: appointment.id,
       };
@@ -473,8 +624,16 @@ export function EditAppointmentDialog({
         detailsPayload.instructorId = instructorId;
         hasDetails = true;
       }
-      if (lessonType !== originalLessonType) {
-        detailsPayload.lessonType = lessonType;
+      if (typesChanged && lessonTypes.length) {
+        // Multi attività: il BE scrive types[] e type = primo. Se svuoti tutto
+        // non inviamo nulla (non si può azzerare il tipo base).
+        detailsPayload.lessonTypes = lessonTypes;
+        hasDetails = true;
+      }
+      if (ratingChanged) {
+        // Accettato dal BE solo su guide effettuate: garantito dallo step esito
+        // qui sopra o dallo stato già effettuato.
+        detailsPayload.rating = rating;
         hasDetails = true;
       }
       if (vehicleId !== originalVehicleId) {
@@ -501,6 +660,13 @@ export function EditAppointmentDialog({
       }
       if ((notes ?? "") !== (originalNotes ?? "")) {
         detailsPayload.notes = notes;
+        hasDetails = true;
+      }
+      // Durata: quando cambia anche data/ora, il nuovo endsAt viaggia già col
+      // reschedule (effectiveEnd = start + durata scelta). Se cambia SOLO la
+      // durata, la passiamo qui — questo canale è permissivo anche sul passato.
+      if (durationChanged && !dateTimeChanged) {
+        detailsPayload.durationMin = durationMin;
         hasDetails = true;
       }
 
@@ -620,6 +786,36 @@ export function EditAppointmentDialog({
             <div className="flex flex-col gap-2">
               <label className="text-xs font-medium text-slate-700">Orario</label>
               <TimePickerInput value={newTime} onChange={setNewTime} />
+            </div>
+          </div>
+
+          {/* Durata — modificabile (start invariato, cambia solo l'endsAt). */}
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+              <Clock className="size-3.5 text-slate-500" aria-hidden />
+              Durata
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {Array.from(new Set([...DURATION_OPTIONS, originalDurationMin, durationMin]))
+                .sort((a, b) => a - b)
+                .map((min) => {
+                  const active = durationMin === min;
+                  return (
+                    <button
+                      key={min}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => setDurationMin(min)}
+                      className={`cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                        active
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                      }`}
+                    >
+                      {formatDuration(min)}
+                    </button>
+                  );
+                })}
             </div>
           </div>
 
@@ -784,30 +980,93 @@ export function EditAppointmentDialog({
             </div>
           )}
 
-          {/* Lesson type */}
+          {/* Esito (Presente/Assente) — parità con la "Gestisci guida" mobile.
+              Solo su guide effettuate/correggibili. Salva via updateStatus. */}
+          {showEsito && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <CheckCircle2 className="size-3.5 text-slate-500" aria-hidden />
+                Esito
+              </label>
+              <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setEsito("checked_in")}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50",
+                    esito === "checked_in"
+                      ? "bg-white text-emerald-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700",
+                  )}
+                >
+                  <Check className="size-4" strokeWidth={2.4} />
+                  Presente
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setEsito("no_show")}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition-colors disabled:opacity-50",
+                    esito === "no_show"
+                      ? "bg-white text-red-700 shadow-sm"
+                      : "text-slate-500 hover:text-slate-700",
+                  )}
+                >
+                  <X className="size-4" strokeWidth={2.4} />
+                  Assente
+                </button>
+              </div>
+              {esito === "no_show" && currentOutcome === "checked_in" && (
+                <p className="text-[11px] text-slate-400">
+                  Passando ad “Assente” la guida verrà riaccreditata all&apos;allievo.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Valutazione (1-5) — solo su guide effettuate (vincolo BE). */}
+          {showRating && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <Star className="size-3.5 text-slate-500" aria-hidden />
+                Valutazione
+              </label>
+              <StarRatingInput value={rating} onChange={setRating} disabled={pending} />
+            </div>
+          )}
+
+          {/* Tipo guida — multi "cosa si è fatto" (attività). */}
           <div className="flex flex-col gap-2">
-            <label
-              htmlFor="edit-lesson-type"
-              className="text-xs font-medium text-slate-700"
-            >
-              Tipo guida
+            <label className="text-xs font-medium text-slate-700">
+              Tipo guida · cosa si è fatto
             </label>
-            <Select
-              value={lessonType || undefined}
-              onValueChange={(v) => setLessonType(v)}
-              disabled={pending}
-            >
-              <SelectTrigger id="edit-lesson-type" className="h-10 cursor-pointer">
-                <SelectValue placeholder="Seleziona tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                {LESSON_TYPE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
+            <div className="flex flex-wrap gap-2">
+              {LESSON_TYPE_OPTIONS.map((opt) => {
+                const on = lessonTypes.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    disabled={pending}
+                    onClick={() =>
+                      setLessonTypes((prev) =>
+                        on ? prev.filter((t) => t !== opt.value) : [...prev, opt.value],
+                      )
+                    }
+                    className={cn(
+                      "cursor-pointer rounded-[10px] border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50",
+                      on
+                        ? "border-[#1a1a2e] bg-[#1a1a2e] text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                    )}
+                  >
                     {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Location */}

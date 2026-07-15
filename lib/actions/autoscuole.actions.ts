@@ -117,6 +117,9 @@ const createAppointmentSchema = z.object({
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
   skipConflictCheck: z.boolean().optional(),
+  // Owner/instructor may knowingly log a lesson in the past (dopo conferma
+  // esplicita lato client). Senza il flag il blocco resta attivo.
+  allowPast: z.boolean().optional(),
 });
 
 const updateCaseStatusSchema = z.object({
@@ -195,6 +198,14 @@ const updateAppointmentDetailsSchema = z.object({
    * override, not a permanent reassignment).
    */
   instructorId: z.string().uuid().optional(),
+  /**
+   * Nuova durata della guida in minuti (endsAt = startsAt + durationMin). A
+   * differenza del reschedule, lo start non cambia: modificare solo la durata è
+   * consentito anche sulle guide passate (record fix) e agli istruttori. Se la
+   * durata cresce su una guida futura, si ri-controllano i conflitti veicolo/
+   * istruttore sull'intervallo esteso.
+   */
+  durationMin: z.number().int().positive().max(600).optional(),
 });
 
 const checkInstructorAvailabilitySchema = z.object({
@@ -2784,7 +2795,7 @@ export async function createAutoscuolaAppointment(
     if (Number.isNaN(slotTime.getTime())) {
       return { success: false, message: "Orario di inizio non valido." };
     }
-    if (slotTime.getTime() < Date.now()) {
+    if (!payload.allowPast && slotTime.getTime() < Date.now()) {
       return {
         success: false,
         message: "Non puoi prenotare una guida nel passato.",
@@ -3027,6 +3038,9 @@ const createAppointmentBatchSchema = z.object({
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
+  // Vedi createAppointmentSchema.allowPast — consente di registrare slot passati
+  // dopo conferma esplicita dell'utente.
+  allowPast: z.boolean().optional(),
   entries: z
     .array(
       z.object({
@@ -3162,7 +3176,7 @@ export async function createAutoscuolaAppointmentBatch(
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
         return { success: false, message: "Uno o più intervalli orari non validi." };
       }
-      if (start.getTime() < Date.now()) {
+      if (!payload.allowPast && start.getTime() < Date.now()) {
         return { success: false, message: "Non puoi prenotare una guida nel passato." };
       }
       parsedEntries.push({ startsAt: start, endsAt: end });
@@ -4663,12 +4677,26 @@ export async function updateAutoscuolaAppointmentDetails(
       // Il cambio ISTRUTTORE resta comunque bloccato a valle per le guide concluse.
     }
 
-    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; vehicleId?: string | null; instructorId?: string } = {};
+    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; vehicleId?: string | null; instructorId?: string; endsAt?: Date } = {};
     const appointmentLessonType = normalizeLessonType(appointment.type);
     const appointmentEnd = computeAppointmentEnd({
       startsAt: appointment.startsAt,
       endsAt: appointment.endsAt,
     });
+    // Modifica durata: start invariato, endsAt = start + durationMin. Consentita
+    // anche sul passato/concluso; il conflitto si ricontrolla più sotto solo se
+    // la durata cresce su una guida futura.
+    const currentDurationMin = Math.round(
+      (appointmentEnd.getTime() - appointment.startsAt.getTime()) / 60000,
+    );
+    const durationChanged =
+      payload.durationMin != null && payload.durationMin !== currentDurationMin;
+    const newEndsAt = durationChanged
+      ? new Date(appointment.startsAt.getTime() + payload.durationMin! * 60000)
+      : null;
+    if (newEndsAt) {
+      updateData.endsAt = newEndsAt;
+    }
     let enforceRequiredTypeSelection = false;
     let compatibleMissingTypes: string[] = [];
     const isInstructorRole =
@@ -5018,6 +5046,55 @@ export async function updateAutoscuolaAppointmentDetails(
             success: false,
             message: "Veicolo già impegnato in quell'orario su un'altra guida.",
             code: "VEHICLE_UNAVAILABLE" as const,
+          };
+        }
+      }
+    }
+
+    // Durata cresciuta su una guida futura → l'intervallo esteso potrebbe
+    // sovrapporsi ad altre guide. Ricontrolliamo veicoli (tutti quelli riservati)
+    // e istruttore sul nuovo [start, newEnd). Sul passato o se accorciamo, nessun
+    // blocco: è un record fix e l'intervallo non cresce oltre l'attuale.
+    if (
+      newEndsAt &&
+      newEndsAt.getTime() > appointmentEnd.getTime() &&
+      newEndsAt.getTime() > Date.now()
+    ) {
+      const reservedVehicleIds = [
+        finalPrimaryVehicleId,
+        finalFollowVehicleId,
+        ...finalExtraMotoVehicleIds,
+      ].filter((id): id is string => Boolean(id));
+      if (reservedVehicleIds.length) {
+        const conflict = await findVehicleReservationConflict({
+          companyId: membership.companyId,
+          startsAt: appointment.startsAt,
+          endsAt: newEndsAt,
+          vehicleIds: reservedVehicleIds,
+          excludeAppointmentId: appointment.id,
+        });
+        if (conflict) {
+          return {
+            success: false,
+            message: "Veicolo già impegnato in quell'orario: riduci la durata o cambia veicolo.",
+            code: "VEHICLE_UNAVAILABLE" as const,
+          };
+        }
+      }
+      const resolvedInstructorId = updateData.instructorId ?? appointment.instructorId;
+      if (resolvedInstructorId) {
+        const availability = await verifyInstructorAvailability({
+          companyId: membership.companyId,
+          instructorId: resolvedInstructorId,
+          startsAt: appointment.startsAt,
+          endsAt: newEndsAt,
+          excludeAppointmentId: appointment.id,
+        });
+        if (!availability.available) {
+          return {
+            success: false,
+            message:
+              availability.detail ?? "L'istruttore non è libero per la durata estesa.",
           };
         }
       }
@@ -8320,26 +8397,50 @@ export async function removeGroupLessonParticipant(input: {
       return { success: false as const, message: "Operazione non consentita." };
     }
 
+    // Cerchiamo tra TUTTI gli stati "iscritto" (incl. finalizzati: assente /
+    // completato / pending_review), non solo gli attivi: altrimenti rimuovere un
+    // allievo già segnato "Assente" (no_show) dava "Partecipante non trovato".
     const appt = await prisma.autoscuolaAppointment.findFirst({
       where: {
         companyId: membership.companyId,
         groupLessonId: input.groupLessonId,
         studentId: input.studentId,
         type: "group_lesson",
-        status: { in: GROUP_LESSON_ACTIVE_STATUSES },
+        status: { in: GROUP_LESSON_ENROLLED_STATUSES },
       },
-      select: { id: true },
+      select: { id: true, status: true },
     });
     if (!appt) return { success: false as const, message: "Partecipante non trovato." };
 
-    // Shared cancellation: early = free seat & no charge, late/after-the-fact =
-    // stays "da pagare" and enters the late-cancellations inbox. Also frees the
-    // seat and re-broadcasts the invite when the lesson is still upcoming.
-    return await cancelGroupLessonParticipantAppointment({
-      companyId: membership.companyId,
-      appointmentId: appt.id,
-      actorUserId: membership.userId,
+    // Partecipante ancora attivo (guida non conclusa) → cancellazione "ricca":
+    // early = libera il posto & niente addebito, late/after-the-fact = resta "da
+    // pagare" ed entra nell'inbox dei ritardi; libera il posto e ri-diffonde
+    // l'invito se la guida è ancora futura.
+    if (GROUP_LESSON_ACTIVE_STATUSES.includes(appt.status)) {
+      return await cancelGroupLessonParticipantAppointment({
+        companyId: membership.companyId,
+        appointmentId: appt.id,
+        actorUserId: membership.userId,
+      });
+    }
+
+    // Partecipante già finalizzato (assente / completato / da confermare):
+    // rimuoverlo = toglierlo dal roster della guida ormai passata. Nessun posto da
+    // liberare né invito da ri-diffondere; azzeriamo l'eventuale addebito residuo
+    // (es. la tariffa da no_show), perché la rimozione equivale a un "annulla".
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appt.id },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledByUserId: membership.userId,
+        cancellationKind: "manual_cancel",
+        paymentRequired: false,
+        paymentStatus: "not_required",
+        manualPaymentStatus: null,
+      },
     });
+    return { success: true as const, message: "Allievo rimosso." };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -8364,14 +8465,14 @@ export async function cancelGroupLesson(groupLessonId: string) {
 
     await prisma.$transaction([
       prisma.autoscuolaAppointment.updateMany({
-        // Cancel EVERY non-finalised seat, not just the "active" ones: a seat that
-        // already rolled to `pending_review` (lesson time passed, not yet reviewed)
-        // must be cancelled too, otherwise it lingers as a non-cancelled row and
-        // the group lesson keeps re-appearing in the agenda ("non se ne va").
-        // Genuine history (completed / no_show) is left untouched.
+        // Annullare la guida = cancellare OGNI posto, inclusi i finalizzati
+        // (completed / no_show), non solo gli attivi/pending_review. Se lasciassimo
+        // i completed/no_show, l'agenda continuerebbe a derivare la card da quegli
+        // appuntamenti e la guida "rimarrebbe lì" (bug sulle guide passate). Un
+        // annullamento rende la guida nulla per tutti (billing azzerato sotto).
         where: {
           groupLessonId: gl.id,
-          status: { notIn: ["cancelled", "completed", "no_show"] },
+          status: { not: "cancelled" },
         },
         data: {
           status: "cancelled",
@@ -8888,8 +8989,11 @@ export async function updateGroupLesson(
           }
         }
         // Cascade time/instructor only — each participant keeps its own moto.
+        // ENROLLED (non solo ACTIVE): così anche i posti finalizzati di una guida
+        // passata (pending_review/completed/no_show) si spostano con la guida,
+        // altrimenti in agenda l'orario "non cambia".
         await tx.autoscuolaAppointment.updateMany({
-          where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+          where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
           data: { startsAt, endsAt, instructorId },
         });
       });
@@ -8934,8 +9038,10 @@ export async function updateGroupLesson(
           ...(notes !== undefined ? { notes } : {}),
         },
       }),
+      // ENROLLED (non solo ACTIVE): sposta anche i posti finalizzati di una guida
+      // passata, altrimenti in agenda l'orario "non cambia".
       prisma.autoscuolaAppointment.updateMany({
-        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ACTIVE_STATUSES } },
+        where: { groupLessonId: gl.id, status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
         data: { startsAt, endsAt, instructorId, vehicleId },
       }),
     ]);
