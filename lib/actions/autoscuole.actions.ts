@@ -7475,6 +7475,38 @@ export async function updateExamTime(
   }
 }
 
+const updateExamNotesSchema = z.object({
+  appointmentIds: z.array(z.string().uuid()).min(1),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export async function updateExamNotes(
+  input: z.infer<typeof updateExamNotesSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      membership.role !== "admin" &&
+      membership.autoscuolaRole !== "OWNER" &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    const payload = updateExamNotesSchema.parse(input);
+    const notes = payload.notes?.trim() ? payload.notes.trim() : null;
+
+    await prisma.autoscuolaAppointment.updateMany({
+      where: { id: { in: payload.appointmentIds }, companyId: membership.companyId, type: "esame" },
+      data: { notes },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function cancelExamEvent(appointmentIds: string[]) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");

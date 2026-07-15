@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2 } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -12,7 +12,7 @@ import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -36,6 +36,7 @@ import {
   removeExamStudent,
   updateExamInstructor,
   updateExamTime,
+  updateExamNotes,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
@@ -639,9 +640,56 @@ export function AutoscuoleAgendaPage({
   const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
   const [examCreating, setExamCreating] = React.useState(false);
   const [examStudentSearch, setExamStudentSearch] = React.useState("");
+  // Pannello laterale "Aggiungi allievi" (stesso pattern delle guide di gruppo).
+  const [examBrowseOpen, setExamBrowseOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!examDialogOpen) { setExamBrowseOpen(false); setExamStudentSearch(""); }
+  }, [examDialogOpen]);
+  const examStudentInitials = (first?: string | null, last?: string | null) =>
+    `${(first ?? "").trim()[0] ?? ""}${(last ?? "").trim()[0] ?? ""}`.toUpperCase() || "?";
+  const examAddableCount = React.useMemo(
+    () => students.reduce((n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1), 0),
+    [students, examForm.studentIds],
+  );
+  const examBrowseList = React.useMemo(() => {
+    const q = examStudentSearch.trim().toLowerCase();
+    return students
+      .filter((s) => !examForm.studentIds.includes(s.id))
+      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q));
+  }, [students, examForm.studentIds, examStudentSearch]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
+  const [examPanelBrowseOpen, setExamPanelBrowseOpen] = React.useState(false);
+  // Modello DRAFT: orario/istruttore/allievi/note si modificano in locale e si
+  // applicano con un unico "Salva modifiche" (niente auto-save a ogni tocco).
+  const [examNoteDraft, setExamNoteDraft] = React.useState("");
+  const [examDraftTime, setExamDraftTime] = React.useState<string | null>(null);
+  const [examDraftInstructorId, setExamDraftInstructorId] = React.useState<string | null>(null);
+  const [examDraftStudentIds, setExamDraftStudentIds] = React.useState<string[]>([]);
+  // Init i draft solo alla PRIMA apertura (non a ogni update del gruppo).
+  const examPanelOpenedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (examPanelGroup) {
+      if (!examPanelOpenedRef.current) {
+        const g = examPanelGroup;
+        const gs = toDate(g.startsAt);
+        setExamNoteDraft(g.notes ?? "");
+        setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
+        setExamDraftInstructorId(g.instructorId ?? null);
+        setExamDraftStudentIds(g.appointments.map((a) => a.student.id));
+        examPanelOpenedRef.current = true;
+      }
+    } else {
+      examPanelOpenedRef.current = false;
+      setExamPanelBrowseOpen(false);
+      setExamPanelStudentSearch("");
+      setExamNoteDraft("");
+      setExamDraftTime(null);
+      setExamDraftInstructorId(null);
+      setExamDraftStudentIds([]);
+    }
+  }, [examPanelGroup]);
   const [legendOpen, setLegendOpen] = React.useState(false);
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
@@ -2323,10 +2371,16 @@ export function AutoscuoleAgendaPage({
                             {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
                           </div>
                         )}
-                        {/* Availability bands */}
-                        {ranges.map((range, ri) => (
-                          <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
-                        ))}
+                        {/* Availability bands — offset e clip alla finestra oraria visibile
+                            (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
+                        {ranges.map((range, ri) => {
+                          const s = Math.max(range.startMinutes, DAY_START_HOUR * 60);
+                          const e = Math.min(range.endMinutes, DAY_END_HOUR * 60);
+                          if (e <= s) return null;
+                          return (
+                            <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE, height: (e - s) * PIXELS_PER_MINUTE }} />
+                          );
+                        })}
                         {/* Hour grid lines */}
                         {hourMarks.map((hour) => (
                           <div key={hour} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />
@@ -2669,10 +2723,14 @@ export function AutoscuoleAgendaPage({
                   >
                     {renderSlotGhost(day, instr.id)}
                     {renderDraftGhost(day, instr.id)}
-                    {/* Availability bands */}
+                    {/* Availability bands — offset e clip alla finestra oraria visibile
+                        (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
                     {instr.ranges.map((range, ri) => {
-                      const top = range.startMinutes * PIXELS_PER_MINUTE;
-                      const height = (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE;
+                      const s = Math.max(range.startMinutes, DAY_START_HOUR * 60);
+                      const e = Math.min(range.endMinutes, DAY_END_HOUR * 60);
+                      if (e <= s) return null;
+                      const top = (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
+                      const height = (e - s) * PIXELS_PER_MINUTE;
                       return (
                         <div
                           key={ri}
@@ -3347,105 +3405,126 @@ export function AutoscuoleAgendaPage({
       </Dialog>
 
       {/* ── Exam Detail Panel ── */}
-      <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }}>
-        <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
+      <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }} modal={false}>
+        <DialogContent
+          className="max-w-[480px] gap-0 overflow-visible rounded-[20px] p-0"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           {examPanelGroup && (() => {
             const eg = examPanelGroup;
             const egStart = toDate(eg.startsAt);
             const examHasTime = Boolean(eg.endsAt);
             const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
+            const studentById = new Map(students.map((s) => [s.id, s] as const));
+            const draftStudents = examDraftStudentIds
+              .map((id) => studentById.get(id))
+              .filter((s): s is (typeof students)[number] => Boolean(s));
+            const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
+            const examQuery = examPanelStudentSearch.trim().toLowerCase();
+            const examBrowse = examAddable.filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery));
+            // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
+            const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
+            const origInstructorId = eg.instructorId ?? null;
+            const origStudentIds = eg.appointments.map((a) => a.student.id);
+            const sortIds = (a: string[]) => [...a].sort().join(",");
+            const timeChanged = examDraftTime !== origTime;
+            const instrChanged = examDraftInstructorId !== origInstructorId;
+            const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
+            const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
+            const examDirty = timeChanged || instrChanged || noteChanged || studentsChanged;
+            const buildExamStart = () => {
+              const base = new Date(egStart);
+              if (examDraftTime) {
+                const [h, m] = examDraftTime.split(":").map(Number);
+                base.setHours(h, m, 0, 0);
+                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + 60 * 60 * 1000).toISOString() as string | undefined };
+              }
+              base.setHours(0, 0, 0, 0);
+              return { startsAt: base.toISOString(), endsAt: undefined as string | undefined };
+            };
+            const saveExam = async () => {
+              if (examDraftStudentIds.length === 0) { toast.error({ description: "L'esame deve avere almeno un allievo." }); return; }
+              setExamPanelPending(true);
+              try {
+                const studentToAppt = new Map(eg.appointments.map((a) => [a.student.id, a.id] as const));
+                const removed = origStudentIds.filter((id) => !examDraftStudentIds.includes(id));
+                const added = examDraftStudentIds.filter((id) => !origStudentIds.includes(id));
+                const { startsAt, endsAt } = buildExamStart();
+                for (const sid of removed) {
+                  const apptId = studentToAppt.get(sid);
+                  if (!apptId) continue;
+                  const r = await removeExamStudent(apptId);
+                  if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                }
+                for (const sid of added) {
+                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, notes: examNoteDraft.trim() || undefined });
+                  if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                }
+                const keptApptIds = origStudentIds
+                  .filter((id) => examDraftStudentIds.includes(id))
+                  .map((id) => studentToAppt.get(id))
+                  .filter((x): x is string => Boolean(x));
+                if (keptApptIds.length) {
+                  if (timeChanged) {
+                    const r = await updateExamTime({ appointmentIds: keptApptIds, startsAt, endsAt });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (instrChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: keptApptIds, instructorId: examDraftInstructorId });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (noteChanged) {
+                    const r = await updateExamNotes({ appointmentIds: keptApptIds, notes: examNoteDraft.trim() || null });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                }
+                setExamPanelPending(false);
+                setExamPanelGroup(null);
+                load({ silent: true });
+                toast.success({ description: "Esame aggiornato." });
+              } catch {
+                setExamPanelPending(false);
+                toast.error({ description: "Errore durante il salvataggio." });
+              }
+            };
             return (
               <>
+                <div className="max-h-[88vh] overflow-y-auto rounded-[20px] p-7 pb-6">
                 {/* Header */}
-                <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
-                    <GraduationCap className="h-5 w-5 text-violet-600" />
-                  </div>
-                  <div className="flex-1">
-                    <DialogTitle className="text-sm font-semibold">Esame</DialogTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
-                      {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="border-violet-200 bg-violet-100 text-violet-700 text-xs font-bold">
-                    {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
-                  </Badge>
+                <div className="flex items-center gap-2.5 pr-10">
+                  <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">Esame</DialogTitle>
+                  <span className="shrink-0 rounded-full bg-[#ede9fe] px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-[#6d28d9]">
+                    {draftStudents.length} {draftStudents.length === 1 ? "allievo" : "allievi"}
+                  </span>
                 </div>
+                <DialogDescription className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
+                  {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
+                  {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
+                </DialogDescription>
 
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-                  {/* Orario */}
+                <div className="mt-5 space-y-5">
+                  {/* Orario — TimePicker (onClear = orario da definire) */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Orario</p>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : "__none__"}
-                        onValueChange={async (v) => {
-                          if (v === "__none__") {
-                            // Remove time
-                            setExamPanelPending(true);
-                            const dateOnly = new Date(egStart);
-                            dateOnly.setHours(0, 0, 0, 0);
-                            const res = await updateExamTime({
-                              appointmentIds: eg.appointments.map((a) => a.id),
-                              startsAt: dateOnly.toISOString(),
-                              endsAt: undefined,
-                            });
-                            setExamPanelPending(false);
-                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                            setExamPanelGroup({ ...eg, startsAt: dateOnly.toISOString(), endsAt: null });
-                            load({ silent: true });
-                          } else {
-                            // Set time (default 1h duration)
-                            setExamPanelPending(true);
-                            const [h, m] = v.split(":").map(Number);
-                            const newStart = new Date(egStart);
-                            newStart.setHours(h, m, 0, 0);
-                            const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
-                            const res = await updateExamTime({
-                              appointmentIds: eg.appointments.map((a) => a.id),
-                              startsAt: newStart.toISOString(),
-                              endsAt: newEnd.toISOString(),
-                            });
-                            setExamPanelPending(false);
-                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                            setExamPanelGroup({ ...eg, startsAt: newStart.toISOString(), endsAt: newEnd.toISOString() });
-                            load({ silent: true });
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
-                          <SelectValue placeholder="Da definire" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Da definire</SelectItem>
-                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Orario</div>
+                    <TimePickerInput
+                      value={examDraftTime}
+                      placeholder="Orario da definire"
+                      minuteStep={15}
+                      className="w-full justify-between py-[11px]"
+                      onChange={(t) => setExamDraftTime(t)}
+                      onClear={examDraftTime ? () => setExamDraftTime(null) : undefined}
+                    />
                   </div>
 
                   {/* Istruttore */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Istruttore accompagnatore</div>
                     <div className="flex items-center gap-2">
                       <Select
-                        value={eg.instructorId ?? "__none__"}
-                        onValueChange={async (v) => {
-                          setExamPanelPending(true);
-                          const newInstrId = v === "__none__" ? null : v;
-                          const res = await updateExamInstructor({
-                            appointmentIds: eg.appointments.map((a) => a.id),
-                            instructorId: newInstrId,
-                          });
-                          setExamPanelPending(false);
-                          if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                          const newInstr = newInstrId ? instructors.find((i) => i.id === newInstrId) ?? null : null;
-                          setExamPanelGroup({ ...eg, instructorId: newInstrId, instructor: newInstr });
-                          load({ silent: true });
-                        }}
+                        value={examDraftInstructorId ?? "__none__"}
+                        onValueChange={(v) => setExamDraftInstructorId(v === "__none__" ? null : v)}
                       >
-                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
+                        <SelectTrigger className="h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]" disabled={examPanelPending}>
                           <SelectValue placeholder="Nessuno" />
                         </SelectTrigger>
                         <SelectContent>
@@ -3456,128 +3535,166 @@ export function AutoscuoleAgendaPage({
                     </div>
                   </div>
 
-                  {/* Allievi */}
+                  {/* Allievi iscritti */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Allievi iscritti</p>
-                    <div className="rounded-xl border border-border divide-y divide-border">
-                      {eg.appointments.map((a) => (
-                        <div key={a.id} className="flex items-center justify-between px-3.5 py-2.5">
-                          <span className="text-xs font-medium text-foreground">{a.student.firstName} {a.student.lastName}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50"
-                            disabled={examPanelPending || eg.appointments.length <= 1}
-                            onClick={async () => {
-                              setExamPanelPending(true);
-                              const res = await removeExamStudent(a.id);
-                              setExamPanelPending(false);
-                              if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                              const updated = { ...eg, appointments: eg.appointments.filter((x) => x.id !== a.id) };
-                              setExamPanelGroup(updated);
-                              load({ silent: true });
-                              toast.success({ description: "Allievo rimosso dall'esame." });
-                            }}
+                    <div className="mb-3 mt-6 flex items-baseline justify-between gap-3">
+                      <span className="text-[15px] font-semibold text-foreground">Allievi iscritti</span>
+                      <span className="text-[12.5px] font-medium text-[#929292]">
+                        {draftStudents.length} {draftStudents.length === 1 ? "iscritto" : "iscritti"}
+                      </span>
+                    </div>
+                    <div className="rounded-[12px] border-[1.5px] border-[#ededed]">
+                      {draftStudents.map((s, idx) => (
+                        <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
+                          <span className="flex min-w-0 items-center gap-3">
+                            <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                              {examStudentInitials(s.firstName, s.lastName)}
+                            </span>
+                            <span className="min-w-0 truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                          </span>
+                          <button
+                            type="button"
+                            title="Rimuovi dall'esame"
+                            disabled={examPanelPending || draftStudents.length <= 1}
+                            onClick={() => setExamDraftStudentIds((prev) => prev.filter((id) => id !== s.id))}
+                            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            Rimuovi
-                          </Button>
+                            <Trash2 className="size-4" strokeWidth={1.8} />
+                          </button>
                         </div>
                       ))}
                     </div>
-
-                    {/* Aggiungi allievo */}
-                    <div className="mt-3">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                        <Input
-                          value={examPanelStudentSearch}
-                          onChange={(e) => setExamPanelStudentSearch(e.target.value)}
-                          placeholder="Aggiungi allievo..."
-                          className="pl-9 h-8 text-xs"
-                        />
-                      </div>
-                      {examPanelStudentSearch.trim().length >= 2 && (() => {
-                        const q = examPanelStudentSearch.toLowerCase();
-                        const existingIds = new Set(eg.appointments.map((a) => a.student.id));
-                        const results = students
-                          .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
-                          .filter((s) => !existingIds.has(s.id))
-                          .slice(0, 10);
-                        return results.length > 0 ? (
-                          <div className="mt-1.5 max-h-[120px] overflow-y-auto rounded-lg border border-border">
-                            {results.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                disabled={examPanelPending}
-                                onClick={async () => {
-                                  setExamPanelPending(true);
-                                  const res = await addExamStudent({
-                                    studentId: s.id,
-                                    startsAt: eg.startsAt,
-                                    endsAt: eg.endsAt ?? undefined,
-                                    instructorId: eg.instructorId,
-                                    notes: eg.notes ?? undefined,
-                                  });
-                                  setExamPanelPending(false);
-                                  if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                                  const newAppt: AppointmentRow = {
-                                    id: (res.data as { appointmentId: string }).appointmentId,
-                                    type: "esame",
-                                    status: "scheduled",
-                                    startsAt: eg.startsAt,
-                                    endsAt: eg.endsAt,
-                                    student: s,
-                                    instructor: eg.instructor,
-                                  };
-                                  setExamPanelGroup({ ...eg, appointments: [...eg.appointments, newAppt] });
-                                  setExamPanelStudentSearch("");
-                                  load({ silent: true });
-                                  toast.success({ description: `${s.firstName} aggiunto all'esame.` });
-                                }}
-                                className="flex w-full items-center gap-2.5 px-3 py-2 text-xs hover:bg-violet-50 text-left transition-colors border-b border-border last:border-b-0"
-                              >
-                                <Plus className="size-3 text-violet-500 shrink-0" />
-                                <span className="font-medium">{s.firstName} {s.lastName}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Nessun allievo trovato</p>
-                        );
-                      })()}
-                    </div>
                   </div>
 
-                  {/* Note */}
-                  {eg.notes && (
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
-                      <p className="text-xs text-muted-foreground">{eg.notes}</p>
-                    </div>
-                  )}
+                  {/* Aggiungi allievi — trigger del pannello laterale */}
+                  <div>
+                    <div className="mb-2 mt-6 text-[15px] font-semibold text-foreground">Aggiungi allievi</div>
+                    <button
+                      type="button"
+                      onClick={() => setExamPanelBrowseOpen((v) => !v)}
+                      disabled={examAddable.length === 0}
+                      className={cn(
+                        "inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] px-[22px] py-[11px] text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        examPanelBrowseOpen
+                          ? "border-[#222222] bg-[#f7f7f7] text-foreground"
+                          : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
+                      )}
+                    >
+                      <Plus className="size-4" strokeWidth={2} />
+                      {examAddable.length > 0 ? `Sfoglia allievi · ${examAddable.length}` : "Tutti gli allievi aggiunti"}
+                    </button>
+                  </div>
+
+                  {/* Note — editabili */}
+                  <div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Note</div>
+                    <textarea
+                      value={examNoteDraft}
+                      onChange={(e) => setExamNoteDraft(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      disabled={examPanelPending}
+                      placeholder="Es: Esame pratico patente B, sede Motorizzazione…"
+                      className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
+                    />
+                  </div>
+
+                  {/* Salva modifiche + Annulla esame */}
+                  <div className="mt-2 space-y-2">
+                    <button
+                      type="button"
+                      disabled={!examDirty || examPanelPending}
+                      onClick={saveExam}
+                      className="flex w-full cursor-pointer items-center justify-center rounded-full bg-[#222222] py-3 text-sm font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {examPanelPending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={examPanelPending}
+                      onClick={async () => {
+                        setExamPanelPending(true);
+                        const res = await cancelExamEvent(eg.appointments.map((a) => a.id));
+                        setExamPanelPending(false);
+                        if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                        setExamPanelGroup(null);
+                        load({ silent: true });
+                        toast.success({ description: "Esame annullato." });
+                      }}
+                      className="flex w-full cursor-pointer items-center justify-center rounded-full py-3 text-sm font-semibold text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-60"
+                    >
+                      Annulla esame
+                    </button>
+                  </div>
+                </div>
                 </div>
 
-                {/* Footer */}
-                <div className="border-t border-border px-6 py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                    disabled={examPanelPending}
-                    onClick={async () => {
-                      setExamPanelPending(true);
-                      const res = await cancelExamEvent(eg.appointments.map((a) => a.id));
-                      setExamPanelPending(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                      setExamPanelGroup(null);
-                      load({ silent: true });
-                      toast.success({ description: "Esame annullato." });
-                    }}
-                  >
-                    {examPanelPending ? "Annullamento..." : "Annulla esame"}
-                  </Button>
-                </div>
+                {/* Pannello laterale "Aggiungi allievi": card gemella a destra */}
+                <AnimatePresence>
+                  {examPanelBrowseOpen && (
+                    <motion.div
+                      key="exam-add-panel"
+                      initial={{ opacity: 0, x: -14 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">Aggiungi allievi</span>
+                        <button
+                          type="button"
+                          aria-label="Chiudi elenco"
+                          onClick={() => setExamPanelBrowseOpen(false)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                        >
+                          <X className="size-3.5 text-foreground" strokeWidth={2} />
+                        </button>
+                      </div>
+                      <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                        {draftStudents.length} iscritti · {examAddable.length} da aggiungere
+                      </p>
+                      <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                        <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                        <input
+                          value={examPanelStudentSearch}
+                          onChange={(e) => setExamPanelStudentSearch(e.target.value)}
+                          placeholder="Cerca un allievo"
+                          autoFocus
+                          className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                        />
+                      </div>
+                      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                        {examBrowse.length === 0 ? (
+                          <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                            {examPanelStudentSearch.trim()
+                              ? `Nessun allievo trovato per «${examPanelStudentSearch.trim()}».`
+                              : "Tutti gli allievi sono già iscritti."}
+                          </p>
+                        ) : (
+                          examBrowse.map((s, idx) => (
+                            <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                  {examStudentInitials(s.firstName, s.lastName)}
+                                </span>
+                                <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                              </span>
+                              <button
+                                type="button"
+                                disabled={examPanelPending}
+                                onClick={() => setExamDraftStudentIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))}
+                                className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
+                              >
+                                <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </>
             );
           })()}
@@ -3591,6 +3708,66 @@ export function AutoscuoleAgendaPage({
         title="Nuovo esame"
         subtitle="Pianifica un esame per uno o più allievi"
         anchor={popoverAnchor}
+        sidePanel={
+          examBrowseOpen ? (
+            <div className="flex max-h-[80vh] w-[320px] flex-col rounded-[20px] border border-[#dddddd] bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">Aggiungi allievi</span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setExamBrowseOpen(false)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                >
+                  <X className="size-3.5 text-[#222222]" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                {examForm.studentIds.length} selezionati · {examAddableCount} da aggiungere
+              </p>
+              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                <input
+                  value={examStudentSearch}
+                  onChange={(e) => setExamStudentSearch(e.target.value)}
+                  placeholder="Cerca un allievo"
+                  autoFocus
+                  className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-[#222222] outline-none placeholder:text-[#c1c1c1]"
+                />
+              </div>
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {examBrowseList.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    {examStudentSearch.trim()
+                      ? `Nessun allievo trovato per «${examStudentSearch.trim()}».`
+                      : "Tutti gli allievi sono già stati aggiunti."}
+                  </p>
+                ) : (
+                  examBrowseList.map((st, idx) => (
+                    <div
+                      key={st.id}
+                      className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                          {examStudentInitials(st.firstName, st.lastName)}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, st.id] }))}
+                        className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#f7f7f7]"
+                      >
+                        <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : null
+        }
         footer={
           <>
             <p className="text-[11px] font-medium text-[#929292]">
@@ -3709,43 +3886,20 @@ export function AutoscuoleAgendaPage({
                 })}
               </div>
             )}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={examStudentSearch}
-                onChange={(e) => setExamStudentSearch(e.target.value)}
-                placeholder="Cerca allievo per nome..."
-                className="h-9 pl-9 text-xs"
-              />
-            </div>
-            {examStudentSearch.trim().length >= 2 && (() => {
-              const q = examStudentSearch.toLowerCase();
-              const results = students
-                .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
-                .filter((s) => !examForm.studentIds.includes(s.id))
-                .slice(0, 20);
-              return (
-                <div className="mt-2 max-h-[160px] overflow-y-auto rounded-xl border border-[#dddddd]">
-                  {results.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => {
-                        setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, s.id] }));
-                        setExamStudentSearch("");
-                      }}
-                      className="flex w-full cursor-pointer items-center gap-3 border-b border-[#f0f0f0] px-3.5 py-2.5 text-left text-xs transition-colors last:border-b-0 hover:bg-[#f7f7f7]"
-                    >
-                      <Plus className="size-3 shrink-0 text-muted-foreground" />
-                      <span className="font-medium text-foreground">{s.firstName} {s.lastName}</span>
-                    </button>
-                  ))}
-                  {results.length === 0 && (
-                    <p className="px-4 py-4 text-center text-xs text-muted-foreground">Nessun allievo trovato</p>
-                  )}
-                </div>
-              );
-            })()}
+            <button
+              type="button"
+              onClick={() => setExamBrowseOpen((v) => !v)}
+              disabled={examAddableCount === 0}
+              className={cn(
+                "inline-flex cursor-pointer select-none items-center gap-2 self-start rounded-full border-[1.5px] px-[18px] py-[9px] text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                examBrowseOpen
+                  ? "border-[#222222] bg-[#f7f7f7] text-[#222222]"
+                  : "border-[#dddddd] text-[#222222] hover:border-[#222222] hover:bg-[#f7f7f7]",
+              )}
+            >
+              <Plus className="size-4" strokeWidth={2} />
+              {examAddableCount > 0 ? `Sfoglia allievi · ${examAddableCount}` : "Tutti gli allievi aggiunti"}
+            </button>
           </div>
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
