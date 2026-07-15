@@ -7424,6 +7424,17 @@ const GROUP_LESSON_ENROLLED_STATUSES = [
   "no_show",
 ];
 
+// Presence outcome of a group-lesson seat, derived from its appointment status.
+// "present" = checked_in/completed, "absent" = no_show, "pending" = the seat is
+// still upcoming or (most often) past-but-unreviewed (pending_review).
+type GroupLessonAttendance = "present" | "absent" | "pending";
+function groupLessonAttendance(status: string): GroupLessonAttendance {
+  const s = normalizeStatus(status);
+  if (s === "completed" || s === "checked_in") return "present";
+  if (s === "no_show") return "absent";
+  return "pending";
+}
+
 const updateStudentGroupLessonOptInSchema = z.object({
   studentId: z.string().uuid(),
   optIn: z.boolean(),
@@ -8462,6 +8473,7 @@ export async function getGroupLesson(groupLessonId: string) {
           select: {
             id: true,
             studentId: true,
+            status: true,
             notes: true,
             student: { select: { name: true } },
             vehicle: { select: { id: true, name: true, licenseCategory: true } },
@@ -8519,6 +8531,7 @@ export async function getGroupLesson(groupLessonId: string) {
               appointmentId: "",
               studentId: "",
               studentName: null,
+              attendance: "pending" as GroupLessonAttendance,
               notes: null,
               vehicleId: null,
               vehicleName: null,
@@ -8529,6 +8542,10 @@ export async function getGroupLesson(groupLessonId: string) {
             appointmentId: a.id,
             studentId: a.studentId,
             studentName: isStaff ? a.student?.name ?? null : null,
+            // Present/absent outcome of this seat, so the staff roster can show
+            // and correct it. "pending" = past-but-unreviewed (pending_review) or
+            // still upcoming.
+            attendance: groupLessonAttendance(a.status),
             // Per-student note lives on the seat appointment (edited via
             // updateAutoscuolaAppointmentDetails). Surfaced to staff and to the
             // student's own seat for the instructor roster UI.
@@ -8541,6 +8558,129 @@ export async function getGroupLesson(groupLessonId: string) {
         }),
       },
     };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Group-lesson attendance (present / absent) — per seat + bulk "tutti presenti".
+//
+// A group-lesson seat is a plain AutoscuolaAppointment. We deliberately do NOT
+// route this through updateAutoscuolaAppointmentStatus: that path demands a
+// valid lesson TYPE, applies lesson credits and runs settlement — all wrong for
+// a group seat (flat "da pagare", creditApplied=false). Presence here is a pure
+// record-keeping toggle: it does NOT change billing (the seat stays "da pagare"
+// regardless), it only moves the seat out of "Da confermare".
+// ---------------------------------------------------------------------------
+
+// Present = checked_in while the lesson is still running, auto-completed once it
+// has ended (mirrors updateAutoscuolaAppointmentStatus). Group reviews happen
+// after the fact, so in practice this is always "completed".
+function groupLessonPresentStatus(startsAt: Date, endsAt: Date | null): string {
+  const endTime = endsAt ?? new Date(startsAt.getTime() + 60 * 60 * 1000);
+  return new Date() >= endTime ? "completed" : "checked_in";
+}
+
+async function resolveOwnInstructorId(companyId: string, userId: string) {
+  const own = await prisma.autoscuolaInstructor.findFirst({
+    where: { companyId, userId, status: { not: "inactive" } },
+    select: { id: true },
+  });
+  return own?.id ?? null;
+}
+
+const groupLessonSeatOutcomeSchema = z.object({
+  appointmentId: z.string().uuid(),
+  outcome: z.enum(["present", "absent"]),
+});
+
+/** Mark a single group-lesson participant present or absent. */
+export async function setGroupLessonSeatOutcome(
+  input: z.infer<typeof groupLessonSeatOutcomeSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const { appointmentId, outcome } = groupLessonSeatOutcomeSchema.parse(input);
+
+    const isStaff =
+      membership.role === "admin" ||
+      isOwner(membership.autoscuolaRole) ||
+      isInstructor(membership.autoscuolaRole);
+    if (!isStaff) return { success: false as const, message: "Non autorizzato." };
+
+    const appt = await prisma.autoscuolaAppointment.findFirst({
+      where: {
+        id: appointmentId,
+        companyId: membership.companyId,
+        type: "group_lesson",
+        groupLessonId: { not: null },
+      },
+      select: { id: true, status: true, startsAt: true, endsAt: true, instructorId: true },
+    });
+    if (!appt) return { success: false as const, message: "Partecipante non trovato." };
+    if (normalizeStatus(appt.status) === "cancelled") {
+      return { success: false as const, message: "Il posto è stato annullato." };
+    }
+
+    // An instructor (non-admin) may only review their own lessons.
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
+      const ownInstructorId = await resolveOwnInstructorId(membership.companyId, membership.userId);
+      if (!ownInstructorId || appt.instructorId !== ownInstructorId) {
+        return { success: false as const, message: "Puoi aggiornare solo le tue guide." };
+      }
+    }
+
+    const nextStatus =
+      outcome === "absent" ? "no_show" : groupLessonPresentStatus(appt.startsAt, appt.endsAt);
+
+    await prisma.autoscuolaAppointment.update({
+      where: { id: appt.id, companyId: membership.companyId },
+      data: { status: nextStatus },
+    });
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Mark every (non-cancelled) participant of a group lesson present in one go. */
+export async function markGroupLessonAllPresent(input: { groupLessonId: string }) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const groupLessonId = z.string().uuid().parse(input.groupLessonId);
+
+    const isStaff =
+      membership.role === "admin" ||
+      isOwner(membership.autoscuolaRole) ||
+      isInstructor(membership.autoscuolaRole);
+    if (!isStaff) return { success: false as const, message: "Non autorizzato." };
+
+    const gl = await prisma.autoscuolaGroupLesson.findFirst({
+      where: { id: groupLessonId, companyId: membership.companyId },
+      select: { id: true, startsAt: true, endsAt: true, instructorId: true },
+    });
+    if (!gl) return { success: false as const, message: "Guida di gruppo non trovata." };
+
+    if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
+      const ownInstructorId = await resolveOwnInstructorId(membership.companyId, membership.userId);
+      if (!ownInstructorId || gl.instructorId !== ownInstructorId) {
+        return { success: false as const, message: "Puoi aggiornare solo le tue guide." };
+      }
+    }
+
+    const presentStatus = groupLessonPresentStatus(gl.startsAt, gl.endsAt);
+    await prisma.autoscuolaAppointment.updateMany({
+      where: {
+        groupLessonId: gl.id,
+        type: "group_lesson",
+        status: { in: GROUP_LESSON_ENROLLED_STATUSES },
+      },
+      data: { status: presentStatus },
+    });
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }

@@ -31,6 +31,8 @@ import {
   listEligibleGroupLessonInvitees,
   cancelGroupLesson,
   updateAutoscuolaAppointmentDetails,
+  setGroupLessonSeatOutcome,
+  markGroupLessonAllPresent,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
@@ -70,6 +72,7 @@ type GroupLessonDetail = {
     appointmentId: string;
     studentId: string;
     studentName: string | null;
+    attendance: "present" | "absent" | "pending";
     notes: string | null;
     vehicleId?: string | null;
     vehicleName?: string | null;
@@ -359,6 +362,18 @@ export function GroupLessonManageDialog({
   const handleRemove = async (studentId: string) => {
     if (!groupLessonId) return;
     if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload();
+  };
+  // Presence outcome for a single seat (present/absent). Pure record-keeping —
+  // does not change the "da pagare" charge.
+  const handleSetOutcome = async (appointmentId: string, outcome: "present" | "absent") => {
+    if (await run(
+      () => setGroupLessonSeatOutcome({ appointmentId, outcome }),
+      outcome === "present" ? "Segnato presente." : "Segnato assente.",
+    )) reload();
+  };
+  const handleAllPresent = async () => {
+    if (!groupLessonId) return;
+    if (await run(() => markGroupLessonAllPresent({ groupLessonId }), "Tutti segnati presenti.")) reload();
   };
   const startEditNote = (appointmentId: string, current: string | null) => {
     setNoteEditing(appointmentId);
@@ -664,13 +679,28 @@ export function GroupLessonManageDialog({
             ) : null}
 
             {/* ── Partecipanti ── */}
-            <div className="mb-3 mt-6 flex items-baseline justify-between">
+            <div className="mb-3 mt-6 flex items-baseline justify-between gap-3">
               <span className="text-[15px] font-semibold text-foreground">Partecipanti</span>
-              <span className="text-[12.5px] font-medium text-[#929292]">
-                {lesson.openSeats > 0
-                  ? `${lesson.openSeats} ${lesson.openSeats === 1 ? "posto libero" : "posti liberi"}`
-                  : "Posti esauriti"}
-              </span>
+              {lesson.participants.length > 1 &&
+              lesson.participants.some((p) => p.attendance === "pending") ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleAllPresent}
+                  className={cn(
+                    "shrink-0 cursor-pointer text-[12.5px] font-semibold underline underline-offset-2 transition-all hover:decoration-2 disabled:opacity-50",
+                    isMoto ? "text-[#C2410C]" : "text-[#0f766e]",
+                  )}
+                >
+                  Segna tutti presenti
+                </button>
+              ) : (
+                <span className="text-[12.5px] font-medium text-[#929292]">
+                  {lesson.openSeats > 0
+                    ? `${lesson.openSeats} ${lesson.openSeats === 1 ? "posto libero" : "posti liberi"}`
+                    : "Posti esauriti"}
+                </span>
+              )}
             </div>
             {lesson.participants.length === 0 ? (
               <p className="text-[12.5px] font-medium text-[#929292]">
@@ -721,6 +751,38 @@ export function GroupLessonManageDialog({
                           <Trash2 className="size-4" strokeWidth={1.8} />
                         </button>
                       </div>
+                    </div>
+                    {/* Presenza: tint (teal auto / arancio moto) = presente,
+                        grigio = assente, nessuno = da confermare. */}
+                    <div className="mt-2.5 inline-flex items-center rounded-full bg-[#f4f4f5] p-0.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSetOutcome(p.appointmentId, "present")}
+                        className={cn(
+                          "cursor-pointer rounded-full px-3.5 py-1 text-[12px] font-semibold transition-colors disabled:opacity-50",
+                          p.attendance === "present"
+                            ? isMoto
+                              ? "bg-[#C2410C] text-white"
+                              : "bg-[#0f766e] text-white"
+                            : "text-[#6a6a6a] hover:text-foreground",
+                        )}
+                      >
+                        Presente
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSetOutcome(p.appointmentId, "absent")}
+                        className={cn(
+                          "cursor-pointer rounded-full px-3.5 py-1 text-[12px] font-semibold transition-colors disabled:opacity-50",
+                          p.attendance === "absent"
+                            ? "bg-[#52525b] text-white"
+                            : "text-[#6a6a6a] hover:text-foreground",
+                        )}
+                      >
+                        Assente
+                      </button>
                     </div>
                     {noteEditing === p.appointmentId ? (
                       <div className="mt-2">
