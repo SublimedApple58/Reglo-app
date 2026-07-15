@@ -8392,6 +8392,7 @@ export async function getGroupLessonsForAgenda(input?: {
         },
         appointments: {
           where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
+          orderBy: { createdAt: "asc" },
           select: {
             id: true,
             studentId: true,
@@ -8470,6 +8471,9 @@ export async function getGroupLesson(groupLessonId: string) {
         },
         appointments: {
           where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } },
+          // Stable enrolment order so the roster never reshuffles when a seat's
+          // presence changes (Postgres has no implicit order without this).
+          orderBy: { createdAt: "asc" },
           select: {
             id: true,
             studentId: true,
