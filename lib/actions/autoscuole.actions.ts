@@ -7406,13 +7406,20 @@ export async function cancelExamEvent(appointmentIds: string[]) {
 
 const GROUP_LESSON_ACTIVE_STATUSES = ["scheduled", "confirmed", "proposal", "checked_in"];
 // "Enrolled" = a student who occupies/occupied a seat, including PAST lessons.
-// ACTIVE excludes "completed"/"no_show", so once a past group lesson is marked
-// attended its seats vanish from roster/count queries (the bug where managing a
-// past group lesson showed 0 participants). Use this for per-lesson roster,
-// filled-seat counts and the enrolled-set; keep ACTIVE for booking/eligibility
-// on still-scheduled lessons (where completed/no_show never occur anyway).
+// ACTIVE excludes the terminal/past statuses, so once a group lesson's time
+// passes its seats vanish from roster/count queries (the bug where managing a
+// past group lesson showed 0 participants). Note "pending_review": the auto
+// cron (processAutoscuolaAutoPendingReview) rolls scheduled/confirmed seats to
+// pending_review the moment the lesson ends — BEFORE anyone marks them
+// completed/no_show — so it's the FIRST past state a seat lands in and MUST be
+// counted as enrolled, else a past-but-unreviewed group lesson shows 0/3 in the
+// manage dialog while the agenda still shows 3/3 (real Robatto bug, 2026-07-15).
+// Use this for per-lesson roster, filled-seat counts and the enrolled-set; keep
+// ACTIVE for booking/eligibility on still-scheduled lessons (where these past
+// statuses never occur anyway).
 const GROUP_LESSON_ENROLLED_STATUSES = [
   ...GROUP_LESSON_ACTIVE_STATUSES,
+  "pending_review",
   "completed",
   "no_show",
 ];
