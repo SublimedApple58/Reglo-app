@@ -1798,12 +1798,17 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           lateCancellationAction: true,
           notes: true,
           createdAt: true,
+          groupLessonId: true,
           instructor: { select: { name: true } },
           vehicle: { select: { name: true } },
         },
         orderBy: { startsAt: "desc" },
       }),
     ]);
+
+    // Group-lesson fill (N/M) + kind, so the student history can flag which
+    // lessons were group lessons and how many students were on them.
+    const registerGlInfo = await fetchGroupLessonFill(lessons.map((l) => l.groupLessonId));
 
     const register = buildDrivingRegisterData({ cases, lessons });
     const student = toStudentProfile(studentMembership.user, studentMembership.createdAt);
@@ -1866,6 +1871,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             lateCancellationAction: raw?.lateCancellationAction ?? null,
             notes: raw?.notes ?? null,
             createdAt: raw?.createdAt ?? null,
+            group: raw?.groupLessonId ? registerGlInfo.get(raw.groupLessonId) ?? null : null,
           };
         }),
       },
@@ -2314,14 +2320,21 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
       });
 
       const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
+      const glInfo = await fetchGroupLessonFill(appointments.map((a) => a.groupLessonId));
       return {
         success: true,
-        data: appointments.map((item) => ({
-          ...item,
-          case: null,
-          student: mapCaseStudent(item.student),
-          ...(gridFlags.get(item.id) ?? {}),
-        })),
+        data: appointments.map((item) => {
+          const gl = item.groupLessonId ? glInfo.get(item.groupLessonId) : null;
+          return {
+            ...item,
+            case: null,
+            student: mapCaseStudent(item.student),
+            ...(gridFlags.get(item.id) ?? {}),
+            groupLessonCapacity: gl?.capacity ?? null,
+            groupLessonKind: gl?.kind ?? null,
+            groupLessonFilled: gl?.filled ?? null,
+          };
+        }),
       };
     }
 
@@ -2346,13 +2359,20 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
     });
 
     const gridFlags = await buildAppointmentGridFlags(companyId, appointments);
+    const glInfo = await fetchGroupLessonFill(appointments.map((a) => a.groupLessonId));
     return {
       success: true,
-      data: appointments.map((item) => ({
-        ...item,
-        student: mapCaseStudent(item.student),
-        ...(gridFlags.get(item.id) ?? {}),
-      })),
+      data: appointments.map((item) => {
+        const gl = item.groupLessonId ? glInfo.get(item.groupLessonId) : null;
+        return {
+          ...item,
+          student: mapCaseStudent(item.student),
+          ...(gridFlags.get(item.id) ?? {}),
+          groupLessonCapacity: gl?.capacity ?? null,
+          groupLessonKind: gl?.kind ?? null,
+          groupLessonFilled: gl?.filled ?? null,
+        };
+      }),
     };
   } catch (error) {
     return { success: false, message: formatError(error) };
@@ -7433,6 +7453,29 @@ function groupLessonAttendance(status: string): GroupLessonAttendance {
   if (s === "completed" || s === "checked_in") return "present";
   if (s === "no_show") return "absent";
   return "pending";
+}
+
+type GroupLessonFill = { filled: number; capacity: number; kind: string };
+/**
+ * For a set of appointment groupLessonIds, returns per-group seat fill (enrolled
+ * count), capacity and kind — so a student's lesson history can flag "Guida di
+ * gruppo · N/M". Function declaration (hoisted) so callers above may use it.
+ */
+async function fetchGroupLessonFill(
+  groupLessonIds: Array<string | null | undefined>,
+): Promise<Map<string, GroupLessonFill>> {
+  const ids = [...new Set(groupLessonIds.filter(Boolean) as string[])];
+  if (!ids.length) return new Map();
+  const rows = await prisma.autoscuolaGroupLesson.findMany({
+    where: { id: { in: ids } },
+    select: {
+      id: true,
+      capacity: true,
+      kind: true,
+      _count: { select: { appointments: { where: { status: { in: GROUP_LESSON_ENROLLED_STATUSES } } } } },
+    },
+  });
+  return new Map(rows.map((g) => [g.id, { filled: g._count.appointments, capacity: g.capacity, kind: g.kind }]));
 }
 
 const updateStudentGroupLessonOptInSchema = z.object({

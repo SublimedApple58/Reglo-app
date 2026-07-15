@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -125,6 +125,8 @@ type LessonEntry = {
   lateCancellationAction: string | null;
   notes: string | null;
   createdAt: string | Date | null;
+  /** Set when this lesson was a group lesson: seats filled / capacity + kind. */
+  group: { filled: number; capacity: number; kind: string } | null;
 };
 
 /** Filtri client-side del tab Guide del drawer allievo. */
@@ -1741,17 +1743,32 @@ export function AutoscuoleStudentsPage({
                     {" – "}
                     {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                   </span>
-                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                  {lesson.group ? (
                     <span
-                      key={i}
                       className={cn(
-                        "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
-                        isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                        "inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                        lesson.group.kind === "moto"
+                          ? "bg-[#FFF4EA] text-[#C2410C]"
+                          : "bg-[#ECFDF5] text-[#0f766e]",
                       )}
                     >
-                      {formatLessonType(t)}
+                      <Users className="size-3" strokeWidth={2.2} />
+                      {lesson.group.kind === "moto" ? "Gruppo moto" : "Guida di gruppo"} ·{" "}
+                      {lesson.group.filled}/{lesson.group.capacity}
                     </span>
-                  ))}
+                  ) : (
+                    (lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                      <span
+                        key={i}
+                        className={cn(
+                          "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                          isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                        )}
+                      >
+                        {formatLessonType(t)}
+                      </span>
+                    ))
+                  )}
                 </div>
                 <p className="mb-2 text-[13px] font-medium text-[#6a6a6a]">
                   {lesson.durationMinutes} min · {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
@@ -1838,17 +1855,32 @@ export function AutoscuoleStudentsPage({
                     {" – "}
                     {endDate.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
                   </span>
-                  {(lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                  {lesson.group ? (
                     <span
-                      key={i}
                       className={cn(
-                        "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
-                        isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                        "inline-flex items-center gap-1 rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                        lesson.group.kind === "moto"
+                          ? "bg-[#FFF4EA] text-[#C2410C]"
+                          : "bg-[#ECFDF5] text-[#0f766e]",
                       )}
                     >
-                      {formatLessonType(t)}
+                      <Users className="size-3" strokeWidth={2.2} />
+                      {lesson.group.kind === "moto" ? "Gruppo moto" : "Guida di gruppo"} ·{" "}
+                      {lesson.group.filled}/{lesson.group.capacity}
                     </span>
-                  ))}
+                  ) : (
+                    (lesson.types?.length ? lesson.types : [lesson.type]).map((t: string, i: number) => (
+                      <span
+                        key={i}
+                        className={cn(
+                          "rounded-[4px] px-2 py-0.5 text-[12px] font-semibold",
+                          isExam ? "bg-[#f3e8ff] text-[#7c3aed]" : "bg-[#f0f4ff] text-[#428bff]",
+                        )}
+                      >
+                        {formatLessonType(t)}
+                      </span>
+                    ))
+                  )}
                   {lesson.rating != null && (
                     <span className="ml-auto flex items-center gap-0.5 text-[10px]">
                       {Array.from({ length: 5 }, (_, i) => (
