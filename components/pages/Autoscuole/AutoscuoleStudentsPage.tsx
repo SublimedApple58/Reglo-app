@@ -2046,9 +2046,13 @@ export function AutoscuoleStudentsPage({
           const lessonStatus = (lesson.status ?? "").toLowerCase();
           // Esito impostabile su guide non annullate/proposte già iniziate (mirror
           // del "correctable"): permette di segnare effettuata e quindi valutare.
+          // NON sulle guide di gruppo: la presenza lì è di gruppo (tutti insieme,
+          // markGroupLessonAllPresent), non per-partecipante — e il type
+          // "group_lesson" non è un tipo guida valido per il check-in.
           const canSetOutcome =
             lessonStatus !== "cancelled" &&
             lessonStatus !== "proposal" &&
+            !lesson.group &&
             startDate.getTime() - 10 * 60 * 1000 <= Date.now();
           const canRate = esitoDraft !== null || RATEABLE_STATUSES.has(lessonStatus);
           return (
