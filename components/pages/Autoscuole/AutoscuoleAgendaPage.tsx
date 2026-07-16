@@ -163,8 +163,87 @@ const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
-// Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
-const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180", "210", "240", "270", "300"];
+// Chip durata rapide per gli esami; per durate fuori standard c'è il TimePicker "fine".
+const EXAM_DURATION_CHIPS = [30, 45, 60, 90, 120, 180, 240];
+const fmtExamDuration = (min: number) => {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h${m}`;
+};
+const examTimeToMin = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const examMinToTime = (min: number) => {
+  const capped = Math.min(Math.max(min, 0), 1440);
+  return `${String(Math.floor(capped / 60)).padStart(2, "0")}:${String(capped % 60).padStart(2, "0")}`;
+};
+
+/**
+ * Imposta la durata con DUE modalità intercambiabili: chip di durata rapide
+ * OPPURE l'orario di fine (TimePicker). Entrambe aggiornano `durationMin`.
+ * Condiviso da esame (creazione + gestione) e blocca-slot; `chips` personalizza
+ * le durate rapide per il contesto.
+ */
+function DurationField({
+  startTime,
+  durationMin,
+  onDurationChange,
+  chips = EXAM_DURATION_CHIPS,
+}: {
+  startTime: string;
+  durationMin: number;
+  onDurationChange: (min: number) => void;
+  chips?: number[];
+}) {
+  const startMin = examTimeToMin(startTime);
+  const endTime = examMinToTime(startMin + durationMin);
+  // Durata "custom" = impostata dal picker fine, nessuna chip corrisponde.
+  const customDuration = !chips.includes(durationMin);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[13px] font-semibold text-[#6a6a6a]">Durata</div>
+      {/* Una riga sola: chip durata + divisore + picker "fine", stessa cornice →
+          i due modi di impostare la fine collaborano in un unico controllo compatto. */}
+      <div className="flex items-center gap-1 rounded-[12px] border-[1.5px] border-[#e6e6e8] p-1">
+        {chips.map((m) => {
+          const active = durationMin === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onDurationChange(m)}
+              className={cn(
+                "min-w-0 flex-1 cursor-pointer rounded-[8px] py-[7px] text-[12.5px] font-semibold transition-colors",
+                active
+                  ? "bg-[#222222] text-white"
+                  : "text-[#8a8a8f] hover:bg-[#f5f5f5] hover:text-[#222222]",
+              )}
+            >
+              {fmtExamDuration(m)}
+            </button>
+          );
+        })}
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
+        <TimePickerInput
+          value={endTime}
+          minTime={examMinToTime(Math.min(startMin + 15, 1440))}
+          maxTime="24:00"
+          minuteStep={15}
+          className={cn(
+            "shrink-0 gap-1.5 border-0 px-2 py-[7px] text-[12.5px] font-semibold hover:bg-[#f5f5f5]",
+            customDuration ? "bg-[#f2f2f4]" : "bg-transparent",
+          )}
+          onChange={(t) => {
+            const d = examTimeToMin(t) - startMin;
+            if (d > 0) onDurationChange(d);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 const BASE_PIXELS_PER_MINUTE = 1.6;
 // Scala base della griglia (px per minuto). In fullscreen il componente ombreggia
 // questa costante con un fattore di zoom; qui resta la base usata dallo skeleton.
@@ -665,6 +744,7 @@ export function AutoscuoleAgendaPage({
   // applicano con un unico "Salva modifiche" (niente auto-save a ogni tocco).
   const [examNoteDraft, setExamNoteDraft] = React.useState("");
   const [examDraftTime, setExamDraftTime] = React.useState<string | null>(null);
+  const [examDraftDurationMin, setExamDraftDurationMin] = React.useState(60);
   const [examDraftInstructorId, setExamDraftInstructorId] = React.useState<string | null>(null);
   const [examDraftStudentIds, setExamDraftStudentIds] = React.useState<string[]>([]);
   // Init i draft solo alla PRIMA apertura (non a ogni update del gruppo).
@@ -676,6 +756,7 @@ export function AutoscuoleAgendaPage({
         const gs = toDate(g.startsAt);
         setExamNoteDraft(g.notes ?? "");
         setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
+        setExamDraftDurationMin(g.endsAt ? Math.max(15, Math.round((toDate(g.endsAt).getTime() - gs.getTime()) / 60000)) : 60);
         setExamDraftInstructorId(g.instructorId ?? null);
         setExamDraftStudentIds(g.appointments.map((a) => a.student.id));
         examPanelOpenedRef.current = true;
@@ -686,6 +767,7 @@ export function AutoscuoleAgendaPage({
       setExamPanelStudentSearch("");
       setExamNoteDraft("");
       setExamDraftTime(null);
+      setExamDraftDurationMin(60);
       setExamDraftInstructorId(null);
       setExamDraftStudentIds([]);
     }
@@ -3438,22 +3520,24 @@ export function AutoscuoleAgendaPage({
             const origInstructorId = eg.instructorId ?? null;
             const origStudentIds = eg.appointments.map((a) => a.student.id);
             const sortIds = (a: string[]) => [...a].sort().join(",");
+            const origDurationMin = examHasTime ? Math.max(15, Math.round((egEnd.getTime() - egStart.getTime()) / 60000)) : 60;
             const timeChanged = examDraftTime !== origTime;
+            // La durata conta solo quando c'è un orario (con "da definire" non ha senso).
+            const durationChanged = examDraftTime !== null && examDraftDurationMin !== origDurationMin;
+            const timingChanged = timeChanged || durationChanged;
             const instrChanged = examDraftInstructorId !== origInstructorId;
             const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
             const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
-            const examDirty = timeChanged || instrChanged || noteChanged || studentsChanged;
-            // Durata REALE dell'esame (egEnd cade a start+1h solo se "da definire").
-            // Va preservata: un allievo aggiunto (o un cambio orario) deve tenere
-            // lo stesso [start,end] del gruppo, altrimenti finisce in un gruppo
-            // esame separato (chiave = start|end|istruttore) → esame fantasma.
-            const examDurationMs = egEnd.getTime() - egStart.getTime();
+            const examDirty = timingChanged || instrChanged || noteChanged || studentsChanged;
+            // endsAt = start + durata scelta. Preservare la durata è ciò che tiene
+            // insieme il gruppo esame (chiave = start|end|istruttore): un allievo
+            // aggiunto o un cambio orario mantengono lo stesso [start,end].
             const buildExamStart = () => {
               const base = new Date(egStart);
               if (examDraftTime) {
                 const [h, m] = examDraftTime.split(":").map(Number);
                 base.setHours(h, m, 0, 0);
-                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + examDurationMs).toISOString() as string | undefined };
+                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + examDraftDurationMin * 60000).toISOString() as string | undefined };
               }
               base.setHours(0, 0, 0, 0);
               return { startsAt: base.toISOString(), endsAt: undefined as string | undefined };
@@ -3481,7 +3565,7 @@ export function AutoscuoleAgendaPage({
                   .map((id) => studentToAppt.get(id))
                   .filter((x): x is string => Boolean(x));
                 if (keptApptIds.length) {
-                  if (timeChanged) {
+                  if (timingChanged) {
                     const r = await updateExamTime({ appointmentIds: keptApptIds, startsAt, endsAt });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
@@ -3505,7 +3589,8 @@ export function AutoscuoleAgendaPage({
             };
             return (
               <>
-                <div className="max-h-[88vh] overflow-y-auto rounded-[20px] p-7 pb-6">
+                <div className="flex max-h-[88vh] flex-col rounded-[20px]">
+                <div className="min-h-0 flex-1 overflow-y-auto p-7 pb-4">
                 {/* Header */}
                 <div className="flex items-center gap-2.5 pr-10">
                   <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">Esame</DialogTitle>
@@ -3531,6 +3616,15 @@ export function AutoscuoleAgendaPage({
                       onClear={examDraftTime ? () => setExamDraftTime(null) : undefined}
                     />
                   </div>
+
+                  {/* Durata / fine — solo se l'esame ha un orario */}
+                  {examDraftTime ? (
+                    <DurationField
+                      startTime={examDraftTime}
+                      durationMin={examDraftDurationMin}
+                      onDurationChange={setExamDraftDurationMin}
+                    />
+                  ) : null}
 
                   {/* Istruttore */}
                   <div>
@@ -3621,9 +3715,11 @@ export function AutoscuoleAgendaPage({
                       className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
                     />
                   </div>
+                </div>
+                </div>
 
-                  {/* Salva modifiche + Annulla esame */}
-                  <div className="mt-2 space-y-2">
+                {/* Footer pinnato: "Salva" sempre raggiungibile anche col dialog lungo */}
+                <div className="shrink-0 space-y-2 rounded-b-[20px] border-t border-[#f0f0f0] bg-white px-7 py-4">
                     <button
                       type="button"
                       disabled={!examDirty || examPanelPending}
@@ -3648,7 +3744,6 @@ export function AutoscuoleAgendaPage({
                     >
                       Annulla esame
                     </button>
-                  </div>
                 </div>
                 </div>
 
@@ -3875,15 +3970,11 @@ export function AutoscuoleAgendaPage({
             <InlineToggle checked={examForm.timeSet} size="sm" />
           </div>
           {examForm.timeSet && (
-            <div>
-              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
-              <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EXAM_SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+            <DurationField
+              startTime={examForm.time}
+              durationMin={parseInt(examForm.duration, 10) || 60}
+              onDurationChange={(m) => setExamForm((f) => ({ ...f, duration: String(m) }))}
+            />
           )}
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore accompagnatore</p>
@@ -4019,27 +4110,12 @@ export function AutoscuoleAgendaPage({
               <TimePickerInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
             </div>
           </div>
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { value: "15", label: "15 min" },
-                { value: "30", label: "30 min" },
-                { value: "45", label: "45 min" },
-                { value: "60", label: "1 ora" },
-                { value: "90", label: "1h 30m" },
-                { value: "120", label: "2 ore" },
-              ].map((o) => {
-                const active = blockForm.duration === o.value;
-                return (
-                  <button key={o.value} type="button" onClick={() => setBlockForm((f) => ({ ...f, duration: o.value }))}
-                    className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
-                    {o.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <DurationField
+            startTime={blockForm.startTime}
+            durationMin={parseInt(blockForm.duration, 10) || 60}
+            onDurationChange={(m) => setBlockForm((f) => ({ ...f, duration: String(m) }))}
+            chips={[15, 30, 45, 60, 90, 120]}
+          />
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
             <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
