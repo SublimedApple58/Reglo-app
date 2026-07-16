@@ -46,6 +46,7 @@ import {
   updateStudentGroupLessonOptIn,
   updateStudentPhone,
   updateAutoscuolaAppointmentDetails,
+  updateAutoscuolaAppointmentStatus,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -232,6 +233,16 @@ const EDITABLE_LESSON_TYPES = [
 ];
 // La valutazione è ammessa dal BE solo su guide effettuate.
 const RATEABLE_STATUSES = new Set(["checked_in", "completed", "no_show"]);
+
+// Esito derivato dallo stato (mirror EditAppointmentDialog): Presente = presente/
+// completata, Assente = no_show, altrimenti nessun esito (guida non effettuata).
+type Outcome = "checked_in" | "no_show" | null;
+const outcomeFromStatus = (status: string | null | undefined): Outcome => {
+  const s = (status ?? "").toLowerCase();
+  if (s === "checked_in" || s === "completed") return "checked_in";
+  if (s === "no_show") return "no_show";
+  return null;
+};
 
 const formatStatus = (value: string) =>
   STATUS_LABELS[value] ?? formatLabel(value);
@@ -581,6 +592,7 @@ export function AutoscuoleStudentsPage({
   const [noteDraft, setNoteDraft] = React.useState("");
   const [typesDraft, setTypesDraft] = React.useState<string[]>([]);
   const [ratingDraft, setRatingDraft] = React.useState<number | null>(null);
+  const [esitoDraft, setEsitoDraft] = React.useState<Outcome>(null);
   const [noteSaving, setNoteSaving] = React.useState<string | null>(null);
 
   // Quiz seats context (banner + AWAITING grant button)
@@ -759,28 +771,28 @@ export function AutoscuoleStudentsPage({
     (lesson.types?.length ? lesson.types : lesson.type ? [lesson.type] : []).filter((t) =>
       EDITABLE_LESSON_TYPES.includes(t),
     );
-  const startEditNote = (lesson: {
+  type EditableLesson = {
     id: string;
     notes?: string | null;
     types?: string[] | null;
     type?: string | null;
     rating?: number | null;
-  }) => {
+    status?: string | null;
+  };
+  const startEditNote = (lesson: EditableLesson) => {
     setNoteDraft(lesson.notes ?? "");
     setTypesDraft(lessonInitialTypes(lesson));
     setRatingDraft(lesson.rating ?? null);
+    setEsitoDraft(outcomeFromStatus(lesson.status));
     setEditingNoteId(lesson.id);
   };
   const toggleTypeDraft = (t: string) =>
     setTypesDraft((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
-  const saveNote = async (lesson: {
-    id: string;
-    notes?: string | null;
-    types?: string[] | null;
-    type?: string | null;
-    rating?: number | null;
-  }) => {
+  const saveNote = async (lesson: EditableLesson) => {
     if (noteSaving) return;
+    const currentOutcome = outcomeFromStatus(lesson.status);
+    const esitoChanged = esitoDraft !== currentOutcome;
+
     const payload: Parameters<typeof updateAutoscuolaAppointmentDetails>[0] = { appointmentId: lesson.id };
     const initialTypes = lessonInitialTypes(lesson);
     const typesChanged =
@@ -792,18 +804,37 @@ export function AutoscuoleStudentsPage({
     if (ratingDraft !== (lesson.rating ?? null)) payload.rating = ratingDraft;
     const trimmed = noteDraft.trim();
     if (trimmed !== (lesson.notes ?? "").trim()) payload.notes = trimmed;
-    if (Object.keys(payload).length === 1) {
+    const hasDetails = Object.keys(payload).length > 1;
+
+    if (!esitoChanged && !hasDetails) {
       setEditingNoteId(null); // niente da salvare
       return;
     }
 
     setNoteSaving(lesson.id);
-    const res = await updateAutoscuolaAppointmentDetails(payload);
-    setNoteSaving(null);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile salvare i dettagli." });
-      return;
+    // 1. Esito PRIMA dei dettagli, così la valutazione supera il controllo di
+    // stato del BE (rating solo su guide effettuate). Il BE fa past→completed e
+    // il riaccredito su no_show.
+    let newStatus = lesson.status ?? null;
+    if (esitoChanged && esitoDraft) {
+      const stRes = await updateAutoscuolaAppointmentStatus({ appointmentId: lesson.id, status: esitoDraft });
+      if (!stRes.success) {
+        setNoteSaving(null);
+        toast.error({ description: stRes.message ?? "Impossibile aggiornare l'esito." });
+        return;
+      }
+      newStatus = esitoDraft;
     }
+    // 2. Dettagli (tipo/valutazione/note).
+    if (hasDetails) {
+      const res = await updateAutoscuolaAppointmentDetails(payload);
+      if (!res.success) {
+        setNoteSaving(null);
+        toast.error({ description: res.message ?? "Impossibile salvare i dettagli." });
+        return;
+      }
+    }
+    setNoteSaving(null);
     setRegister((prev) =>
       prev
         ? {
@@ -812,6 +843,7 @@ export function AutoscuoleStudentsPage({
               l.id === lesson.id
                 ? {
                     ...l,
+                    status: newStatus ?? l.status,
                     notes: payload.notes !== undefined ? payload.notes || null : l.notes,
                     rating: payload.rating !== undefined ? payload.rating : l.rating,
                     ...(payload.lessonTypes
@@ -2011,6 +2043,14 @@ export function AutoscuoleStudentsPage({
           const isExam = lesson.type === "esame";
           const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
           const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
+          const lessonStatus = (lesson.status ?? "").toLowerCase();
+          // Esito impostabile su guide non annullate/proposte già iniziate (mirror
+          // del "correctable"): permette di segnare effettuata e quindi valutare.
+          const canSetOutcome =
+            lessonStatus !== "cancelled" &&
+            lessonStatus !== "proposal" &&
+            startDate.getTime() - 10 * 60 * 1000 <= Date.now();
+          const canRate = esitoDraft !== null || RATEABLE_STATUSES.has(lessonStatus);
           return (
             <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
               <div className="min-w-[56px] pt-0.5 text-[12px] font-medium text-[#929292]">
@@ -2087,7 +2127,34 @@ export function AutoscuoleStudentsPage({
                         </div>
                       </>
                     ) : null}
-                    {RATEABLE_STATUSES.has((lesson.status ?? "").toLowerCase()) ? (
+                    {canSetOutcome ? (
+                      <>
+                        <p className="mb-1.5 text-[12px] font-medium text-[#929292]">Esito</p>
+                        <div className="mb-3 grid grid-cols-2 gap-1.5 rounded-xl bg-[#f2f2f4] p-1">
+                          <button
+                            type="button"
+                            onClick={() => setEsitoDraft(esitoDraft === "checked_in" ? null : "checked_in")}
+                            className={cn(
+                              "cursor-pointer rounded-lg py-2 text-[13px] font-semibold transition-colors",
+                              esitoDraft === "checked_in" ? "bg-white text-emerald-700 shadow-sm" : "text-[#8a8a8f] hover:text-foreground",
+                            )}
+                          >
+                            Presente
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEsitoDraft(esitoDraft === "no_show" ? null : "no_show")}
+                            className={cn(
+                              "cursor-pointer rounded-lg py-2 text-[13px] font-semibold transition-colors",
+                              esitoDraft === "no_show" ? "bg-white text-red-700 shadow-sm" : "text-[#8a8a8f] hover:text-foreground",
+                            )}
+                          >
+                            Assente
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
+                    {canRate ? (
                       <>
                         <p className="mb-1 text-[12px] font-medium text-[#929292]">Valutazione</p>
                         <div className="mb-3 flex items-center gap-0.5">
