@@ -3562,6 +3562,55 @@ export async function createAutoscuolaAppointmentBatch(
   }
 }
 
+/**
+ * Owner-facing in-app notification (bell/inbox) created when a STUDENT cancels
+ * their own guide. Display fields are snapshotted so the notification stays
+ * readable even if the appointment/user is later removed. Best-effort: never
+ * block or fail the cancellation because of a notification write.
+ */
+async function createStudentCancellationNotification(params: {
+  companyId: string;
+  appointment: {
+    id: string;
+    studentId: string | null;
+    startsAt: Date;
+    instructorId: string | null;
+    type: string;
+    types?: string[];
+  };
+}) {
+  const { companyId, appointment } = params;
+  if (!appointment.studentId) return;
+  try {
+    const [student, instructor] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: appointment.studentId },
+        select: { name: true },
+      }),
+      appointment.instructorId
+        ? prisma.autoscuolaInstructor.findUnique({
+            where: { id: appointment.instructorId },
+            select: { name: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    await prisma.autoscuolaNotification.create({
+      data: {
+        companyId,
+        kind: "student_cancellation",
+        appointmentId: appointment.id,
+        studentId: appointment.studentId,
+        studentName: student?.name ?? null,
+        startsAt: appointment.startsAt,
+        instructorName: instructor?.name ?? null,
+        lessonType: appointment.types?.[0] ?? appointment.type ?? null,
+      },
+    });
+  } catch (error) {
+    console.error("createStudentCancellationNotification failed", error);
+  }
+}
+
 export async function cancelAutoscuolaAppointment(
   input: z.infer<typeof cancelAppointmentSchema>,
 ) {
@@ -3675,6 +3724,26 @@ export async function cancelAutoscuolaAppointment(
       cancellationKind: "manual_cancel",
       actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
     });
+    }
+
+    // Notify the autoscuola owner (bell/inbox) when a STUDENT cancels their own
+    // upcoming guide. Staff/owner cancellations and exams are excluded; group
+    // lessons take a different path earlier. Off the request's critical path.
+    const isStudentActor =
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole);
+    if (
+      isStudentActor &&
+      appointment.type !== "esame" &&
+      appointment.startsAt.getTime() > Date.now()
+    ) {
+      after(() =>
+        createStudentCancellationNotification({
+          companyId: membership.companyId,
+          appointment,
+        }),
+      );
     }
 
     if (appointment.slotId) {

@@ -39,6 +39,7 @@ import {
   type NovitaEntryKey,
 } from "@/components/Layout/NovitaDialog";
 import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
+import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
@@ -148,6 +149,8 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
           {/* Avatar sede + hamburger */}
           <div className="flex items-center justify-end gap-2.5">
+            {/* Campanella notifiche titolare (annullamenti allievi) */}
+            {serviceActive && <OwnerNotificationsBell />}
             {/* Avatar → switcher autoscuola */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

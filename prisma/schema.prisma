@@ -234,6 +234,7 @@ model Company {
   pushDevices                          MobilePushDevice[]
   autoscuolaHolidays                   AutoscuolaHoliday[]
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  autoscuolaNotifications              AutoscuolaNotification[]
   quizSessions                         QuizSession[]
   autoscuolaLocations                  AutoscuolaLocation[]
   supportThread                        SupportThread?
@@ -241,6 +242,31 @@ model Company {
   documents                            CompanyDocument[]
   plan                                 CompanyPlan?
   licensePurchases                     CompanyLicensePurchase[]
+}
+
+/// In-app notifications shown to the autoscuola owner in the web bell/inbox.
+/// v1 populated by student lesson cancellations. Read state is per-company
+/// (`readAt`), extensible to other `kind`s. Display fields are snapshotted so a
+/// notification survives even if the source appointment/user is later removed;
+/// `appointmentId`/`studentId` are kept nullable as optional refs.
+model AutoscuolaNotification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String    @db.Uuid
+  kind           String    @default("student_cancellation")
+  appointmentId  String?   @db.Uuid
+  studentId      String?   @db.Uuid
+  /// Snapshot for stable rendering (names/times as they were at creation).
+  studentName    String?
+  startsAt       DateTime? @db.Timestamp(6)
+  instructorName String?
+  lessonType     String?
+  readAt         DateTime? @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, readAt])
 }
 
 model CompanyService {
