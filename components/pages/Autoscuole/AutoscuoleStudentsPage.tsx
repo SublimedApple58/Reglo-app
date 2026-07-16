@@ -220,6 +220,19 @@ const formatLabel = (value: string) =>
 const formatLessonType = (value: string) =>
   LESSON_TYPE_LABELS[value] ?? formatLabel(value);
 
+// Attività selezionabili come "tipo di guida effettuata" (no guida/esame/gruppo).
+const EDITABLE_LESSON_TYPES = [
+  "manovre",
+  "urbano",
+  "extraurbano",
+  "notturna",
+  "autostrada",
+  "parcheggio",
+  "altro",
+];
+// La valutazione è ammessa dal BE solo su guide effettuate.
+const RATEABLE_STATUSES = new Set(["checked_in", "completed", "no_show"]);
+
 const formatStatus = (value: string) =>
   STATUS_LABELS[value] ?? formatLabel(value);
 
@@ -562,9 +575,12 @@ export function AutoscuoleStudentsPage({
   const [phoneDraft, setPhoneDraft] = React.useState("");
   const [phoneSaving, setPhoneSaving] = React.useState(false);
 
-  // Inline edit delle note di una guida dallo storico (tab Note)
+  // Inline edit dei dettagli di una guida dallo storico (tab Note): tipo,
+  // valutazione e note insieme.
   const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
+  const [typesDraft, setTypesDraft] = React.useState<string[]>([]);
+  const [ratingDraft, setRatingDraft] = React.useState<number | null>(null);
   const [noteSaving, setNoteSaving] = React.useState<string | null>(null);
 
   // Quiz seats context (banner + AWAITING grant button)
@@ -738,31 +754,77 @@ export function AutoscuoleStudentsPage({
     void load();
   };
 
-  // Note di una guida modificabili direttamente dallo storico (tab Note).
-  const startEditNote = (lessonId: string, current: string | null | undefined) => {
-    setNoteDraft(current ?? "");
-    setEditingNoteId(lessonId);
+  // Dettagli di una guida (tipo/valutazione/note) modificabili dallo storico.
+  const lessonInitialTypes = (lesson: { types?: string[] | null; type?: string | null }) =>
+    (lesson.types?.length ? lesson.types : lesson.type ? [lesson.type] : []).filter((t) =>
+      EDITABLE_LESSON_TYPES.includes(t),
+    );
+  const startEditNote = (lesson: {
+    id: string;
+    notes?: string | null;
+    types?: string[] | null;
+    type?: string | null;
+    rating?: number | null;
+  }) => {
+    setNoteDraft(lesson.notes ?? "");
+    setTypesDraft(lessonInitialTypes(lesson));
+    setRatingDraft(lesson.rating ?? null);
+    setEditingNoteId(lesson.id);
   };
-  const saveNote = async (lessonId: string) => {
+  const toggleTypeDraft = (t: string) =>
+    setTypesDraft((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+  const saveNote = async (lesson: {
+    id: string;
+    notes?: string | null;
+    types?: string[] | null;
+    type?: string | null;
+    rating?: number | null;
+  }) => {
     if (noteSaving) return;
-    setNoteSaving(lessonId);
-    const res = await updateAutoscuolaAppointmentDetails({
-      appointmentId: lessonId,
-      notes: noteDraft.trim(),
-    });
-    setNoteSaving(null);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile salvare la nota." });
+    const payload: Parameters<typeof updateAutoscuolaAppointmentDetails>[0] = { appointmentId: lesson.id };
+    const initialTypes = lessonInitialTypes(lesson);
+    const typesChanged =
+      JSON.stringify([...typesDraft].sort()) !== JSON.stringify([...initialTypes].sort());
+    if (typesDraft.length && typesChanged) {
+      payload.lessonTypes = typesDraft;
+      payload.lessonType = typesDraft[0];
+    }
+    if (ratingDraft !== (lesson.rating ?? null)) payload.rating = ratingDraft;
+    const trimmed = noteDraft.trim();
+    if (trimmed !== (lesson.notes ?? "").trim()) payload.notes = trimmed;
+    if (Object.keys(payload).length === 1) {
+      setEditingNoteId(null); // niente da salvare
       return;
     }
-    const saved = noteDraft.trim() || null;
+
+    setNoteSaving(lesson.id);
+    const res = await updateAutoscuolaAppointmentDetails(payload);
+    setNoteSaving(null);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile salvare i dettagli." });
+      return;
+    }
     setRegister((prev) =>
       prev
-        ? { ...prev, lessons: prev.lessons.map((l) => (l.id === lessonId ? { ...l, notes: saved } : l)) }
+        ? {
+            ...prev,
+            lessons: prev.lessons.map((l) =>
+              l.id === lesson.id
+                ? {
+                    ...l,
+                    notes: payload.notes !== undefined ? payload.notes || null : l.notes,
+                    rating: payload.rating !== undefined ? payload.rating : l.rating,
+                    ...(payload.lessonTypes
+                      ? { types: payload.lessonTypes, type: payload.lessonTypes[0] }
+                      : {}),
+                  }
+                : l,
+            ),
+          }
         : prev,
     );
     setEditingNoteId(null);
-    toast.success({ description: "Nota salvata." });
+    toast.success({ description: "Dettagli salvati." });
   };
 
   const openStudentDetail = React.useCallback(
@@ -1999,13 +2061,56 @@ export function AutoscuoleStudentsPage({
                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                 </p>
                 {editingNoteId === lesson.id ? (
-                  <div>
+                  <div className="rounded-xl border border-[#ececec] bg-[#fafafa] p-3">
+                    {!lesson.group && !isExam ? (
+                      <>
+                        <p className="mb-1.5 text-[12px] font-medium text-[#929292]">Tipo di guida</p>
+                        <div className="mb-3 flex flex-wrap gap-1.5">
+                          {EDITABLE_LESSON_TYPES.map((t) => {
+                            const active = typesDraft.includes(t);
+                            return (
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => toggleTypeDraft(t)}
+                                className={cn(
+                                  "cursor-pointer rounded-full px-3 py-1 text-[12.5px] font-medium transition-colors",
+                                  active
+                                    ? "bg-[#1a1a2e] text-white"
+                                    : "bg-white text-[#6a6a6a] ring-1 ring-[#e2e2e6] hover:bg-[#f2f2f4]",
+                                )}
+                              >
+                                {formatLessonType(t)}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : null}
+                    {RATEABLE_STATUSES.has((lesson.status ?? "").toLowerCase()) ? (
+                      <>
+                        <p className="mb-1 text-[12px] font-medium text-[#929292]">Valutazione</p>
+                        <div className="mb-3 flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              aria-label={`${star} stell${star === 1 ? "a" : "e"}`}
+                              onClick={() => setRatingDraft(star === ratingDraft ? null : star)}
+                              className="cursor-pointer p-0.5 text-[20px] leading-none transition-transform hover:scale-110"
+                            >
+                              <span className={star <= (ratingDraft ?? 0) ? "text-yellow-400" : "text-[#d7dbe2]"}>★</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                    <p className="mb-1 text-[12px] font-medium text-[#929292]">Note</p>
                     <textarea
                       autoFocus
                       value={noteDraft}
                       onChange={(e) => setNoteDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveNote(lesson.id);
                         if (e.key === "Escape") setEditingNoteId(null);
                       }}
                       placeholder="Aggiungi note operative o osservazioni."
@@ -2013,8 +2118,8 @@ export function AutoscuoleStudentsPage({
                       rows={3}
                       className="w-full resize-none rounded-lg border border-[#e2e2e6] bg-white px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
                     />
-                    <div className="mt-1.5 flex items-center gap-3">
-                      <button type="button" className={blueLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson.id)}>
+                    <div className="mt-2 flex items-center gap-3">
+                      <button type="button" className={blueLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson)}>
                         {noteSaving === lesson.id ? "Salvo…" : "Salva"}
                       </button>
                       <button
@@ -2040,9 +2145,9 @@ export function AutoscuoleStudentsPage({
                     <button
                       type="button"
                       className={cn(blueLinkClass, "shrink-0")}
-                      onClick={() => startEditNote(lesson.id, lesson.notes)}
+                      onClick={() => startEditNote(lesson)}
                     >
-                      {hasNote ? "Modifica" : "Aggiungi nota"}
+                      {hasNote ? "Modifica" : "Aggiungi"}
                     </button>
                   </div>
                 )}

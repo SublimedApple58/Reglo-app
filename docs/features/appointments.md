@@ -31,6 +31,11 @@ Il web `EditAppointmentDialog` ora ha gli stessi controlli della "Gestisci guida
 - **Tipo guida multi** ("cosa si è fatto"): chip multi delle 7 attività (`manovre/urbano/extraurbano/notturna/autostrada/parcheggio/altro`, come mobile `lessonTypes.ts`; NO guida/esame) al posto del vecchio select singolo. Salva `lessonTypes[]` (BE scrive anche `type = primo`); selezione vuota = nessun invio (non si azzera il tipo base).
 - **Ordine salvataggio** in `handleSubmit`: reschedule → esito → dettagli(tipi/rating/note/…). `handleOpenEdit` ora passa `types`+`rating` al dialog (prima scartati). `EditAppointmentDialogAppointment` esteso con `types?`/`rating?`.
 
+## Modifica dettagli guida dallo storico allievo (2026-07-16)
+Oltre che dal blocco agenda / foglio "Gestisci guida", **tipo guida + valutazione + note** di una guida si modificano ora anche dalla **sezione Allievi → dettaglio → storico guide**, sia web che mobile — stesso canale `updateAutoscuolaAppointmentDetails` (`lessonTypes`/`lessonType`, `rating`, `notes`; si inviano solo i campi cambiati). Permessi invariati: owner tutte le guide, istruttore solo le proprie (guardia BE "Puoi modificare solo le tue guide"). La valutazione è mostrata/editabile solo su guide **effettuate** (`checked_in`/`completed`/`no_show`); il tipo non compare per esami/guide di gruppo.
+- **Web**: editor inline nel tab **Note** del pannello allievo (`AutoscuoleStudentsPage`, `renderPanelNotes`): chip tipo + stelle + textarea.
+- **Mobile**: la riga dello storico (`StudentNotesDetailScreen`) apre il foglio `manage-lesson-details` (seed minimale su `manageLessonStore`), registrato anche nello stack `notes`. Vedi `reglo-mobile/docs/features/notes.md`.
+
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson
 - `createAutoscuolaAppointmentBatch()` — batch (exams)
