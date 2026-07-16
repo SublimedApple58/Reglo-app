@@ -2514,7 +2514,18 @@ export function AutoscuoleAgendaPage({
                                   <div className="font-bold text-[10px] text-violet-700 flex items-center gap-0.5">
                                     <GraduationCap className="size-2.5 shrink-0" /> Esame
                                   </div>
-                                  <div className="text-[8px] text-violet-500 truncate">{eg.appointments.length} all. · {formatTimeRange(egStart, egEnd)}</div>
+                                  <div className="text-[8px] text-violet-500 truncate">{formatTimeRange(egStart, egEnd)}</div>
+                                  <div className="mt-0.5 flex flex-col gap-px">
+                                    {eg.appointments.map((a) => {
+                                      const lic = studentLicenseById.get(a.student.id);
+                                      return (
+                                        <div key={a.id} className="truncate text-[9px] font-semibold leading-tight text-violet-900/85">
+                                          {a.student.firstName} {a.student.lastName}
+                                          {lic ? <span className="font-medium text-violet-500"> · {lic}</span> : null}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               </button>
                             );
@@ -3555,7 +3566,14 @@ export function AutoscuoleAgendaPage({
                             <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
                               {examStudentInitials(s.firstName, s.lastName)}
                             </span>
-                            <span className="min-w-0 truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                              {s.licenseCategory ? (
+                                <span className="truncate text-[12px] font-medium text-[#929292]">
+                                  Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                </span>
+                              ) : null}
+                            </span>
                           </span>
                           <button
                             type="button"
@@ -3683,7 +3701,14 @@ export function AutoscuoleAgendaPage({
                                 <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
                                   {examStudentInitials(s.firstName, s.lastName)}
                                 </span>
-                                <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                  {s.licenseCategory ? (
+                                    <span className="truncate text-[11.5px] font-medium text-[#929292]">
+                                      Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                    </span>
+                                  ) : null}
+                                </span>
                               </span>
                               <button
                                 type="button"
