@@ -477,11 +477,6 @@
   transform-origin: 50% 20%;
   animation: megaphone-bell 0.85s ease-out 1;
 }
-@media (prefers-reduced-motion: reduce) {
-  .megaphone-ring {
-    animation: none;
-  }
-}
 
 /* Agenda a schermo intero: quando la griglia è in modalità fullscreen scaliamo
    il testo dei blocchi insieme allo zoom verticale (--agenda-fs-scale = fattore

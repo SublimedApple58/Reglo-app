@@ -18,11 +18,6 @@ import { cn } from "@/lib/utils";
  * lo si può avvisare da qui.
  */
 
-// Appuntamenti già "squillati" in questo caricamento pagina: evita che il badge
-// ri-squilli navigando avanti/indietro; il primo mount di ciascuno squilla una
-// volta ("quando apro l'agenda"). L'hover ri-squilla sempre.
-const rungAppointments = new Set<string>();
-
 function normalizeItalianWaNumber(phone: string): string | null {
   const digits = phone.replace(/\D/g, "");
   if (!digits) return null;
@@ -80,13 +75,11 @@ function WhatsAppGlyph() {
 }
 
 export function NeverAccessedNudge({
-  appointmentId,
   studentFirstName,
   phone,
   startsAt,
   size = 20,
 }: {
-  appointmentId: string;
   studentFirstName: string;
   phone?: string | null;
   startsAt?: string | Date | null;
@@ -106,13 +99,13 @@ export function NeverAccessedNudge({
     el.classList.add("megaphone-ring");
   }, []);
 
-  // Squillo d'apertura: una volta sola per appuntamento in questo caricamento.
+  // Squillo quando il badge appare (apertura agenda / navigazione). I blocchi
+  // hanno key stabile (id appuntamento) → i refresh silenziosi non rimontano il
+  // componente, quindi niente re-squillo a raffica. L'hover ri-squilla sempre.
   React.useEffect(() => {
-    if (rungAppointments.has(appointmentId)) return;
-    rungAppointments.add(appointmentId);
     const t = setTimeout(ring, 120);
     return () => clearTimeout(t);
-  }, [appointmentId, ring]);
+  }, [ring]);
 
   const clearClose = () => {
     if (closeTimer.current) {

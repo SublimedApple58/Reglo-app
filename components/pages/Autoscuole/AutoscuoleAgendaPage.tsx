@@ -2584,7 +2584,6 @@ export function AutoscuoleAgendaPage({
                             {neverAccessedFor(item) ? (
                               <div className="absolute z-30" style={{ top: Math.max(0, top - 4), right: 2 }}>
                                 <NeverAccessedNudge
-                                  appointmentId={item.id}
                                   studentFirstName={item.student.firstName}
                                   phone={phoneById.get(item.student.id) ?? null}
                                   startsAt={item.startsAt}
@@ -3010,7 +3009,6 @@ export function AutoscuoleAgendaPage({
                         {neverAccessedFor(item) ? (
                           <div className="absolute z-30" style={{ top: Math.max(0, top - 5), right: 3 }}>
                             <NeverAccessedNudge
-                              appointmentId={item.id}
                               studentFirstName={item.student.firstName}
                               phone={phoneById.get(item.student.id) ?? null}
                               startsAt={item.startsAt}
