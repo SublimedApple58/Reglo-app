@@ -45,6 +45,7 @@ import {
   setManualPaymentStatus,
   updateStudentGroupLessonOptIn,
   updateStudentPhone,
+  updateAutoscuolaAppointmentDetails,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -561,6 +562,11 @@ export function AutoscuoleStudentsPage({
   const [phoneDraft, setPhoneDraft] = React.useState("");
   const [phoneSaving, setPhoneSaving] = React.useState(false);
 
+  // Inline edit delle note di una guida dallo storico (tab Note)
+  const [editingNoteId, setEditingNoteId] = React.useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = React.useState("");
+  const [noteSaving, setNoteSaving] = React.useState<string | null>(null);
+
   // Quiz seats context (banner + AWAITING grant button)
   type QuizCtx = {
     quizSeats: number;
@@ -708,6 +714,7 @@ export function AutoscuoleStudentsPage({
 
   React.useEffect(() => {
     setEditingPhone(false);
+    setEditingNoteId(null);
   }, [selectedStudentId]);
 
   const startEditPhone = () => {
@@ -729,6 +736,33 @@ export function AutoscuoleStudentsPage({
     toast.success({ description: res.message ?? "Numero aggiornato." });
     // Aggiorna la lista (indicatore "mai in app" / telefono) senza flicker.
     void load();
+  };
+
+  // Note di una guida modificabili direttamente dallo storico (tab Note).
+  const startEditNote = (lessonId: string, current: string | null | undefined) => {
+    setNoteDraft(current ?? "");
+    setEditingNoteId(lessonId);
+  };
+  const saveNote = async (lessonId: string) => {
+    if (noteSaving) return;
+    setNoteSaving(lessonId);
+    const res = await updateAutoscuolaAppointmentDetails({
+      appointmentId: lessonId,
+      notes: noteDraft.trim(),
+    });
+    setNoteSaving(null);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile salvare la nota." });
+      return;
+    }
+    const saved = noteDraft.trim() || null;
+    setRegister((prev) =>
+      prev
+        ? { ...prev, lessons: prev.lessons.map((l) => (l.id === lessonId ? { ...l, notes: saved } : l)) }
+        : prev,
+    );
+    setEditingNoteId(null);
+    toast.success({ description: "Nota salvata." });
   };
 
   const openStudentDetail = React.useCallback(
@@ -1964,14 +1998,54 @@ export function AutoscuoleStudentsPage({
                 <p className="mb-1.5 text-[13px] font-medium text-[#6a6a6a]">
                   {lesson.instructorName || "Istruttore n/d"} · {lesson.vehicleName || "Veicolo n/d"}
                 </p>
-                <p
-                  className={cn(
-                    "text-[13px] leading-relaxed",
-                    hasNote ? "font-medium text-foreground" : "font-medium italic text-[#929292]",
-                  )}
-                >
-                  {lesson.notes?.trim() || "Nessuna nota"}
-                </p>
+                {editingNoteId === lesson.id ? (
+                  <div>
+                    <textarea
+                      autoFocus
+                      value={noteDraft}
+                      onChange={(e) => setNoteDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void saveNote(lesson.id);
+                        if (e.key === "Escape") setEditingNoteId(null);
+                      }}
+                      placeholder="Aggiungi note operative o osservazioni."
+                      disabled={noteSaving === lesson.id}
+                      rows={3}
+                      className="w-full resize-none rounded-lg border border-[#e2e2e6] bg-white px-3 py-2 text-[13px] leading-relaxed text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
+                    />
+                    <div className="mt-1.5 flex items-center gap-3">
+                      <button type="button" className={blueLinkClass} disabled={noteSaving === lesson.id} onClick={() => void saveNote(lesson.id)}>
+                        {noteSaving === lesson.id ? "Salvo…" : "Salva"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[13px] font-medium text-[#929292] hover:text-foreground disabled:opacity-60"
+                        disabled={noteSaving === lesson.id}
+                        onClick={() => setEditingNoteId(null)}
+                      >
+                        Annulla
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-2">
+                    <p
+                      className={cn(
+                        "flex-1 text-[13px] leading-relaxed",
+                        hasNote ? "font-medium text-foreground" : "font-medium italic text-[#929292]",
+                      )}
+                    >
+                      {lesson.notes?.trim() || "Nessuna nota"}
+                    </p>
+                    <button
+                      type="button"
+                      className={cn(blueLinkClass, "shrink-0")}
+                      onClick={() => startEditNote(lesson.id, lesson.notes)}
+                    >
+                      {hasNote ? "Modifica" : "Aggiungi nota"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );
