@@ -127,6 +127,10 @@ export async function POST(request: Request) {
               status: { in: activeStatuses },
               startsAt: { lt: endsAt },
               endsAt: { gt: startsAt },
+              // Exclude THIS exam's own rows (same slot+instructor): adding a
+              // student to an exam the instructor already accompanies — incl. an
+              // empty exam's placeholder — is not a real conflict.
+              NOT: { type: "esame", instructorId: resolvedInstructorId, startsAt, endsAt },
             },
             select: { id: true },
           });
