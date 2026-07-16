@@ -20,6 +20,11 @@ Segnala al titolare (web) gli **allievi con account creato da lui ma mai usato**
 - **Animazione** — `assets/styles/globals.css`: `@keyframes megaphone-bell` + `.megaphone-ring` (squillo one-shot) con guardia `@media (prefers-reduced-motion: reduce)` → chi ha "Riduci movimento" attivo vede l'icona **ferma** (comunque presente/cliccabile).
 - **Asset** — `public/images/3d/megafono-3d.png` (📢 Fluent 3D) e `no-phone-3d.png` (📵 Fluent 3D), Microsoft Fluent Emoji (MIT), 256×256.
 
+## Modifica/aggiunta telefono allievo (2026-07-16)
+Il titolare può **aggiungere/modificare/cancellare** il numero dell'allievo dal pannello dettaglio (tab Riepilogo → Anagrafica → Telefono, link "Aggiungi"/"Modifica", inline-edit). Serve proprio per popolare il numero degli allievi senza app, così il nudge WhatsApp diventa azionabile.
+- **Backend**: `updateStudentPhone({ studentId, phone })` in `autoscuole.actions.ts` — gate `canManageStudentCredits`; verifica che lo studentId sia uno `STUDENT` della company (il telefono è su `User`, globale) e poi `user.update({ phone })`. Stringa vuota = `null` (cancella); validazione formato `^[+()\-\s\d]{5,25}$`.
+- **Web**: inline-edit nel `AutoscuoleStudentsPage` (Anagrafica) → aggiorna `register` locale col valore confermato dal BE + `load()` per rinfrescare lista/indicatore. Nessun optimistic update.
+
 ## Note
 - **Solo guide individuali**: le guide di gruppo hanno più allievi → nessun singolo destinatario, niente badge.
 - **Cache**: il flag entra nel payload bootstrap agenda già in cache Redis (20s) → quando un allievo accede, il badge sparisce entro ~20s.

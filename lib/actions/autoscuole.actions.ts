@@ -6972,6 +6972,14 @@ const updateStudentLicensePathSchema = z.object({
   transmission: z.enum(TRANSMISSIONS),
 });
 
+// Il titolare può aggiungere/modificare/cancellare il numero dell'allievo
+// (utile quando l'account è stato creato da lui e non ha ancora l'app → così
+// può avvisarlo su WhatsApp). Stringa vuota = cancella (→ null).
+const updateStudentPhoneSchema = z.object({
+  studentId: z.string().uuid(),
+  phone: z.string().max(30),
+});
+
 export async function toggleStudentBookingBlock(
   input: z.infer<typeof toggleStudentBookingBlockSchema>,
 ) {
@@ -7223,6 +7231,52 @@ export async function updateStudentLicensePath(
         transmission: payload.transmission,
       },
       message: "Percorso patente aggiornato.",
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+export async function updateStudentPhone(
+  input: z.infer<typeof updateStudentPhoneSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = updateStudentPhoneSchema.parse(input);
+
+    // Il telefono è su User (globale), non su CompanyMember: prima verifica che
+    // l'allievo sia davvero uno STUDENT di questa company, così non si può
+    // toccare l'utenza di chiunque tramite il suo id.
+    const member = await prisma.companyMember.findFirst({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      select: { userId: true },
+    });
+    if (!member) {
+      return { success: false, message: "Allievo non valido per questa company." };
+    }
+
+    const trimmed = payload.phone.trim();
+    if (trimmed && !/^[+()\-\s\d]{5,25}$/.test(trimmed)) {
+      return { success: false, message: "Numero di telefono non valido." };
+    }
+    const phone = trimmed || null;
+
+    await prisma.user.update({
+      where: { id: payload.studentId },
+      data: { phone },
+    });
+
+    return {
+      success: true,
+      data: { phone },
+      message: phone ? "Numero aggiornato." : "Numero rimosso.",
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

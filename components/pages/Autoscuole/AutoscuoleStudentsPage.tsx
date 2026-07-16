@@ -44,6 +44,7 @@ import {
   setExamPriorityOverride,
   setManualPaymentStatus,
   updateStudentGroupLessonOptIn,
+  updateStudentPhone,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -555,6 +556,11 @@ export function AutoscuoleStudentsPage({
   const [phaseDialogOpen, setPhaseDialogOpen] = React.useState(false);
   const [licenseDialogOpen, setLicenseDialogOpen] = React.useState(false);
 
+  // Inline edit del telefono allievo (Anagrafica)
+  const [editingPhone, setEditingPhone] = React.useState(false);
+  const [phoneDraft, setPhoneDraft] = React.useState("");
+  const [phoneSaving, setPhoneSaving] = React.useState(false);
+
   // Quiz seats context (banner + AWAITING grant button)
   type QuizCtx = {
     quizSeats: number;
@@ -699,6 +705,31 @@ export function AutoscuoleStudentsPage({
     },
     [toast],
   );
+
+  React.useEffect(() => {
+    setEditingPhone(false);
+  }, [selectedStudentId]);
+
+  const startEditPhone = () => {
+    setPhoneDraft(register?.student.phone ?? "");
+    setEditingPhone(true);
+  };
+  const saveStudentPhone = async () => {
+    if (!register || phoneSaving) return;
+    setPhoneSaving(true);
+    const res = await updateStudentPhone({ studentId: register.student.id, phone: phoneDraft });
+    setPhoneSaving(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile aggiornare il numero." });
+      return;
+    }
+    const newPhone = res.data?.phone ?? null;
+    setRegister((prev) => (prev ? { ...prev, student: { ...prev.student, phone: newPhone } } : prev));
+    setEditingPhone(false);
+    toast.success({ description: res.message ?? "Numero aggiornato." });
+    // Aggiorna la lista (indicatore "mai in app" / telefono) senza flicker.
+    void load();
+  };
 
   const openStudentDetail = React.useCallback(
     (studentId: string) => {
@@ -1174,7 +1205,41 @@ export function AutoscuoleStudentsPage({
             </div>
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Telefono</p>
-              <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
+              {editingPhone ? (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="tel"
+                    autoFocus
+                    value={phoneDraft}
+                    onChange={(e) => setPhoneDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void saveStudentPhone();
+                      if (e.key === "Escape") setEditingPhone(false);
+                    }}
+                    placeholder="+39 333 123 4567"
+                    disabled={phoneSaving}
+                    className="w-full max-w-[170px] rounded-lg border border-[#e2e2e6] bg-white px-2.5 py-1.5 text-sm font-medium text-foreground outline-none focus:border-foreground/40 disabled:opacity-60"
+                  />
+                  <button type="button" className={blueLinkClass} disabled={phoneSaving} onClick={() => void saveStudentPhone()}>
+                    {phoneSaving ? "…" : "Salva"}
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[13px] font-medium text-[#929292] hover:text-foreground disabled:opacity-60"
+                    disabled={phoneSaving}
+                    onClick={() => setEditingPhone(false)}
+                  >
+                    Annulla
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-foreground">{register.student.phone || "—"}</p>
+                  <button type="button" className={blueLinkClass} onClick={startEditPhone}>
+                    {register.student.phone ? "Modifica" : "Aggiungi"}
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Case attiva</p>
