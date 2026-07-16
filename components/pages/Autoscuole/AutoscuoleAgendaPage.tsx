@@ -3432,12 +3432,17 @@ export function AutoscuoleAgendaPage({
             const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
             const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
             const examDirty = timeChanged || instrChanged || noteChanged || studentsChanged;
+            // Durata REALE dell'esame (egEnd cade a start+1h solo se "da definire").
+            // Va preservata: un allievo aggiunto (o un cambio orario) deve tenere
+            // lo stesso [start,end] del gruppo, altrimenti finisce in un gruppo
+            // esame separato (chiave = start|end|istruttore) → esame fantasma.
+            const examDurationMs = egEnd.getTime() - egStart.getTime();
             const buildExamStart = () => {
               const base = new Date(egStart);
               if (examDraftTime) {
                 const [h, m] = examDraftTime.split(":").map(Number);
                 base.setHours(h, m, 0, 0);
-                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + 60 * 60 * 1000).toISOString() as string | undefined };
+                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + examDurationMs).toISOString() as string | undefined };
               }
               base.setHours(0, 0, 0, 0);
               return { startsAt: base.toISOString(), endsAt: undefined as string | undefined };
