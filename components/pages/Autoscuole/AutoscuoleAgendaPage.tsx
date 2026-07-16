@@ -3782,7 +3782,14 @@ export function AutoscuoleAgendaPage({
                         <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
                           {examStudentInitials(st.firstName, st.lastName)}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                          {st.licenseCategory ? (
+                            <span className="truncate text-[11.5px] font-medium text-[#929292]">
+                              Patente {st.licenseCategory}{st.transmission === "automatic" ? " · autom." : ""}
+                            </span>
+                          ) : null}
+                        </span>
                       </span>
                       <button
                         type="button"
@@ -3910,6 +3917,9 @@ export function AutoscuoleAgendaPage({
                       className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#222222] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
                     >
                       {s.firstName} {s.lastName}
+                      {s.licenseCategory ? (
+                        <span className="font-medium text-[#929292]">· {s.licenseCategory}{s.transmission === "automatic" ? " aut." : ""}</span>
+                      ) : null}
                       <span className="text-[#929292]">&times;</span>
                     </button>
                   );
