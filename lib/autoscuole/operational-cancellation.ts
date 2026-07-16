@@ -91,7 +91,8 @@ const releaseSlotsForAppointment = async (
   appointment: {
     id: string;
     companyId: string;
-    studentId: string;
+    // Null only for studentless exam placeholders — no student slot to release.
+    studentId: string | null;
     instructorId: string | null;
     vehicleId: string | null;
     startsAt: Date;
@@ -99,7 +100,9 @@ const releaseSlotsForAppointment = async (
   },
 ) => {
   const rangeEnd = getAppointmentEnd(appointment);
-  const ownerFilters = [{ ownerType: "student", ownerId: appointment.studentId }];
+  const ownerFilters = appointment.studentId
+    ? [{ ownerType: "student", ownerId: appointment.studentId }]
+    : [];
   if (appointment.instructorId) {
     ownerFilters.push({ ownerType: "instructor", ownerId: appointment.instructorId });
   }
@@ -136,11 +139,13 @@ const notifyOperationalCancellation = async ({
   instructorId,
 }: {
   companyId: string;
-  studentId: string;
+  // Null only for studentless exam placeholders — nobody to notify.
+  studentId: string | null;
   startsAt: Date;
   reason: string;
   instructorId?: string | null;
 }) => {
+  if (!studentId) return;
   const [studentUser, instructor] = await Promise.all([
     defaultPrisma.user.findUnique({
       where: { id: studentId },

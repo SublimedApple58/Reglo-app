@@ -1046,7 +1046,9 @@ export async function applyLessonCreditToExistingAppointment({
   const credit = await consumeLessonCreditIfAvailable({
     prisma,
     companyId: appointment.companyId,
-    studentId: appointment.studentId,
+    // Non-null: the `type === "esame"` guard above already excluded studentless
+    // exam placeholders.
+    studentId: appointment.studentId!,
     appointmentId,
     actorUserId,
   });
@@ -1251,7 +1253,9 @@ export async function refundLessonCreditIfEligible({
     const adjustment = await adjustStudentLessonCredits({
       prisma: tx as never,
       companyId: appointment.companyId,
-      studentId: appointment.studentId,
+      // Non-null: refunds only run on credit-applied lessons; studentless exam
+      // placeholders never consume a credit.
+      studentId: appointment.studentId!,
       delta: 1,
       reason: "cancel_refund",
       actorUserId: actorUserId ?? null,
@@ -1679,7 +1683,9 @@ const queueAndAttemptPhasePayment = async ({
   appointment: {
     id: string;
     companyId: string;
-    studentId: string;
+    // Null only for studentless exam placeholders, which always have
+    // paymentRequired = false and bail at the guard below before studentId is used.
+    studentId: string | null;
     paymentRequired: boolean;
   };
   phase: "penalty" | "settlement";
@@ -1713,7 +1719,9 @@ const queueAndAttemptPhasePayment = async ({
       data: {
         appointmentId: appointment.id,
         companyId: appointment.companyId,
-        studentId: appointment.studentId,
+        // Non-null: only reached when paymentRequired is true, which excludes
+        // studentless exam placeholders.
+        studentId: appointment.studentId!,
         phase,
         amount,
         currency: "EUR",
@@ -2170,6 +2178,10 @@ export async function processAutoscuolaInvoiceFinalization({
 
   let issued = 0;
   for (const appointment of appointments) {
+    // Studentless exam placeholders never require payment/invoicing.
+    if (!appointment.studentId || !appointment.student) {
+      continue;
+    }
     if (!isFinalizable(appointment, now)) {
       continue;
     }
@@ -2208,7 +2220,9 @@ export async function processAutoscuolaInvoiceFinalization({
       });
       const invoiceId = await createFicInvoiceForAppointment({
         prisma,
-        appointment,
+        // studentId/student are non-null past the placeholder guard above; restate
+        // them so the narrowed (non-null) types flow through the spread.
+        appointment: { ...appointment, studentId: appointment.studentId, student: appointment.student },
         finalAmountCents,
         config,
       });
@@ -2521,6 +2535,10 @@ export async function getMobileAppointmentPaymentDocument({
 
   if (!appointment) {
     throw new Error("Pagamento non trovato.");
+  }
+  // Studentless exam placeholders never carry payments/receipts.
+  if (!appointment.student) {
+    return null;
   }
 
   const resolveStripeReceipt = async () => {

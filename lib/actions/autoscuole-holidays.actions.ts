@@ -156,6 +156,7 @@ export async function createHoliday(
       // Group by student for notifications (one notification per student)
       const byStudent = new Map<string, typeof toCancelAppts>();
       for (const appt of toCancelAppts) {
+        if (!appt.studentId) continue; // studentless exam placeholder — no student to notify
         const list = byStudent.get(appt.studentId) ?? [];
         list.push(appt);
         byStudent.set(appt.studentId, list);
@@ -219,7 +220,9 @@ export async function createHoliday(
         select: { studentId: true },
       });
 
-      const uniqueStudentIds = [...new Set(appointments.map((a) => a.studentId))];
+      const uniqueStudentIds = [
+        ...new Set(appointments.map((a) => a.studentId).filter((id): id is string => id != null)),
+      ];
 
       if (uniqueStudentIds.length > 0) {
         const title = "🏖️ Giorno festivo";

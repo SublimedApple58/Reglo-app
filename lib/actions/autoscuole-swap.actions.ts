@@ -347,6 +347,7 @@ export async function createSwapOffer(
       );
       const appointmentsByStudent = new Map<string, Array<{ startsAt: Date; endsAt: Date | null }>>();
       for (const apt of appointments_) {
+        if (!apt.studentId) continue; // studentless exam placeholder — not a swap candidate
         const list = appointmentsByStudent.get(apt.studentId) ?? [];
         list.push({ startsAt: apt.startsAt, endsAt: apt.endsAt });
         appointmentsByStudent.set(apt.studentId, list);
@@ -1122,6 +1123,12 @@ export async function instructorSwapAppointments(
       });
     if (blockReason) {
       return { success: false, message: SWAP_BLOCK_MESSAGES[blockReason] };
+    }
+
+    // Exams are blocked above, so both appointments carry a real student.
+    // (Narrows studentId to non-null for the rest of the swap logic.)
+    if (!apptA.studentId || !apptB.studentId) {
+      return { success: false, message: "Una o entrambe le guide non hanno un allievo." };
     }
 
     // Both must be scheduled or confirmed

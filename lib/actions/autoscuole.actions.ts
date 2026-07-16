@@ -810,7 +810,20 @@ const listAutoscuolaVehiclesReadOnly = async (companyId: string) =>
     include: { poolMembers: { select: { instructorId: true } } },
   });
 
-const mapCaseStudent = (student: UserSnapshot) => {
+const mapCaseStudent = (student: UserSnapshot | null) => {
+  // Studentless exam placeholder (an esame created before its participants are
+  // known). Surface a synthetic "Esame" pseudo-student so downstream renderers
+  // never dereference a null student; consumers detect it via the `exam-empty`
+  // id prefix. See materializeExamSlot.
+  if (!student) {
+    return {
+      id: "exam-empty",
+      firstName: "Esame",
+      lastName: "",
+      email: null,
+      phone: null,
+    };
+  }
   const email = normalizeEmail(student.email);
   const nameParts = parseNameParts(student.name, email);
   return {
@@ -1143,7 +1156,11 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
       return {
         ...rest,
         case: null,
-        student: mapCaseStudent(appointment.student),
+        // Unique id per empty-exam placeholder (mirrors the gl-empty convention)
+        // so the client can key/track it and the exam panel can filter it out.
+        student: appointment.student
+          ? mapCaseStudent(appointment.student)
+          : { id: `exam-empty:${appointment.id}`, firstName: "Esame", lastName: "", email: null, phone: null },
         followVehicle,
         extraMotoVehicles,
         ...(gridFlags.get(appointment.id) ?? {}),
@@ -1689,7 +1706,12 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     }
 
     const lessonsByStudent = new Map<string, DrivingRegisterLessonRow[]>();
-    for (const item of lessons) {
+    // Drop studentless exam placeholders (no student register); the typed
+    // predicate also removes the nullable from studentId.
+    const studentLessonRows = lessons.filter(
+      (l): l is (typeof lessons)[number] & { studentId: string } => l.studentId != null,
+    );
+    for (const item of studentLessonRows) {
       const current = lessonsByStudent.get(item.studentId) ?? [];
       current.push(item);
       lessonsByStudent.set(item.studentId, current);
@@ -1864,7 +1886,12 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     // lessons were group lessons and how many students were on them.
     const registerGlInfo = await fetchGroupLessonFill(lessons.map((l) => l.groupLessonId));
 
-    const register = buildDrivingRegisterData({ cases, lessons });
+    // Query is scoped to a single studentId, so every row has that student; the
+    // typed filter is a no-op at runtime that drops the nullable from the type.
+    const lessonRows = lessons.filter(
+      (l): l is (typeof lessons)[number] & { studentId: string } => l.studentId != null,
+    );
+    const register = buildDrivingRegisterData({ cases, lessons: lessonRows });
     const student = toStudentProfile(studentMembership.user, studentMembership.createdAt);
 
     // Exam priority info
@@ -2184,7 +2211,8 @@ const buildAppointmentGridFlags = async (
   companyId: string,
   appointments: Array<{
     id: string;
-    studentId: string;
+    // Null only for studentless exam placeholders, filtered out below.
+    studentId: string | null;
     type: string | null;
     groupLessonId: string | null;
     startsAt: Date;
@@ -2193,7 +2221,9 @@ const buildAppointmentGridFlags = async (
   const flags = new Map<string, { mandatoryLesson: boolean; examNextDay: boolean }>();
   const guides = appointments.filter((a) => a.type !== "esame");
   if (!guides.length) return flags;
-  const studentIds = [...new Set(guides.map((a) => a.studentId))];
+  const studentIds = [
+    ...new Set(guides.map((a) => a.studentId).filter((id): id is string => id != null)),
+  ];
 
   const [allGuides, cases, examAppointments] = await Promise.all([
     // All individual guides of the involved students, to rank each lesson in
@@ -2231,6 +2261,7 @@ const buildAppointmentGridFlags = async (
   const perStudentCount = new Map<string, number>();
   const SIXTY_MIN_MS = 60 * 60 * 1000;
   for (const g of allGuides) {
+    if (!g.studentId) continue; // studentless exam placeholder (not a guide)
     if (!g.endsAt || g.endsAt.getTime() - g.startsAt.getTime() !== SIXTY_MIN_MS) continue;
     const n = perStudentCount.get(g.studentId) ?? 0;
     if (n < REQUIRED_LESSONS_COUNT) mandatoryIds.add(g.id);
@@ -2246,9 +2277,12 @@ const buildAppointmentGridFlags = async (
     examDaysByStudent.set(studentId, set);
   };
   for (const c of cases) addExamDay(c.studentId, c.drivingExamAt);
-  for (const e of examAppointments) addExamDay(e.studentId, e.startsAt);
+  for (const e of examAppointments) {
+    if (e.studentId) addExamDay(e.studentId, e.startsAt); // null: studentless exam placeholder
+  }
 
   for (const a of guides) {
+    if (!a.studentId) continue; // studentless exam placeholder — not a guide
     const examDays = examDaysByStudent.get(a.studentId);
     flags.set(a.id, {
       mandatoryLesson: mandatoryIds.has(a.id),
@@ -3632,7 +3666,9 @@ export async function cancelAutoscuolaAppointment(
       actorUserId: membership.userId,
       appointment: {
         id: appointment.id,
-        studentId: appointment.studentId,
+        // Non-null in this branch: guarded by `type !== "esame"`, and only
+        // exam placeholders are studentless.
+        studentId: appointment.studentId!,
         startsAt: appointment.startsAt,
         instructorId: appointment.instructorId,
       },
@@ -3648,9 +3684,9 @@ export async function cancelAutoscuolaAppointment(
       const rangeEnd =
         appointment.endsAt ??
         new Date(appointment.startsAt.getTime() + 30 * 60 * 1000);
-      const ownerFilters = [
-        { ownerType: "student", ownerId: appointment.studentId },
-      ];
+      const ownerFilters = appointment.studentId
+        ? [{ ownerType: "student", ownerId: appointment.studentId }]
+        : [];
       if (appointment.instructorId) {
         ownerFilters.push({
           ownerType: "instructor",
@@ -3687,7 +3723,9 @@ export async function cancelAutoscuolaAppointment(
         slotId: appointment.slotId,
         startsAt: appointment.startsAt,
         expiresAt,
-        excludeStudentIds: [appointment.studentId, membership.userId],
+        excludeStudentIds: [appointment.studentId, membership.userId].filter(
+          (x): x is string => x != null,
+        ),
       });
 
       await invalidateAgendaAndPaymentsCache(membership.companyId);
@@ -3742,20 +3780,23 @@ export async function permanentlyCancelAutoscuolaAppointment(
     // be slow enough to trip the mobile client's 15s timeout → a false
     // "Impossibile eliminare la guida" toast even though the delete succeeded.
     // after() runs the notification once the response has been sent.
-    after(async () => {
-      await notifyStudentAppointmentCancelled({
-        companyId: membership.companyId,
-        actorUserId: membership.userId,
-        appointment: {
-          id: appointment.id,
-          studentId: appointment.studentId,
-          startsAt: appointment.startsAt,
-          instructorId: appointment.instructorId,
-        },
-        cancellationKind: "permanent_cancel",
-        actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+    const cancelNotifyStudentId = appointment.studentId;
+    if (cancelNotifyStudentId) {
+      after(async () => {
+        await notifyStudentAppointmentCancelled({
+          companyId: membership.companyId,
+          actorUserId: membership.userId,
+          appointment: {
+            id: appointment.id,
+            studentId: cancelNotifyStudentId,
+            startsAt: appointment.startsAt,
+            instructorId: appointment.instructorId,
+          },
+          cancellationKind: "permanent_cancel",
+          actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+        });
       });
-    });
+    }
 
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
@@ -3808,6 +3849,11 @@ export async function rescheduleAutoscuolaAppointment(
     });
     if (!appointment) {
       return { success: false, message: "Appuntamento non trovato." };
+    }
+    // A studentless exam placeholder is retimed from the exam panel
+    // (updateExamTime), not this per-student reschedule flow.
+    if (!appointment.studentId) {
+      return { success: false, message: "Aggiungi un allievo all'esame prima di spostarlo." };
     }
 
     const currentStatus = normalizeStatus(appointment.status);
@@ -4174,7 +4220,7 @@ export async function rescheduleAutoscuolaAppointment(
       // student/instructor/vehicle should become open again.
       const rangeEnd = appointment.endsAt ?? new Date(oldStartsAt.getTime() + 30 * 60 * 1000);
       const ownerFilters: Array<{ ownerType: string; ownerId: string }> = [
-        { ownerType: "student", ownerId: appointment.studentId },
+        ...(appointment.studentId ? [{ ownerType: "student", ownerId: appointment.studentId }] : []),
       ];
       if (appointment.instructorId) {
         ownerFilters.push({ ownerType: "instructor", ownerId: appointment.instructorId });
@@ -4226,13 +4272,14 @@ export async function rescheduleAutoscuolaAppointment(
       : membership.role === "admin"
         ? "admin"
         : "owner";
-    if (!silentRecordFix) await notifyAppointmentRescheduled({
+    const reschedNotifyStudentId = updated.studentId;
+    if (!silentRecordFix && reschedNotifyStudentId) await notifyAppointmentRescheduled({
       companyId,
       actorUserId: membership.userId,
       actorRole,
       appointment: {
         id: updated.id,
-        studentId: updated.studentId,
+        studentId: reschedNotifyStudentId,
         startsAt: updated.startsAt,
         endsAt: updated.endsAt,
         instructorId: updated.instructorId,
@@ -4468,14 +4515,16 @@ export async function updateAutoscuolaAppointmentStatus(
 
     if (isInstructor(membership.autoscuolaRole) && membership.role !== "admin") {
       const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
+      const coverageStudentId = appointment.studentId;
       if (
+        coverageStudentId &&
         lessonPolicy.lessonPolicyEnabled &&
         lessonPolicy.lessonRequiredTypesEnabled &&
         lessonPolicy.lessonRequiredTypes.length
       ) {
         const coverage = await getStudentLessonPolicyCoverage({
           companyId: membership.companyId,
-          studentId: appointment.studentId,
+          studentId: coverageStudentId,
           policy: lessonPolicy,
         });
         if (coverage.missingRequiredTypes.length) {
@@ -4630,18 +4679,21 @@ export async function updateAutoscuolaAppointmentStatus(
         actorUserId: membership.userId,
       });
 
-      await notifyStudentAppointmentCancelled({
-        companyId: membership.companyId,
-        actorUserId: membership.userId,
-        appointment: {
-          id: updated.id,
-          studentId: updated.studentId,
-          startsAt: updated.startsAt,
-          instructorId: updated.instructorId ?? null,
-        },
-        cancellationKind: "manual_cancel",
-        actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
-      });
+      const manualCancelNotifyStudentId = updated.studentId;
+      if (manualCancelNotifyStudentId) {
+        await notifyStudentAppointmentCancelled({
+          companyId: membership.companyId,
+          actorUserId: membership.userId,
+          appointment: {
+            id: updated.id,
+            studentId: manualCancelNotifyStudentId,
+            startsAt: updated.startsAt,
+            instructorId: updated.instructorId ?? null,
+          },
+          cancellationKind: "manual_cancel",
+          actorRole: isInstructor(membership.autoscuolaRole) ? "instructor" : membership.role === "admin" ? "admin" : "owner",
+        });
+      }
     }
 
     // Reverse credits when reverting auto-checked-in appointment to no_show
@@ -4747,14 +4799,16 @@ export async function updateAutoscuolaAppointmentDetails(
 
     if (isInstructorRole) {
       const lessonPolicy = await getLessonPolicyForCompany(membership.companyId);
+      const coverageStudentId = appointment.studentId;
       if (
+        coverageStudentId &&
         lessonPolicy.lessonPolicyEnabled &&
         lessonPolicy.lessonRequiredTypesEnabled &&
         lessonPolicy.lessonRequiredTypes.length
       ) {
         const coverage = await getStudentLessonPolicyCoverage({
           companyId: membership.companyId,
-          studentId: appointment.studentId,
+          studentId: coverageStudentId,
           policy: lessonPolicy,
         });
         if (coverage.missingRequiredTypes.length) {
@@ -5184,7 +5238,7 @@ export async function updateAutoscuolaAppointmentDetails(
         const oldName = locationChangedFrom?.name ?? "Sede dell'autoscuola";
         await sendAutoscuolaPushToUsers({
           companyId: membership.companyId,
-          userIds: [appointment.studentId],
+          userIds: appointment.studentId ? [appointment.studentId] : [],
           title: "📍 Luogo guida aggiornato",
           body: `Il luogo della tua guida del ${when} è cambiato: ${newName}.`,
           data: {
@@ -7319,8 +7373,95 @@ export async function assignStudentToInstructor(input: {
 // Exam events
 // ---------------------------------------------------------------------------
 
+/**
+ * Attach exam rows to a slot honoring the "placeholder" model: an esame with
+ * zero participants is stored as a SINGLE row with studentId = null (autoscuole
+ * often create the exam before knowing who will sit it). Adding the first
+ * student CONVERTS that placeholder instead of leaving a ghost row; further
+ * students each get their own row. Every exam-create entry point (owner action,
+ * instructor API route, single add) funnels through here so the invariant
+ * "0 students ⇒ exactly 1 placeholder, ≥1 student ⇒ no placeholder" always holds.
+ *
+ * Slot identity = (companyId, type "esame", startsAt, endsAt, instructorId).
+ * Returns the count of real (studentful) rows created/attached by this call.
+ */
+export async function materializeExamSlot(params: {
+  companyId: string;
+  studentIds: string[];
+  startsAt: Date;
+  endsAt: Date | null;
+  instructorId: string | null;
+  notes: string | null;
+}): Promise<number> {
+  const { companyId, studentIds, startsAt, endsAt, instructorId, notes } = params;
+
+  const base = {
+    companyId,
+    bookingSource: BOOKING_SOURCE.exam,
+    type: "esame",
+    startsAt,
+    endsAt,
+    status: "scheduled",
+    instructorId: instructorId ?? null,
+    vehicleId: null,
+    paymentRequired: false,
+  };
+
+  // Existing empty placeholder(s) for this exact slot, if any.
+  const placeholders = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      type: "esame",
+      studentId: null,
+      startsAt,
+      endsAt: endsAt ?? null,
+      instructorId: instructorId ?? null,
+      status: { not: "cancelled" },
+    },
+    select: { id: true },
+  });
+
+  // No students yet → ensure exactly one placeholder exists for the slot.
+  if (studentIds.length === 0) {
+    if (placeholders.length > 0) return 0;
+    await prisma.autoscuolaAppointment.create({
+      data: { ...base, studentId: null, notes: notes ?? null },
+    });
+    return 0;
+  }
+
+  // Convert placeholders into the first students; create rows for the rest;
+  // drop any leftover placeholder (there should be at most one).
+  const ops: Prisma.PrismaPromise<unknown>[] = [];
+  let i = 0;
+  for (const ph of placeholders) {
+    if (i < studentIds.length) {
+      ops.push(
+        prisma.autoscuolaAppointment.update({
+          where: { id: ph.id },
+          // Convert the placeholder into a real seat; refresh notes if provided
+          // so a just-filled exam stays consistent with newly-created seats.
+          data: { studentId: studentIds[i], ...(notes != null ? { notes } : {}) },
+        }),
+      );
+      i++;
+    } else {
+      ops.push(prisma.autoscuolaAppointment.delete({ where: { id: ph.id } }));
+    }
+  }
+  for (; i < studentIds.length; i++) {
+    ops.push(
+      prisma.autoscuolaAppointment.create({
+        data: { ...base, studentId: studentIds[i], notes: notes ?? null },
+      }),
+    );
+  }
+  await prisma.$transaction(ops);
+  return studentIds.length;
+}
+
 const createExamEventSchema = z.object({
-  studentIds: z.array(z.string().uuid()).min(1),
+  studentIds: z.array(z.string().uuid()),
   startsAt: z.string(),
   endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
@@ -7405,30 +7546,20 @@ export async function createExamEvent(
       }
     }
 
-    // Create one appointment per student
-    const appointments = await prisma.$transaction(
-      payload.studentIds.map((studentId) =>
-        prisma.autoscuolaAppointment.create({
-          data: {
-            companyId,
-            studentId,
-            bookingSource: BOOKING_SOURCE.exam,
-            type: "esame",
-            startsAt,
-            endsAt,
-            status: "scheduled",
-            instructorId: payload.instructorId ?? null,
-            vehicleId: null,
-            notes: payload.notes ?? null,
-            paymentRequired: false,
-          },
-        }),
-      ),
-    );
+    // Create one appointment per student — or a single studentless placeholder
+    // when no students were selected (see materializeExamSlot).
+    const count = await materializeExamSlot({
+      companyId,
+      studentIds: payload.studentIds,
+      startsAt,
+      endsAt,
+      instructorId: payload.instructorId ?? null,
+      notes: payload.notes ?? null,
+    });
 
     await invalidateAgendaAndPaymentsCache(companyId);
 
-    return { success: true as const, data: { count: appointments.length } };
+    return { success: true as const, data: { count } };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -7459,24 +7590,19 @@ export async function addExamStudent(
     });
     if (!member) return { success: false as const, message: "Allievo non trovato." };
 
-    const appointment = await prisma.autoscuolaAppointment.create({
-      data: {
-        companyId,
-        studentId: payload.studentId,
-        bookingSource: BOOKING_SOURCE.exam,
-        type: "esame",
-        startsAt: new Date(payload.startsAt),
-        endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
-        status: "scheduled",
-        instructorId: payload.instructorId ?? null,
-        vehicleId: null,
-        notes: payload.notes ?? null,
-        paymentRequired: false,
-      },
+    // Consumes a null placeholder for this slot if present (empty exam → first
+    // student), otherwise adds a new row alongside the existing participants.
+    await materializeExamSlot({
+      companyId,
+      studentIds: [payload.studentId],
+      startsAt: new Date(payload.startsAt),
+      endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
+      instructorId: payload.instructorId ?? null,
+      notes: payload.notes ?? null,
     });
 
     await invalidateAgendaAndPaymentsCache(companyId);
-    return { success: true as const, data: { appointmentId: appointment.id } };
+    return { success: true as const };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -8707,7 +8833,8 @@ export async function getGroupLessonsForAgenda(input?: {
         openSeats: Math.max(0, l.capacity - l.appointments.length),
         participants: l.appointments.map((a) => ({
           appointmentId: a.id,
-          studentId: a.studentId,
+          // Non-null: group-lesson seats always have a student.
+          studentId: a.studentId!,
           studentName: a.student?.name ?? null,
           vehicleId: a.vehicle?.id ?? null,
           vehicleName: a.vehicle?.name ?? null,
@@ -8817,7 +8944,9 @@ export async function getGroupLesson(groupLessonId: string) {
           }
           return {
             appointmentId: a.id,
-            studentId: a.studentId,
+            // Non-null: group-lesson seats always have a student (studentless
+            // placeholders exist only for exams).
+            studentId: a.studentId!,
             studentName: isStaff ? a.student?.name ?? null : null,
             // Present/absent outcome of this seat, so the staff roster can show
             // and correct it. "pending" = past-but-unreviewed (pending_review) or
@@ -9029,7 +9158,9 @@ export async function updateGroupLesson(
       if (!instr) return { success: false as const, message: "Istruttore non trovato." };
     }
 
-    const studentIds = gl.appointments.map((a) => a.studentId);
+    // Group-lesson seats always carry a student (only exam placeholders are
+    // studentless); filter narrows the type without changing runtime behavior.
+    const studentIds = gl.appointments.map((a) => a.studentId).filter((id): id is string => id != null);
 
     // Capacity change: never below the current enrolled count.
     if (payload.capacity !== undefined && payload.capacity < studentIds.length) {
@@ -9624,6 +9755,7 @@ export async function resolveLateCancellation(
     } else if (config.lessonCreditFlowEnabled) {
       // Credit flow: re-deduct 1 credit if it was refunded
       if (
+        appointment.studentId &&
         appointment.creditApplied &&
         appointment.creditRefundedAt !== null
       ) {
@@ -9703,6 +9835,7 @@ export async function getStudentsCompletedDrivingMinutes() {
     // Aggregate minutes per student
     const minutesByStudent: Record<string, number> = {};
     for (const appt of appointments) {
+      if (!appt.studentId) continue; // skip studentless exam placeholders
       const start = appt.startsAt.getTime();
       const end = appt.endsAt
         ? appt.endsAt.getTime()

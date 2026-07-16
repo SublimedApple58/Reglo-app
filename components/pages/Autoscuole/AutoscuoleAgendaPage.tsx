@@ -133,6 +133,13 @@ type ExamGroup = {
   notes: string | null;
 };
 
+// A studentless "placeholder" row for an exam created before its participants
+// are known (its student is a synthetic `exam-empty:` pseudo-student). Such rows
+// keep the exam slot visible/manageable but must be excluded from the real
+// student list, counts and the manage panel. See materializeExamSlot (backend).
+const isExamPlaceholder = (a: AppointmentRow) =>
+  a.type === "esame" && a.student.id.startsWith("exam-empty");
+
 type AgendaBootstrapPayload = {
   appointments: AppointmentRow[];
   students: Array<{
@@ -763,7 +770,7 @@ export function AutoscuoleAgendaPage({
         setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
         setExamDraftDurationMin(g.endsAt ? Math.max(15, Math.round((toDate(g.endsAt).getTime() - gs.getTime()) / 60000)) : 60);
         setExamDraftInstructorId(g.instructorId ?? null);
-        setExamDraftStudentIds(g.appointments.map((a) => a.student.id));
+        setExamDraftStudentIds(g.appointments.filter((a) => !isExamPlaceholder(a)).map((a) => a.student.id));
         examPanelOpenedRef.current = true;
       }
     } else {
@@ -2401,7 +2408,7 @@ export function AutoscuoleAgendaPage({
                                   >
                                     <GraduationCap className="size-3 shrink-0" />
                                     <span>Esame {examHasTime ? formatTimeRange(egStart, egEnd) : "· orario da definire"}</span>
-                                    <span className="text-violet-500">· {eg.appointments.length} all.</span>
+                                    <span className="text-violet-500">{(() => { const n = eg.appointments.filter((a) => !isExamPlaceholder(a)).length; return n === 0 ? "· vuoto" : `· ${n} all.`; })()}</span>
                                   </button>
                                 );
                               })}
@@ -2637,15 +2644,21 @@ export function AutoscuoleAgendaPage({
                                   </div>
                                   <div className="text-[8px] text-violet-500 truncate">{formatTimeRange(egStart, egEnd)}</div>
                                   <div className="mt-0.5 flex flex-col gap-px">
-                                    {eg.appointments.map((a) => {
-                                      const lic = studentLicenseById.get(a.student.id);
-                                      return (
-                                        <div key={a.id} className="truncate text-[9px] font-semibold leading-tight text-violet-900/85">
-                                          {a.student.firstName} {a.student.lastName}
-                                          {lic ? <span className="font-medium text-violet-500"> · {lic}</span> : null}
-                                        </div>
-                                      );
-                                    })}
+                                    {(() => {
+                                      const real = eg.appointments.filter((a) => !isExamPlaceholder(a));
+                                      if (real.length === 0) {
+                                        return <div className="truncate text-[9px] font-medium italic leading-tight text-violet-500/80">Nessun allievo</div>;
+                                      }
+                                      return real.map((a) => {
+                                        const lic = studentLicenseById.get(a.student.id);
+                                        return (
+                                          <div key={a.id} className="truncate text-[9px] font-semibold leading-tight text-violet-900/85">
+                                            {a.student.firstName} {a.student.lastName}
+                                            {lic ? <span className="font-medium text-violet-500"> · {lic}</span> : null}
+                                          </div>
+                                        );
+                                      });
+                                    })()}
                                   </div>
                                 </div>
                               </button>
@@ -3569,7 +3582,8 @@ export function AutoscuoleAgendaPage({
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
-            const origStudentIds = eg.appointments.map((a) => a.student.id);
+            const origStudentIds = eg.appointments.filter((a) => !isExamPlaceholder(a)).map((a) => a.student.id);
+            const placeholderApptIds = eg.appointments.filter((a) => isExamPlaceholder(a)).map((a) => a.id);
             const sortIds = (a: string[]) => [...a].sort().join(",");
             const origDurationMin = examHasTime ? Math.max(15, Math.round((egEnd.getTime() - egStart.getTime()) / 60000)) : 60;
             const timeChanged = examDraftTime !== origTime;
@@ -3594,7 +3608,8 @@ export function AutoscuoleAgendaPage({
               return { startsAt: base.toISOString(), endsAt: undefined as string | undefined };
             };
             const saveExam = async () => {
-              if (examDraftStudentIds.length === 0) { toast.error({ description: "L'esame deve avere almeno un allievo." }); return; }
+              // Zero students is allowed: the exam keeps a single studentless
+              // placeholder row (created/kept server-side) so the slot survives.
               setExamPanelPending(true);
               try {
                 const studentToAppt = new Map(eg.appointments.map((a) => [a.student.id, a.id] as const));
@@ -3607,6 +3622,19 @@ export function AutoscuoleAgendaPage({
                   const r = await removeExamStudent(apptId);
                   if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                 }
+                // Move any empty placeholder to the target slot BEFORE adding, so the
+                // first added student converts it (matched by slot) rather than
+                // spawning a ghost row at the old time.
+                if (placeholderApptIds.length && (timingChanged || instrChanged)) {
+                  if (timingChanged) {
+                    const r = await updateExamTime({ appointmentIds: placeholderApptIds, startsAt, endsAt });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (instrChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: placeholderApptIds, instructorId: examDraftInstructorId });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                }
                 for (const sid of added) {
                   const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, notes: examNoteDraft.trim() || undefined });
                   if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
@@ -3615,17 +3643,20 @@ export function AutoscuoleAgendaPage({
                   .filter((id) => examDraftStudentIds.includes(id))
                   .map((id) => studentToAppt.get(id))
                   .filter((x): x is string => Boolean(x));
-                if (keptApptIds.length) {
+                // When no student was added, the exam is still empty → apply
+                // metadata to the surviving placeholder row(s).
+                const metaApptIds = added.length === 0 ? [...keptApptIds, ...placeholderApptIds] : keptApptIds;
+                if (metaApptIds.length) {
                   if (timingChanged) {
-                    const r = await updateExamTime({ appointmentIds: keptApptIds, startsAt, endsAt });
+                    const r = await updateExamTime({ appointmentIds: metaApptIds, startsAt, endsAt });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                   if (instrChanged) {
-                    const r = await updateExamInstructor({ appointmentIds: keptApptIds, instructorId: examDraftInstructorId });
+                    const r = await updateExamInstructor({ appointmentIds: metaApptIds, instructorId: examDraftInstructorId });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                   if (noteChanged) {
-                    const r = await updateExamNotes({ appointmentIds: keptApptIds, notes: examNoteDraft.trim() || null });
+                    const r = await updateExamNotes({ appointmentIds: metaApptIds, notes: examNoteDraft.trim() || null });
                     if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
                   }
                 }
@@ -3955,12 +3986,12 @@ export function AutoscuoleAgendaPage({
           <>
             <p className="text-[11px] font-medium text-[#929292]">
               {examForm.studentIds.length === 0
-                ? "Seleziona almeno un allievo"
+                ? "Nessun allievo — potrai aggiungerli in seguito"
                 : `${examForm.studentIds.length} alliev${examForm.studentIds.length === 1 ? "o" : "i"} selezionat${examForm.studentIds.length === 1 ? "o" : "i"}`}
             </p>
             <button
               type="button"
-              disabled={examCreating || !examForm.date || !examForm.studentIds.length}
+              disabled={examCreating || !examForm.date}
               className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
               onClick={async () => {
                 setExamCreating(true);
@@ -3987,7 +4018,7 @@ export function AutoscuoleAgendaPage({
                 setExamCreating(false);
                 if (res.success) {
                   const count = (res.data as { count: number }).count;
-                  toast.success({ description: `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.` });
+                  toast.success({ description: count === 0 ? "Esame creato — aggiungi gli allievi quando vuoi." : `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.` });
                   setExamDialogOpen(false);
                   load({ silent: true });
                 } else {

@@ -192,7 +192,9 @@ const buildAppointmentMaps = (
   appointments: Array<{
     instructorId: string | null;
     vehicleId: string | null;
-    studentId: string;
+    // Null only for studentless exam placeholders — they still reserve the
+    // instructor/vehicle but have no student interval to record.
+    studentId: string | null;
     startsAt: Date;
     endsAt: Date | null;
     appointmentVehicles?: Array<{ vehicleId: string }>;
@@ -217,7 +219,7 @@ const buildAppointmentMaps = (
   for (const appointment of appointments) {
     const start = appointment.startsAt.getTime();
     const end = appointment.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
-    add(appointment.studentId, start, end);
+    if (appointment.studentId) add(appointment.studentId, start, end);
     if (appointment.instructorId) add(appointment.instructorId, start, end);
     if (appointment.vehicleId) add(appointment.vehicleId, start, end);
     // Multi-vehicle lessons (e.g. moto + follow car) reserve every vehicle in

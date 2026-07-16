@@ -264,10 +264,12 @@ async function getExamEndTimesOnDay(
   });
   for (const appt of examAppointments) {
     const end = appt.endsAt ?? new Date(appt.startsAt.getTime() + 60 * 60 * 1000);
-    const existing = result.get(appt.studentId);
+    // studentId is non-null here: the query filters `studentId: { in: studentIds }`,
+    // which never matches the null of a studentless exam placeholder.
+    const existing = result.get(appt.studentId!);
     // Keep the latest exam end time if a student somehow has multiple
     if (!existing || end > existing) {
-      result.set(appt.studentId, end);
+      result.set(appt.studentId!, end);
     }
   }
 

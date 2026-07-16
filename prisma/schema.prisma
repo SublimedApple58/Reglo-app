@@ -375,7 +375,12 @@ model AutoscuolaCase {
 model AutoscuolaAppointment {
   id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId                    String    @db.Uuid
-  studentId                    String    @db.Uuid
+  /// Nullable ONLY for placeholder exam rows: an "esame" can be created before
+  /// its participants are known (autoscuole often don't know upfront who will
+  /// sit the exam). Such a slot is stored as a single row with studentId = null;
+  /// adding the first student converts the placeholder. All other appointment
+  /// types always carry a studentId (enforced at the application layer).
+  studentId                    String?   @db.Uuid
   caseId                       String?   @db.Uuid
   slotId                       String?   @db.Uuid
   type                         String
@@ -422,7 +427,7 @@ model AutoscuolaAppointment {
   updatedAt                    DateTime  @updatedAt
 
   company               Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student               User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  student               User?                                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
   case                  AutoscuolaCase?                       @relation(fields: [caseId], references: [id], onDelete: SetNull)
   slot                  AutoscuolaAvailabilitySlot?           @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor            AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)

@@ -375,6 +375,7 @@ export const processAutoscuolaAppointmentReminders = async ({
     });
 
     for (const appointment of appointments) {
+      if (!appointment.student) continue; // studentless exam placeholder — nobody to message
       const studentProfile = mapStudentFromUser(appointment.student);
       await sendAutoscuolaMessage({
         prisma,
@@ -690,6 +691,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     ]);
 
     for (const appointment of studentAppointments) {
+      if (!appointment.student) continue; // studentless exam placeholder — nobody to message
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -743,6 +745,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
     for (const appointment of instructorAppointments) {
       const instructor = appointment.instructor;
       if (!instructor) continue;
+      if (!appointment.student) continue; // studentless exam placeholder — nobody to message
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -859,6 +862,7 @@ export const processAutoscuolaMorningReminders = async ({
     });
 
     for (const appointment of appointments) {
+      if (!appointment.student) continue; // studentless exam placeholder — nobody to message
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -980,6 +984,7 @@ export const processAutoscuolaDayBeforeReminders = async ({
     });
 
     for (const appointment of appointments) {
+      if (!appointment.student) continue; // studentless exam placeholder — nobody to message
       const studentProfile = mapStudentFromUser(appointment.student);
       const startsAtLabel = formatAutoscuolaDateTime(appointment.startsAt);
       const durationMinutes = Math.max(
@@ -1551,7 +1556,7 @@ export const processEmptySlotNotifications = async ({
       },
       select: { studentId: true },
     });
-    const bookedStudentIds = new Set(existingAppointments.map((a: { studentId: string }) => a.studentId));
+    const bookedStudentIds = new Set(existingAppointments.map((a: { studentId: string | null }) => a.studentId));
     targetUserIds = targetUserIds.filter((id) => !bookedStudentIds.has(id));
 
     if (!targetUserIds.length) continue;
