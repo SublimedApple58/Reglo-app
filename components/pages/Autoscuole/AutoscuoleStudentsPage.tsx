@@ -66,6 +66,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { AutoscuoleLateCancellationsPanel } from "./AutoscuoleLateCancellationsPanel";
+import { NeverAccessedListMark } from "./NeverAccessedNudge";
 
 type StudentProfile = {
   id: string;
@@ -79,6 +80,9 @@ type StudentProfile = {
 
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
+  // Account creato dal titolare ma mai usato (nessun accesso in app) → non
+  // riceve promemoria. Guida l'indicatore "cellulare-divieto" nella lista.
+  neverAccessed?: boolean;
   assignedInstructorId?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   licenseCategory?: string | null;
@@ -969,6 +973,9 @@ export function AutoscuoleStudentsPage({
           <span className="truncate text-sm font-semibold text-foreground">
             {student.firstName} {student.lastName}
           </span>
+          {student.neverAccessed ? (
+            <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
+          ) : null}
           {student.bookingBlocked && <Pill tone="red">Bloccato</Pill>}
         </div>
         {options?.secondLine ? (

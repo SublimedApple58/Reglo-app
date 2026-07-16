@@ -167,6 +167,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Student Phase (TEORIA)**: contesto concettuale (lezioni di teoria), ma il live è anonimo → legame volutamente lasco.
 - **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays. Aula è un catalogo a sé (niente crediti/refund/swap/slot). Presenze ↔ agenda è estensione futura fuori scope.
 
+### Never-accessed nudge (allievo mai loggato)
+- → **Mobile Auth / Push**: `neverAccessed` = nessun `MobileAccessToken` (login mobile) **e** nessun `MobilePushDevice` (push) per lo userId. Se cambia come/quando vengono creati quei record, cambia il significato del flag. Nessun `lastLoginAt` su `User`.
+- → **Appointments / Agenda**: il flag viaggia nell'array `students` del bootstrap agenda (`getAutoscuolaAgendaBootstrapAction` → `listDirectoryStudents`); la web page costruisce mappe client (`neverAccessedById`, `phoneById`) come `studentLicenseById`. Solo guide **individuali** (no gruppo).
+- → **Students directory**: `getAutoscuolaStudentsWithProgress` annota il flag → `AutoscuoleStudentsPage`.
+- → **Cache**: entra nel payload bootstrap in cache Redis (segmento AGENDA, 20s) → il badge sparisce entro ~20s dal primo accesso dell'allievo.
+- → **Design system**: icone 3D Fluent (MIT) in `public/images/3d/`; animazione `.megaphone-ring` in `globals.css` rispetta `prefers-reduced-motion`.
+
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
 - → **Login**: condivide `buildMobileAuthPayload` (`lib/mobile-auth-payload.ts`) — se cambia la shape di `AuthPayload`, aggiorna login + confirm + mobile types insieme.

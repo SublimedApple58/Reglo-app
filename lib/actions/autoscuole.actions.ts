@@ -685,7 +685,11 @@ type UserSnapshot = {
   phone: string | null;
 };
 
-const toStudentProfile = (user: UserSnapshot, createdAt: Date) => {
+const toStudentProfile = (
+  user: UserSnapshot,
+  createdAt: Date,
+  neverAccessedSet?: Set<string>,
+) => {
   const email = normalizeEmail(user.email);
   const nameParts = parseNameParts(user.name, email);
   return {
@@ -696,6 +700,8 @@ const toStudentProfile = (user: UserSnapshot, createdAt: Date) => {
     phone: user.phone ?? null,
     status: "active",
     createdAt,
+    // Present only when the caller resolved it (agenda directory + students list).
+    ...(neverAccessedSet ? { neverAccessed: neverAccessedSet.has(user.id) } : {}),
   };
 };
 
@@ -705,6 +711,36 @@ const STUDENT_USER_SELECT = {
   email: true,
   phone: true,
 } as const;
+
+/**
+ * Set of userIds that have NEVER accessed the mobile app — no `MobileAccessToken`
+ * (minted on every mobile login/signup/invite-accept) AND no `MobilePushDevice`
+ * (created on first app open with push registration). The presence of either row
+ * proves the account was used at least once; the absence of both is our best
+ * "never accessed" signal. Lets the web app flag students whose owner-created
+ * account is still unused (they get no in-app reminders). Batched over the given
+ * ids, mirroring how `buildAppointmentGridFlags` batches its lookups.
+ */
+async function buildNeverAccessedUserIds(userIds: string[]): Promise<Set<string>> {
+  const ids = Array.from(new Set(userIds));
+  if (ids.length === 0) return new Set<string>();
+  const [tokens, devices] = await Promise.all([
+    prisma.mobileAccessToken.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true },
+      distinct: ["userId"],
+    }),
+    prisma.mobilePushDevice.findMany({
+      where: { userId: { in: ids } },
+      select: { userId: true },
+      distinct: ["userId"],
+    }),
+  ]);
+  const accessed = new Set<string>();
+  for (const t of tokens) accessed.add(t.userId);
+  for (const d of devices) accessed.add(d.userId);
+  return new Set(ids.filter((id) => !accessed.has(id)));
+}
 
 const listDirectoryStudents = async (companyId: string) => {
   const members = await prisma.companyMember.findMany({
@@ -717,8 +753,12 @@ const listDirectoryStudents = async (companyId: string) => {
     take: 500,
   });
 
+  const neverAccessed = await buildNeverAccessedUserIds(
+    members.map((member) => member.user.id),
+  );
+
   return members.map((member) => ({
-    ...toStudentProfile(member.user, member.createdAt),
+    ...toStudentProfile(member.user, member.createdAt, neverAccessed),
     assignedInstructorId: member.assignedInstructorId ?? null,
     // Pursued license path — surfaced so the booking pickers can show a badge
     // and validate vehicle⇄student eligibility (moto hierarchy).
@@ -1579,8 +1619,11 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       orderBy: { createdAt: "desc" },
       take: 500,
     });
+    const neverAccessedSet = await buildNeverAccessedUserIds(
+      members.map((m) => m.user.id),
+    );
     const students = members.map((m) => ({
-      ...toStudentProfile(m.user, m.createdAt),
+      ...toStudentProfile(m.user, m.createdAt, neverAccessedSet),
       assignedInstructorId: m.assignedInstructorId ?? null,
       studentPhase: m.studentPhase,
       licenseCategory: m.licenseCategory ?? null,

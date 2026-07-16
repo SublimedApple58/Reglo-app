@@ -459,6 +459,30 @@
   }
 }
 
+/* Megafono "allievo mai loggato" — squillo tipo campanella, una volta (all'apertura
+   agenda e all'hover del badge). Il componente ri-aggiunge la classe per ri-triggerare.
+   Rispetta prefers-reduced-motion → nessun movimento (icona ferma ma visibile). */
+@keyframes megaphone-bell {
+  0% { transform: rotate(0); }
+  8% { transform: rotate(19deg); }
+  18% { transform: rotate(-16deg); }
+  28% { transform: rotate(13deg); }
+  38% { transform: rotate(-10deg); }
+  48% { transform: rotate(7deg); }
+  58% { transform: rotate(-4deg); }
+  68% { transform: rotate(2deg); }
+  100% { transform: rotate(0); }
+}
+.megaphone-ring {
+  transform-origin: 50% 20%;
+  animation: megaphone-bell 0.85s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .megaphone-ring {
+    animation: none;
+  }
+}
+
 /* Agenda a schermo intero: quando la griglia è in modalità fullscreen scaliamo
    il testo dei blocchi insieme allo zoom verticale (--agenda-fs-scale = fattore
    di zoom). Le utility Tailwind di font-size stanno in @layer, quindi queste

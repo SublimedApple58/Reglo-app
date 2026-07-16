@@ -69,8 +69,9 @@ import {
 } from "@/components/pages/Autoscuole/EditAppointmentDialog";
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
+import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean };
 type ResourceOption = {
   id: string;
   name: string;
@@ -138,10 +139,14 @@ type AgendaBootstrapPayload = {
     id: string;
     firstName: string;
     lastName: string;
+    phone?: string | null;
     licenseCategory?: string | null;
     transmission?: string | null;
     assignedInstructorId?: string | null;
     lastInstructorId?: string | null;
+    // True quando l'allievo non ha mai fatto accesso in app (account creato dal
+    // titolare, mai usato → non riceve i promemoria). Guida il badge megafono.
+    neverAccessed?: boolean;
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
@@ -1716,6 +1721,28 @@ export function AutoscuoleAgendaPage({
     [studentLicenseById],
   );
 
+  // Allievi che non hanno mai aperto l'app (account creato dal titolare, mai
+  // usato) + loro telefono — risolti via la directory bootstrap (stesso spazio
+  // user-id degli appuntamenti), come studentLicenseById. Guidano il badge
+  // megafono sui blocchi individuali.
+  const neverAccessedById = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const s of students) if (s.neverAccessed) set.add(s.id);
+    return set;
+  }, [students]);
+  const phoneById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of students) if (s.phone) map.set(s.id, s.phone);
+    return map;
+  }, [students]);
+  // Il badge va solo sulle guide individuali (le guide di gruppo hanno più
+  // allievi → niente singolo destinatario da avvisare).
+  const neverAccessedFor = React.useCallback(
+    (item: AppointmentRow): boolean =>
+      item.type !== "group_lesson" && neverAccessedById.has(item.student.id),
+    [neverAccessedById],
+  );
+
   const allWeekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
   const visibleWeekDays = allWeekDays.filter((d) => viewPrefs.days.includes(d.getDay()));
   const days = visibleWeekDays.length ? visibleWeekDays : allWeekDays;
@@ -2496,7 +2523,8 @@ export function AutoscuoleAgendaPage({
                               ? glTintInstr.card
                               : statusMeta.className;
                           return (
-                            <DropdownMenu modal={false} key={item.id}>
+                            <React.Fragment key={item.id}>
+                            <DropdownMenu modal={false}>
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
@@ -2553,6 +2581,18 @@ export function AutoscuoleAgendaPage({
                               )}
                               </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
+                            {neverAccessedFor(item) ? (
+                              <div className="absolute z-30" style={{ top: Math.max(0, top - 4), right: 2 }}>
+                                <NeverAccessedNudge
+                                  appointmentId={item.id}
+                                  studentFirstName={item.student.firstName}
+                                  phone={phoneById.get(item.student.id) ?? null}
+                                  startsAt={item.startsAt}
+                                  size={16}
+                                />
+                              </div>
+                            ) : null}
+                            </React.Fragment>
                           );
                         })}
                         {/* Exam blocks for this instructor on this day */}
@@ -2873,7 +2913,8 @@ export function AutoscuoleAgendaPage({
                           : statusMeta.className;
 
                       return (
-                        <DropdownMenu modal={false} key={item.id}>
+                        <React.Fragment key={item.id}>
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
@@ -2966,6 +3007,18 @@ export function AutoscuoleAgendaPage({
                               )}
                           </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
+                        {neverAccessedFor(item) ? (
+                          <div className="absolute z-30" style={{ top: Math.max(0, top - 5), right: 3 }}>
+                            <NeverAccessedNudge
+                              appointmentId={item.id}
+                              studentFirstName={item.student.firstName}
+                              phone={phoneById.get(item.student.id) ?? null}
+                              startsAt={item.startsAt}
+                              size={18}
+                            />
+                          </div>
+                        ) : null}
+                        </React.Fragment>
                       );
                     })}
                     {/* Instructor blocks for this instructor on this day */}

@@ -7,6 +7,7 @@
 | Feature | Doc | Primary files |
 |---------|-----|--------------|
 | Appointments | [appointments.md](features/appointments.md) | `autoscuole.actions.ts` |
+| Never-accessed nudge (allievo mai loggato) | [never-accessed-nudge.md](features/never-accessed-nudge.md) | `autoscuole.actions.ts` (`buildNeverAccessedUserIds`), `NeverAccessedNudge.tsx`, `AutoscuoleAgendaPage.tsx`, `AutoscuoleStudentsPage.tsx` |
 | Availability | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts` |
 | Booking Engine | [booking-engine.md](features/booking-engine.md) | `slot-matcher.ts`, `booking-governance.ts` |
 | Vehicles | [vehicles.md](features/vehicles.md) | `autoscuole.actions.ts` (vehicle CRUD), `fixed-vehicle.ts`, `slot-matcher.ts` |
