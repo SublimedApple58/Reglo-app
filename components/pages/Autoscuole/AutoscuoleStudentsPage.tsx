@@ -2053,6 +2053,7 @@ export function AutoscuoleStudentsPage({
             lessonStatus !== "cancelled" &&
             lessonStatus !== "proposal" &&
             !lesson.group &&
+            !isExam &&
             startDate.getTime() - 10 * 60 * 1000 <= Date.now();
           const canRate = esitoDraft !== null || RATEABLE_STATUSES.has(lessonStatus);
           return (
