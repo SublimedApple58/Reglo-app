@@ -216,6 +216,11 @@ const checkInstructorAvailabilitySchema = z.object({
   excludeAppointmentId: z.string().uuid().optional(),
 });
 
+const checkStudentSlotCancellationSchema = z.object({
+  studentId: z.string().uuid(),
+  startsAt: z.string(),
+});
+
 const createInstructorSchema = z.object({
   userId: z.string().uuid(),
   name: z.string().min(1).optional(),
@@ -5534,6 +5539,55 @@ export async function checkInstructorAvailability(
     });
 
     return { success: true, data: result };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * Did THIS student cancel a guida that started at THIS instant?
+ * Powers the orange "l'allievo aveva annullato una guida in questo orario"
+ * banner inside the web booking popover — purely informative, never blocks
+ * the booking. Source = AutoscuolaNotification rows (kind
+ * "student_cancellation"), i.e. only cancellations the student made themself.
+ * Duration is ignored on purpose: we match on the start instant only.
+ */
+export async function checkStudentSlotCancellation(
+  input: z.infer<typeof checkStudentSlotCancellationSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = checkStudentSlotCancellationSchema.parse(input);
+
+    if (
+      membership.role !== "admin" &&
+      !isOwner(membership.autoscuolaRole) &&
+      !isInstructor(membership.autoscuolaRole)
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+
+    const startsAt = new Date(payload.startsAt);
+    if (Number.isNaN(startsAt.getTime())) {
+      return { success: false, message: "Data non valida." };
+    }
+    // Match the whole minute so any seconds/millis drift between the stored
+    // cancellation and the freshly-picked slot doesn't hide a real hit.
+    const minuteStart = new Date(startsAt);
+    minuteStart.setSeconds(0, 0);
+    const minuteEnd = new Date(minuteStart.getTime() + 60_000);
+
+    const hit = await prisma.autoscuolaNotification.findFirst({
+      where: {
+        companyId: membership.companyId,
+        kind: "student_cancellation",
+        studentId: payload.studentId,
+        startsAt: { gte: minuteStart, lt: minuteEnd },
+      },
+      select: { id: true },
+    });
+
+    return { success: true, data: { hadCancellation: hit != null } };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

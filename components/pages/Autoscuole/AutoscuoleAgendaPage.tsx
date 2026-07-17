@@ -1310,6 +1310,43 @@ export function AutoscuoleAgendaPage({
     return null;
   }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
 
+  // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
+  // annullato lui una guida che iniziava a questo istante, mostriamo un banner
+  // ambra informativo nel form di prenotazione (non blocca: si può prenotare
+  // lo stesso). La durata è ignorata: conta solo l'orario di inizio.
+  const [studentSlotCancelled, setStudentSlotCancelled] = React.useState(false);
+  React.useEffect(() => {
+    if (!createOpen || !form.studentId || !form.day || !form.time) {
+      setStudentSlotCancelled(false);
+      return;
+    }
+    const start = buildLocalDateTime(form.day, form.time);
+    if (Number.isNaN(start.getTime())) {
+      setStudentSlotCancelled(false);
+      return;
+    }
+    let cancelled = false;
+    setStudentSlotCancelled(false);
+    const params = new URLSearchParams({
+      studentId: form.studentId,
+      startsAt: start.toISOString(),
+    });
+    fetch(`/api/autoscuole/slot-cancellation-check?${params.toString()}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (cancelled) return;
+        setStudentSlotCancelled(Boolean(res?.success && res.data?.hadCancellation));
+      })
+      .catch(() => {
+        if (!cancelled) setStudentSlotCancelled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, form.studentId, form.day, form.time]);
+
   // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
   // sola, e scrolla verticalmente fino all'orario del ghost.
   React.useEffect(() => {
@@ -3311,6 +3348,15 @@ export function AutoscuoleAgendaPage({
               }}
             />
           </div>
+          {studentSlotCancelled && (
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-700"
+            >
+              <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              <span>Questo allievo aveva annullato una guida in questo orario.</span>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div ref={createInstructorRef}>
               <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>

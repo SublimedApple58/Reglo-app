@@ -9,7 +9,8 @@ In-app **bell/inbox** in the autoscuola web top-bar that tells the **titolare**,
 - `app/api/autoscuole/owner-notifications/route.ts` — **GET** (list + unread count), **POST** (mark all read), **DELETE** (clear all); owner/admin only
 - `components/Layout/OwnerNotificationsBell.tsx` — the bell (3D gold icon `public/images/menu/bell-3d.png`), Radix Popover panel, polling, toast
 - `components/Layout/AutoscuoleShell.tsx` — mounts `<OwnerNotificationsBell />` in the right cluster (before the avatar)
-- `lib/actions/autoscuole.actions.ts` — `createStudentCancellationNotification()` + the trigger inside `cancelAutoscuolaAppointment`
+- `lib/actions/autoscuole.actions.ts` — `createStudentCancellationNotification()` + the trigger inside `cancelAutoscuolaAppointment`; also `checkStudentSlotCancellation()` (booking-popover banner, below)
+- `app/api/autoscuole/slot-cancellation-check/route.ts` — **GET** `?studentId&startsAt` → `{ hadCancellation }` (owner/admin/instructor); powers the booking-popover banner
 
 ## Data model
 `AutoscuolaNotification`: `companyId`, `kind` (default `student_cancellation`), optional refs `appointmentId`/`studentId`, **snapshot** display fields (`studentName`, `startsAt`, `instructorName`, `lessonType`) so a notification stays readable even if the source row is later removed, `readAt` (**per-company** read state), `createdAt`. Indexes on `(companyId, createdAt)` and `(companyId, readAt)`.
@@ -24,6 +25,9 @@ Inside `cancelAutoscuolaAppointment`: when the actor is a **STUDENT** (not admin
 
 ## UI (Airbnb-style, deliberately minimal)
 Flat list (no day-group headers, no dividers), avatar initials + "**Nome** ha annullato una guida" + muted "`sab 18 lug, 15:00 · 3 ore fa`". Unread = small red dot (`#c13515`, same as the bell badge); no colored band. Header: "Notifiche" + two round icon buttons — **CheckCheck** (mark all read, disabled when nothing unread) and **Trash** (clear all, no confirm). Empty state uses the faded 3D bell.
+
+## Booking-popover banner (rebooking a cancelled slot)
+When the owner/instructor opens **Nuovo appuntamento** in the web agenda and picks a student + day + time, an effect in `AutoscuoleAgendaPage.tsx` (keyed on `form.studentId/day/time`) calls `GET /api/autoscuole/slot-cancellation-check`. If that **same student** had cancelled a guida starting at that **same instant** (duration ignored — match on start only, within the minute), an **orange** inline banner appears under the Allievo field: *"Questo allievo aveva annullato una guida in questo orario."* Purely informative — the booking is **never blocked**. Source = the `AutoscuolaNotification` rows (kind `student_cancellation`), so only student-initiated cancellations trigger it. Same pill styling as the edit dialog's availability badge, in `bg-orange-50 text-orange-700`.
 
 ## Not this feature
 - `app/api/autoscuole/notifications/route.ts` is the **mobile recovery feed** (derived from other tables) — unrelated. The owner bell lives at `/api/autoscuole/owner-notifications`.
