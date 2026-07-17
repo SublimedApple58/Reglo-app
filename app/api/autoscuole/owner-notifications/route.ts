@@ -5,6 +5,7 @@ import { formatError } from "@/lib/utils";
 import {
   listAutoscuolaNotifications,
   markAutoscuolaNotificationsRead,
+  deleteAutoscuolaNotifications,
 } from "@/lib/autoscuole/notifications";
 
 /**
@@ -44,6 +45,26 @@ export async function POST() {
       );
     }
     await markAutoscuolaNotificationsRead(membership.companyId);
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json(
+      { success: false, message: formatError(error) },
+      { status: 400 },
+    );
+  }
+}
+
+// Delete all notifications ("cestino").
+export async function DELETE() {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
+      return NextResponse.json(
+        { success: false, message: "Operazione non consentita." },
+        { status: 403 },
+      );
+    }
+    await deleteAutoscuolaNotifications(membership.companyId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

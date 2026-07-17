@@ -61,3 +61,10 @@ export async function markAutoscuolaNotificationsRead(
     data: { readAt: new Date() },
   });
 }
+
+/** Delete all of a company's notifications (the bell "trash" action). */
+export async function deleteAutoscuolaNotifications(
+  companyId: string,
+): Promise<void> {
+  await prisma.autoscuolaNotification.deleteMany({ where: { companyId } });
+}

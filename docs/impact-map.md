@@ -174,6 +174,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Cache**: entra nel payload bootstrap in cache Redis (segmento AGENDA, 20s) → il badge sparisce entro ~20s dal primo accesso dell'allievo.
 - → **Design system**: icone 3D Fluent (MIT) in `public/images/3d/`; animazione `.megaphone-ring` in `globals.css` rispetta `prefers-reduced-motion`.
 
+### Owner notifications (bell annullamenti allievi)
+- → **Appointments / Appointment Cancel**: il trigger vive dentro `cancelAutoscuolaAppointment` — quando l'attore è un **allievo** (non staff), guida **futura non-esame**, crea una `AutoscuolaNotification` via `after()`. Se cambia chi/come annulla (o il rilevamento dell'attore-allievo), aggiorna il trigger.
+- → **Shell / Layout**: `OwnerNotificationsBell` è montato in `AutoscuoleShell` (cluster destro). Owner-only: l'endpoint risponde 403 ai non-titolari → il bell si auto-nasconde.
+- → **Mobile Notifications**: NON confondere con `/api/autoscuole/notifications` (feed recovery mobile, derivato da altre tabelle). Il bell titolare usa `/api/autoscuole/owner-notifications` + tabella `AutoscuolaNotification`.
+- → **DB**: nuova tabella `AutoscuolaNotification` (`readAt` per-azienda, snapshot display). Real-time = polling 25s (nessuna infra); rimpiazzabile con servizio gestito senza toccare la UI.
+
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
 - → **Login**: condivide `buildMobileAuthPayload` (`lib/mobile-auth-payload.ts`) — se cambia la shape di `AuthPayload`, aggiorna login + confirm + mobile types insieme.

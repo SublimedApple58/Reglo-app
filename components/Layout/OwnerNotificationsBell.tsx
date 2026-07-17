@@ -3,9 +3,9 @@
 import React from "react";
 import Image from "next/image";
 import * as Popover from "@radix-ui/react-popover";
+import { CheckCheck, Trash } from "lucide-react";
 
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
-import { cn } from "@/lib/utils";
 
 type NotificationItem = {
   id: string;
@@ -31,11 +31,11 @@ const timeFmt = new Intl.DateTimeFormat("it-IT", {
   minute: "2-digit",
 });
 
-/** "dom 20 lug · 15:00" for the cancelled guide. */
+/** "dom 20 lug, 15:00" for the cancelled guide. */
 function formatGuida(iso: string | null): string {
   if (!iso) return "";
   const d = new Date(iso);
-  return `${dayFmt.format(d)} · ${timeFmt.format(d)}`;
+  return `${dayFmt.format(d)}, ${timeFmt.format(d)}`;
 }
 
 /** Compact relative time in Italian: "adesso", "3 ore fa", "ieri", "3 giorni fa". */
@@ -51,32 +51,11 @@ function relativeTime(iso: string): string {
   return `${days} giorni fa`;
 }
 
-/** Day bucket for grouping: 0 = today, 1 = this week, 2 = earlier. */
-function bucketOf(iso: string): 0 | 1 | 2 {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate();
-  if (sameDay) return 0;
-  const days = (Date.now() - d.getTime()) / 86_400_000;
-  return days <= 7 ? 1 : 2;
-}
-const BUCKET_LABEL = ["Oggi", "Questa settimana", "Prima"] as const;
-
 function initialsOf(name: string | null): string {
   const t = (name ?? "").trim();
   if (!t) return "·";
   const w = t.split(/\s+/).filter(Boolean);
   return ((w[0]?.[0] ?? "") + (w[1]?.[0] ?? "")).toUpperCase() || "·";
-}
-
-function lessonLabel(type: string | null): string | null {
-  if (!type) return null;
-  const t = type.toLowerCase();
-  if (t === "guida" || t === "esame") return null; // generic — no chip
-  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 export function OwnerNotificationsBell() {
@@ -141,14 +120,19 @@ export function OwnerNotificationsBell() {
     }
   }, [unread, fetchNotifications]);
 
-  if (hidden) return null;
+  const deleteAll = React.useCallback(async () => {
+    // Optimistic: clear locally + reset the seen-set so a later arrival re-toasts.
+    setItems([]);
+    setUnread(0);
+    seenRef.current = new Set();
+    try {
+      await fetch(ENDPOINT, { method: "DELETE" });
+    } catch {
+      void fetchNotifications();
+    }
+  }, [fetchNotifications]);
 
-  const groups = ([0, 1, 2] as const)
-    .map((b) => ({
-      label: BUCKET_LABEL[b],
-      rows: items.filter((n) => bucketOf(n.createdAt) === b),
-    }))
-    .filter((g) => g.rows.length > 0);
+  if (hidden) return null;
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -156,14 +140,14 @@ export function OwnerNotificationsBell() {
         <button
           type="button"
           aria-label="Notifiche"
-          className="relative flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-white transition-colors hover:bg-[#f0f0f2]"
+          className="relative flex h-[38px] w-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#f0f0f0] transition-colors hover:bg-[#e6e6e6]"
         >
           <Image
-            src="/images/menu/bell-gold.png"
+            src="/images/menu/bell-3d.png"
             alt=""
-            width={28}
-            height={28}
-            className="block h-[27px] w-[27px] object-contain"
+            width={30}
+            height={30}
+            className="block h-[30px] w-[30px] translate-x-[1.5px] translate-y-[1px] object-contain"
           />
           {unread > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-[#f7f7f7] bg-[#c13515] px-1 text-[10px] font-bold leading-none text-white">
@@ -176,97 +160,72 @@ export function OwnerNotificationsBell() {
         <Popover.Content
           align="end"
           sideOffset={10}
-          className="z-50 w-[392px] overflow-hidden rounded-2xl border border-border bg-white shadow-dropdown"
+          className="z-50 w-[400px] overflow-hidden rounded-[18px] bg-white shadow-[0_8px_28px_rgba(0,0,0,0.13),0_0_0_1px_rgba(0,0,0,0.04)]"
         >
-          <div className="flex items-center justify-between border-b border-[#f4f4f5] px-4 pb-3 pt-3.5">
-            <div className="flex items-center gap-2">
-              <span className="text-[15px] font-bold text-foreground">Notifiche</span>
-              {unread > 0 && (
-                <span className="rounded-full border border-[#dbe7fb] bg-[#f4f8ff] px-2 py-px text-[11px] font-bold text-[#2563eb]">
-                  {unread} nuov{unread === 1 ? "a" : "e"}
-                </span>
-              )}
-            </div>
-            {unread > 0 && (
-              <button
-                type="button"
-                onClick={markAllRead}
-                className="cursor-pointer text-[12px] font-semibold text-navy-900 underline underline-offset-2 hover:opacity-80"
-              >
-                Segna tutte lette
-              </button>
+          <div className="flex items-center justify-between px-5 pb-3.5 pt-4">
+            <span className="text-[18px] font-bold tracking-[-0.3px] text-foreground">
+              Notifiche
+            </span>
+            {items.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={markAllRead}
+                  disabled={unread === 0}
+                  title="Segna tutte come lette"
+                  aria-label="Segna tutte come lette"
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[#f0f0f0] text-[#484848] transition-colors hover:bg-[#e6e6e6] disabled:cursor-default disabled:opacity-40 disabled:hover:bg-[#f0f0f0]"
+                >
+                  <CheckCheck className="h-[17px] w-[17px]" strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  onClick={deleteAll}
+                  title="Cancella tutte"
+                  aria-label="Cancella tutte"
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-[#f0f0f0] text-[#484848] transition-colors hover:bg-[#e6e6e6]"
+                >
+                  <Trash className="h-[14px] w-[14px]" strokeWidth={2} />
+                </button>
+              </div>
             )}
           </div>
 
           {items.length === 0 ? (
-            <div className="px-5 py-9 text-center">
+            <div className="px-5 pb-10 pt-6 text-center">
               <Image
-                src="/images/menu/bell-gold.png"
+                src="/images/menu/bell-3d.png"
                 alt=""
-                width={44}
-                height={44}
-                className="mx-auto mb-2.5 block h-[44px] w-[44px] object-contain opacity-50 grayscale"
+                width={46}
+                height={46}
+                className="mx-auto mb-3 block h-[46px] w-[46px] object-contain opacity-45 grayscale"
               />
-              <p className="text-[14px] font-semibold text-foreground">Nessuna notifica</p>
-              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+              <p className="text-[15px] font-semibold text-foreground">Nessuna notifica</p>
+              <p className="mt-1 text-[13px] font-medium text-[#717171]">
                 Ti avvisiamo qui quando un allievo annulla una guida.
               </p>
             </div>
           ) : (
-            <div className="max-h-[360px] overflow-y-auto">
-              {groups.map((g) => (
-                <div key={g.label}>
-                  <div className="sticky top-0 bg-white px-4 pb-1 pt-2.5 text-[11px] font-bold uppercase tracking-[0.5px] text-[#a4a4ab]">
-                    {g.label}
-                  </div>
-                  {g.rows.map((n) => {
-                    const chip = lessonLabel(n.lessonType);
-                    return (
-                      <div
-                        key={n.id}
-                        className={cn(
-                          "flex items-start gap-3 border-l-2 px-4 py-2.5",
-                          n.read
-                            ? "border-transparent"
-                            : "border-[#2563eb] bg-[#f4f8ff]",
-                        )}
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#eef0f4] text-[12.5px] font-bold text-navy-900">
-                          {initialsOf(n.studentName)}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="text-[13px] leading-[1.5] text-[#33333a]">
-                            <span className="font-semibold text-foreground">
-                              {n.studentName ?? "Un allievo"}
-                            </span>{" "}
-                            ha annullato la guida di{" "}
-                            <span className="font-semibold text-foreground">
-                              {formatGuida(n.startsAt)}
-                            </span>
-                            .
-                          </p>
-                          <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11.5px] font-semibold text-[#929292]">
-                            <span>{relativeTime(n.createdAt)}</span>
-                            {n.instructorName && (
-                              <>
-                                <span className="text-[#cfcfd6]">·</span>
-                                <span>{n.instructorName}</span>
-                              </>
-                            )}
-                            {chip && (
-                              <>
-                                <span className="text-[#cfcfd6]">·</span>
-                                <span>{chip}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                        {!n.read && (
-                          <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full bg-[#2563eb]" />
-                        )}
-                      </div>
-                    );
-                  })}
+            <div className="max-h-[420px] overflow-y-auto pb-1.5">
+              {items.map((n) => (
+                <div key={n.id} className="relative flex items-center gap-3.5 px-5 py-3">
+                  <span className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[13px] font-semibold text-[#484848]">
+                    {initialsOf(n.studentName)}
+                  </span>
+                    <div className="min-w-0 flex-1 pr-4">
+                      <p className="text-[14.5px] leading-[1.4] text-foreground">
+                        <span className="font-semibold">
+                          {n.studentName ?? "Un allievo"}
+                        </span>{" "}
+                        ha annullato una guida
+                      </p>
+                      <p className="mt-0.5 text-[13px] font-medium text-[#717171]">
+                        {formatGuida(n.startsAt)} · {relativeTime(n.createdAt)}
+                      </p>
+                    </div>
+                  {!n.read && (
+                    <span className="h-[9px] w-[9px] shrink-0 rounded-full bg-[#c13515]" />
+                  )}
                 </div>
               ))}
             </div>
