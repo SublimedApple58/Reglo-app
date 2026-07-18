@@ -28,6 +28,8 @@ import {
   getAutoscuolaStudentsWithProgress,
   listInstructorSickLeaves,
   deleteInstructorSickLeave,
+  listInstructorFerie,
+  deleteInstructorFerie,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getDailyAvailabilityOverrides,
@@ -322,7 +324,7 @@ export default function InstructorsTab({
 }: InstructorsTabProps) {
   const toast = useFeedbackToast();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const [tab, setTab] = React.useState<"disp" | "malattia" | "autonoma">("disp");
+  const [tab, setTab] = React.useState<"disp" | "malattia" | "ferie" | "autonoma">("disp");
   const [colorPopAnchor, setColorPopAnchor] = React.useState<DOMRect | null>(null);
 
   const selectedIndex = instructors.findIndex((i) => i.id === selectedId);
@@ -399,6 +401,7 @@ export default function InstructorsTab({
   const TABS = [
     { key: "disp" as const, label: "Disponibilità" },
     { key: "malattia" as const, label: "Malattia" },
+    { key: "ferie" as const, label: "Ferie" },
     { key: "autonoma" as const, label: "Gestione autonoma" },
   ];
 
@@ -473,6 +476,9 @@ export default function InstructorsTab({
         )}
         {tab === "malattia" && (
           <MalattiaTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
+        )}
+        {tab === "ferie" && (
+          <FerieTab instructor={selected} refreshAgenda={refreshAgenda} toast={toast} />
         )}
         {tab === "autonoma" && (
           <AutonomaTab
@@ -1231,6 +1237,218 @@ function MalattiaTab({
                     >
                       <div className="flex items-center gap-3 border-b border-[#f2f2f2] px-0.5 py-[13px]">
                         <span className="size-2 shrink-0 rounded-full bg-[#d64530]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-semibold text-[#222222]">
+                            {p.start === p.end ? fmtIso(p.start) : `${fmtIso(p.start)} → ${fmtIso(p.end)}`}
+                          </div>
+                          <div className="mt-px text-[12.5px] font-medium text-[#929292]">
+                            {p.half ? `Mezza giornata${p.time ? ` · dalle ${p.time}` : ""}` : "Giornata intera"}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => void removePeriod(p)}
+                          className="shrink-0 cursor-pointer text-sm font-semibold text-[#c1360f]"
+                        >
+                          Rimuovi
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
+    </div>
+  );
+}
+
+// ═══ TAB FERIE ═════════════════════════════════════════════════════════════════
+// Stesso identico meccanismo della Malattia (blocchi a giornata piena + cancella
+// le guide + avvisa gli allievi), ma scheda separata e notifica dedicata "in
+// ferie" (route instructor-vacation, reason blocco "ferie").
+function FerieTab({
+  instructor,
+  refreshAgenda,
+  toast,
+}: {
+  instructor: InstructorDetail;
+  refreshAgenda: () => void;
+  toast: ToastApi;
+}) {
+  const todayIso = ymd(new Date());
+  const [startIso, setStartIso] = React.useState(todayIso);
+  const [endIso, setEndIso] = React.useState(todayIso);
+  const [half, setHalf] = React.useState(false);
+  const [time, setTime] = React.useState("14:00");
+  const [saving, setSaving] = React.useState(false);
+  const [periods, setPeriods] = React.useState<SickPeriod[]>([]);
+  const [loaded, setLoaded] = React.useState(false);
+
+  const loadPeriods = React.useCallback(async () => {
+    const res = await listInstructorFerie(instructor.id);
+    if (!res.success || !res.data) {
+      setLoaded(true);
+      return;
+    }
+    // Raggruppa i blocchi giornalieri contigui in periodi.
+    const blocks = res.data
+      .map((b) => {
+        const starts = new Date(b.startsAt);
+        return { id: b.id, iso: ymd(starts), startMinutes: starts.getHours() * 60 + starts.getMinutes() };
+      })
+      .sort((a, b) => a.iso.localeCompare(b.iso));
+    const grouped: SickPeriod[] = [];
+    for (const b of blocks) {
+      const last = grouped[grouped.length - 1];
+      const prevDate = last ? new Date(last.end + "T00:00:00") : null;
+      if (prevDate) prevDate.setDate(prevDate.getDate() + 1);
+      if (last && prevDate && ymd(prevDate) === b.iso) {
+        last.end = b.iso;
+        last.ids.push(b.id);
+      } else {
+        grouped.push({
+          ids: [b.id],
+          start: b.iso,
+          end: b.iso,
+          half: b.startMinutes > 0,
+          time: b.startMinutes > 0 ? mmToLabel(b.startMinutes) : null,
+        });
+      }
+    }
+    setPeriods(grouped);
+    setLoaded(true);
+  }, [instructor.id]);
+
+  React.useEffect(() => {
+    void loadPeriods();
+  }, [loadPeriods]);
+
+  const save = async () => {
+    if (!startIso || !endIso) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/autoscuole/instructor-vacation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instructorId: instructor.id,
+          startDate: startIso,
+          endDate: endIso,
+          startTime: half ? time : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        const cancelled = data.data.appointmentsCancelled as number;
+        toast.success({
+          description: `Ferie aggiunte.${cancelled > 0 ? ` ${cancelled} ${cancelled === 1 ? "guida cancellata" : "guide cancellate"}.` : ""}`,
+        });
+        setStartIso(todayIso);
+        setEndIso(todayIso);
+        setHalf(false);
+        setTime("14:00");
+        await loadPeriods();
+        refreshAgenda();
+      } else {
+        toast.error({ description: data.message ?? "Errore nel salvataggio." });
+      }
+    } catch {
+      toast.error({ description: "Errore nel salvataggio." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removePeriod = async (p: SickPeriod) => {
+    const res = await deleteInstructorFerie(p.ids);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere le ferie." });
+      return;
+    }
+    toast.success({ description: "Ferie rimosse. Le guide già cancellate non vengono ripristinate." });
+    await loadPeriods();
+    refreshAgenda();
+  };
+
+  return (
+    <div>
+      <div className="mb-[18px] flex gap-3">
+        <div className="flex-1">
+          <div className={LBL}>Data inizio</div>
+          <DatePickerInput
+            value={startIso}
+            onChange={(v) => {
+              setStartIso(v);
+              if (endIso < v) setEndIso(v);
+            }}
+            className="h-auto rounded-[10px] border-[1.5px] px-3.5 py-[11px]"
+          />
+        </div>
+        <div className="flex-1">
+          <div className={LBL}>Data fine</div>
+          <DatePickerInput
+            value={endIso}
+            onChange={(v) => {
+              setEndIso(v);
+              if (v < startIso) setStartIso(v);
+            }}
+            className="h-auto rounded-[10px] border-[1.5px] px-3.5 py-[11px]"
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3.5 border-t border-[#f0f0f0] py-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-[#222222]">Mezza giornata</div>
+          <div className="mt-0.5 text-[12.5px] font-medium leading-snug text-[#929292]">
+            Le ferie iniziano a un orario specifico del primo giorno.
+          </div>
+        </div>
+        <InlineToggle checked={half} onChange={() => setHalf((v) => !v)} size="lg" />
+      </div>
+      {half && (
+        <div className="mt-1">
+          <div className={LBL}>Orario inizio ferie</div>
+          <TimePickerInput value={time} onChange={setTime} minTime="06:00" maxTime="20:00" className="w-full justify-between py-[11px]" />
+        </div>
+      )}
+
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => void save()}
+        className="mt-[18px] flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] bg-navy-900 p-[13px] text-sm font-semibold text-white transition-colors hover:bg-navy-800 disabled:opacity-60"
+      >
+        {saving ? <LoadingDots className="min-h-5" /> : "Aggiungi ferie"}
+      </button>
+
+      {loaded && (
+        <AnimatePresence initial={false}>
+          {periods.length > 0 && (
+            <motion.div
+              key="ferie-list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+            >
+              <div className={cn(LBL, "mt-7")}>Ferie registrate</div>
+              <div className="flex flex-col">
+                <AnimatePresence initial={false}>
+                  {periods.map((p) => (
+                    <motion.div
+                      key={p.ids[0]}
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.28, ease: "easeOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-center gap-3 border-b border-[#f2f2f2] px-0.5 py-[13px]">
+                        <span className="size-2 shrink-0 rounded-full bg-[#e8a020]" />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-semibold text-[#222222]">
                             {p.start === p.end ? fmtIso(p.start) : `${fmtIso(p.start)} → ${fmtIso(p.end)}`}

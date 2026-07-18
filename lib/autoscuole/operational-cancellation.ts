@@ -45,6 +45,8 @@ const formatCancellationTitle = (value: string) => {
       return "Guida annullata dalla segreteria";
     case "instructor_sick":
       return "🤒 Guida annullata — istruttore in malattia";
+    case "instructor_vacation":
+      return "🌴 Guida annullata — istruttore in ferie";
     default:
       return "Guida annullata";
   }
@@ -67,6 +69,8 @@ const formatCancellationBody = (value: string, slotLabel: string, instrLabel: st
       return `La guida di ${slotLabel}${instrLabel} è stata annullata per un cambio istruttore. ${tail}`;
     case "instructor_sick":
       return `🤒 La guida di ${slotLabel}${instrLabel} è stata annullata perché l'istruttore è in malattia. ${tail}`;
+    case "instructor_vacation":
+      return `🌴 La guida di ${slotLabel}${instrLabel} è stata annullata perché l'istruttore è in ferie. ${tail}`;
     default:
       return `La guida di ${slotLabel}${instrLabel} è stata annullata per motivi organizzativi. ${tail}`;
   }

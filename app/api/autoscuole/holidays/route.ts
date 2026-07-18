@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getHolidays,
   createHoliday,
+  createHolidayRange,
   deleteHoliday,
 } from "@/lib/actions/autoscuole-holidays.actions";
 
@@ -15,7 +16,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const payload = await request.json();
-  const res = await createHoliday(payload);
+  // Intervallo (from/to) dal modale "Segna festivo"; altrimenti giorno singolo (date).
+  const res =
+    payload && typeof payload.from === "string" && typeof payload.to === "string"
+      ? await createHolidayRange(payload)
+      : await createHoliday(payload);
   return NextResponse.json(res, { status: res.success ? 200 : 400 });
 }
 

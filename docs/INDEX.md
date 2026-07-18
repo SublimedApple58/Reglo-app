@@ -18,6 +18,7 @@
 | Holidays | [holidays.md](features/holidays.md) | `autoscuole-holidays.actions.ts` |
 | Locations (Sede e luoghi) | [locations.md](features/locations.md) | `api/autoscuole/locations/*`, `locations/LocationsSection.tsx`, `locations/LocationFormDialog.tsx` |
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
+| Instructor Absences (Malattia / Ferie) | [instructor-absences.md](features/instructor-absences.md) | `instructor-sick-leave/route.ts`, `instructor-vacation/route.ts`, `InstructorsTab.tsx` (`MalattiaTab`/`FerieTab`), `operational-cancellation.ts` |
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
 | Instructor Colors | [instructor-colors.md](features/instructor-colors.md) | `lib/autoscuole/instructor-colors.ts`, `color-swatch-picker.tsx`, `InstructorsTab.tsx`, `AutoscuoleAgendaPage.tsx` |

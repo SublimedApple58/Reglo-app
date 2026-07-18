@@ -7101,6 +7101,50 @@ export async function deleteInstructorSickLeave(blockIds: string[]) {
   }
 }
 
+export async function listInstructorFerie(instructorId: string) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const twoWeeksAgo = new Date();
+    twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+    const blocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId: membership.companyId,
+        instructorId,
+        reason: "ferie",
+        endsAt: { gte: twoWeeksAgo },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+      orderBy: { startsAt: "asc" },
+    });
+    return { success: true as const, data: blocks };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/** Rimuove un periodo di ferie (i blocchi giornalieri che lo compongono).
+ * Non ripristina le guide già cancellate. */
+export async function deleteInstructorFerie(blockIds: string[]) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
+      return { success: false as const, message: "Operazione non consentita." };
+    }
+    if (!blockIds.length) return { success: true as const, data: { deleted: 0 } };
+    const result = await prisma.autoscuolaInstructorBlock.deleteMany({
+      where: {
+        companyId: membership.companyId,
+        id: { in: blockIds },
+        reason: "ferie",
+      },
+    });
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const, data: { deleted: result.count } };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
 export async function deleteInstructorBlockRecurrence(recurrenceGroupId: string) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");

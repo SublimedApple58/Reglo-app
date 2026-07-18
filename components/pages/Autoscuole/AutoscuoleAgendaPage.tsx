@@ -46,6 +46,7 @@ import { Checkbox } from "@/components/animate-ui/radix/checkbox";
 import { DatePickerInput } from "@/components/ui/date-picker";
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { HolidayModal } from "@/components/pages/Autoscuole/dialogs/HolidayModal";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -815,10 +816,8 @@ export function AutoscuoleAgendaPage({
   }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
-  const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
-  const [holidayDialogDate, setHolidayDialogDate] = React.useState<Date | null>(null);
-  const [holidayLabel, setHolidayLabel] = React.useState("");
-  const [holidayPending, setHolidayPending] = React.useState(false);
+  const [holidayModalOpen, setHolidayModalOpen] = React.useState(false);
+  const [holidayModalInitialDate, setHolidayModalInitialDate] = React.useState<Date | null>(null);
   const [removeHolidayDialogOpen, setRemoveHolidayDialogOpen] = React.useState(false);
   const [removeHolidayDate, setRemoveHolidayDate] = React.useState<Date | null>(null);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
@@ -2121,29 +2120,25 @@ export function AutoscuoleAgendaPage({
                     Guida di gruppo
                   </button>
                 )}
-                {viewMode === "day" && (
-                  <>
-                    <div className="my-1 border-t border-[#f0f0f0]" />
-                    {holidaySet.has(formatYmd(dayFocus)) ? (
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
-                        onClick={() => { setPlusMenuOpen(false); setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
-                      >
-                        <Ban className="size-4" strokeWidth={1.7} />
-                        Rimuovi festivo
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
-                        onClick={() => { setPlusMenuOpen(false); setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
-                      >
-                        <Ban className="size-4" strokeWidth={1.7} />
-                        Segna festivo
-                      </button>
-                    )}
-                  </>
+                <div className="my-1 border-t border-[#f0f0f0]" />
+                {viewMode === "day" && holidaySet.has(formatYmd(dayFocus)) ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
+                  >
+                    <Ban className="size-4" strokeWidth={1.7} />
+                    Rimuovi festivo
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); setHolidayModalInitialDate(viewMode === "day" ? dayFocus : null); setHolidayModalOpen(true); }}
+                  >
+                    <Ban className="size-4" strokeWidth={1.7} />
+                    Segna festivo
+                  </button>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2379,9 +2374,8 @@ export function AutoscuoleAgendaPage({
                           setRemoveHolidayDate(normalizeDay(day));
                           setRemoveHolidayDialogOpen(true);
                         } else {
-                          setHolidayDialogDate(normalizeDay(day));
-                          setHolidayLabel("");
-                          setHolidayDialogOpen(true);
+                          setHolidayModalInitialDate(normalizeDay(day));
+                          setHolidayModalOpen(true);
                         }
                       }}
                     >
@@ -2470,10 +2464,10 @@ export function AutoscuoleAgendaPage({
               {/* Calendar body */}
               <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Time gutter — sticky left */}
-                <div className="sticky left-0 z-20 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
+                <div className="sticky left-0 z-40 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">{`${pad(hour)}:00`}</span>
+                      <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">{`${pad(hour)}:00`}</span>
                     </div>
                   ))}
                   {/* Now label */}
@@ -2511,7 +2505,7 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative cursor-pointer overflow-hidden border-l", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative cursor-pointer border-l", isColumnHoliday && instrIdx === 0 ? "overflow-visible" : "overflow-hidden", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-[#fffbf3]" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
                         data-agenda-col-day={dateKey}
                         data-agenda-col-instructor={instr.instructorId}
@@ -2519,9 +2513,21 @@ export function AutoscuoleAgendaPage({
                       >
                         {renderSlotGhost(day, instr.instructorId)}
                         {renderDraftGhost(day, instr.instructorId)}
-                        {isColumnHoliday && (
-                          <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
-                            {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
+                        {isColumnHoliday && instrIdx === 0 && (
+                          <div className="pointer-events-none sticky top-3 z-20 flex justify-center">
+                            <button
+                              type="button"
+                              title="Rimuovi festivo"
+                              className="group pointer-events-auto flex size-8 cursor-pointer items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-amber-200/70 transition-colors hover:ring-amber-300"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRemoveHolidayDate(normalizeDay(day));
+                                setRemoveHolidayDialogOpen(true);
+                              }}
+                            >
+                              <span className="text-[18px] leading-none group-hover:hidden" aria-hidden>🌴</span>
+                              <X className="hidden size-[18px] text-amber-600 group-hover:block" strokeWidth={2.2} />
+                            </button>
                           </div>
                         )}
                         {/* Availability bands — offset e clip alla finestra oraria visibile
@@ -2710,6 +2716,7 @@ export function AutoscuoleAgendaPage({
                           .map((b) => {
                             const bStart = toDate(b.startsAt);
                             const bEnd = toDate(b.endsAt);
+                            const blockStyle = blockTint(b.reason);
                             const clippedStart = bStart < dayStart ? dayStart : bStart;
                             const clippedEnd = bEnd > dayEnd ? dayEnd : bEnd;
                             const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
@@ -2721,19 +2728,19 @@ export function AutoscuoleAgendaPage({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F3F4F8] text-[9px] leading-tight text-left hover:bg-[#E7E9F1] transition-colors"
+                                    className={cn("absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left transition-colors", blockStyle.card)}
                                     style={{ top, height }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <div className="p-1">
-                                      <div className="font-semibold truncate text-[10px] text-slate-600">{b.reason || "Blocco"}</div>
+                                      <div className={cn("font-semibold truncate text-[10px]", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                       <div className="text-[8px] truncate text-slate-400">{formatTimeRange(bStart, bEnd)}</div>
                                     </div>
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
                                   <div className="space-y-2">
-                                    <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                    <div className={cn("text-xs font-semibold", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                     <div className="text-xs text-muted-foreground">{instr.instructorName}</div>
                                     <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
                                   </div>
@@ -2771,16 +2778,16 @@ export function AutoscuoleAgendaPage({
         <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
           {/* Holiday banner */}
           {holidaySet.has(formatYmd(dayFocus)) && (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 mb-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-red-700">
-                <Ban className="size-4" />
-                Giorno festivo{holidaySet.get(formatYmd(dayFocus)) ? ` — ${holidaySet.get(formatYmd(dayFocus))}` : ""}
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-[#fffbf3] px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-700">
+                <span className="text-[15px] leading-none" aria-hidden>🌴</span>
+                Giorno festivo{holidaySet.get(formatYmd(dayFocus)) ? ` · ${holidaySet.get(formatYmd(dayFocus))}` : ""}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-red-600 hover:bg-red-100 hover:text-red-700"
+                className="text-amber-700 hover:bg-amber-100 hover:text-amber-800"
                 onClick={() => {
                   setRemoveHolidayDate(dayFocus);
                   setRemoveHolidayDialogOpen(true);
@@ -2844,7 +2851,7 @@ export function AutoscuoleAgendaPage({
                   className="absolute left-0 right-0 flex items-start"
                   style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                 >
-                  <span className="w-full pr-2 text-right text-[11px] leading-none text-[#aaaaaa]">
+                  <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">
                     {`${pad(hour)}:00`}
                   </span>
                 </div>
@@ -4274,113 +4281,14 @@ export function AutoscuoleAgendaPage({
         </div>
       </CreateEventPopover>
 
-      {/* ── Holiday Creation Dialog ── */}
-      <Dialog open={holidayDialogOpen} onOpenChange={(open) => { if (!holidayPending) setHolidayDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Segna come festivo</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              {holidayDialogDate?.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
-            <div>
-              <label htmlFor="holiday-label" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Nome festività (opzionale)
-              </label>
-              <Input
-                id="holiday-label"
-                placeholder="es. Ferragosto, Ferie estive..."
-                value={holidayLabel}
-                onChange={(e) => setHolidayLabel(e.target.value)}
-                disabled={holidayPending}
-              />
-            </div>
-            {(() => {
-              const dayApptCount = holidayDialogDate
-                ? appointments.filter((a) => {
-                    const d = new Date(a.startsAt);
-                    return formatYmd(d) === formatYmd(holidayDialogDate) && a.status !== "cancelled";
-                  }).length
-                : 0;
-              if (dayApptCount > 0) {
-                return (
-                  <p className="text-sm text-amber-600">
-                    <AlertTriangle className="mr-1 inline size-4" />
-                    {dayApptCount === 1
-                      ? "C'è 1 guida prenotata questo giorno."
-                      : `Ci sono ${dayApptCount} guide prenotate questo giorno.`}
-                  </p>
-                );
-              }
-              return null;
-            })()}
-          </div>
-          <div className="flex flex-col gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-lg"
-              disabled={holidayPending}
-              onClick={async () => {
-                if (!holidayDialogDate) return;
-                setHolidayPending(true);
-                try {
-                  const res = await fetch("/api/autoscuole/holidays", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: false }),
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    toast.success({ description: "Giorno festivo aggiunto." });
-                    setHolidayDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: data.message ?? "Errore." });
-                  }
-                } catch { toast.error({ description: "Errore di rete." }); }
-                finally { setHolidayPending(false); }
-              }}
-            >
-              Chiudi e mantieni guide
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full rounded-lg"
-              disabled={holidayPending}
-              onClick={async () => {
-                if (!holidayDialogDate) return;
-                setHolidayPending(true);
-                try {
-                  const res = await fetch("/api/autoscuole/holidays", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: true }),
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    const count = data.data?.cancelledCount ?? 0;
-                    toast.success({
-                      description: count > 0
-                        ? `Giorno festivo aggiunto. ${count} ${count === 1 ? "guida cancellata" : "guide cancellate"}.`
-                        : "Giorno festivo aggiunto.",
-                    });
-                    setHolidayDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: data.message ?? "Errore." });
-                  }
-                } catch { toast.error({ description: "Errore di rete." }); }
-                finally { setHolidayPending(false); }
-              }}
-            >
-              Chiudi e cancella guide
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ── Holiday Creation Modal (single day + range) ── */}
+      <HolidayModal
+        open={holidayModalOpen}
+        onClose={() => setHolidayModalOpen(false)}
+        initialDate={holidayModalInitialDate}
+        existingHolidays={holidaySet}
+        onDone={() => load({ silent: true })}
+      />
 
       {/* ── Holiday Removal AlertDialog ── */}
       <AlertDialog open={removeHolidayDialogOpen} onOpenChange={setRemoveHolidayDialogOpen}>
@@ -4658,6 +4566,34 @@ function formatTimeRange(start: Date, end: Date) {
 
 function formatYmd(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** Etichetta leggibile per il motivo di un blocco istruttore (evita di
+ * mostrare valori grezzi tipo "sick_leave"/"ferie" in agenda). */
+function formatBlockReason(reason: string | null | undefined) {
+  switch ((reason ?? "").trim()) {
+    case "sick_leave":
+      return "Malattia";
+    case "ferie":
+      return "Ferie";
+    case "":
+      return "Blocco";
+    default:
+      return reason as string;
+  }
+}
+
+/** Tinta del blocco istruttore per tipo — palette condivisa con il mobile:
+ * malattia = arancio, ferie = teal, generico = grigio. */
+function blockTint(reason: string | null | undefined): { card: string; text: string } {
+  switch ((reason ?? "").trim()) {
+    case "sick_leave":
+      return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
+    case "ferie":
+      return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+    default:
+      return { card: "bg-[#F3F4F8] hover:bg-[#E7E9F1]", text: "text-slate-600" };
+  }
 }
 
 function buildLocalDateTime(day: string, time: string) {
