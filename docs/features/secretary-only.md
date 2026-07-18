@@ -42,6 +42,16 @@ Segreteria Demo" + titolare `segreteria@reglo.it` con AUTOSCUOLE ACTIVE e
 `{ secretaryOnly: true, voiceFeatureEnabled: true }`. Uso:
 `DOTENV_CONFIG_PATH=.env.dev NODE_OPTIONS=--require=dotenv/config node scripts/seed-secretary-only-company.mjs`
 
+## Niente flash al primo accesso (hydration)
+Il gating è client-side e legge `companyAtom`, che prima partiva `null` (riempito
+da una fetch dopo il mount) → al primo login si vedeva l'app "completa" per un
+attimo, poi al refresh solo la Segretaria. Fix generale: il context aziendale è
+risolto **lato server** in `app/[locale]/user/(autoscuole)/layout.tsx` e idrata
+gli atom al primo render (`useHydrateAtoms` in `company.provider.tsx`, props
+passate da `auth-data.provider.tsx`). Così nav/hamburger/gating partono già
+corretti — vale per tutte le company (risolve anche l'hamburger mancante al
+primo login).
+
 ## Connected features
 - **Voice AI** — l'unica area visibile; il gating interno su `voiceFeatureEnabled`
   resta invariato.
