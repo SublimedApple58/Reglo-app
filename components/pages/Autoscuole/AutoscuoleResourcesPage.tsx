@@ -4,7 +4,11 @@ import React from "react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
+import { useAtomValue } from "jotai";
 import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
+
+import { companyAtom } from "@/atoms/company.store";
+import { isSecretaryOnly } from "@/lib/services";
 
 import {
   BellProtoIcon,
@@ -359,7 +363,15 @@ export function AutoscuoleResourcesPage({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const company = useAtomValue(companyAtom);
+  // Modalità "solo Segretaria": l'overlay Impostazioni mostra solo il pane
+  // Segretaria (niente Prenotazioni/Istruttori/Veicoli/…).
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const paneGroups = secretaryOnly
+    ? [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]]
+    : CONFIG_PANE_GROUPS;
   const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
+    if (secretaryOnly) return "voice";
     // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
     // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
     const raw = searchParams?.get("pane");
@@ -387,6 +399,15 @@ export function AutoscuoleResourcesPage({
     setConfigTab(pane);
     contentScrollRef.current?.scrollTo({ top: 0 });
   }, []);
+
+  // In modalità "solo Segretaria" l'atom company può caricarsi DOPO il primo
+  // render (quando configTab è già stato inizializzato a "bookings"): appena
+  // sappiamo che è secretary-only, forza il pane su "voice".
+  React.useEffect(() => {
+    if (secretaryOnly && configTab !== "voice") {
+      setConfigTab("voice");
+    }
+  }, [secretaryOnly, configTab]);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
   const [studentReminderMorningEnabled, setStudentReminderMorningEnabled] = React.useState(false);
@@ -2085,7 +2106,7 @@ export function AutoscuoleResourcesPage({
               Impostazioni dell&apos;account
             </h1>
             <nav className="flex gap-1 lg:flex-col lg:gap-0.5">
-              {CONFIG_PANE_GROUPS.map((group, groupIndex) => (
+              {paneGroups.map((group, groupIndex) => (
                 <React.Fragment key={groupIndex}>
                   {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}
                   {group.map((pane) => {

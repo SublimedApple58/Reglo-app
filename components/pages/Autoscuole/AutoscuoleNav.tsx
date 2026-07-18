@@ -4,7 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
+import { useAtomValue } from "jotai";
 
+import { companyAtom } from "@/atoms/company.store";
+import { isSecretaryOnly } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,14 +27,21 @@ export function AutoscuoleNav() {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const locale = useLocale();
+  const company = useAtomValue(companyAtom);
 
   const currentTab = searchParams.get("tab") ?? null;
   const basePath = `/${locale}/user/autoscuole`;
   const isOnAutoscuolePage = pathname === basePath;
 
+  // Modalità "solo Segretaria": mostra unicamente la tab Segretaria.
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const items = secretaryOnly
+    ? navItems.filter((item) => item.tab === "voice")
+    : navItems;
+
   return (
     <nav className="flex h-full items-stretch justify-center overflow-x-auto [scrollbar-width:none]">
-      {navItems.map((item) => {
+      {items.map((item) => {
         let isActive: boolean;
         if (item.tab === "voice") {
           isActive = pathname.startsWith(`${basePath}/voice`);

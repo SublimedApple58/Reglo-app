@@ -88,6 +88,15 @@ export type ServiceLimits = {
    * Vedi docs/features/reglo-aula.md.
    */
   aulaEnabled?: boolean;
+  /**
+   * Modalità "solo Segretaria": la company ha attivato SOLO il modulo
+   * segreteria vocale AI, non l'intera suite autoscuole. Quando true la web
+   * app mostra unicamente l'area Segretaria + le sue impostazioni (niente
+   * Agenda/Allievi/Rinnovi né gli altri pane di configurazione). Richiede
+   * `voiceFeatureEnabled: true` per avere contenuto. Default false.
+   * Vedi docs/features/secretary-only.md.
+   */
+  secretaryOnly?: boolean;
 };
 
 export type CompanyServiceInfo = {
@@ -134,3 +143,12 @@ export const getServiceLimits = (
   if (!match?.limits) return DEFAULT_SERVICE_LIMITS[key];
   return { ...DEFAULT_SERVICE_LIMITS[key], ...match.limits };
 };
+
+/**
+ * true se la company è in modalità "solo Segretaria" (ha attivato solo il
+ * modulo segreteria vocale AI). Guida il gating della web app: nav, landing e
+ * pane impostazioni mostrano solo l'area Segretaria.
+ */
+export const isSecretaryOnly = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean => getServiceLimits(services, "AUTOSCUOLE").secretaryOnly === true;

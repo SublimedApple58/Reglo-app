@@ -2,8 +2,12 @@
 
 import React from "react";
 import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useLocale } from "next-intl";
+import { useAtomValue } from "jotai";
 
+import { companyAtom } from "@/atoms/company.store";
+import { isSecretaryOnly } from "@/lib/services";
 import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
@@ -50,6 +54,10 @@ function normalizeTab(value: string | null): AutoscuoleTabKey {
 
 export function AutoscuoleTabsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const locale = useLocale();
+  const company = useAtomValue(companyAtom);
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -61,6 +69,15 @@ export function AutoscuoleTabsPage() {
     const tab = normalizeTab(searchParams.get("tab"));
     setActiveTab(tab);
   }, [searchParams]);
+
+  // Modalità "solo Segretaria": le tab dell'autoscuola (agenda/allievi/…) non
+  // esistono — reindirizza alla pagina Segretaria. Le Impostazioni restano
+  // accessibili (mostreranno solo il pane Segretaria).
+  React.useEffect(() => {
+    if (secretaryOnly && activeTab !== "settings") {
+      router.replace(`/${locale}/user/autoscuole/voice`);
+    }
+  }, [secretaryOnly, activeTab, router, locale]);
 
   React.useEffect(() => {
     const preloaders: Record<AutoscuoleTabKey, Array<() => Promise<unknown>>> = {
@@ -98,6 +115,12 @@ export function AutoscuoleTabsPage() {
     const timeout = window.setTimeout(runPrefetch, 250);
     return () => window.clearTimeout(timeout);
   }, [activeTab]);
+
+  // Modalità "solo Segretaria": tutto ciò che non è "settings" reindirizza a
+  // /voice (effetto sopra) — mostra un placeholder mentre avviene.
+  if (secretaryOnly && activeTab !== "settings") {
+    return <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" />;
+  }
 
   return (
     <div className="w-full">

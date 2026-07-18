@@ -166,6 +166,7 @@ function AutoscuolaDrawerContent({
       : 0;
   const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
   const aulaEnabled = Boolean(limits.aulaEnabled);
+  const secretaryOnly = Boolean(limits.secretaryOnly);
 
   const [quizSeatsUsed, setQuizSeatsUsed] = useState<number | null>(null);
   useEffect(() => {
@@ -663,6 +664,43 @@ function AutoscuolaDrawerContent({
               </tbody>
             </table>
           </div>
+        )}
+      </section>
+
+      {/* ── Modalità app ── */}
+      <section className="rounded-2xl border border-border bg-white p-5 shadow-[var(--shadow-card)]">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-50">
+            <Phone className="h-4 w-4 text-sky-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-foreground">Modalità app</p>
+            <p className="text-xs text-muted-foreground">
+              Definisce cosa vede l&apos;autoscuola nella web app.
+            </p>
+          </div>
+        </div>
+        <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Solo Segretaria</p>
+            <p className="text-xs text-muted-foreground">
+              La web app mostra solo l&apos;area Segretaria e le sue impostazioni
+              (niente Agenda/Allievi/Rinnovi). Richiede la Segretaria attiva.
+            </p>
+          </div>
+          <Checkbox
+            checked={secretaryOnly}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, secretaryOnly: Boolean(checked) }))
+            }
+          />
+        </label>
+        {secretaryOnly && !voiceFeatureEnabled && (
+          <p className="mt-2 text-xs text-amber-600">
+            Attenzione: la Segretaria non è ancora attiva su questa autoscuola —
+            attivala qui sotto, altrimenti l&apos;utente vedrà la schermata
+            &quot;Segretaria non attiva&quot;.
+          </p>
         )}
       </section>
 

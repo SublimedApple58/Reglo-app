@@ -41,7 +41,7 @@ import {
 import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
 import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
-import { isServiceActive } from "@/lib/services";
+import { isSecretaryOnly, isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
 // Sezione "Novità" del menu utente nascosta temporaneamente (2026-07-12).
@@ -119,6 +119,11 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
   const serviceActive = React.useMemo(
     () => isServiceActive(company?.services ?? null, "AUTOSCUOLE", true),
+    [company?.services],
+  );
+  // Modalità "solo Segretaria": nasconde le voci operative "guida" del menu.
+  const secretaryOnly = React.useMemo(
+    () => isSecretaryOnly(company?.services ?? null),
     [company?.services],
   );
 
@@ -280,20 +285,24 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <UsersProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Utenti</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => router.push("/user/autoscuole/ore-guida")}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Ore guida</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setComunicatoOpen(true)}
-                    className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                  >
-                    <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                    <span className="text-[15px] font-medium">Invia comunicato</span>
-                  </DropdownMenuItem>
+                  {!secretaryOnly && (
+                    <DropdownMenuItem
+                      onClick={() => router.push("/user/autoscuole/ore-guida")}
+                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                    >
+                      <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span className="text-[15px] font-medium">Ore guida</span>
+                    </DropdownMenuItem>
+                  )}
+                  {!secretaryOnly && (
+                    <DropdownMenuItem
+                      onClick={() => setComunicatoOpen(true)}
+                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                    >
+                      <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span className="text-[15px] font-medium">Invia comunicato</span>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole/assistenza")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
