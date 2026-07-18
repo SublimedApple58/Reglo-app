@@ -1,4 +1,4 @@
-import { requireUserAndCompany } from '@/lib/auth-guard';
+import { requireCompanyAdmin } from '@/lib/auth-guard';
 
 export default async function UserLayout({
   children,
@@ -8,7 +8,10 @@ export default async function UserLayout({
   params: Promise<{ locale: string }>;
 }>) {
   const { locale } = await params;
-  await requireUserAndCompany(locale);
+  // La web app è riservata a titolari e istruttori amministratori
+  // (OWNER / INSTRUCTOR_OWNER). Allievi e istruttori "semplici" vengono
+  // mandati alla schermata /unauthorized (usano l'app mobile).
+  await requireCompanyAdmin(locale);
 
   return <>{children}</>;
 }
