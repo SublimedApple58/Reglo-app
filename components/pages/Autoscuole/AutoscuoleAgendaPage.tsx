@@ -266,9 +266,13 @@ const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE;
 // `totalMinutes` è ridefinito nel componente (dipende dalla fascia oraria scelta);
 // DAY_START_HOUR/DAY_END_HOUR restano 0/24 qui per gli orari prenotabili completi.
 const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
-type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number };
+// weekMode: "classic" = settimana lun–dom; "rolling" = 7 giorni a partire da
+// oggi (es. mercoledì → mer…mar). In entrambi i casi si rispettano i giorni
+// visibili scelti.
+type WeekMode = "classic" | "rolling";
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode };
 // days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
-const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24 };
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic" };
 const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
   { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
   { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
@@ -293,10 +297,22 @@ function readAgendaViewPrefs(): AgendaViewPrefs {
         ? (p.endHour as number)
         : DEFAULT_VIEW_PREFS.endHour;
     if (endHour <= startHour) endHour = DEFAULT_VIEW_PREFS.endHour;
-    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour };
+    const weekMode: WeekMode = p.weekMode === "rolling" ? "rolling" : "classic";
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode };
   } catch {
     return DEFAULT_VIEW_PREFS;
   }
+}
+
+// Ancora della settimana visibile: "classic" → lunedì della settimana;
+// "rolling" → mezzanotte del giorno stesso (finestra di 7 giorni da oggi).
+function weekAnchor(date: Date, mode: WeekMode) {
+  if (mode === "rolling") {
+    const copy = new Date(date);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+  }
+  return startOfWeek(date);
 }
 
 // Persistenza dei filtri agenda in localStorage: restano applicati tra refresh e
@@ -686,7 +702,9 @@ export function AutoscuoleAgendaPage({
   // scelto per mostrarlo nell'alert prima di procedere con allowPast.
   const [pastConfirmOpen, setPastConfirmOpen] = React.useState(false);
   const [pendingPastStart, setPendingPastStart] = React.useState<Date | null>(null);
-  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = React.useState(() =>
+    weekAnchor(new Date(), readAgendaViewPrefs().weekMode),
+  );
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
   const [editAppointmentTarget, setEditAppointmentTarget] =
@@ -1353,7 +1371,7 @@ export function AutoscuoleAgendaPage({
     const target = toDate(`${draftGhost.ymd}T00:00:00`);
     const normalized = normalizeDay(target);
     if (viewMode === "week") {
-      const ws = startOfWeek(normalized);
+      const ws = weekAnchor(normalized, viewPrefs.weekMode);
       if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
     } else if (normalized.getTime() !== dayFocus.getTime()) {
       setDayFocus(normalized);
@@ -1895,7 +1913,7 @@ export function AutoscuoleAgendaPage({
                 className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
               >
                 <LayoutGrid className="size-4" strokeWidth={1.6} />
-                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24) && (
+                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic") && (
                   <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
                 )}
               </button>
@@ -1909,6 +1927,36 @@ export function AutoscuoleAgendaPage({
               >
                 <div className="space-y-4">
                   <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
+                    <div className="flex gap-1.5">
+                      {([
+                        { key: "classic", label: "Classica (lun–dom)" },
+                        { key: "rolling", label: "7 giorni da oggi" },
+                      ] as const).map((opt) => {
+                        const on = viewPrefs.weekMode === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => {
+                              setViewPrefs((p) => ({ ...p, weekMode: opt.key }));
+                              setWeekStart(weekAnchor(new Date(), opt.key));
+                            }}
+                            className={cn(
+                              "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
+                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">
+                      &quot;7 giorni da oggi&quot; parte dal giorno corrente invece che da lunedì.
+                    </p>
+                  </div>
                   <div className="space-y-2">
                     <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1963,7 +2011,10 @@ export function AutoscuoleAgendaPage({
                     <button
                       type="button"
                       className="cursor-pointer text-[13px] font-semibold text-[#1a1a2e] underline underline-offset-2 hover:opacity-70"
-                      onClick={() => setViewPrefs(DEFAULT_VIEW_PREFS)}
+                      onClick={() => {
+                        setViewPrefs(DEFAULT_VIEW_PREFS);
+                        setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
+                      }}
                     >
                       Ripristina
                     </button>
