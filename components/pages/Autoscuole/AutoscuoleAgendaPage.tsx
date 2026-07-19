@@ -2797,6 +2797,53 @@ export function AutoscuoleAgendaPage({
               </Button>
             </div>
           )}
+          {/* Riga esami del giorno (con o senza orario). La vista giorno prima
+              non renderizzava gli examGroups da nessuna parte → gli esami erano
+              invisibili. Come nella vista settimana, li mostriamo come banner
+              che aprono il pannello di gestione esame. */}
+          {(() => {
+            const dayExams = examGroups.filter(
+              (eg) => formatYmd(toDate(eg.startsAt)) === formatYmd(dayFocus),
+            );
+            if (dayExams.length === 0) return null;
+            return (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-violet-100 bg-[#faf8ff] px-3 py-2">
+                <span className="mr-0.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-violet-400">
+                  <GraduationCap className="size-3.5" /> Esami
+                </span>
+                {dayExams.map((eg) => {
+                  const egStart = toDate(eg.startsAt);
+                  const examHasTime = Boolean(eg.endsAt);
+                  const egEnd = eg.endsAt
+                    ? toDate(eg.endsAt)
+                    : new Date(egStart.getTime() + 3600000);
+                  const n = eg.appointments.filter(
+                    (a) => !isExamPlaceholder(a),
+                  ).length;
+                  return (
+                    <button
+                      key={`exam-day-${eg.key}`}
+                      type="button"
+                      onClick={() => {
+                        setExamPanelGroup(eg);
+                        setExamPanelStudentSearch("");
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 cursor-pointer"
+                    >
+                      <span>
+                        {examHasTime
+                          ? formatTimeRange(egStart, egEnd)
+                          : "orario da definire"}
+                      </span>
+                      <span className="text-violet-500">
+                        {n === 0 ? "· vuoto" : `· ${n} all.`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <div
             ref={calendarScrollRef}
             className={cn("bg-white", isAgendaFullscreen ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
@@ -3076,6 +3123,75 @@ export function AutoscuoleAgendaPage({
                         </React.Fragment>
                       );
                     })}
+                    {/* Exam blocks (con orario) for this instructor on this day.
+                        Gli esami senza orario restano nella riga banner in alto. */}
+                    {examGroups
+                      .filter(
+                        (eg) =>
+                          eg.instructorId === instr.id &&
+                          Boolean(eg.endsAt) &&
+                          formatYmd(toDate(eg.startsAt)) === formatYmd(day),
+                      )
+                      .map((eg) => {
+                        const egStart = toDate(eg.startsAt);
+                        const egEnd = toDate(eg.endsAt!);
+                        const clippedStart = egStart < dayStart ? dayStart : egStart;
+                        const clippedEnd = egEnd > dayEnd ? dayEnd : egEnd;
+                        const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                        const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                        const top = offsetMin * PIXELS_PER_MINUTE;
+                        const height = durMin * PIXELS_PER_MINUTE;
+                        return (
+                          <button
+                            key={`exam-day-grid-${eg.key}`}
+                            type="button"
+                            className="absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight shadow-[0_5px_14px_rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
+                            style={{ top, height }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExamPanelGroup(eg);
+                              setExamPanelStudentSearch("");
+                            }}
+                          >
+                            <div className="p-2">
+                              <div className="flex items-center gap-1 text-[11px] font-bold text-violet-700">
+                                <GraduationCap className="size-3 shrink-0" /> Esame
+                              </div>
+                              <div className="truncate text-[10px] text-violet-500">
+                                {formatTimeRange(egStart, egEnd)}
+                              </div>
+                              <div className="mt-0.5 flex flex-col gap-px">
+                                {(() => {
+                                  const real = eg.appointments.filter(
+                                    (a) => !isExamPlaceholder(a),
+                                  );
+                                  if (real.length === 0) {
+                                    return (
+                                      <div className="truncate text-[10px] font-medium italic leading-tight text-violet-500/80">
+                                        Nessun allievo
+                                      </div>
+                                    );
+                                  }
+                                  return real.map((a) => {
+                                    const lic = studentLicenseById.get(a.student.id);
+                                    return (
+                                      <div
+                                        key={a.id}
+                                        className="truncate text-[10px] font-semibold leading-tight text-violet-900/85"
+                                      >
+                                        {a.student.firstName} {a.student.lastName}
+                                        {lic ? (
+                                          <span className="font-medium text-violet-500"> · {lic}</span>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     {/* Instructor blocks for this instructor on this day */}
                     {instructorBlocks
                       .filter((b) => b.instructorId === instr.id && (() => {
