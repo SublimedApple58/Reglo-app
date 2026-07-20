@@ -5457,7 +5457,13 @@ async function verifyInstructorAvailability({
       minute: "2-digit",
       timeZone: "Europe/Rome",
     });
-    const reasonSuffix = overlappingBlock.reason ? ` (${overlappingBlock.reason})` : "";
+    const rawBlockReason = overlappingBlock.reason?.trim();
+    const blockReasonLabel =
+      rawBlockReason === "theory_lesson" ? "Lezione teorica"
+      : rawBlockReason === "sick_leave" ? "Malattia"
+      : rawBlockReason === "ferie" ? "Ferie"
+      : rawBlockReason;
+    const reasonSuffix = blockReasonLabel ? ` (${blockReasonLabel})` : "";
     return {
       available: false,
       reason: "BLOCK",
@@ -6983,8 +6989,14 @@ export async function createInstructorBlock(
         const dayStr = formatDayItaly(blockStart);
         const requested = `${formatTimeItaly(blockStart)}–${formatTimeItaly(blockEnd)}`;
         const conflictTime = `${formatTimeItaly(blockConflict.startsAt)}–${formatTimeItaly(blockConflict.endsAt)}`;
-        const reason = blockConflict.reason?.trim();
-        const conflictLabel = reason ? `«${reason}» ${conflictTime}` : conflictTime;
+        const rawReason = blockConflict.reason?.trim();
+        // Traduci i sentinel-tipo in etichette leggibili (il resto è titolo libero).
+        const reasonLabel =
+          rawReason === "theory_lesson" ? "Lezione teorica"
+          : rawReason === "sick_leave" ? "Malattia"
+          : rawReason === "ferie" ? "Ferie"
+          : rawReason;
+        const conflictLabel = reasonLabel ? `«${reasonLabel}» ${conflictTime}` : conflictTime;
         return {
           success: false as const,
           message: `Impossibile bloccare ${dayStr} ${requested}: si sovrappone al blocco ${conflictLabel}.`,
@@ -10030,6 +10042,9 @@ type InstructorHoursDayBreakdown = {
   totalMinutes: number;
   outsideWorkingHoursMinutes: number;
   appointmentCount: number;
+  // Ore di lezione teorica (block `theory_lesson`) — categoria SEPARATA, NON
+  // conteggiata in totalMinutes (che resta solo guide).
+  theoryMinutes: number;
 };
 
 export type InstructorHoursEntry = {
@@ -10041,6 +10056,7 @@ export type InstructorHoursEntry = {
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
     lateCancellationMinutes: number;
+    theoryMinutes: number;
     byDay: InstructorHoursDayBreakdown[];
   };
   monthly: {
@@ -10048,6 +10064,7 @@ export type InstructorHoursEntry = {
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
     lateCancellationMinutes: number;
+    theoryMinutes: number;
   };
 };
 
@@ -10060,6 +10077,7 @@ export type InstructorHoursBucket = {
   totalMinutes: number;
   outsideWorkingHoursMinutes: number;
   appointmentCount: number;
+  theoryMinutes: number; // ore di lezione teorica, categoria separata
 };
 
 export type InstructorHoursRange = {
@@ -10070,7 +10088,7 @@ export type InstructorHoursRange = {
   rangeStart: string; // ISO YYYY-MM-DD (inclusive)
   rangeEnd: string; // ISO YYYY-MM-DD (inclusive)
   granularity: "day" | "week";
-  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number };
+  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number; theoryMinutes: number };
   buckets: InstructorHoursBucket[];
 };
 
@@ -10221,6 +10239,18 @@ export async function getInstructorDrivingHours(input: {
       },
     });
 
+    // Lezioni teoriche (block `theory_lesson`) nello stesso range — categoria
+    // separata, NON sommata alle ore di guida.
+    const theoryBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        reason: "theory_lesson",
+        startsAt: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    });
+
     // Late cancellations: status = 'cancelled' AND cancelledAt > penaltyCutoffAt
     // AND cancellationKind = 'manual_cancel'. We fetch all candidates and then
     // filter in JS because Prisma's `where` cannot compare two fields directly.
@@ -10263,6 +10293,9 @@ export async function getInstructorDrivingHours(input: {
       const instrLateAppts = lateCancelledAppointments.filter(
         (a) => a.instructorId === instr.id,
       );
+      const instrTheory = theoryBlocks.filter((b) => b.instructorId === instr.id);
+      const blockMinutes = (b: { startsAt: Date; endsAt: Date }) =>
+        Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / 60000);
 
       // Late cancellation totals (weekly + monthly)
       let weeklyLateCancellationMin = 0;
@@ -10300,6 +10333,9 @@ export async function getInstructorDrivingHours(input: {
             settings.workingHoursEnd,
           );
         }
+        const dayTheoryMin = instrTheory
+          .filter((b) => b.startsAt >= dayDate && b.startsAt < nextDay)
+          .reduce((s, b) => s + blockMinutes(b), 0);
         const dow = (dayDate.getUTCDay());
         weekDays.push({
           date: dateStr,
@@ -10307,11 +10343,13 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: dayTotalMin,
           outsideWorkingHoursMinutes: Math.round(dayOutsideMin),
           appointmentCount: dayAppts.length,
+          theoryMinutes: dayTheoryMin,
         });
       }
 
       const weeklyTotal = weekDays.reduce((s, d) => s + d.totalMinutes, 0);
       const weeklyOutside = weekDays.reduce((s, d) => s + d.outsideWorkingHoursMinutes, 0);
+      const weeklyTheory = weekDays.reduce((s, d) => s + d.theoryMinutes, 0);
 
       // Monthly totals
       const monthAppts = instrAppts.filter((a) => a.startsAt >= monthStartDate && a.startsAt < monthEndDate);
@@ -10328,6 +10366,9 @@ export async function getInstructorDrivingHours(input: {
           settings.workingHoursEnd,
         );
       }
+      const monthTheory = instrTheory
+        .filter((b) => b.startsAt >= monthStartDate && b.startsAt < monthEndDate)
+        .reduce((s, b) => s + blockMinutes(b), 0);
 
       const monthLabel = `${ITALY_MONTH_LABELS[monthStartDate.getUTCMonth()]} ${monthStartDate.getUTCFullYear()}`;
 
@@ -10340,6 +10381,7 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: weeklyTotal,
           outsideWorkingHoursMinutes: weeklyOutside,
           lateCancellationMinutes: weeklyLateCancellationMin,
+          theoryMinutes: weeklyTheory,
           byDay: weekDays,
         },
         monthly: {
@@ -10347,6 +10389,7 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: monthTotal,
           outsideWorkingHoursMinutes: Math.round(monthOutside),
           lateCancellationMinutes: monthlyLateCancellationMin,
+          theoryMinutes: monthTheory,
         },
       };
     });
@@ -10439,10 +10482,24 @@ export async function getInstructorDrivingHoursRange(input: {
       select: { instructorId: true, startsAt: true, endsAt: true },
     });
 
+    // Lezioni teoriche nello stesso range — categoria separata.
+    const theoryBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        reason: "theory_lesson",
+        startsAt: { gte: rangeStartDate, lt: rangeEndExclusive },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    });
+
     const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
     for (const instr of targetInstructors) {
       settingsMap.set(instr.id, parseInstructorSettings(instr.settings));
     }
+
+    const sumTheory = (blocks: { startsAt: Date; endsAt: Date }[]) =>
+      blocks.reduce((s, b) => s + Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / 60000), 0);
 
     const sumAppts = (
       appts: { startsAt: Date; endsAt: Date | null }[],
@@ -10467,6 +10524,7 @@ export async function getInstructorDrivingHoursRange(input: {
     const results: InstructorHoursRange[] = targetInstructors.map((instr) => {
       const settings = settingsMap.get(instr.id)!;
       const instrAppts = appointments.filter((a) => a.instructorId === instr.id);
+      const instrTheory = theoryBlocks.filter((b) => b.instructorId === instr.id);
       const buckets: InstructorHoursBucket[] = [];
 
       if (granularity === "day") {
@@ -10483,6 +10541,7 @@ export async function getInstructorDrivingHoursRange(input: {
             totalMinutes: total,
             outsideWorkingHoursMinutes: outside,
             appointmentCount: dayAppts.length,
+            theoryMinutes: sumTheory(instrTheory.filter((b) => b.startsAt >= dayDate && b.startsAt < nextDay)),
           });
         }
       } else {
@@ -10503,6 +10562,7 @@ export async function getInstructorDrivingHoursRange(input: {
             totalMinutes: total,
             outsideWorkingHoursMinutes: outside,
             appointmentCount: wAppts.length,
+            theoryMinutes: sumTheory(instrTheory.filter((b) => b.startsAt >= weekStartD && b.startsAt < weekEndD)),
           });
         }
       }
@@ -10519,6 +10579,7 @@ export async function getInstructorDrivingHoursRange(input: {
           totalMinutes: buckets.reduce((s, b) => s + b.totalMinutes, 0),
           outsideWorkingHoursMinutes: buckets.reduce((s, b) => s + b.outsideWorkingHoursMinutes, 0),
           appointmentCount: buckets.reduce((s, b) => s + b.appointmentCount, 0),
+          theoryMinutes: buckets.reduce((s, b) => s + b.theoryMinutes, 0),
         },
         buckets,
       };

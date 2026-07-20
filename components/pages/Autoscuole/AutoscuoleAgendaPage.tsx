@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2 } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -833,6 +833,10 @@ export function AutoscuoleAgendaPage({
     setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
   }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
+  // Lo stesso dialog "blocco istruttore" serve due eventi: "generic" = Evento
+  // bloccante (titolo libero) e "theory" = Lezione teorica (reason forzato
+  // "theory_lesson", niente titolo, avviso "bloccante"). Vedi createInstructorBlock.
+  const [blockKind, setBlockKind] = React.useState<"generic" | "theory">("generic");
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
   const [holidayModalOpen, setHolidayModalOpen] = React.useState(false);
   const [holidayModalInitialDate, setHolidayModalInitialDate] = React.useState<Date | null>(null);
@@ -1307,9 +1311,11 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(blockForm.startTime),
         durMin: parseInt(blockForm.duration, 10) || 60,
         instructorId: blockForm.instructorId || null,
-        title: blockForm.reason.trim() || "Evento bloccante",
-        cardClass: "bg-[#F3F4F8]/85 border-[#b8bcc8]",
-        dotClass: "bg-[#9ca3af]",
+        title: blockKind === "theory" ? "Lezione teorica" : (blockForm.reason.trim() || "Evento bloccante"),
+        cardClass: blockKind === "theory"
+          ? "bg-[#E6E9FF]/85 border-[#a5abf0]"
+          : "bg-[#F3F4F8]/85 border-[#b8bcc8]",
+        dotClass: blockKind === "theory" ? "bg-[#4f46e5]" : "bg-[#9ca3af]",
       };
     }
     if (createGroupLessonOpen && groupDraft?.date && groupDraft.time) {
@@ -1325,7 +1331,7 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -2156,10 +2162,18 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "120", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                >
+                  <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />
+                  Lezione teorica
                 </button>
                 {groupLessonsEnabled && (
                   <button
@@ -2325,7 +2339,18 @@ export function AutoscuoleAgendaPage({
                 label: "Evento bloccante",
                 icon: <Ban className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
+                  setBlockKind("generic");
                   setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+                  setBlockDialogOpen(true);
+                }),
+              },
+              {
+                key: "theory",
+                label: "Lezione teorica",
+                icon: <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />,
+                onSelect: () => closeAnd(() => {
+                  setBlockKind("theory");
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "120", reason: "", recurring: false, recurringWeeks: 12 });
                   setBlockDialogOpen(true);
                 }),
               },
@@ -4349,8 +4374,8 @@ export function AutoscuoleAgendaPage({
       <CreateEventPopover
         open={blockDialogOpen}
         onClose={() => { if (!blockCreating) setBlockDialogOpen(false); }}
-        title="Nuovo evento bloccante"
-        subtitle="Blocca l'agenda dell'istruttore per un impegno"
+        title={blockKind === "theory" ? "Nuova lezione teorica" : "Nuovo evento bloccante"}
+        subtitle={blockKind === "theory" ? "Blocca la fascia oraria dell'istruttore" : "Blocca l'agenda dell'istruttore per un impegno"}
         anchor={popoverAnchor}
         footer={
           <>
@@ -4366,26 +4391,31 @@ export function AutoscuoleAgendaPage({
                 const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
                 const startsAt = blockStart.toISOString();
                 const endsAt = new Date(blockStart.getTime() + parseInt(blockForm.duration, 10) * 60 * 1000).toISOString();
+                const isTheory = blockKind === "theory";
                 const res = await createInstructorBlock({
                   instructorId: blockForm.instructorId,
                   startsAt,
                   endsAt,
-                  reason: blockForm.reason.trim() || undefined,
+                  reason: isTheory ? "theory_lesson" : (blockForm.reason.trim() || undefined),
                   recurring: blockForm.recurring,
                   recurringWeeks: blockForm.recurring ? blockForm.recurringWeeks : undefined,
                 });
                 setBlockCreating(false);
                 if (!res.success) {
-                  toast.error({ description: res.message ?? "Errore creazione evento." });
+                  toast.error({ description: res.message ?? (isTheory ? "Errore creazione lezione." : "Errore creazione evento.") });
                   return;
                 }
                 setBlockDialogOpen(false);
                 load({ silent: true });
                 const count = (res as { count?: number }).count ?? 1;
-                toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
+                toast.success({
+                  description: isTheory
+                    ? (count > 1 ? `${count} lezioni teoriche create.` : "Lezione teorica creata.")
+                    : (count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato."),
+                });
               }}
             >
-              {blockCreating ? <LoadingDots className="min-h-5" /> : "Crea evento"}
+              {blockCreating ? <LoadingDots className="min-h-5" /> : (blockKind === "theory" ? "Crea lezione" : "Crea evento")}
             </button>
           </>
         }
@@ -4418,10 +4448,19 @@ export function AutoscuoleAgendaPage({
             onDurationChange={(m) => setBlockForm((f) => ({ ...f, duration: String(m) }))}
             chips={[15, 30, 45, 60, 90, 120]}
           />
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
-            <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
-          </div>
+          {blockKind === "theory" ? (
+            <div className="flex items-start gap-2.5 rounded-[10px] bg-[#E6E9FF] px-3.5 py-3">
+              <Lock className="mt-0.5 size-4 shrink-0 text-[#4f46e5]" strokeWidth={2} />
+              <p className="text-[12.5px] font-medium leading-snug text-[#3730a3]">
+                In questa fascia l&apos;istruttore risulta occupato: gli allievi non vedranno slot prenotabili e non sarà possibile inserire guide, esami o guide di gruppo sovrapposte.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
+              <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
+            </div>
+          )}
           <div className="space-y-2">
             <div
               className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
@@ -4743,6 +4782,8 @@ function formatBlockReason(reason: string | null | undefined) {
       return "Malattia";
     case "ferie":
       return "Ferie";
+    case "theory_lesson":
+      return "Lezione teorica";
     case "":
       return "Blocco";
     default:
@@ -4751,13 +4792,21 @@ function formatBlockReason(reason: string | null | undefined) {
 }
 
 /** Tinta del blocco istruttore per tipo — palette condivisa con il mobile:
- * malattia = arancio, ferie = teal, generico = grigio. */
+ * malattia = arancio, ferie = teal, lezione teorica = indaco a righe
+ * (evento fortemente bloccante), generico = grigio. */
 function blockTint(reason: string | null | undefined): { card: string; text: string } {
   switch ((reason ?? "").trim()) {
     case "sick_leave":
       return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
     case "ferie":
       return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+    case "theory_lesson":
+      // Indaco + righe diagonali = "occupato / non prenotabile" a colpo d'occhio.
+      // Colore (background-color) + hatch (background-image) impilati in un'unica classe.
+      return {
+        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] hover:bg-[#DCE0FF]",
+        text: "text-[#3730a3]",
+      };
     default:
       return { card: "bg-[#F3F4F8] hover:bg-[#E7E9F1]", text: "text-slate-600" };
   }

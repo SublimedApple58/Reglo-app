@@ -17,6 +17,16 @@ Reports an instructor's completed driving hours, with the share worked **outside
 - Authorization mirrors the legacy action: instructor sees own; owner/admin sees all (or a specific `instructorId`).
 - **No DB migration.** Read-only over `AutoscuolaAppointment`.
 
+## Ore di lezione teorica (categoria separata)
+Entrambe le action includono `theoryMinutes` (block `AutoscuolaInstructorBlock`
+con `reason:"theory_lesson"` nello stesso range): shape legacy `weekly.theoryMinutes`
++ `weekly.byDay[].theoryMinutes` + `monthly.theoryMinutes`; shape range
+`total.theoryMinutes` + `buckets[].theoryMinutes`. **NON** sono sommate a
+`totalMinutes` (che resta solo guide). Web: pill indaco "Lezione teorica" nella
+card istruttore + totale team header. Mobile: card indaco nell'hero. Vedi
+`features/lezione-teorica.md`.
+
 ## Connected features
 - **Instructor Clusters / Settings** — `workingHoursStart/End` (the window for "fuori orario") comes from instructor settings.
+- **Lezione teorica** — le ore teoriche compaiono qui come categoria separata (`theoryMinutes`).
 - **Mobile** — `reglo-mobile` Ore di guida screen + `more/hours-period` period picker consume the range shape.

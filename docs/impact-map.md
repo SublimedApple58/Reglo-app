@@ -32,6 +32,14 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Instructor Clusters**: `parseInstructorSettings()` for availabilityMode
 - → **Mobile**: `InstructorAvailabilityScreen`, `PublicationModeEditor`, booking flow in `AllievoHomeScreen`
 
+### Lezione teorica (agenda)
+- **È un** `AutoscuolaInstructorBlock` con `reason:"theory_lesson"` (nessuna migrazione, nessun modello nuovo)
+- → **Availability**: `getAllAvailableSlots`/`getDateAvailabilityMap` la sottraggono già (carve dei block); la fascia sparisce agli allievi
+- → **Appointments/Booking**: `verifyInstructorAvailability` + overlap-check in create/reschedule rifiutano guide/esami/gruppi sovrapposti
+- → **Instructor Absences**: stesso modello/rendering (`blockTint`/`formatBlockReason`) ma NON è un'assenza (niente cancellazione guide)
+- → **Creazione**: solo web (`AutoscuoleAgendaPage` menu ＋ + popover veloce, `blockKind`), riusa `createInstructorBlock`
+- → **Mobile**: visualizza + crea (istruttore per sé); dot calendario indaco; `weeklyAgenda.ts` `BLOCK_PRESENTATION.theory`
+
 ### Booking Engine
 - → **Availability**: reads weekly, daily overrides, published weeks, holidays
 - → **Appointments**: creates appointments when booking confirmed
