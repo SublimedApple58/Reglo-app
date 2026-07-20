@@ -1863,11 +1863,17 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
       prisma.autoscuolaAppointment.findMany({
         // record_cleanup = guida rimossa dal titolare ("Cancella"): sparisce
         // dallo storico (e quindi da "Tutte"/"Annullate") e da tutti i conteggi.
-        // Prisma `not` include anche le righe con cancellationKind null.
+        // ATTENZIONE: in Prisma `{ not: "x" }` NON include le righe con valore
+        // NULL (semantica SQL: `col <> 'x'` è NULL per col NULL). Le guide normali
+        // hanno cancellationKind null → serve l'OR esplicito, altrimenti sparirebbero
+        // TUTTE le guide non cancellate dallo storico di ogni allievo.
         where: {
           companyId,
           studentId,
-          cancellationKind: { not: "record_cleanup" },
+          OR: [
+            { cancellationKind: null },
+            { cancellationKind: { not: "record_cleanup" } },
+          ],
         },
         select: {
           id: true,
