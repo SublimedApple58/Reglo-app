@@ -36,6 +36,16 @@ Oltre che dal blocco agenda / foglio "Gestisci guida", **tipo guida + valutazion
 - **Web**: editor inline nel tab **Note** del pannello allievo (`AutoscuoleStudentsPage`, `renderPanelNotes`): chip tipo + stelle + textarea.
 - **Mobile**: la riga dello storico (`StudentNotesDetailScreen`) apre il foglio `manage-lesson-details` (seed minimale su `manageLessonStore`), registrato anche nello stack `notes`. Vedi `reglo-mobile/docs/features/notes.md`.
 
+## Cancellazione "pulizia storico" + preavviso ri-esposto (2026-07-20)
+Nuova semantica di cancellazione pensata per far **sparire dallo storico** guide future ormai inutili, senza toccare crediti/penale — distinta dalle cancellazioni esistenti (`manual_cancel`, `operational_cancel`, `permanent_cancel`).
+- **`hardCleanupAppointment()`** e **`hardCleanupAppointmentsByStudent()`** (`lib/autoscuole/operational-cancellation.ts`): soft-delete con `cancellationKind: "record_cleanup"` (+ `cancellationReason: "record_cleanup"`), status → `cancelled`. **NON** rimborsa il credito, **NON** gestisce penale/cutoff, libera lo slot (`releaseSlotsForAppointment`). Agisce **solo su guide FUTURE ancora attive** (`scheduled`/`confirmed`/`checked_in`); **esami e guide di gruppo esclusi**.
+- **Server action** (`lib/actions/autoscuole.actions.ts`): `hardCleanupAutoscuolaAppointment(input)` (singola) e `hardCleanupAutoscuolaAppointmentsByStudent({studentId})` (tutte). Guardia **owner/admin only**.
+- **Esclusione dallo storico**: `getAutoscuolaStudentDrivingRegister` ha ora nel `where` `cancellationKind: { not: "record_cleanup" }` → le guide "pulite" spariscono da "Tutte" e "Annullate" **e da tutti i conteggi** (Prisma `not` include anche le righe con `cancellationKind` null).
+- **Preavviso ri-esposto (tema 3)**: `getAutoscuolaStudentDrivingRegister` seleziona e ritorna ora anche `penaltyCutoffAt`. Nel tab **"Guide"** del dettaglio allievo (`components/pages/Autoscuole/AutoscuoleStudentsPage.tsx`) per gli annullamenti **dell'allievo** (`cancellationKind === "manual_cancel"`) si mostra una Pill **"Preavviso: Xh Ymin"** (ricalcolata client da `startsAt − cancelledAt`, **non** persistita come numero) + badge **"Tardiva"** quando `cancelledAt > penaltyCutoffAt`. Il preavviso resta consultabile **anche dopo** la decisione della cancellazione tardiva (prima spariva quando usciva dalla coda `getLateCancellations`/`AutoscuoleLateCancellationsPanel`).
+- **UI cancella dal dettaglio allievo** (`AutoscuoleStudentsPage.tsx`, pannello Guide): bottone **"Cancella"** per-riga (solo guide future non concluse, no esami/gruppi) + **"Cancella tutte"** nell'header, con `AlertDialog` di conferma, spinner `LoadingDots`, refetch via `loadRegister` (no optimistic).
+- **Campi annullamento esposti al mobile**: `getAutoscuolaAppointmentsFiltered` ramo **`light`** aggiunge `cancelledAt, penaltyAmount, penaltyCutoffAt, lateCancellationAction` (consumati dalla vista mobile "Guide annullate").
+- **Ore istruttore — nessun impatto**: `getInstructorDrivingHours`/`getInstructorDrivingHoursRange` contano solo status `completed`/`checked_in`/`no_show`, quindi `record_cleanup` (status `cancelled`) è già escluso. Vedi `features/instructor-hours.md`.
+
 ## Key functions
 - `createAutoscuolaAppointment()` — single lesson
 - `createAutoscuolaAppointmentBatch()` — batch (exams)
@@ -53,7 +63,7 @@ Oltre che dal blocco agenda / foglio "Gestisci guida", **tipo guida + valutazion
 - **Cancellazioni staff dall'agenda web (2026-07-07)**: la CTA "Elimina definitivamente" (`permanentlyCancelAutoscuolaAppointment`, kind `permanent_cancel`) è stata RIMOSSA dal popover evento — restano "Annulla" (`cancelAutoscuolaAppointment`, `manual_cancel`, regole penale/cutoff) e "Cancella" (`deleteAutoscuolaAppointment` → `operationallyCancelAppointment`, `operational_cancel`: rimborso sempre, penale waived, slot liberati, ora con confirm). L'action + endpoint `/permanent-cancel` restano SOLO per il tasto "Elimina" del foglio Gestisci guida mobile — noti i suoi limiti: nessun guard ruolo/proprietà, slot non liberati, penale non azzerata.
 
 ## DB models
-- `AutoscuolaAppointment` — status, startsAt/endsAt, instructorId, vehicleId, `studentId` (**nullable dal 2026-07-16 — solo per i segnaposto esame senza allievi; vedi sopra**), rating, notes, cancellationReason/Kind, rescheduledAt, availabilityOverrideApproved, lateCancellationAction, invoiceId/invoiceStatus
+- `AutoscuolaAppointment` — status, startsAt/endsAt, instructorId, vehicleId, `studentId` (**nullable dal 2026-07-16 — solo per i segnaposto esame senza allievi; vedi sopra**), rating, notes, cancellationReason/Kind (`manual_cancel` | `operational_cancel` | `permanent_cancel` | `record_cleanup`), rescheduledAt, availabilityOverrideApproved, lateCancellationAction, invoiceId/invoiceStatus
 - `AutoscuolaCase` — tracks lesson progress per student
 
 ## Appointment statuses

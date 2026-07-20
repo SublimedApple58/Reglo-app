@@ -6,7 +6,7 @@
 
 | Feature | Doc | Primary files |
 |---------|-----|--------------|
-| Appointments | [appointments.md](features/appointments.md) | `autoscuole.actions.ts` |
+| Appointments (incl. cancellazioni: annulla / cancella / pulizia storico `record_cleanup`) | [appointments.md](features/appointments.md) | `autoscuole.actions.ts`, `lib/autoscuole/operational-cancellation.ts`, `AutoscuoleStudentsPage.tsx` |
 | Never-accessed nudge (allievo mai loggato) | [never-accessed-nudge.md](features/never-accessed-nudge.md) | `autoscuole.actions.ts` (`buildNeverAccessedUserIds`), `NeverAccessedNudge.tsx`, `AutoscuoleAgendaPage.tsx`, `AutoscuoleStudentsPage.tsx` |
 | Owner notifications (bell annullamenti allievi) | [owner-notifications.md](features/owner-notifications.md) | `AutoscuolaNotification` model, `lib/autoscuole/notifications.ts`, `api/autoscuole/owner-notifications/route.ts`, `OwnerNotificationsBell.tsx`, `autoscuole.actions.ts` (`createStudentCancellationNotification`) |
 | Availability | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts` |

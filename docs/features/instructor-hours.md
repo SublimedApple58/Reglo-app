@@ -14,6 +14,7 @@ Reports an instructor's completed driving hours, with the share worked **outside
 ## Range mode
 - `from`/`to` inclusive `YYYY-MM-DD`. Granularity derived server-side: span ≤ 14 days → daily buckets; longer → Mon–Sun weekly buckets.
 - Appointments counted: `status in (completed, checked_in, no_show)`, `type != esame`, `startsAt ∈ [from, to+1)`.
+- **Nota `record_cleanup` (2026-07-20)**: la cancellazione "pulizia storico" mette la guida a status `cancelled`, quindi è **già esclusa** dal conteggio ore (entrambe le action filtrano solo `completed`/`checked_in`/`no_show`). Nessun cambiamento richiesto qui. Vedi `features/appointments.md`.
 - Authorization mirrors the legacy action: instructor sees own; owner/admin sees all (or a specific `instructorId`).
 - **No DB migration.** Read-only over `AutoscuolaAppointment`.
 
