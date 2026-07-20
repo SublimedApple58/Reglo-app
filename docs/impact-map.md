@@ -7,16 +7,20 @@ When modifying a feature, read its connected features to verify nothing breaks.
 Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Appointments
-- → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`), confirm consumes credits, settlement charges Stripe
+- → **Payments**: cancel refunds credits (`refundLessonCreditIfEligible`; l'annullo web `annulFutureAppointment` rende il credito via `adjustStudentLessonCredits` o azzera l'importo `waived`), confirm consumes credits, settlement charges Stripe, `coverAppointmentWithLessonCredit` applica 1 credito a una guida da pagare
 - → **Repositioning (retired)**: cancel now cancels only — no reposition/proposal (`queueOperationalRepositionForAppointment` is cancel-only behind `REPOSITIONING_ENABLED=false`)
-- → **Notifications**: push on create/cancel/reschedule/propose
+- → **Notifications**: push on create/cancel/reschedule/propose (l'annullo web via `annulFutureAppointment` notifica con reason `owner_delete`)
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Communications**: case status change triggers notifications
 - → **Booking Engine**: booking request creates appointments via slot matcher
 - → **Vehicles (M:N + auto al seguito, 2026-06-24)**: an appointment reserves **N vehicles** via the `AutoscuolaAppointmentVehicle` join (`role=primary|follow`); `vehicleId` stays = the primary. A moto lesson may add a follow car. Any busy-interval builder / conflict-check must read the join, not just `vehicleId` (`slot-matcher`, `autoscuole-availability.actions`, `createAutoscuolaAppointment`, `communications.freeSlotLicenseKeysTomorrow`). `updateAutoscuolaAppointmentDetails({vehicleId, followVehicleId})` reconciles the join. Swaps exclude follow-car lessons. See `features/vehicles.md`.
 - → **Cases & Deadlines**: appointments track lesson progress per case
-- → **Penalties**: late cancellation triggers penalty charge; il **preavviso** dell'allievo (`manual_cancel`) è ora ricalcolato e mostrato in modo permanente nel dettaglio allievo (Pill "Preavviso" + badge "Tardiva"), anche dopo la decisione della coda tardive
-- → **Cancellazione "pulizia storico" (`record_cleanup`, 2026-07-20)**: `hardCleanupAppointment`/`hardCleanupAppointmentsByStudent` (`operational-cancellation.ts`) + action owner-only `hardCleanupAutoscuolaAppointment(sByStudent)`. Soft-delete su guide **future attive** (no esami/gruppi): NON rimborsa credito, NON tocca penale, libera lo slot. `getAutoscuolaStudentDrivingRegister` filtra `cancellationKind != "record_cleanup"` → sparisce da storico + conteggi. **NON impatta Payments** (nessun refund) né **Instructor Hours** (status `cancelled` già escluso)
+- → **Penalties**: annullo tardivo → coda "Cancellazioni tardive". Dal redesign 2026-07-20 il titolare può decidere subito nel dialogo "Annulla guida" (`annulFutureAppointment`, `lateOutcome` penalize/waive/defer) oppure lasciare `defer` per il pannello. Il **preavviso** dell'allievo (`manual_cancel`) è ricalcolato e mostrato in modo permanente nel dettaglio allievo (Pill "Preavviso" + badge "Tardiva"). `resolveLateCancellation` ora restituisce davvero il credito su "dismiss"; CTA dinamici (`creditApplied` da `getLateCancellations`). Vedi `features/penalties.md`
+- → **Redesign cancellazioni / dialogo unico (`CancelAppointmentDialog`, 2026-07-20)**: due sole azioni web condivise agenda↔dettaglio allievo.
+  - **"Annulla guida"** (future) → `annulAutoscuolaAppointment({appointmentId, lateOutcome})` → core `annulFutureAppointment` (`operational-cancellation.ts`): `manual_cancel`, libera slot, notifica; esito credito/penale per copertura (credit/money/none) × tempistica (`isLate` vs `penaltyCutoffAt`). Impatta **Payments** (refund credito o `waived`/`unpaid`) e **Penalties** (coda su `defer`). Owner/admin decidono l'esito; istruttore non-titolare → sempre `defer`.
+  - **"Rimuovi dallo storico"** (passate) → `hardCleanupAutoscuolaAppointment({appointmentId, keepInHours?, refundCredit?})` → core `removeAppointmentFromRecord` (ex `hardCleanupAppointment`, non più future-only): marcatore `record_cleanup`. `getAutoscuolaStudentDrivingRegister` + agenda filtrano `record_cleanup` → sparisce da storico/agenda/conteggi. `keepInHours=false` → `cancelled` (fuori da **Instructor Hours** + slot liberati); `keepInHours=true` → stato invariato → **RESTA nelle Instructor Hours** (asimmetria voluta, vedi `features/instructor-hours.md`). `refundCredit=true` → +1 credito se coperta e non resa. Bulk `hardCleanupAutoscuolaAppointmentsByStudent` esiste ma non più esposto nel web.
+  - **"Copri con credito"** → `coverAppointmentWithLessonCredit({appointmentId})`: applica 1 credito a una guida da pagare (guide di gruppo). Impatta **Payments** (−1 credito, `creditApplied`).
+  - Azioni legacy `cancelAutoscuolaAppointment`/`deleteAutoscuolaAppointment`/`permanentlyCancelAutoscuolaAppointment` restano SOLO per il mobile (e trigger owner-notifications).
 - → **Mobile**: types `AutoscuolaAppointmentWithRelations` used in 14 screens; il ramo `light` di `getAutoscuolaAppointmentsFiltered` ora espone `cancelledAt/penaltyAmount/penaltyCutoffAt/lateCancellationAction` per la vista mobile "Guide annullate" (allievo)
 - → **Group Lessons (per-student notes, 2026-06-16)**: a group-lesson seat is an appointment, so `updateAutoscuolaAppointmentDetails({notes})` is the per-student note editor; the seat note reaches the student via the normal `getAppointments`/`latest-note` paths (mobile teal note card). See `features/group-lessons.md`.
 - → **Group Lessons MOTO (`kind="moto"`, 2026-06-25)**: a moto group reserves a **fleet of motos** (`AutoscuolaGroupLessonVehicle`) + **one shared follow car** (`AutoscuolaGroupLesson.followVehicleId`) — both reserved at the **container level** for the whole window (`group-lesson-busy.ts`). Each participant gets an **auto-assigned** fleet moto (`lib/autoscuole/group-moto.ts`); mixed categories allowed. `findGroupLessonOverlap` now takes `vehicleIds[]` and checks other containers' fleet/follow car. Any new group-lesson conflict check must consider the fleet + follow car, not a single `vehicleId`. See `features/group-lessons.md`.
@@ -136,8 +140,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - (legacy, dead behind `REPOSITIONING_ENABLED=false`) Booking Engine slot-matching
 
 ### Penalties
-- → **Payments**: penalty charge via Stripe, tracked in AppointmentPayment
-- → **Appointments**: reads cancellation time vs cutoff
+- → **Payments**: penalty charge via Stripe, tracked in AppointmentPayment; `resolveLateCancellation` "dismiss" ora **restituisce il credito** (+1) se la guida era coperta e non ancora resa, "charge" lo ri-scala / segna `manualPaymentStatus=unpaid`
+- → **Appointments**: reads cancellation time vs cutoff; la coda tardive è alimentata da `annulFutureAppointment` con `lateOutcome="defer"` (o annullo allievo / no-show). CTA del pannello dinamici su `creditApplied`
 - → **Communications**: background job triggers penalty processing
 
 ### Voice AI
@@ -197,7 +201,22 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ## Critical Call Chains
 
-### Appointment Cancel
+### Appointment Cancel (web — dialogo unico, 2026-07-20)
+```
+annulAutoscuolaAppointment() → annulFutureAppointment()
+    → update(status=cancelled, cancellationKind=manual_cancel, lateCancellationAction?)
+    → releaseSlotsForAppointment()
+    → adjustStudentLessonCredits(+1)  // se nei tempi / waive su guida a credito
+    → notifyOperationalCancellation(reason=owner_delete) → sendAutoscuolaPushToUsers() + email
+    → invalidateAutoscuoleCache(AGENDA, PAYMENTS)
+
+hardCleanupAutoscuolaAppointment() → removeAppointmentFromRecord()
+    → update(cancellationKind=record_cleanup, status=cancelled se !keepInHours)
+    → releaseSlotsForAppointment()  // solo se !keepInHours
+    → adjustStudentLessonCredits(+1)  // solo se refundCredit + coperta
+```
+
+### Appointment Cancel (mobile / legacy)
 ```
 cancelAppointment() → refundLessonCreditIfEligible() → adjustStudentLessonCredits()
                     → queueOperationalRepositionForAppointment() → findBestAutoscuolaSlot()
