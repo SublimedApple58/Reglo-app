@@ -2381,6 +2381,8 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           cancelledAt: true,
           cancellationKind: true,
           cancellationReason: true,
+          creditApplied: true,
+          paymentRequired: true,
           penaltyAmount: true,
           penaltyCutoffAt: true,
           lateCancellationAction: true,

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CancelAppointmentDialog, type CancelDialogTarget, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -24,8 +25,8 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
-  deleteAutoscuolaAppointment,
-  cancelAutoscuolaAppointment,
+  annulAutoscuolaAppointment,
+  hardCleanupAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
   createInstructorBlock,
@@ -99,6 +100,10 @@ type AppointmentRow = {
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
   cancellationKind?: string | null;
+  creditApplied?: boolean | null;
+  paymentRequired?: boolean | null;
+  penaltyCutoffAt?: string | Date | null;
+  penaltyAmount?: number | null;
   groupLessonId?: string | null;
   groupLessonCapacity?: number | null;
   groupLessonKind?: string | null;
@@ -1643,40 +1648,67 @@ export function AutoscuoleAgendaPage({
     load({ silent: true });
   };
 
-  const handleCancel = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler annullare questa guida?");
-    if (!confirmed) return;
-    setPendingEventActionId(appointmentId);
-    const res = await cancelAutoscuolaAppointment({ appointmentId });
-    if (!res.success) {
-      toast.error({
-        description: res.message ?? "Impossibile annullare l'appuntamento.",
-      });
-      setPendingEventActionId(null);
-      return;
-    }
-    toast.success({
-      description: "Guida annullata.",
-    });
-    await load({ silent: true });
-    setPendingEventActionId(null);
+  // Dialogo unico "Annulla guida" (future) / "Rimuovi dallo storico" (passate).
+  const [cancelDialogTarget, setCancelDialogTarget] = React.useState<CancelDialogTarget | null>(null);
+  const [cancelDialogBusy, setCancelDialogBusy] = React.useState(false);
+
+  const isFutureActiveItem = (item: AppointmentRow) => {
+    const status = (item.status ?? "").toLowerCase();
+    return ["scheduled", "confirmed"].includes(status) && toDate(item.startsAt).getTime() > Date.now();
   };
 
-  const handleDelete = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler cancellare questa guida?");
-    if (!confirmed) return;
-    setPendingEventActionId(appointmentId);
-    const res = await deleteAutoscuolaAppointment({ appointmentId });
+  const openCancelDialog = (item: AppointmentRow) => {
+    const start = toDate(item.startsAt);
+    const status = (item.status ?? "").toLowerCase();
+    const isFutureActive =
+      ["scheduled", "confirmed"].includes(status) && start.getTime() > Date.now();
+    setCancelDialogTarget({
+      appointmentId: item.id,
+      studentName: item.student?.firstName ?? null,
+      startsAt: start,
+      endsAt: item.endsAt ? toDate(item.endsAt) : null,
+      isPast: !isFutureActive,
+      creditApplied: !!item.creditApplied,
+      paymentRequired: !!item.paymentRequired,
+      penaltyCutoffAt: item.penaltyCutoffAt ? toDate(item.penaltyCutoffAt) : null,
+      penaltyAmount: item.penaltyAmount ?? null,
+      countsInHours: ["completed", "checked_in", "no_show"].includes(status),
+    });
+  };
+
+  const handleAnnulConfirm = async (lateOutcome?: LateOutcome) => {
+    if (!cancelDialogTarget || cancelDialogBusy) return;
+    setCancelDialogBusy(true);
+    const res = await annulAutoscuolaAppointment({
+      appointmentId: cancelDialogTarget.appointmentId,
+      lateOutcome,
+    });
+    setCancelDialogBusy(false);
     if (!res.success) {
-      toast.error({
-        description: res.message ?? "Impossibile cancellare l'evento.",
-      });
-      setPendingEventActionId(null);
+      toast.error({ description: res.message ?? "Impossibile annullare la guida." });
       return;
     }
-    toast.success({ description: res.message ?? "Guida cancellata." });
+    setCancelDialogTarget(null);
+    toast.success({ description: res.message ?? "Guida annullata." });
     await load({ silent: true });
-    setPendingEventActionId(null);
+  };
+
+  const handleRemoveConfirm = async (opts: { keepInHours: boolean; refundCredit: boolean }) => {
+    if (!cancelDialogTarget || cancelDialogBusy) return;
+    setCancelDialogBusy(true);
+    const res = await hardCleanupAutoscuolaAppointment({
+      appointmentId: cancelDialogTarget.appointmentId,
+      keepInHours: opts.keepInHours,
+      refundCredit: opts.refundCredit,
+    });
+    setCancelDialogBusy(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere la guida." });
+      return;
+    }
+    setCancelDialogTarget(null);
+    toast.success({ description: res.message ?? "Guida rimossa dallo storico." });
+    await load({ silent: true });
   };
 
   const handleStatusUpdate = async (appointmentId: string, status: "scheduled" | "confirmed" | "proposal" | "checked_in" | "no_show" | "completed" | "cancelled") => {
@@ -2282,6 +2314,13 @@ export function AutoscuoleAgendaPage({
           vehiclesEnabled={vehiclesEnabled}
           onChanged={() => { load({ silent: true }); }}
         />
+        <CancelAppointmentDialog
+          target={cancelDialogTarget}
+          busy={cancelDialogBusy}
+          onClose={() => { if (!cancelDialogBusy) setCancelDialogTarget(null); }}
+          onAnnul={(lateOutcome) => void handleAnnulConfirm(lateOutcome)}
+          onRemove={(opts) => void handleRemoveConfirm(opts)}
+        />
         <GroupLessonCreateDialog
           open={createGroupLessonOpen}
           onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) { setGroupLessonPrefill(null); setGroupDraft(null); setGroupSlotPatch(null); } }}
@@ -2700,14 +2739,13 @@ export function AutoscuoleAgendaPage({
                                     {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
                                     {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
                                     <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                    <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                                   </div>
                                 )}
                                 {canRescheduleAppointment(item) && !isGroupLessonInstr ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonInstr ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
                               ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => openCancelDialog(item)}>{isFutureActiveItem(item) ? "Annulla guida" : "Rimuovi dallo storico"}</Button>
                               )}
                               </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
@@ -3179,14 +3217,13 @@ export function AutoscuoleAgendaPage({
                                 {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
                                 {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
                                 <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                               </div>
                             )}
                             {canRescheduleAppointment(item) && !isGroupLessonDay ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonDay ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
                               ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => openCancelDialog(item)}>{isFutureActiveItem(item) ? "Annulla guida" : "Rimuovi dallo storico"}</Button>
                               )}
                           </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
