@@ -8,6 +8,16 @@ import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -47,6 +57,8 @@ import {
   updateStudentPhone,
   updateAutoscuolaAppointmentDetails,
   updateAutoscuolaAppointmentStatus,
+  hardCleanupAutoscuolaAppointment,
+  hardCleanupAutoscuolaAppointmentsByStudent,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -126,6 +138,7 @@ type LessonEntry = {
   cancelledAt: string | Date | null;
   cancellationKind: string | null;
   cancellationReason: string | null;
+  penaltyCutoffAt: string | Date | null;
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
   creditApplied: boolean;
@@ -326,6 +339,19 @@ const listButtonClass =
 /** Link-azione blu inline (proto #428bff) */
 const blueLinkClass =
   "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
+
+const redLinkClass =
+  "cursor-pointer text-[12px] font-medium text-[#dc2626] hover:underline disabled:cursor-default disabled:opacity-50";
+
+/** "Preavviso dato" = quanto tempo prima dell'inizio guida è arrivato l'annullamento. */
+const formatNoticeGiven = (startsAt: Date, cancelledAt: Date) => {
+  const mins = Math.max(0, Math.round((startsAt.getTime() - cancelledAt.getTime()) / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
+};
 
 const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
 
@@ -667,6 +693,11 @@ export function AutoscuoleStudentsPage({
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
+  // Conferma cancellazione guida dal dettaglio allievo ("Cancella" / "Cancella tutte").
+  const [cancelTarget, setCancelTarget] = React.useState<
+    { kind: "one"; id: string } | { kind: "all"; count: number } | null
+  >(null);
+  const [cancelBusy, setCancelBusy] = React.useState(false);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -977,6 +1008,36 @@ export function AutoscuoleStudentsPage({
     },
     [paymentSaving, toast],
   );
+
+  // Cancella (pulizia storico): rimuove la guida da storico + agenda, libera lo
+  // slot, nessun rimborso. Solo guide future. No optimistic → refetch dal BE.
+  const confirmCancel = React.useCallback(async () => {
+    if (!cancelTarget || !register || cancelBusy) return;
+    const studentId = register.student.id;
+    setCancelBusy(true);
+    const res =
+      cancelTarget.kind === "one"
+        ? await hardCleanupAutoscuolaAppointment({ appointmentId: cancelTarget.id })
+        : await hardCleanupAutoscuolaAppointmentsByStudent({ studentId });
+    setCancelBusy(false);
+    if (!res.success) {
+      const message = "message" in res ? res.message : undefined;
+      toast.error({ description: message ?? "Impossibile cancellare la guida." });
+      return;
+    }
+    const removed =
+      cancelTarget.kind === "all" ? (res as { removed?: number }).removed ?? 0 : 1;
+    setCancelTarget(null);
+    toast.success({
+      description:
+        cancelTarget.kind === "one"
+          ? "Guida cancellata."
+          : removed === 0
+            ? "Nessuna guida da cancellare."
+            : `${removed} ${removed === 1 ? "guida cancellata" : "guide cancellate"}.`,
+    });
+    await loadRegister(studentId);
+  }, [cancelTarget, register, cancelBusy, toast, loadRegister]);
 
   const openCreateDialog = React.useCallback(() => {
     setCreateForm({
@@ -1887,6 +1948,14 @@ export function AutoscuoleStudentsPage({
     ];
     const activeFilter = filterDefs.some((f) => f.value === lessonFilter) ? lessonFilter : "all";
     const filteredLessons = sortedLessons.filter(predicates[activeFilter]);
+    // Guide future cancellabili dal titolare (no esami/gruppi → flussi dedicati).
+    const cancellableFuture = sortedLessons.filter(
+      (l) =>
+        ["scheduled", "confirmed"].includes(l.status) &&
+        startMs(l) > nowMs &&
+        l.type !== "esame" &&
+        !l.group,
+    );
 
     return (
       <div>
@@ -1901,6 +1970,20 @@ export function AutoscuoleStudentsPage({
             }))}
           />
         </div>
+        {cancellableFuture.length > 0 && (
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              className={redLinkClass}
+              disabled={cancelBusy}
+              onClick={() =>
+                setCancelTarget({ kind: "all", count: cancellableFuture.length })
+              }
+            >
+              Cancella tutte ({cancellableFuture.length})
+            </button>
+          </div>
+        )}
         {filteredLessons.length === 0 ? (
           <div className="pt-8 text-center">
             <p className="text-[13px] font-medium text-[#929292]">Nessuna guida per questo filtro.</p>
@@ -1930,6 +2013,31 @@ export function AutoscuoleStudentsPage({
           const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
           const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
           const isExam = lesson.type === "esame";
+          const canHardCancel =
+            ["scheduled", "confirmed"].includes(lesson.status) &&
+            startDate.getTime() > Date.now() &&
+            !isExam &&
+            !lesson.group;
+          // Preavviso dato per gli annullamenti dell'allievo (manual_cancel).
+          const cancelledDate = lesson.cancelledAt
+            ? lesson.cancelledAt instanceof Date
+              ? lesson.cancelledAt
+              : new Date(lesson.cancelledAt)
+            : null;
+          const cutoffDate = lesson.penaltyCutoffAt
+            ? lesson.penaltyCutoffAt instanceof Date
+              ? lesson.penaltyCutoffAt
+              : new Date(lesson.penaltyCutoffAt)
+            : null;
+          const noticeLabel =
+            lesson.cancellationKind === "manual_cancel" && cancelledDate
+              ? formatNoticeGiven(startDate, cancelledDate)
+              : null;
+          const isLateCancellation =
+            noticeLabel != null &&
+            cancelledDate != null &&
+            cutoffDate != null &&
+            cancelledDate.getTime() > cutoffDate.getTime();
 
           return (
             <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
@@ -1977,6 +2085,8 @@ export function AutoscuoleStudentsPage({
                   <Pill tone={isCompleted || isCheckedIn ? "green" : isCancelled || isNoShow ? "red" : "gray"}>
                     {formatStatus(lesson.status)}
                   </Pill>
+                  {noticeLabel && <Pill tone="gray">Preavviso: {noticeLabel}</Pill>}
+                  {isLateCancellation && <Pill tone="amber">Tardiva</Pill>}
                   {isPenaltyCharged && !lesson.creditApplied && (
                     <Pill tone="amber">Da pagare</Pill>
                   )}
@@ -2017,12 +2127,62 @@ export function AutoscuoleStudentsPage({
                       )}
                     </>
                   )}
+                  {canHardCancel && (
+                    <button
+                      type="button"
+                      className={cn(redLinkClass, "ml-1")}
+                      disabled={cancelBusy}
+                      onClick={() => setCancelTarget({ kind: "one", id: lesson.id })}
+                    >
+                      Cancella
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           );
           })
         )}
+        <AlertDialog
+          open={cancelTarget !== null}
+          onOpenChange={(open) => {
+            if (!open && !cancelBusy) setCancelTarget(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {cancelTarget?.kind === "all"
+                  ? "Cancellare tutte le guide future?"
+                  : "Cancellare questa guida?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {cancelTarget?.kind === "all"
+                  ? `Verranno rimosse ${cancelTarget.count} guide future dallo storico e dall'agenda, e gli slot torneranno liberi. Nessun rimborso viene effettuato. L'operazione non è reversibile.`
+                  : "La guida verrà rimossa dallo storico e dall'agenda, e lo slot tornerà libero. Nessun rimborso viene effettuato. L'operazione non è reversibile."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={cancelBusy}>Annulla</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  void confirmCancel();
+                }}
+                disabled={cancelBusy}
+                className="bg-[#dc2626] hover:bg-[#b91c1c] focus:ring-[#dc2626]"
+              >
+                {cancelBusy ? (
+                  <LoadingDots className="scale-[0.6]" />
+                ) : cancelTarget?.kind === "all" ? (
+                  "Cancella tutte"
+                ) : (
+                  "Cancella"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   };
