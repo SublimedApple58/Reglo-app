@@ -23,6 +23,7 @@ import {
   operationallyCancelAppointment,
   operationallyCancelAppointmentsByResource,
   removeAppointmentFromRecord,
+  annulFutureAppointment,
   hardCleanupAppointmentsByStudent,
 } from "@/lib/autoscuole/operational-cancellation";
 import {
@@ -3934,6 +3935,43 @@ export async function hardCleanupAutoscuolaAppointment(
       actorUserId: membership.userId,
       keepInHours: payload.keepInHours ?? false,
       refundCredit: payload.refundCredit ?? false,
+    });
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Annulla guida" (guide future) — dialogo unico dell'agenda / dettaglio allievo.
+ * `lateOutcome` (solo se l'annullamento è tardivo): "penalize" | "waive" | "defer".
+ * L'istruttore (non titolare) non decide l'esito economico: se tardivo va sempre
+ * in coda "Cancellazioni tardive" (defer).
+ */
+const annulAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+  lateOutcome: z.enum(["penalize", "waive", "defer"]).optional(),
+});
+
+export async function annulAutoscuolaAppointment(
+  input: z.infer<typeof annulAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    const isInstructorActor =
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
+    if (!isOwnerOrAdmin && !isInstructorActor) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = annulAppointmentSchema.parse(input);
+    // L'istruttore non titolare non può decidere addebito/rimborso sul tardivo.
+    const lateOutcome = isOwnerOrAdmin ? payload.lateOutcome : "defer";
+    return await annulFutureAppointment({
+      companyId: membership.companyId,
+      appointmentId: payload.appointmentId,
+      actorUserId: membership.userId,
+      lateOutcome,
     });
   } catch (error) {
     return { success: false, message: formatError(error) };
