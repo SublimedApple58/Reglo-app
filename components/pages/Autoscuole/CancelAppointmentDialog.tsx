@@ -176,7 +176,7 @@ export function CancelAppointmentDialog({
   if (target.isPast) {
     return (
       <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-        <DialogContent>
+        <DialogContent overlayClassName="z-[250]" className="z-[250]">
           <DialogHeader>
             <DialogTitle>Rimuovere questa guida dallo storico?</DialogTitle>
           </DialogHeader>
@@ -239,7 +239,7 @@ export function CancelAppointmentDialog({
   if (!isLate) {
     return (
       <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-        <DialogContent>
+        <DialogContent overlayClassName="z-[250]" className="z-[250]">
           <DialogHeader>
             <DialogTitle>Annullare questa guida?</DialogTitle>
           </DialogHeader>
