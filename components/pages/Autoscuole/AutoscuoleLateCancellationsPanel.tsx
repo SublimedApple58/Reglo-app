@@ -25,6 +25,8 @@ type LateCancellation = {
   lessonType: string;
   durationMinutes: number;
   studentLateCancellationsCount: number;
+  /** La guida era coperta da un credito guida (scalato alla prenotazione). */
+  creditApplied: boolean;
 };
 
 const LESSON_TYPE_LABELS: Record<string, string> = {
@@ -210,22 +212,34 @@ export function AutoscuoleLateCancellationsPanel({
             {infoField("Istruttore", `${item.instructorName ?? "—"} · ${formatLessonType(item.lessonType)}`)}
           </div>
 
-          <div className="flex items-center gap-2.5 border-t border-[#f2f2f2] pt-5">
-            <Button
-              size="sm"
-              disabled={resolving === item.id}
-              onClick={() => void handleResolve(item.id, "charge")}
-            >
-              {resolving === item.id ? "Elaboro..." : "Addebita"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={resolving === item.id}
-              onClick={() => void handleResolve(item.id, "dismiss")}
-            >
-              Non addebitare
-            </Button>
+          <div className="border-t border-[#f2f2f2] pt-5">
+            {item.creditApplied && (
+              <p className="mb-3 text-[12px] font-medium text-[#929292]">
+                Guida coperta da un credito · <span className="text-[#222222]">Trattieni</span> = l&apos;allievo lo perde ·{" "}
+                <span className="text-[#222222]">Restituisci</span> = gli torna 1 credito
+              </p>
+            )}
+            <div className="flex items-center gap-2.5">
+              <Button
+                size="sm"
+                disabled={resolving === item.id}
+                onClick={() => void handleResolve(item.id, "charge")}
+              >
+                {resolving === item.id
+                  ? "Elaboro..."
+                  : item.creditApplied
+                    ? "Trattieni il credito"
+                    : "Addebita"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={resolving === item.id}
+                onClick={() => void handleResolve(item.id, "dismiss")}
+              >
+                {item.creditApplied ? "Restituisci il credito" : "Non addebitare"}
+              </Button>
+            </div>
           </div>
         </div>
       ))}

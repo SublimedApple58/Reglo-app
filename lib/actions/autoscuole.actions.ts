@@ -9851,6 +9851,7 @@ export async function getLateCancellations() {
         instructorName: string | null;
         type: string;
         endsAt: Date | null;
+        creditApplied: boolean;
       }>
     >`
       SELECT
@@ -9864,7 +9865,8 @@ export async function getLateCancellations() {
         u.name AS "studentName",
         i.name AS "instructorName",
         a.type,
-        a."endsAt"
+        a."endsAt",
+        a."creditApplied"
       FROM "AutoscuolaAppointment" a
       JOIN "User" u ON u.id = a."studentId"
       LEFT JOIN "AutoscuolaInstructor" i ON i.id = a."instructorId"
@@ -9945,6 +9947,7 @@ export async function getLateCancellations() {
         lessonType: c.type,
         durationMinutes,
         studentLateCancellationsCount: lateCounts.get(c.studentId) ?? 0,
+        creditApplied: c.creditApplied,
       };
     });
 
@@ -9992,14 +9995,40 @@ export async function resolveLateCancellation(
     }
 
     if (payload.action === "dismiss") {
-      await prisma.autoscuolaAppointment.update({
-        where: { id: appointment.id },
-        data: { lateCancellationAction: "dismissed" },
-      });
+      // Se la guida era coperta da un credito (scalato alla prenotazione) e il
+      // credito NON è ancora stato reso, "Non addebitare / Restituisci il credito"
+      // deve RIDARLO davvero all'allievo (+1). Prima veniva solo archiviata e il
+      // credito restava perso → i due CTA erano di fatto identici.
+      const refundCredit =
+        !!appointment.studentId &&
+        appointment.creditApplied &&
+        appointment.creditRefundedAt === null;
+      if (refundCredit) {
+        await adjustStudentLessonCredits({
+          companyId: membership.companyId,
+          studentId: appointment.studentId!,
+          delta: 1,
+          reason: "cancel_refund",
+          actorUserId: membership.userId,
+          appointmentId: appointment.id,
+        });
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "dismissed", creditRefundedAt: new Date() },
+        });
+      } else {
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "dismissed" },
+        });
+      }
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
       return {
         success: true,
         data: { action: "dismissed" },
-        message: "Cancellazione tardiva archiviata senza addebito.",
+        message: refundCredit
+          ? "Credito restituito all'allievo."
+          : "Cancellazione tardiva archiviata senza addebito.",
       };
     }
 
