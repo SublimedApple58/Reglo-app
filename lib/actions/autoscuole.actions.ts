@@ -22,6 +22,8 @@ import {
 import {
   operationallyCancelAppointment,
   operationallyCancelAppointmentsByResource,
+  hardCleanupAppointment,
+  hardCleanupAppointmentsByStudent,
 } from "@/lib/autoscuole/operational-cancellation";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
@@ -1859,7 +1861,14 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         },
       }),
       prisma.autoscuolaAppointment.findMany({
-        where: { companyId, studentId },
+        // record_cleanup = guida rimossa dal titolare ("Cancella"): sparisce
+        // dallo storico (e quindi da "Tutte"/"Annullate") e da tutti i conteggi.
+        // Prisma `not` include anche le righe con cancellationKind null.
+        where: {
+          companyId,
+          studentId,
+          cancellationKind: { not: "record_cleanup" },
+        },
         select: {
           id: true,
           studentId: true,
@@ -1873,6 +1882,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           cancelledAt: true,
           cancellationKind: true,
           cancellationReason: true,
+          penaltyCutoffAt: true,
           paymentRequired: true,
           manualPaymentStatus: true,
           creditApplied: true,
@@ -1951,6 +1961,7 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             cancelledAt: raw?.cancelledAt ?? null,
             cancellationKind: raw?.cancellationKind ?? null,
             cancellationReason: raw?.cancellationReason ?? null,
+            penaltyCutoffAt: raw?.penaltyCutoffAt ?? null,
             paymentRequired: raw?.paymentRequired ?? false,
             manualPaymentStatus: raw?.manualPaymentStatus ?? null,
             creditApplied: raw?.creditApplied ?? false,
@@ -2358,8 +2369,12 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           locationId: true,
           groupLessonId: true,
           notes: true,
+          cancelledAt: true,
           cancellationKind: true,
           cancellationReason: true,
+          penaltyAmount: true,
+          penaltyCutoffAt: true,
+          lateCancellationAction: true,
           replacedByAppointmentId: true,
           createdAt: true,
           updatedAt: true,
@@ -3875,6 +3890,64 @@ export async function permanentlyCancelAutoscuolaAppointment(
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return { success: true, message: "Guida eliminata definitivamente." };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Cancella" dal dettaglio allievo (web): rimuove una guida futura dallo storico
+ * e dall'agenda senza rimborsare nulla, liberando lo slot. Solo titolare/admin.
+ * Esami e guide di gruppo esclusi (flussi dedicati). La guida resta a DB come
+ * soft-delete `cancellationKind = "record_cleanup"`, filtrata fuori ovunque.
+ */
+export async function hardCleanupAutoscuolaAppointment(
+  input: z.infer<typeof cancelAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerOrAdmin) {
+      return {
+        success: false,
+        message: "Solo il titolare può rimuovere una guida dallo storico.",
+      };
+    }
+    const payload = cancelAppointmentSchema.parse(input);
+    return await hardCleanupAppointment({
+      companyId: membership.companyId,
+      appointmentId: payload.appointmentId,
+      actorUserId: membership.userId,
+    });
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Cancella tutte" dal dettaglio allievo (web): rimuove tutte le guide future
+ * ancora attive dell'allievo (esami/gruppi esclusi). Solo titolare/admin.
+ */
+export async function hardCleanupAutoscuolaAppointmentsByStudent(input: {
+  studentId: string;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerOrAdmin) {
+      return {
+        success: false,
+        message: "Solo il titolare può rimuovere le guide dallo storico.",
+      };
+    }
+    const studentId = z.string().min(1).parse(input?.studentId);
+    return await hardCleanupAppointmentsByStudent({
+      companyId: membership.companyId,
+      studentId,
+      actorUserId: membership.userId,
+    });
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

@@ -310,6 +310,135 @@ export async function operationallyCancelAppointment({
 }
 
 /**
+ * "Pulizia storico": il titolare rimuove definitivamente una guida dallo
+ * storico dell'allievo e dall'agenda. A differenza della cancellazione
+ * operativa, NON rimborsa il credito e NON gestisce alcuna penale — è una
+ * rimozione puramente amministrativa. Soft-delete con un cancellationKind
+ * dedicato ("record_cleanup") così la guida viene filtrata fuori dallo storico
+ * allievo e dalla vista "guide annullate" del mobile, mentre gli slot vengono
+ * liberati (la fascia torna prenotabile). Ammesse SOLO le guide future ancora
+ * attive: non riscrive mai le guide passate/completate (né le ore istruttore).
+ * Esami e guide di gruppo hanno flussi dedicati → esclusi.
+ */
+export async function hardCleanupAppointment({
+  prisma = defaultPrisma,
+  companyId,
+  appointmentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  appointmentId: string;
+  actorUserId?: string | null;
+}): Promise<{ success: boolean; message?: string }> {
+  const now = new Date();
+
+  const appointment = await prisma.autoscuolaAppointment.findFirst({
+    where: { id: appointmentId, companyId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      type: true,
+      instructorId: true,
+      vehicleId: true,
+    },
+  });
+
+  if (!appointment) {
+    return { success: false, message: "Guida non trovata." };
+  }
+  if (appointment.type === "esame" || appointment.type === "group_lesson") {
+    return {
+      success: false,
+      message: "Questo tipo di evento non può essere rimosso da qui.",
+    };
+  }
+  if (!isAppointmentOperationallyCancellable(appointment)) {
+    return {
+      success: false,
+      message: "Puoi rimuovere solo guide future non ancora svolte.",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: "cancelled",
+        cancelledAt: now,
+        cancelledByUserId: actorUserId ?? null,
+        cancellationKind: "record_cleanup",
+        cancellationReason: "record_cleanup",
+      },
+    });
+
+    await releaseSlotsForAppointment(tx as never, {
+      id: appointment.id,
+      companyId,
+      studentId: appointment.studentId,
+      instructorId: appointment.instructorId,
+      vehicleId: appointment.vehicleId,
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+    });
+  });
+
+  await invalidateAutoscuoleCache({
+    companyId,
+    segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+  });
+
+  return { success: true };
+}
+
+/**
+ * Bulk "pulizia storico" di tutte le guide future ancora attive di un allievo
+ * (l'azione "Cancella tutte" dal dettaglio allievo). Esami e guide di gruppo
+ * sono esclusi. Ritorna quante guide sono state rimosse.
+ */
+export async function hardCleanupAppointmentsByStudent({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  actorUserId?: string | null;
+}): Promise<{ success: boolean; removed: number }> {
+  const now = new Date();
+
+  const candidates = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId,
+      status: { in: [...ACTIVE_CANCELLABLE_STATUSES] },
+      startsAt: { gt: now },
+      type: { notIn: ["esame", "group_lesson"] },
+    },
+    select: { id: true },
+  });
+
+  let removed = 0;
+  for (const candidate of candidates) {
+    const res = await hardCleanupAppointment({
+      prisma,
+      companyId,
+      appointmentId: candidate.id,
+      actorUserId,
+    });
+    if (res.success) removed += 1;
+  }
+
+  return { success: true, removed };
+}
+
+/**
  * Cancel every future, still-active lesson tied to a set of appointment ids
  * (e.g. when an instructor or vehicle is deactivated). Returns the count of
  * lessons actually cancelled.
