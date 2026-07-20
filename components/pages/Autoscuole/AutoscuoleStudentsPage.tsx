@@ -140,6 +140,7 @@ type LessonEntry = {
   cancellationKind: string | null;
   cancellationReason: string | null;
   penaltyCutoffAt: string | Date | null;
+  penaltyAmount: number | null;
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
   creditApplied: boolean;
