@@ -22,7 +22,7 @@ import {
 import {
   operationallyCancelAppointment,
   operationallyCancelAppointmentsByResource,
-  hardCleanupAppointment,
+  removeAppointmentFromRecord,
   hardCleanupAppointmentsByStudent,
 } from "@/lib/autoscuole/operational-cancellation";
 import {
@@ -3902,13 +3902,20 @@ export async function permanentlyCancelAutoscuolaAppointment(
 }
 
 /**
- * "Cancella" dal dettaglio allievo (web): rimuove una guida futura dallo storico
- * e dall'agenda senza rimborsare nulla, liberando lo slot. Solo titolare/admin.
- * Esami e guide di gruppo esclusi (flussi dedicati). La guida resta a DB come
- * soft-delete `cancellationKind = "record_cleanup"`, filtrata fuori ovunque.
+ * "Rimuovi dallo storico" dal dettaglio allievo (web): toglie una guida dallo
+ * storico e dall'agenda. Solo titolare/admin. Esami e guide di gruppo esclusi.
+ * Opzioni scelte dal titolare in fase di rimozione:
+ *  - keepInHours: mantiene la guida nel conteggio ore dell'istruttore.
+ *  - refundCredit: restituisce il credito se la guida era coperta da un credito.
  */
+const removeFromRecordSchema = z.object({
+  appointmentId: z.string().uuid(),
+  keepInHours: z.boolean().optional(),
+  refundCredit: z.boolean().optional(),
+});
+
 export async function hardCleanupAutoscuolaAppointment(
-  input: z.infer<typeof cancelAppointmentSchema>,
+  input: z.infer<typeof removeFromRecordSchema>,
 ) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
@@ -3920,11 +3927,13 @@ export async function hardCleanupAutoscuolaAppointment(
         message: "Solo il titolare può rimuovere una guida dallo storico.",
       };
     }
-    const payload = cancelAppointmentSchema.parse(input);
-    return await hardCleanupAppointment({
+    const payload = removeFromRecordSchema.parse(input);
+    return await removeAppointmentFromRecord({
       companyId: membership.companyId,
       appointmentId: payload.appointmentId,
       actorUserId: membership.userId,
+      keepInHours: payload.keepInHours ?? false,
+      refundCredit: payload.refundCredit ?? false,
     });
   } catch (error) {
     return { success: false, message: formatError(error) };

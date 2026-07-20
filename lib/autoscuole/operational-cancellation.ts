@@ -7,7 +7,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
-import { refundLessonCreditIfEligible } from "@/lib/autoscuole/payments";
+import { refundLessonCreditIfEligible, adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
 
 // Operational cancellation. When a lesson can no longer take place for an
 // organizational reason (owner deletes it, the instructor/vehicle is made
@@ -310,26 +310,33 @@ export async function operationallyCancelAppointment({
 }
 
 /**
- * "Pulizia storico": il titolare rimuove definitivamente una guida dallo
- * storico dell'allievo e dall'agenda. A differenza della cancellazione
- * operativa, NON rimborsa il credito e NON gestisce alcuna penale — è una
- * rimozione puramente amministrativa. Soft-delete con un cancellationKind
- * dedicato ("record_cleanup") così la guida viene filtrata fuori dallo storico
- * allievo e dalla vista "guide annullate" del mobile, mentre gli slot vengono
- * liberati (la fascia torna prenotabile). Ammesse SOLO le guide future ancora
- * attive: non riscrive mai le guide passate/completate (né le ore istruttore).
+ * "Rimuovi dallo storico": il titolare toglie una guida dallo storico
+ * dell'allievo e dall'agenda. Marcatore dedicato `cancellationKind =
+ * "record_cleanup"` → la guida è filtrata fuori dallo storico, dall'agenda e
+ * dalla vista "guide annullate" del mobile. Due opzioni decise dal titolare in
+ * fase di rimozione:
+ *  - `keepInHours`: se true, lo stato resta invariato (es. "completed") → la
+ *    guida CONTINUA a contare nelle ore dell'istruttore (l'ha comunque svolta);
+ *    se false (default) lo stato diventa "cancelled" → esce anche dalle ore, e
+ *    gli slot futuri vengono liberati.
+ *  - `refundCredit`: se true e la guida era coperta da un credito non ancora
+ *    reso, restituisce 1 credito all'allievo.
  * Esami e guide di gruppo hanno flussi dedicati → esclusi.
  */
-export async function hardCleanupAppointment({
+export async function removeAppointmentFromRecord({
   prisma = defaultPrisma,
   companyId,
   appointmentId,
   actorUserId,
+  keepInHours = false,
+  refundCredit = false,
 }: {
   prisma?: PrismaClientLike;
   companyId: string;
   appointmentId: string;
   actorUserId?: string | null;
+  keepInHours?: boolean;
+  refundCredit?: boolean;
 }): Promise<{ success: boolean; message?: string }> {
   const now = new Date();
 
@@ -345,6 +352,9 @@ export async function hardCleanupAppointment({
       type: true,
       instructorId: true,
       vehicleId: true,
+      cancellationKind: true,
+      creditApplied: true,
+      creditRefundedAt: true,
     },
   });
 
@@ -357,34 +367,56 @@ export async function hardCleanupAppointment({
       message: "Questo tipo di evento non può essere rimosso da qui.",
     };
   }
-  if (!isAppointmentOperationallyCancellable(appointment)) {
-    return {
-      success: false,
-      message: "Puoi rimuovere solo guide future non ancora svolte.",
-    };
+  if (appointment.cancellationKind === "record_cleanup") {
+    return { success: false, message: "Guida già rimossa dallo storico." };
   }
 
   await prisma.$transaction(async (tx) => {
     await tx.autoscuolaAppointment.update({
       where: { id: appointment.id },
       data: {
-        status: "cancelled",
-        cancelledAt: now,
-        cancelledByUserId: actorUserId ?? null,
+        // record_cleanup = marcatore "fuori dallo storico" (indipendente dallo stato).
         cancellationKind: "record_cleanup",
         cancellationReason: "record_cleanup",
+        cancelledByUserId: actorUserId ?? null,
+        // keepInHours: lo stato resta invariato → continua a contare nelle ore.
+        // Altrimenti "cancelled" → fuori da ore + storico, con cancelledAt.
+        ...(keepInHours ? {} : { status: "cancelled", cancelledAt: now }),
       },
     });
 
-    await releaseSlotsForAppointment(tx as never, {
-      id: appointment.id,
-      companyId,
-      studentId: appointment.studentId,
-      instructorId: appointment.instructorId,
-      vehicleId: appointment.vehicleId,
-      startsAt: appointment.startsAt,
-      endsAt: appointment.endsAt,
-    });
+    if (!keepInHours) {
+      await releaseSlotsForAppointment(tx as never, {
+        id: appointment.id,
+        companyId,
+        studentId: appointment.studentId,
+        instructorId: appointment.instructorId,
+        vehicleId: appointment.vehicleId,
+        startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+      });
+    }
+
+    if (
+      refundCredit &&
+      appointment.studentId &&
+      appointment.creditApplied &&
+      appointment.creditRefundedAt === null
+    ) {
+      await adjustStudentLessonCredits({
+        prisma: tx as never,
+        companyId,
+        studentId: appointment.studentId,
+        delta: 1,
+        reason: "cancel_refund",
+        actorUserId: actorUserId ?? null,
+        appointmentId: appointment.id,
+      });
+      await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: { creditRefundedAt: now },
+      });
+    }
   });
 
   await invalidateAutoscuoleCache({
@@ -426,7 +458,7 @@ export async function hardCleanupAppointmentsByStudent({
 
   let removed = 0;
   for (const candidate of candidates) {
-    const res = await hardCleanupAppointment({
+    const res = await removeAppointmentFromRecord({
       prisma,
       companyId,
       appointmentId: candidate.id,

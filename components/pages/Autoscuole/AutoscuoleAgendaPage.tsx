@@ -98,6 +98,7 @@ type AppointmentRow = {
   extraMotoVehicles?: ResourceOption[] | null;
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
+  cancellationKind?: string | null;
   groupLessonId?: string | null;
   groupLessonCapacity?: number | null;
   groupLessonKind?: string | null;
@@ -1471,6 +1472,9 @@ export function AutoscuoleAgendaPage({
       // Always hide cancelled appointments from the agenda — the cancellation
       // is recorded server-side, but the slot should free up visually.
       if ((item.status ?? "").toLowerCase() === "cancelled") return false;
+      // "Rimossa dallo storico" (record_cleanup): nascosta anche quando lo stato
+      // resta invariato (opzione "mantieni nelle ore" → status "completed").
+      if (item.cancellationKind === "record_cleanup") return false;
 
       // Filtri multi-selezione (vuoto = tutto passa).
       if (instructorFilter.length > 0 && !instructorFilter.includes(item.instructor?.id ?? "")) {
