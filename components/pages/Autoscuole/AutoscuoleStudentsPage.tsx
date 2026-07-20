@@ -9,15 +9,10 @@ import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogFooter,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogAction,
-  AlertDialogCancel,
-} from "@/components/ui/alert-dialog";
+  CancelAppointmentDialog,
+  type CancelDialogTarget,
+  type LateOutcome,
+} from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -58,7 +53,7 @@ import {
   updateAutoscuolaAppointmentDetails,
   updateAutoscuolaAppointmentStatus,
   hardCleanupAutoscuolaAppointment,
-  hardCleanupAutoscuolaAppointmentsByStudent,
+  annulAutoscuolaAppointment,
   coverAppointmentWithLessonCredit,
 } from "@/lib/actions/autoscuole.actions";
 import {
@@ -695,10 +690,8 @@ export function AutoscuoleStudentsPage({
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
-  // Conferma cancellazione guida dal dettaglio allievo ("Cancella" / "Cancella tutte").
-  const [cancelTarget, setCancelTarget] = React.useState<
-    { kind: "one"; id: string } | { kind: "all"; count: number } | null
-  >(null);
+  // Dialogo annulla (future) / rimuovi (passate) dal dettaglio allievo.
+  const [dialogTarget, setDialogTarget] = React.useState<CancelDialogTarget | null>(null);
   const [cancelBusy, setCancelBusy] = React.useState(false);
 
   React.useEffect(() => {
@@ -1032,35 +1025,56 @@ export function AutoscuoleStudentsPage({
     [paymentSaving, toast, selectedStudentId, loadRegister, loadCredits],
   );
 
-  // Cancella (pulizia storico): rimuove la guida da storico + agenda, libera lo
-  // slot, nessun rimborso. Solo guide future. No optimistic → refetch dal BE.
-  const confirmCancel = React.useCallback(async () => {
-    if (!cancelTarget || !register || cancelBusy) return;
-    const studentId = register.student.id;
-    setCancelBusy(true);
-    const res =
-      cancelTarget.kind === "one"
-        ? await hardCleanupAutoscuolaAppointment({ appointmentId: cancelTarget.id })
-        : await hardCleanupAutoscuolaAppointmentsByStudent({ studentId });
-    setCancelBusy(false);
-    if (!res.success) {
-      const message = "message" in res ? res.message : undefined;
-      toast.error({ description: message ?? "Impossibile cancellare la guida." });
-      return;
-    }
-    const removed =
-      cancelTarget.kind === "all" ? (res as { removed?: number }).removed ?? 0 : 1;
-    setCancelTarget(null);
-    toast.success({
-      description:
-        cancelTarget.kind === "one"
-          ? "Guida cancellata."
-          : removed === 0
-            ? "Nessuna guida da cancellare."
-            : `${removed} ${removed === 1 ? "guida cancellata" : "guide cancellate"}.`,
-    });
-    await loadRegister(studentId);
-  }, [cancelTarget, register, cancelBusy, toast, loadRegister]);
+  // Annulla una guida futura (esito credito/penale gestito nel dialogo). No optimistic.
+  const handleAnnul = React.useCallback(
+    async (lateOutcome?: LateOutcome) => {
+      if (!dialogTarget || cancelBusy) return;
+      const studentId = register?.student.id;
+      setCancelBusy(true);
+      const res = await annulAutoscuolaAppointment({
+        appointmentId: dialogTarget.appointmentId,
+        lateOutcome,
+      });
+      setCancelBusy(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile annullare la guida." });
+        return;
+      }
+      setDialogTarget(null);
+      toast.success({ description: res.message ?? "Guida annullata." });
+      if (studentId) {
+        await loadRegister(studentId);
+        await loadCredits(studentId);
+      }
+    },
+    [dialogTarget, register, cancelBusy, toast, loadRegister, loadCredits],
+  );
+
+  // Rimuove una guida passata dallo storico (opzioni ore/credito nel dialogo).
+  const handleRemove = React.useCallback(
+    async (opts: { keepInHours: boolean; refundCredit: boolean }) => {
+      if (!dialogTarget || cancelBusy) return;
+      const studentId = register?.student.id;
+      setCancelBusy(true);
+      const res = await hardCleanupAutoscuolaAppointment({
+        appointmentId: dialogTarget.appointmentId,
+        keepInHours: opts.keepInHours,
+        refundCredit: opts.refundCredit,
+      });
+      setCancelBusy(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile rimuovere la guida." });
+        return;
+      }
+      setDialogTarget(null);
+      toast.success({ description: res.message ?? "Guida rimossa dallo storico." });
+      if (studentId) {
+        await loadRegister(studentId);
+        await loadCredits(studentId);
+      }
+    },
+    [dialogTarget, register, cancelBusy, toast, loadRegister, loadCredits],
+  );
 
   const openCreateDialog = React.useCallback(() => {
     setCreateForm({
@@ -1971,14 +1985,6 @@ export function AutoscuoleStudentsPage({
     ];
     const activeFilter = filterDefs.some((f) => f.value === lessonFilter) ? lessonFilter : "all";
     const filteredLessons = sortedLessons.filter(predicates[activeFilter]);
-    // Guide future cancellabili dal titolare (no esami/gruppi → flussi dedicati).
-    const cancellableFuture = sortedLessons.filter(
-      (l) =>
-        ["scheduled", "confirmed"].includes(l.status) &&
-        startMs(l) > nowMs &&
-        l.type !== "esame" &&
-        !l.group,
-    );
 
     return (
       <div>
@@ -1993,20 +1999,6 @@ export function AutoscuoleStudentsPage({
             }))}
           />
         </div>
-        {cancellableFuture.length > 0 && (
-          <div className="mb-3 flex justify-end">
-            <button
-              type="button"
-              className={redLinkClass}
-              disabled={cancelBusy}
-              onClick={() =>
-                setCancelTarget({ kind: "all", count: cancellableFuture.length })
-              }
-            >
-              Cancella tutte ({cancellableFuture.length})
-            </button>
-          </div>
-        )}
         {filteredLessons.length === 0 ? (
           <div className="pt-8 text-center">
             <p className="text-[13px] font-medium text-[#929292]">Nessuna guida per questo filtro.</p>
@@ -2036,11 +2028,24 @@ export function AutoscuoleStudentsPage({
           const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
           const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
           const isExam = lesson.type === "esame";
-          const canHardCancel =
+          // Esami e guide di gruppo hanno flussi dedicati; le già-rimosse sono escluse.
+          const canModify =
+            !isExam && !lesson.group && lesson.cancellationKind !== "record_cleanup";
+          const isFutureActive =
             ["scheduled", "confirmed"].includes(lesson.status) &&
-            startDate.getTime() > Date.now() &&
-            !isExam &&
-            !lesson.group;
+            startDate.getTime() > Date.now();
+          const buildDialogTarget = (isPast: boolean): CancelDialogTarget => ({
+            appointmentId: lesson.id,
+            studentName: register?.student?.firstName ?? null,
+            startsAt: startDate,
+            endsAt: endDate,
+            isPast,
+            creditApplied: lesson.creditApplied,
+            paymentRequired: lesson.paymentRequired,
+            penaltyCutoffAt: lesson.penaltyCutoffAt ? new Date(lesson.penaltyCutoffAt) : null,
+            penaltyAmount: lesson.penaltyAmount,
+            countsInHours: ["completed", "checked_in", "no_show"].includes(lesson.status),
+          });
           // Preavviso dato per gli annullamenti dell'allievo (manual_cancel).
           const cancelledDate = lesson.cancelledAt
             ? lesson.cancelledAt instanceof Date
@@ -2160,14 +2165,24 @@ export function AutoscuoleStudentsPage({
                       )}
                     </>
                   )}
-                  {canHardCancel && (
+                  {canModify && isFutureActive && (
                     <button
                       type="button"
                       className={cn(redLinkClass, "ml-1")}
                       disabled={cancelBusy}
-                      onClick={() => setCancelTarget({ kind: "one", id: lesson.id })}
+                      onClick={() => setDialogTarget(buildDialogTarget(false))}
                     >
-                      Cancella
+                      Annulla
+                    </button>
+                  )}
+                  {canModify && !isFutureActive && (
+                    <button
+                      type="button"
+                      className={cn(redLinkClass, "ml-1")}
+                      disabled={cancelBusy}
+                      onClick={() => setDialogTarget(buildDialogTarget(true))}
+                    >
+                      Rimuovi
                     </button>
                   )}
                 </div>
@@ -2176,46 +2191,15 @@ export function AutoscuoleStudentsPage({
           );
           })
         )}
-        <AlertDialog
-          open={cancelTarget !== null}
-          onOpenChange={(open) => {
-            if (!open && !cancelBusy) setCancelTarget(null);
+        <CancelAppointmentDialog
+          target={dialogTarget}
+          busy={cancelBusy}
+          onClose={() => {
+            if (!cancelBusy) setDialogTarget(null);
           }}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>
-                {cancelTarget?.kind === "all"
-                  ? "Cancellare tutte le guide future?"
-                  : "Cancellare questa guida?"}
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                {cancelTarget?.kind === "all"
-                  ? `Verranno rimosse ${cancelTarget.count} guide future dallo storico e dall'agenda, e gli slot torneranno liberi. Nessun rimborso viene effettuato. L'operazione non è reversibile.`
-                  : "La guida verrà rimossa dallo storico e dall'agenda, e lo slot tornerà libero. Nessun rimborso viene effettuato. L'operazione non è reversibile."}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={cancelBusy}>Annulla</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={(e) => {
-                  e.preventDefault();
-                  void confirmCancel();
-                }}
-                disabled={cancelBusy}
-                className="bg-[#dc2626] hover:bg-[#b91c1c] focus:ring-[#dc2626]"
-              >
-                {cancelBusy ? (
-                  <LoadingDots className="scale-[0.6]" />
-                ) : cancelTarget?.kind === "all" ? (
-                  "Cancella tutte"
-                ) : (
-                  "Cancella"
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+          onAnnul={(lateOutcome) => void handleAnnul(lateOutcome)}
+          onRemove={(opts) => void handleRemove(opts)}
+        />
       </div>
     );
   };
