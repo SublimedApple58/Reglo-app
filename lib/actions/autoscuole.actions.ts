@@ -9806,6 +9806,87 @@ export async function setManualPaymentStatus(
   }
 }
 
+/**
+ * "Copri con credito" dal dettaglio allievo: applica un credito guida a una guida
+ * NON ancora coperta (tipicamente una guida di gruppo, che nasce `paymentRequired`
+ * e non consuma credito alla prenotazione). Consuma 1 credito e marca la guida come
+ * coperta (`creditApplied=true`, azzera lo stato pagamento manuale). Atomico.
+ * L'alternativa resta "Segna pagata".
+ */
+export async function coverAppointmentWithLessonCredit(input: { appointmentId: string }) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const { appointmentId } = z
+      .object({ appointmentId: z.string().uuid() })
+      .parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: appointmentId, companyId: membership.companyId },
+      select: {
+        id: true,
+        studentId: true,
+        creditApplied: true,
+        manualPaymentStatus: true,
+        type: true,
+      },
+    });
+    if (!appointment) {
+      return { success: false, message: "Guida non trovata." };
+    }
+    if (appointment.type === "esame") {
+      return { success: false, message: "Gli esami non usano i crediti guida." };
+    }
+    if (appointment.creditApplied) {
+      return { success: false, message: "Questa guida è già coperta da un credito." };
+    }
+    if (appointment.manualPaymentStatus === "paid") {
+      return { success: false, message: "Questa guida è già segnata come pagata." };
+    }
+    if (!appointment.studentId) {
+      return { success: false, message: "Guida senza allievo." };
+    }
+
+    const config = await getAutoscuolaPaymentConfig({ companyId: membership.companyId });
+    if (!config.lessonCreditFlowEnabled) {
+      return {
+        success: false,
+        message: "I crediti guida non sono attivi per questa autoscuola.",
+      };
+    }
+
+    const studentId = appointment.studentId;
+    const applied = await prisma.$transaction(async (tx) => {
+      const adjustment = await adjustStudentLessonCredits({
+        prisma: tx as never,
+        companyId: membership.companyId,
+        studentId,
+        delta: -1,
+        reason: "booking_consume",
+        actorUserId: membership.userId,
+        appointmentId: appointment.id,
+      });
+      if (adjustment.appliedDelta === 0) return false;
+      await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: { creditApplied: true, manualPaymentStatus: null },
+      });
+      return true;
+    });
+
+    if (!applied) {
+      return { success: false, message: "L'allievo non ha crediti disponibili." };
+    }
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true, message: "Guida coperta da un credito." };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Payment mode helper
 // ---------------------------------------------------------------------------

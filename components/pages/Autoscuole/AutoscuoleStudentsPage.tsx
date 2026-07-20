@@ -59,6 +59,7 @@ import {
   updateAutoscuolaAppointmentStatus,
   hardCleanupAutoscuolaAppointment,
   hardCleanupAutoscuolaAppointmentsByStudent,
+  coverAppointmentWithLessonCredit,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -1007,6 +1008,27 @@ export function AutoscuoleStudentsPage({
       });
     },
     [paymentSaving, toast],
+  );
+
+  // "Copri con credito": consuma 1 credito dell'allievo per coprire una guida
+  // da pagare (tipicamente una guida di gruppo). Refetch registro + saldo crediti.
+  const handleCoverWithCredit = React.useCallback(
+    async (appointmentId: string) => {
+      if (paymentSaving) return;
+      setPaymentSaving(appointmentId);
+      const res = await coverAppointmentWithLessonCredit({ appointmentId });
+      setPaymentSaving(null);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Operazione non riuscita." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Guida coperta da un credito." });
+      if (selectedStudentId) {
+        await loadRegister(selectedStudentId);
+        await loadCredits(selectedStudentId);
+      }
+    },
+    [paymentSaving, toast, selectedStudentId, loadRegister, loadCredits],
   );
 
   // Cancella (pulizia storico): rimuove la guida da storico + agenda, libera lo
@@ -2113,6 +2135,16 @@ export function AutoscuoleStudentsPage({
                           onClick={() => void handleSetManualPayment(lesson.id, "paid")}
                         >
                           {paymentSaving === lesson.id ? "Salvo…" : "Segna pagata"}
+                        </button>
+                      )}
+                      {lesson.manualPaymentStatus !== "paid" && !isExam && (credits?.availableCredits ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className={cn(blueLinkClass, "ml-1")}
+                          disabled={paymentSaving === lesson.id}
+                          onClick={() => void handleCoverWithCredit(lesson.id)}
+                        >
+                          {paymentSaving === lesson.id ? "Salvo…" : "Copri con credito"}
                         </button>
                       )}
                       {lesson.manualPaymentStatus === "paid" && (
