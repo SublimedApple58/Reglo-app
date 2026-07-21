@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -521,6 +521,9 @@ export function AutoscuoleStudentsPage({
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
+  // Ordinamento lista allievi: "recent" (ordine server, default) o "name" (A-Z
+  // dentro ogni fase). Client-side: la lista è già tutta in memoria.
+  const [sortMode, setSortMode] = React.useState<"recent" | "name">("recent");
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searching, setSearching] = React.useState(false);
@@ -685,8 +688,17 @@ export function AutoscuoleStudentsPage({
       else if (phase === "PATENTATO") groups.patentato.push(s);
       else groups.pratica.push(s);
     }
+    if (sortMode === "name") {
+      const fullName = (s: Student) => `${s.firstName} ${s.lastName}`.trim();
+      const byName = (a: Student, b: Student) =>
+        fullName(a).localeCompare(fullName(b), "it", { sensitivity: "base" });
+      groups.awaiting.sort(byName);
+      groups.teoria.sort(byName);
+      groups.pratica.sort(byName);
+      groups.patentato.sort(byName);
+    }
     return groups;
-  }, [students]);
+  }, [students, sortMode]);
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
@@ -1712,7 +1724,10 @@ export function AutoscuoleStudentsPage({
               <SelectTrigger className="w-full" disabled={assigningSaving}>
                 <SelectValue placeholder="Nessun istruttore" />
               </SelectTrigger>
-              <SelectContent>
+              {/* z-[200]: il dropdown deve stare sopra il DetailPanel (z-[200]),
+                  altrimenti si apre dietro il pannello e sembra non rispondere
+                  al click — stessa convenzione di date-picker/time-picker. */}
+              <SelectContent className="z-[200]">
                 <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
                 {autonomousInstructors.map((instr) => (
                   <SelectItem key={instr.id} value={instr.id}>
@@ -2507,6 +2522,25 @@ export function AutoscuoleStudentsPage({
                 )}
 
                 <div className="flex-1" />
+
+                {/* Ordina A-Z (dentro ogni fase) */}
+                <button
+                  type="button"
+                  title={sortMode === "name" ? "Ordina per più recenti" : "Ordina A-Z"}
+                  aria-pressed={sortMode === "name"}
+                  onClick={() => {
+                    setSortMode((prev) => (prev === "name" ? "recent" : "name"));
+                    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
+                  }}
+                  className={cn(
+                    "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors",
+                    sortMode === "name"
+                      ? "bg-[#f0f0f0] text-foreground"
+                      : "text-[#929292] hover:text-foreground",
+                  )}
+                >
+                  <ArrowDownAZ className="size-[21px]" strokeWidth={1.8} />
+                </button>
 
                 {inviteCode && (
                   <button

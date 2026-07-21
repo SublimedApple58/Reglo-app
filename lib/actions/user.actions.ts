@@ -215,6 +215,9 @@ type CompanyUserRow = {
   role: 'admin' | 'member';
   autoscuolaRole?: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT' | null;
   status: 'active' | 'invited';
+  // Percorso patente (solo allievi): mostrato in lista nella sezione Utenti.
+  licenseCategory?: string | null;
+  transmission?: string | null;
 };
 
 type CompanyUserRowWithDate = CompanyUserRow & { createdAt: Date };
@@ -243,11 +246,13 @@ export async function getCompanyUsers({
   page,
   query = '',
   role,
+  sort = 'recent',
 }: {
   limit?: number;
   page: number;
   query?: string;
   role?: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
+  sort?: 'recent' | 'name';
 }): Promise<PaginatedUsers<CompanyUserRow>> {
   const context = await requireCompanyAdminContext();
 
@@ -322,11 +327,17 @@ export async function getCompanyUsers({
     autoscuolaRole: member.autoscuolaRole,
     status: 'active',
     createdAt: member.createdAt,
+    licenseCategory: member.licenseCategory ?? null,
+    transmission: member.transmission ?? null,
   }));
 
   const rows = [...inviteRows, ...memberRows]
     .filter((row) => !role || (row.autoscuolaRole ?? 'STUDENT') === role)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    .sort((a, b) =>
+      sort === 'name'
+        ? a.name.localeCompare(b.name, 'it', { sensitivity: 'base' })
+        : b.createdAt.getTime() - a.createdAt.getTime(),
+    );
 
   const dataCount = rows.length;
   const paged = rows.slice((page - 1) * limit, page * limit);

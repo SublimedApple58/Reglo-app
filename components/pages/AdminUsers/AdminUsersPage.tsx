@@ -24,6 +24,7 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { cn } from "@/lib/utils";
 import {
+  ArrowDownAZ,
   Bell,
   ChevronLeft,
   ChevronRight,
@@ -35,6 +36,7 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
+import { TRANSMISSION_LABELS, type Transmission } from "@/lib/autoscuole/license";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,7 +83,17 @@ type AdminUserRow = {
   email: string;
   autoscuolaRole?: AutoscuolaRole;
   status: "active" | "invited";
+  licenseCategory?: string | null;
+  transmission?: string | null;
 };
+
+// Percorso patente compatto per la lista (es. "B · Manuale"); null se non allievo
+// o percorso non impostato.
+function licenseLabelOf(row: AdminUserRow): string | null {
+  if (!row.licenseCategory) return null;
+  const t = TRANSMISSION_LABELS[row.transmission as Transmission];
+  return t ? `${row.licenseCategory} · ${t}` : row.licenseCategory;
+}
 
 // ─── Constants / helpers ─────────────────────────────────────────────────────
 
@@ -154,6 +166,7 @@ export function AdminUsersPage({
   total,
   initialQuery,
   roleFilter,
+  sort,
 }: {
   users: AdminUserRow[];
   page: number;
@@ -161,6 +174,7 @@ export function AdminUsersPage({
   total: number;
   initialQuery: string;
   roleFilter: AutoscuolaRole | null;
+  sort: "recent" | "name";
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -238,6 +252,14 @@ export function AdminUsersPage({
     });
   };
 
+  const toggleSort = () => {
+    pushParams((params) => {
+      if (sort === "name") params.delete("sort");
+      else params.set("sort", "name");
+      params.set("page", "1");
+    });
+  };
+
   const openDetail = (user: AdminUserRow) => {
     setActiveUser(user);
     setPanelOpen(true);
@@ -279,6 +301,24 @@ export function AdminUsersPage({
           </div>
 
           <div className="flex-1" />
+
+          {/* Ordina A-Z */}
+          <button
+            type="button"
+            onClick={toggleSort}
+            title={sort === "name" ? "Ordina per più recenti" : "Ordina A-Z"}
+            aria-pressed={sort === "name"}
+            className={cn(
+              "relative flex h-[34px] shrink-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg px-2 transition-colors hover:bg-[#f0f0f0]",
+              sort === "name" && "bg-[#f0f0f0]",
+            )}
+          >
+            <ArrowDownAZ className="size-4 text-[#888888]" strokeWidth={1.7} />
+            <span className="text-[13px] font-medium text-[#555555]">A-Z</span>
+            {sort === "name" && (
+              <span className="absolute right-0.5 top-0.5 h-[7px] w-[7px] rounded-full bg-navy-900" />
+            )}
+          </button>
 
           {/* Filtri ruolo */}
           <DropdownMenu>
@@ -441,8 +481,13 @@ export function AdminUsersPage({
                 <div className="overflow-hidden text-ellipsis whitespace-nowrap pr-3 text-[13px] font-medium text-[#6a6a6a] max-lg:hidden">
                   {user.email}
                 </div>
-                <div className="flex items-center">
+                <div className="flex min-w-0 flex-col items-start gap-1">
                   <RolePill role={user.autoscuolaRole ?? "STUDENT"} />
+                  {(user.autoscuolaRole ?? "STUDENT") === "STUDENT" && licenseLabelOf(user) && (
+                    <span className="max-w-full truncate text-[11px] font-medium text-[#929292]">
+                      {licenseLabelOf(user)}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center">
                   <StatusPill status={user.status} />
