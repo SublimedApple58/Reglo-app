@@ -3185,7 +3185,10 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     const sortedEntryMinutes = [...allowedEntryMinutes].sort((a, b) => a - b);
 
-    const result: Array<{ startsAt: string; endsAt: string }> = [];
+    // Marchiamo ogni slot come dentro/fuori la fascia oraria prioritaria: dopo il
+    // ciclo teniamo solo quelli dentro fascia, e ripieghiamo su TUTTI se dentro non
+    // ce n'è nessuno (fascia prioritaria "morbida", non un muro).
+    const result: Array<{ startsAt: string; endsAt: string; inRestrictedWindow: boolean }> = [];
     const studentIntervals = intervals.get(payload.studentId);
 
     {
@@ -3197,11 +3200,11 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         if (startDate < rangeStart || endDate > rangeEnd) continue;
         if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
-        // Restricted time range: if student has availability in the restricted range,
-        // only show slots within that range
-        if (restrictToTimeRange) {
-          if (minutes < restrictedStartMin || minutes + payload.durationMinutes > restrictedEndMin) continue;
-        }
+        // Fascia oraria prioritaria: NON scartiamo più lo slot se è fuori fascia,
+        // lo marchiamo soltanto (il fallback avviene dopo il ciclo).
+        const inRestrictedWindow =
+          !restrictToTimeRange ||
+          (minutes >= restrictedStartMin && minutes + payload.durationMinutes <= restrictedEndMin);
 
         if (
           enforceLessonTypeTimeConstraints &&
@@ -3273,12 +3276,19 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         result.push({
           startsAt: startDate.toISOString(),
           endsAt: endDate.toISOString(),
+          inRestrictedWindow,
         });
       }
     }
 
-    await writeAutoscuoleCache(slotsCacheKey, result, 30); // 30s TTL
-    return { success: true, data: result };
+    // Fascia prioritaria "morbida": se il giorno ha slot DENTRO la fascia mostra
+    // solo quelli; altrimenti (nessuno dentro) ripiega su tutti (dentro + fuori).
+    const insideWindow = result.filter((s) => s.inRestrictedWindow);
+    const chosen = insideWindow.length > 0 ? insideWindow : result;
+    const data = chosen.map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
+
+    await writeAutoscuoleCache(slotsCacheKey, data, 30); // 30s TTL
+    return { success: true, data };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -3630,6 +3640,10 @@ export async function getDateAvailabilityMap(
 
       let available = false;
       const dayInstructors = new Set<string>();
+      // Fascia oraria prioritaria "morbida": teniamo a parte la disponibilità
+      // FUORI fascia, da usare come fallback solo se dentro la fascia non c'è nulla.
+      let availableOutOfWindow = false;
+      const dayInstructorsOutOfWindow = new Set<string>();
 
       const isPast = dateStart < todayStart;
       const isBeforeMin = minDate !== null && dateStart < minDate;
@@ -3709,10 +3723,11 @@ export async function getDateAvailabilityMap(
           if (startDate < dateStart || endDate > dateEnd) continue;
           if (overlaps(studentIntervals, startMs, endDate.getTime())) continue;
 
-          // Restricted time range filter
-          if (restrictToTimeRange) {
-            if (minutes < restrictedStartMin || minutes + defaultDuration > restrictedEndMin) continue;
-          }
+          // Fascia oraria prioritaria: non scartiamo lo slot fuori fascia, lo
+          // marchiamo — così se dentro la fascia non c'è nulla facciamo fallback.
+          const inRestrictedWindow =
+            !restrictToTimeRange ||
+            (minutes >= restrictedStartMin && minutes + defaultDuration <= restrictedEndMin);
 
           const candidateEnd = minutes + defaultDuration;
 
@@ -3764,13 +3779,25 @@ export async function getDateAvailabilityMap(
             : slotInstructors;
           if (!pairableInstructors.length) continue;
 
-          // Valid slot — record available instructors
-          available = true;
-          for (const id of pairableInstructors) dayInstructors.add(id);
+          // Valid slot — lo registriamo dentro o fuori fascia
+          if (inRestrictedWindow) {
+            available = true;
+            for (const id of pairableInstructors) dayInstructors.add(id);
+          } else {
+            availableOutOfWindow = true;
+            for (const id of pairableInstructors) dayInstructorsOutOfWindow.add(id);
+          }
 
-          // Short-circuit when all instructors found
+          // Short-circuit quando la fascia prioritaria copre già tutti gli istruttori
           if (dayInstructors.size >= activeInstructorIds.length) break;
         }
+      }
+
+      // Fallback fascia prioritaria: se dentro la fascia non c'è nulla ma fuori sì,
+      // rendiamo comunque il giorno selezionabile (con gli istruttori fuori fascia).
+      if (!available && availableOutOfWindow) {
+        available = true;
+        for (const id of dayInstructorsOutOfWindow) dayInstructors.add(id);
       }
 
       result[key] = available;
