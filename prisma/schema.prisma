@@ -1473,6 +1473,27 @@ model ProductFeedback {
   @@index([createdAt])
 }
 
+// Richieste/consigli raccolti dal dialog "Novità" (annuncio pausa richieste
+// agenda). Standalone (nessuna relation) per non appesantire User/Company:
+// companyId/userId sono solo snapshot. type = "request" | "suggestion".
+// Vedi docs/features/news-announcement.md.
+model NewsFeedback {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String?  @db.Uuid
+  userId    String?  @db.Uuid
+  /// Snapshot del nome al momento dell'invio
+  userName  String?
+  /// "request" (Fai una richiesta) | "suggestion" (Consiglia qualcosa)
+  type      String
+  /// Moduli selezionati (solo per i consigli): road | rinnovi | guide
+  modules   String[] @default([])
+  message   String
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([type])
+  @@index([createdAt])
+}
+
 // Documenti dell'autoscuola caricati dal team Reglo via backoffice (contratto
 // di servizio, fatture, altri documenti) e visibili al titolare in Area
 // personale → "Contratto e fattura". File su R2, download con URL firmati.

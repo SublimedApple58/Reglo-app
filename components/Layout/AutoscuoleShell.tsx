@@ -39,13 +39,18 @@ import {
   type NovitaEntryKey,
 } from "@/components/Layout/NovitaDialog";
 import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
+import { AgendaPauseNewsDialog } from "@/components/Layout/news/AgendaPauseNewsDialog";
 import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isSecretaryOnly, isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
 
-// Sezione "Novità" del menu utente nascosta temporaneamente (2026-07-12).
-const SHOW_NOVITA = false;
+// Sezione "Novità" del menu utente (riattivata 2026-07-21).
+const SHOW_NOVITA = true;
+
+// Annuncio "Richieste agenda in pausa": compare una volta al primo accesso web
+// (titolari/segretarie). Bumpando questa chiave si ri-mostra a tutti.
+const AGENDA_PAUSE_NEWS_KEY = "reglo-news-seen:agenda-pausa-2026-07";
 
 function companyInitials(name: string | null | undefined) {
   const trimmed = (name ?? "").trim();
@@ -82,6 +87,27 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   const [novitaEntry, setNovitaEntry] = React.useState<NovitaEntryKey | null>(null);
   const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  // Annuncio "Richieste agenda in pausa": null = chiuso, "splash" = auto-show al
+  // login, "detail" = aperto dal menu Novità. L'auto-show scatta una volta sola
+  // per dispositivo (localStorage).
+  const [agendaNewsView, setAgendaNewsView] = React.useState<"splash" | "detail" | null>(null);
+  React.useEffect(() => {
+    if (!session) return;
+    try {
+      if (localStorage.getItem(AGENDA_PAUSE_NEWS_KEY)) return;
+    } catch {
+      return;
+    }
+    setAgendaNewsView("splash");
+  }, [session]);
+  const closeAgendaNews = React.useCallback(() => {
+    try {
+      localStorage.setItem(AGENDA_PAUSE_NEWS_KEY, "1");
+    } catch {
+      /* storage non disponibile: pazienza, si ri-mostra */
+    }
+    setAgendaNewsView(null);
+  }, []);
   // Risposte del team Reglo non ancora lette: pallino sull'hamburger + conteggio
   // sulla voce "Centro assistenza". Si azzera aprendo la chat (mark-read server).
   const [supportUnread, setSupportUnread] = React.useState(0);
@@ -355,7 +381,11 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                       {NOVITA_ENTRIES.map((item) => (
                         <DropdownMenuItem
                           key={item.key}
-                          onClick={() => setNovitaEntry(item.key)}
+                          onClick={() =>
+                            item.key === "agenda-pausa"
+                              ? setAgendaNewsView("detail")
+                              : setNovitaEntry(item.key)
+                          }
                           className="-mx-1.5 flex cursor-pointer items-start gap-3 rounded-[9px] px-1.5 py-[7px]"
                         >
                           <span
@@ -397,6 +427,11 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
       {/* Dialog dal menu hamburger */}
       <NovitaDialog entry={novitaEntry} onClose={() => setNovitaEntry(null)} />
+      <AgendaPauseNewsDialog
+        open={agendaNewsView !== null}
+        startWith={agendaNewsView ?? "splash"}
+        onClose={closeAgendaNews}
+      />
       <ComunicatoDialog open={comunicatoOpen} onOpenChange={setComunicatoOpen} />
       <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </div>

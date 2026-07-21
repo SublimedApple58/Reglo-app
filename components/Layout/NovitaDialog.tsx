@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Lightbulb, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "gruppo" | "istruttori" | "veicoli";
+export type NovitaEntryKey = "agenda-pausa" | "gruppo" | "istruttori" | "veicoli";
 
+// "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
+// AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
-  { key: "veicoli", title: "Modulo veicoli", latest: true },
+  { key: "agenda-pausa", title: "Richieste agenda in pausa", latest: true },
+  { key: "veicoli", title: "Modulo veicoli" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
   { key: "gruppo", title: "Guide di gruppo" },
 ];
