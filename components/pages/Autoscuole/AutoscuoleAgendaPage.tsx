@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -71,6 +71,12 @@ import {
 } from "@/components/pages/Autoscuole/EditAppointmentDialog";
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
+import {
+  AgendaPrintDialog,
+  type AgendaPrintData,
+  type AgendaPrintBlock,
+  type AgendaPrintColumn,
+} from "@/components/pages/Autoscuole/AgendaPrintDialog";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean };
@@ -645,6 +651,8 @@ export function AutoscuoleAgendaPage({
   }, [loading, instructors, vehicles]);
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
+  // Anteprima di stampa dell'agenda (foglio PDF della vista corrente).
+  const [printOpen, setPrintOpen] = React.useState(false);
   // Schermo intero: overlay `fixed inset-0` (NON la Fullscreen API del browser,
   // che metterebbe i popup Radix — portati su document.body — sotto al top-layer
   // rendendoli invisibili). z-40 copre header (z-30) e sidebar (z-10) dell'app ma
@@ -1871,6 +1879,197 @@ export function AutoscuoleAgendaPage({
       .sort((a, b) => toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime());
   });
 
+  // ── Dati per l'anteprima di stampa ──────────────────────────────────────────
+  // "Fotografia" della vista corrente: stesso intervallo di date, stessi filtri
+  // e stessa modalità (settimana → colonne per giorno; giorno → colonne per
+  // istruttore). Calcolata solo quando l'anteprima è aperta.
+  const agendaPrintData: AgendaPrintData | null = React.useMemo(() => {
+    if (!printOpen) return null;
+
+    const startHour = viewPrefs.startHour;
+    const endHour = viewPrefs.endHour;
+    const dayStartMin = startHour * 60;
+    const dayEndMin = endHour * 60;
+
+    // Hex per gli istruttori: colore scelto dal titolare oppure palette
+    // posizionale (stessi hue dei tint legaci in agenda).
+    const PRINT_LEGACY_HEX = [
+      "#64748B", "#0EA5E9", "#10B981", "#F59E0B",
+      "#8B5CF6", "#14B8A6", "#F97316", "#F43F5E",
+    ];
+    const sortedInstructors = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
+    const instructorHex = (id?: string | null): string => {
+      if (!id) return "#64748B";
+      const instr = instructors.find((i) => i.id === id);
+      if (instr?.color) return instr.color;
+      const idx = sortedInstructors.findIndex((i) => i.id === id);
+      return PRINT_LEGACY_HEX[(idx < 0 ? 0 : idx) % PRINT_LEGACY_HEX.length];
+    };
+
+    // Minuti dall'inizio giornata, ritagliati alla fascia oraria visibile.
+    const clampSpan = (start: Date, end: Date): { startMin: number; endMin: number } | null => {
+      if (Number.isNaN(start.getTime())) return null;
+      const s = start.getHours() * 60 + start.getMinutes();
+      let e = end.getHours() * 60 + end.getMinutes();
+      if (Number.isNaN(end.getTime()) || e <= s) e = s + 30;
+      const cs = Math.max(s, dayStartMin);
+      const ce = Math.min(e, dayEndMin);
+      if (ce <= cs) return null;
+      return { startMin: cs, endMin: ce };
+    };
+
+    const toBlock = (item: AppointmentRow): AgendaPrintBlock | null => {
+      const start = toDate(item.startsAt);
+      const end = getAppointmentEnd(item);
+      const span = clampSpan(start, end);
+      if (!span) return null;
+      const isGroup =
+        item.type === "group_lesson" ||
+        String(item.student.firstName).startsWith("Guida di gruppo");
+      const colorHex = isGroup
+        ? item.groupLessonKind === "moto" ? "#F97316" : "#14B8A6"
+        : instructorHex(item.instructor?.id);
+      const title = isGroup
+        ? item.student.firstName
+        : `${item.student.firstName} ${item.student.lastName}`.trim();
+      const subtitle = isGroup
+        ? item.groupLessonKind === "moto" ? "Gruppo moto" : "Gruppo"
+        : [formatEventType(item.type), item.instructor?.name].filter(Boolean).join(" · ");
+      return {
+        id: item.id,
+        startMin: span.startMin,
+        endMin: span.endMin,
+        timeLabel: formatTimeRange(start, end),
+        title,
+        subtitle,
+        colorHex,
+      };
+    };
+
+    const examToBlock = (eg: ExamGroup): AgendaPrintBlock | null => {
+      const start = toDate(eg.startsAt);
+      const end = eg.endsAt ? toDate(eg.endsAt) : new Date(start.getTime() + 60 * 60000);
+      const span = clampSpan(start, end);
+      if (!span) return null;
+      const studentsInExam = eg.appointments.filter((a) => !isExamPlaceholder(a));
+      const title =
+        studentsInExam.length === 0
+          ? "Esame"
+          : studentsInExam.length === 1
+            ? `${studentsInExam[0].student.firstName} ${studentsInExam[0].student.lastName}`.trim()
+            : `Esame · ${studentsInExam.length} allievi`;
+      const subtitle = ["Esame", eg.instructor?.name].filter(Boolean).join(" · ");
+      return {
+        id: `exam-${eg.key}`,
+        startMin: span.startMin,
+        endMin: span.endMin,
+        timeLabel: formatTimeRange(start, end),
+        title,
+        subtitle,
+        colorHex: "#8B5CF6",
+      };
+    };
+
+    // Gli esami rispettano gli stessi filtri istruttore/tipo della vista.
+    const visibleExams = examGroups.filter((eg) => {
+      if (instructorFilter.length > 0 && !instructorFilter.includes(eg.instructorId ?? "")) return false;
+      if (typeFilter.length > 0 && !typeFilter.includes("esame")) return false;
+      const start = toDate(eg.startsAt);
+      return start >= rangeStart && start < rangeEnd;
+    });
+
+    // Giorni visibili ricalcolati da valori primitivi (evita di dipendere
+    // dall'array `visibleDays` ricreato a ogni render).
+    const printDays =
+      viewMode === "week"
+        ? (() => {
+            const all = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+            const vis = all.filter((d) => viewPrefs.days.includes(d.getDay()));
+            return vis.length ? vis : all;
+          })()
+        : [dayFocus];
+
+    let columns: AgendaPrintColumn[] = [];
+    if (viewMode === "week") {
+      columns = printDays.map((day) => {
+        const key = formatYmd(day);
+        const blocks: AgendaPrintBlock[] = [];
+        for (const item of filtered) {
+          if (formatYmd(toDate(item.startsAt)) !== key) continue;
+          const b = toBlock(item);
+          if (b) blocks.push(b);
+        }
+        for (const eg of visibleExams) {
+          if (formatYmd(toDate(eg.startsAt)) !== key) continue;
+          const b = examToBlock(eg);
+          if (b) blocks.push(b);
+        }
+        return {
+          key,
+          label: day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" }),
+          highlight: day.getTime() === todayNormalized.getTime(),
+          blocks,
+        };
+      });
+    } else {
+      const key = formatYmd(dayFocus);
+      const cols = dayViewInstructors.map((instr) => ({ id: instr.id, name: instr.name, blocks: [] as AgendaPrintBlock[] }));
+      const byId = new Map(cols.map((c) => [c.id, c]));
+      const extra: AgendaPrintBlock[] = [];
+      for (const item of filtered) {
+        if (formatYmd(toDate(item.startsAt)) !== key) continue;
+        const b = toBlock(item);
+        if (!b) continue;
+        const c = item.instructor?.id ? byId.get(item.instructor.id) : undefined;
+        (c ? c.blocks : extra).push(b);
+      }
+      for (const eg of visibleExams) {
+        if (formatYmd(toDate(eg.startsAt)) !== key) continue;
+        const b = examToBlock(eg);
+        if (!b) continue;
+        const c = eg.instructorId ? byId.get(eg.instructorId) : undefined;
+        (c ? c.blocks : extra).push(b);
+      }
+      columns = cols.map((c) => ({ key: c.id, label: c.name, blocks: c.blocks }));
+      if (extra.length > 0) columns.push({ key: "__extra", label: "Senza istruttore", blocks: extra });
+    }
+
+    const totalCount = columns.reduce((sum, c) => sum + c.blocks.length, 0);
+
+    const optionLabels = (kind: FilterKind, ids: string[]) =>
+      ids.map((id) => getFilterOptions(kind, instructors, vehicles).find((o) => o.value === id)?.label ?? id);
+    const filtersSummary: string[] = [];
+    if (instructorFilter.length > 0) filtersSummary.push(`Istruttore: ${optionLabels("instructor", instructorFilter).join(", ")}`);
+    if (vehiclesEnabled && vehicleFilter.length > 0) filtersSummary.push(`Veicolo: ${optionLabels("vehicle", vehicleFilter).join(", ")}`);
+    if (typeFilter.length > 0) filtersSummary.push(`Tipo: ${optionLabels("type", typeFilter).join(", ")}`);
+    if (statusFilter.length > 0) filtersSummary.push(`Stato: ${optionLabels("status", statusFilter).join(", ")}`);
+    if (search.trim()) filtersSummary.push(`Ricerca: "${search.trim()}"`);
+
+    const rangeLabel =
+      viewMode === "week"
+        ? `${formatRangeLabel(weekStart)} ${addDays(weekStart, 6).getFullYear()}`
+        : dayFocus.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+
+    const orientation: "portrait" | "landscape" =
+      viewMode === "week" ? "landscape" : dayViewInstructors.length > 4 ? "landscape" : "portrait";
+
+    const generatedAt = new Date(nowTick).toLocaleString("it-IT", {
+      day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+
+    return {
+      rangeLabel,
+      viewModeLabel: viewMode === "week" ? "Vista settimana" : "Vista giorno",
+      filtersSummary,
+      generatedAt,
+      startHour,
+      endHour,
+      orientation,
+      columns,
+      totalCount,
+    };
+  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick]);
+
   return (
     <PageWrapper
       title="Agenda"
@@ -2099,6 +2298,16 @@ export function AutoscuoleAgendaPage({
             className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
           >
             {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
+          </button>
+
+          {/* Stampa agenda — anteprima PDF della vista corrente */}
+          <button
+            type="button"
+            title="Stampa agenda"
+            onClick={() => setPrintOpen(true)}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            <Printer className="size-4" strokeWidth={1.6} />
           </button>
 
           {/* Filtri (menu unico, proto) */}
@@ -2334,6 +2543,12 @@ export function AutoscuoleAgendaPage({
           defaultTime={groupLessonPrefill?.time ?? null}
           defaultInstructorId={groupLessonPrefill?.instructorId ?? null}
           onCreated={() => { load({ silent: true }); }}
+        />
+
+        <AgendaPrintDialog
+          open={printOpen}
+          data={agendaPrintData}
+          onClose={() => setPrintOpen(false)}
         />
 
         {/* Slot menu — click on an empty agenda slot (Google Calendar style) */}
