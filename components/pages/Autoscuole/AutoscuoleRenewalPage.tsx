@@ -104,7 +104,7 @@ export function AutoscuoleRenewalPage() {
         chatbot e revisione delle richieste.
       </p>
 
-      <div className="mb-5 flex flex-wrap gap-1 rounded-full bg-pink-50/80 p-1.5">
+      <div className="mb-5 flex flex-wrap gap-1 rounded-full bg-[#f3f3f3] p-1.5">
         {(
           [
             { id: "settings", label: "Link pubblico", icon: Link2 },
@@ -118,7 +118,7 @@ export function AutoscuoleRenewalPage() {
             onClick={() => setTab(t.id)}
             className={
               "inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition " +
-              (tab === t.id ? "bg-white text-pink-700 shadow-sm" : "text-pink-800/50 hover:text-pink-800")
+              (tab === t.id ? "bg-white text-foreground shadow-sm" : "text-[#6a6a6a] hover:text-foreground")
             }
           >
             <t.icon className="h-4 w-4" />
@@ -128,7 +128,7 @@ export function AutoscuoleRenewalPage() {
       </div>
 
       {notice && (
-        <div className="mb-4 rounded-xl border border-pink-200 bg-pink-50 px-4 py-2 text-sm text-pink-800">
+        <div className="mb-4 rounded-xl border border-[#ececec] bg-[#f7f7f8] px-4 py-2 text-sm text-foreground">
           {notice}
         </div>
       )}
@@ -187,7 +187,7 @@ function SettingsTab({ onNotice }: { onNotice: (m: string) => void }) {
   if (loading) return <p className="text-sm text-neutral-400">Caricamento…</p>;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5">
+    <div className="space-y-4 rounded-[14px] border border-[#ececec] bg-white p-5 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div>
         <label className="mb-1 block text-sm font-medium text-neutral-800">
           Indirizzo pubblico
@@ -198,11 +198,11 @@ function SettingsTab({ onNotice }: { onNotice: (m: string) => void }) {
             value={slug}
             onChange={(e) => setSlug(e.target.value)}
             placeholder="nome-autoscuola"
-            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
           />
           <button
             onClick={save}
-            className="rounded-lg bg-pink-500 px-4 py-2 text-sm font-medium text-white hover:bg-pink-600"
+            className="rounded-lg bg-[#222222] px-[18px] py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
           >
             Salva
           </button>
@@ -269,7 +269,7 @@ function ToggleRow({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-1 h-4 w-4 shrink-0 accent-pink-500"
+        className="mt-1 h-4 w-4 shrink-0 accent-navy-900"
       />
     </label>
   );
@@ -347,25 +347,25 @@ function MedicoForm({
   );
 
   return (
-    <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
+    <div className="space-y-3 rounded-[14px] border border-[#ececec] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Nome medico"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
         />
         <input
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
           placeholder="Telefono (facoltativo)"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
         />
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email (facoltativa)"
-          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+          className="rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
         />
         <div className="flex items-center gap-2">
           <input
@@ -374,7 +374,7 @@ function MedicoForm({
             max={120}
             value={duration}
             onChange={(e) => setDuration(Number(e.target.value))}
-            className="w-24 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+            className="w-24 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
           />
           <span className="text-sm text-neutral-500">min / visita</span>
           <select
@@ -398,7 +398,7 @@ function MedicoForm({
               status,
             })
           }
-          className="rounded-lg bg-pink-500 px-4 py-2 text-sm font-medium text-white hover:bg-pink-600"
+          className="rounded-lg bg-[#222222] px-[18px] py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           Salva
         </button>
@@ -448,7 +448,7 @@ function MedicoCard({
   }
 
   return (
-    <div className="space-y-3 rounded-2xl border border-neutral-200 bg-white p-4">
+    <div className="space-y-3 rounded-[14px] border border-[#ececec] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-semibold text-neutral-900">
@@ -512,7 +512,7 @@ function MedicoCard({
                     className={
                       "h-7 w-8 rounded text-xs font-medium " +
                       (w.daysOfWeek.includes(d.idx)
-                        ? "bg-pink-500 text-white"
+                        ? "bg-[#222222] text-white"
                         : "bg-white text-neutral-500 ring-1 ring-neutral-200")
                     }
                   >
@@ -600,7 +600,7 @@ function FaqTab({ onNotice }: { onNotice: (m: string) => void }) {
       </p>
 
       {faqs.map((f) => (
-        <div key={f.id} className="rounded-2xl border border-neutral-200 bg-white p-4">
+        <div key={f.id} className="rounded-[14px] border border-[#ececec] bg-white p-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-neutral-900">{f.question}</p>
@@ -622,19 +622,19 @@ function FaqTab({ onNotice }: { onNotice: (m: string) => void }) {
         </div>
       ))}
 
-      <div className="space-y-2 rounded-2xl border border-dashed border-neutral-300 bg-white p-4">
+      <div className="space-y-2 rounded-[14px] border border-dashed border-[#dcdcdc] bg-white p-4">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Domanda (es. Quanto costa il rinnovo?)"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
         />
         <textarea
           value={a}
           onChange={(e) => setA(e.target.value)}
           placeholder="Risposta"
           rows={3}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-pink-400"
+          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-navy-900"
         />
         <button
           onClick={async () => {
@@ -652,7 +652,7 @@ function FaqTab({ onNotice }: { onNotice: (m: string) => void }) {
               void load();
             } else onNotice(res.message ?? "Errore.");
           }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-pink-500 px-4 py-2 text-sm font-medium text-white hover:bg-pink-600"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#222222] px-[18px] py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Aggiungi FAQ
         </button>
@@ -806,7 +806,7 @@ function RequestDetail({
                 href={d.url}
                 target="_blank"
                 rel="noreferrer"
-                className="font-medium text-neutral-700 hover:text-pink-600"
+                className="font-medium text-neutral-700 hover:text-foreground"
               >
                 {RENEWAL_DOCUMENT_LABELS[d.type as RenewalDocumentType] ?? d.type}
               </a>
@@ -849,7 +849,7 @@ function RequestDetail({
           </summary>
           <div className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs">
             {detail.messages.map((m, i) => (
-              <p key={i} className={m.role === "user" ? "text-neutral-800" : "text-pink-700"}>
+              <p key={i} className={m.role === "user" ? "text-neutral-800" : "text-navy-900"}>
                 <strong>{m.role === "user" ? "Cittadino" : "Bot"}:</strong> {m.content}
               </p>
             ))}
@@ -864,7 +864,7 @@ function RequestDetail({
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Note interne…"
           rows={2}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-xs outline-none focus:border-pink-400"
+          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-xs outline-none focus:border-navy-900"
         />
         <div className="flex flex-wrap gap-2">
           <button

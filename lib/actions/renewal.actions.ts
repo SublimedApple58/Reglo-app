@@ -28,8 +28,8 @@ const slugSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .min(3)
-  .max(48)
+  .min(3, "L'indirizzo deve avere almeno 3 caratteri.")
+  .max(48, "L'indirizzo è troppo lungo (max 48 caratteri).")
   .regex(/^[a-z0-9-]+$/, "Solo lettere minuscole, numeri e trattini.");
 
 export async function getRenewalSettings() {
@@ -138,7 +138,9 @@ export async function setRenewalPublicSlug(input: { slug: string }) {
 
 const availabilityWindowSchema = z
   .object({
-    daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1),
+    daysOfWeek: z
+      .array(z.number().int().min(0).max(6))
+      .min(1, "Seleziona almeno un giorno per ogni fascia oraria."),
     startMinutes: z.number().int().min(0).max(1439),
     endMinutes: z.number().int().min(1).max(1440),
   })
@@ -147,10 +149,24 @@ const availabilityWindowSchema = z
   });
 
 const medicoSchema = z.object({
-  name: z.string().trim().min(2).max(120),
-  phone: z.string().trim().max(40).optional().nullable(),
-  email: z.string().trim().email().max(160).optional().nullable(),
-  visitDurationMinutes: z.number().int().min(5).max(120),
+  name: z
+    .string()
+    .trim()
+    .min(2, "Il nome del medico deve avere almeno 2 caratteri.")
+    .max(120, "Il nome del medico è troppo lungo."),
+  phone: z.string().trim().max(40, "Numero di telefono troppo lungo.").optional().nullable(),
+  email: z
+    .string()
+    .trim()
+    .email("Indirizzo email non valido.")
+    .max(160)
+    .optional()
+    .nullable(),
+  visitDurationMinutes: z
+    .number()
+    .int()
+    .min(5, "La durata della visita deve essere di almeno 5 minuti.")
+    .max(120, "La durata della visita non può superare 120 minuti."),
   status: z.enum(["active", "inactive"]).default("active"),
 });
 
@@ -284,8 +300,16 @@ export async function setMedicoAvailability(input: {
 // ── FAQ (knowledge base del chatbot) ──────────────────────────────────────────
 
 const faqSchema = z.object({
-  question: z.string().trim().min(3).max(300),
-  answer: z.string().trim().min(1).max(4000),
+  question: z
+    .string()
+    .trim()
+    .min(3, "La domanda deve avere almeno 3 caratteri.")
+    .max(300, "La domanda è troppo lunga."),
+  answer: z
+    .string()
+    .trim()
+    .min(1, "Inserisci una risposta.")
+    .max(4000, "La risposta è troppo lunga (max 4000 caratteri)."),
   sortOrder: z.number().int().min(0).max(9999).default(0),
   active: z.boolean().default(true),
 });

@@ -184,7 +184,7 @@ export function RenewalChat({
     <div className="flex min-h-screen flex-col bg-neutral-50">
       <header className="border-b border-neutral-200 bg-white px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center gap-2">
-          <div className="h-8 w-8 rounded-full bg-pink-500" />
+          <div className="h-8 w-8 rounded-full bg-navy-900" />
           <div>
             <p className="text-sm font-semibold text-neutral-900">
               {resumeMode ? "Integra i documenti" : "Rinnovo patente"}
@@ -204,7 +204,7 @@ export function RenewalChat({
               className={
                 "max-w-[80%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm " +
                 (m.role === "user"
-                  ? "bg-pink-500 text-white"
+                  ? "bg-[#222222] text-white"
                   : "bg-white text-neutral-800 shadow-sm ring-1 ring-neutral-200")
               }
             >
@@ -266,12 +266,12 @@ export function RenewalChat({
               onChange={(e) => setInput(e.target.value)}
               disabled={!requestId}
               placeholder="Scrivi un messaggio…"
-              className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm outline-none focus:border-pink-400 focus:ring-2 focus:ring-pink-100"
+              className="flex-1 rounded-full border border-neutral-300 px-4 py-2 text-sm outline-none focus:border-navy-900"
             />
             <button
               type="submit"
               disabled={busy || !requestId || !input.trim()}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-pink-500 text-white transition hover:bg-pink-600 disabled:opacity-50"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#222222] text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               aria-label="Invia"
             >
               <Send className="h-4 w-4" />
