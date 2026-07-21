@@ -199,6 +199,12 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications**: invia il codice OTP via `sendDynamicEmail` (Resend) dentro `after()`.
 - → **Mobile**: `PasswordResetScreen` consuma le 3 route; auto-login via `SessionContext.applyAuthPayload`.
 
+### Login as admin (impersonazione autoscuola)
+- → **Auth & Session**: nuovo provider NextAuth `impersonation` in `auth.ts` (consuma un grant firmato HMAC, `lib/impersonation-grant.ts`); i callback `jwt`/`session` portano il claim `impersonation` (solo nel cookie dell'operatore Reglo).
+- → **Company Context**: `getActiveCompanyContext` onora `session.impersonation.companyId` con priorità e **non** persiste `activeCompanyId` in impersonazione (minimo impatto sull'owner reale).
+- → **Backoffice**: `impersonateCompany` gated `requireGlobalAdmin`; pulsante "Accedi come titolare" in `BackofficeCompaniesPage`.
+- **Volutamente NON connesso** a member-listing / conteggi / notifiche: si agisce come **owner reale**, nessun account nuovo → invisibile per costruzione.
+
 ## Critical Call Chains
 
 ### Appointment Cancel (web — dialogo unico, 2026-07-20)

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   Car,
   CreditCard,
+  LogIn,
   FileText,
   Loader2,
   Phone,
@@ -50,6 +51,7 @@ import {
   assignAutoscuolaVoiceLine,
   deactivateTeoriaWithResolution,
   deleteCompany,
+  impersonateCompany,
   getCompanyStudentPlatforms,
   getQuizSeatsUsage,
   getTeoriaAffectedStudents,
@@ -856,7 +858,18 @@ export default function BackofficeCompaniesPage({
   const [docsCompany, setDocsCompany] = useState<{ id: string; name: string } | null>(null);
   const [planCompany, setPlanCompany] = useState<{ id: string; name: string } | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null);
   const [localCompanies, setLocalCompanies] = useState(companies);
+
+  const handleImpersonate = async (company: BackofficeCompanyRow) => {
+    setImpersonatingId(company.id);
+    // In caso di successo l'action redirige (naviga via) e non ritorna qui.
+    const res = await impersonateCompany(company.id);
+    setImpersonatingId(null);
+    if (res && !res.success) {
+      toast.error({ description: res.message ?? "Impossibile accedere come titolare." });
+    }
+  };
 
   const handleDelete = async (company: BackofficeCompanyRow) => {
     if (!window.confirm(`Eliminare definitivamente "${company.name}"?\n\nTutti i dati associati (allievi, istruttori, appuntamenti, pagamenti) verranno cancellati irreversibilmente.`)) return;
@@ -1042,6 +1055,19 @@ export default function BackofficeCompaniesPage({
                           }}
                         >
                           Gestisci
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          title="Accedi come titolare"
+                          onClick={() => handleImpersonate(company)}
+                          disabled={impersonatingId === company.id}
+                        >
+                          {impersonatingId === company.id ? (
+                            <LoadingDots className="scale-[0.6]" />
+                          ) : (
+                            <LogIn className="h-3.5 w-3.5" />
+                          )}
                         </Button>
                         <Button
                           size="sm"

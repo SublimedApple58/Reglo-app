@@ -38,6 +38,7 @@
 | Support Center + Feedback | [support-center.md](features/support-center.md) | `support.actions.ts`, `AutoscuoleAssistenzaPage.tsx`, `FeedbackDialog.tsx`, `Backoffice{Support,Feedback}Page.tsx` |
 | Novità (annuncio "Richieste agenda in pausa") | [news-announcement.md](features/news-announcement.md) | `Layout/news/{AgendaPauseNewsDialog,RegloClips}.tsx`, `AutoscuoleShell.tsx`, `NovitaDialog.tsx`, `support.actions.ts` (`submitNewsFeedback`), `NewsFeedback` |
 | Company Documents (contratto/fatture) | [company-documents.md](features/company-documents.md) | `company-documents.actions.ts`, `api/backoffice/company-documents`, `BackofficeCompanyDocumentsDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
+| Login as admin (impersonazione autoscuola dal backoffice) | [admin-impersonation.md](features/admin-impersonation.md) | `impersonation-grant.ts`, `auth.ts` (provider `impersonation`), `company-context.ts`, `backoffice.actions.ts` (`impersonateCompany`), `BackofficeCompaniesPage.tsx` |
 | Company Plan (abbonamento) | [company-plan.md](features/company-plan.md) | `company-plan.actions.ts`, `BackofficeCompanyPlanDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
 
 ## Design System

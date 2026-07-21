@@ -5,6 +5,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireGlobalAdmin } from "@/lib/auth-guard";
+import { signIn } from "@/auth";
+import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { signImpersonationGrant } from "@/lib/impersonation-grant";
 import { normalizeCompanyServices, type ServiceKey } from "@/lib/services";
 import { getTwilioClient, VOICE_WEBHOOK_BASE_URL } from "@/lib/twilio";
 import { telnyxFetch, TELNYX_WEBHOOK_BASE_URL } from "@/lib/telnyx";
@@ -668,6 +671,45 @@ export async function deleteCompany(companyId: string) {
 
     return { success: true as const, data: { name: company.name } };
   } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+/**
+ * "Accedi come titolare": logga l'operatore backoffice nella web app COME l'owner
+ * reale dell'autoscuola (nessun account nuovo → invisibile). Conia un grant firmato
+ * a scadenza breve e lo consuma col provider NextAuth `impersonation`. Da qui si esce
+ * col logout normale dell'app.
+ */
+export async function impersonateCompany(companyId: string) {
+  try {
+    await requireGlobalAdmin();
+
+    // Preferisci il vero OWNER; fallback a un qualsiasi admin (es. INSTRUCTOR_OWNER).
+    const owner =
+      (await prisma.companyMember.findFirst({
+        where: { companyId, role: "admin", autoscuolaRole: "OWNER" },
+        orderBy: { createdAt: "asc" },
+        include: { user: { select: { id: true } } },
+      })) ??
+      (await prisma.companyMember.findFirst({
+        where: { companyId, role: "admin" },
+        orderBy: { createdAt: "asc" },
+        include: { user: { select: { id: true } } },
+      }));
+
+    if (!owner?.user) {
+      return { success: false as const, message: "Nessun titolare per questa autoscuola." };
+    }
+
+    const grant = signImpersonationGrant({ targetUserId: owner.user.id, companyId });
+
+    // signIn imposta il cookie di sessione e REDIRIGE (lancia isRedirectError) → il
+    // return sotto è irraggiungibile in caso di successo.
+    await signIn("impersonation", { token: grant, redirectTo: "/user/autoscuole" });
+    return { success: true as const };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
     return { success: false as const, message: formatError(error) };
   }
 }

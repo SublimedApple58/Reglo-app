@@ -31,6 +31,11 @@ export const getActiveCompanyContext = cache(async function getActiveCompanyCont
     throw new Error("USER_NOT_AUTHENTICATED");
   }
 
+  // Impersonazione backoffice: la company target arriva dal claim di sessione e ha
+  // priorità. Non viene MAI persistita su user.activeCompanyId (vedi sotto), così
+  // la preferenza reale dell'owner resta intatta ("minimo impatto").
+  const impersonationCompanyId = session?.impersonation?.companyId ?? null;
+
   // Two independent reads — no transactional guarantee needed. Running them in a
   // single $transaction forced BEGIN/COMMIT + serial round-trips over the Neon
   // serverless (WebSocket) driver; Promise.all issues both concurrently with no
@@ -52,14 +57,16 @@ export const getActiveCompanyContext = cache(async function getActiveCompanyCont
   }
 
   let activeCompanyId =
-    requestedCompanyId ?? tokenCompanyId ?? user?.activeCompanyId ?? null;
+    requestedCompanyId ?? impersonationCompanyId ?? tokenCompanyId ?? user?.activeCompanyId ?? null;
   if (!activeCompanyId) {
     if (memberships.length === 1) {
       activeCompanyId = memberships[0].companyId;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { activeCompanyId },
-      });
+      if (!impersonationCompanyId) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { activeCompanyId },
+        });
+      }
     } else {
       throw new Error(ACTIVE_COMPANY_REQUIRED);
     }
@@ -73,10 +80,12 @@ export const getActiveCompanyContext = cache(async function getActiveCompanyCont
     if (memberships.length === 1) {
       membership = memberships[0];
       activeCompanyId = membership.companyId;
-      await prisma.user.update({
-        where: { id: userId },
-        data: { activeCompanyId },
-      });
+      if (!impersonationCompanyId) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { activeCompanyId },
+        });
+      }
     } else {
       throw new Error(ACTIVE_COMPANY_REQUIRED);
     }
