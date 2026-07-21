@@ -11,7 +11,7 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 | `components/Layout/news/AgendaPauseNewsDialog.tsx` | Dialog a due livelli: **splash** (card 920×788, testo + CTA "Scopri di più" + `RegloEmbed`) e **dettaglio** (modale "Novità" 640px con clip + form). Portal su `document.body`. Props: `open`, `startWith` (`"splash"` \| `"detail"`), `onClose`. |
 | `components/Layout/news/RegloClips.tsx` | Animazioni portate: `RegloEmbed` (splash), `RegloClipRoad` / `RegloClipRinnovi` / `RegloClipGuide` (clip 16:9 in loop). Puro React, nessun canvas, nessuna dipendenza dall'editor del prototipo. |
 | `components/Layout/AutoscuoleShell.tsx` | Monta il dialog + **auto-show al login** una volta per dispositivo (localStorage `reglo-news-seen:agenda-pausa-2026-07`). |
-| `components/Layout/NovitaDialog.tsx` | `NOVITA_ENTRIES` ha la voce `agenda-pausa` (latest); lo shell la intercetta e apre il dialog in `startWith="detail"` (NON usa `NovitaDialog`). |
+| `components/Layout/NovitaDialog.tsx` | `NOVITA_ENTRIES` ha la voce `agenda-pausa` (latest); lo shell la intercetta e apre il dialog in `startWith="splash"` (NON usa `NovitaDialog`). |
 
 **Auto-show + gating**: al mount, se c'è `session` e la chiave localStorage non è settata → apre lo splash. Alla chiusura setta la chiave (mai più su quel dispositivo). Bumpando `AGENDA_PAUSE_NEWS_KEY` nello shell si ri-mostra a tutti. Riapribile sempre dal menu hamburger → Novità → "Richieste agenda in pausa".
 
