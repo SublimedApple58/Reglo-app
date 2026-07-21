@@ -53,6 +53,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -3110,21 +3111,23 @@ export function AutoscuoleAgendaPage({
                                       <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
                                     )}
                                   </div>
-                                  <Button type="button" variant="ghost" size="sm" className="mt-2 w-full justify-start" onClick={() => openBlockEdit(b)}>Modifica</Button>
-                                  <Button type="button" variant="ghost" size="sm" className="mt-1 w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                    onClick={async () => {
+                                  <DropdownMenuItem className="mt-2 cursor-pointer text-sm font-medium" onSelect={() => openBlockEdit(b)}>Modifica</DropdownMenuItem>
+                                  <DropdownMenuItem className="mt-1 cursor-pointer text-sm font-medium text-red-600 focus:bg-red-50 focus:text-red-700" disabled={blockDeleting === b.id}
+                                    onSelect={() => {
                                       if (b.recurrenceGroupId) {
                                         setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                      } else {
-                                        setBlockDeleting(b.id);
+                                        return;
+                                      }
+                                      setBlockDeleting(b.id);
+                                      void (async () => {
                                         const res = await deleteInstructorBlock(b.id);
                                         setBlockDeleting(null);
                                         if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
                                         setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
                                         toast.success({ description: "Evento eliminato." });
-                                      }
+                                      })();
                                     }}
-                                  >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                                  >Elimina evento</DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             );
@@ -3595,21 +3598,23 @@ export function AutoscuoleAgendaPage({
                                   <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
                                 )}
                               </div>
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full justify-start" onClick={() => openBlockEdit(b)}>Modifica</Button>
-                              <Button type="button" variant="ghost" size="sm" className="mt-1 w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                onClick={async () => {
+                              <DropdownMenuItem className="mt-2 cursor-pointer text-sm font-medium" onSelect={() => openBlockEdit(b)}>Modifica</DropdownMenuItem>
+                              <DropdownMenuItem className="mt-1 cursor-pointer text-sm font-medium text-red-600 focus:bg-red-50 focus:text-red-700" disabled={blockDeleting === b.id}
+                                onSelect={() => {
                                   if (b.recurrenceGroupId) {
                                     setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                  } else {
-                                    setBlockDeleting(b.id);
+                                    return;
+                                  }
+                                  setBlockDeleting(b.id);
+                                  void (async () => {
                                     const res = await deleteInstructorBlock(b.id);
                                     setBlockDeleting(null);
                                     if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
                                     setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
                                     toast.success({ description: "Evento eliminato." });
-                                  }
+                                  })();
                                 }}
-                              >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                              >Elimina evento</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         );
