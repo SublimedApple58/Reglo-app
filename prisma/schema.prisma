@@ -669,6 +669,7 @@ model AutoscuolaInstructorBlock {
   startsAt          DateTime @db.Timestamp(6)
   endsAt            DateTime @db.Timestamp(6)
   reason            String?
+  description       String?
   recurrenceGroupId String?  @db.Uuid
   createdAt         DateTime @default(now()) @db.Timestamp(6)
   updatedAt         DateTime @updatedAt

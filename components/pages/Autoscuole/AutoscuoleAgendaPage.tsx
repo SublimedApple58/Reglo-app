@@ -30,6 +30,7 @@ import {
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
   createInstructorBlock,
+  updateInstructorBlock,
   deleteInstructorBlock,
   deleteInstructorBlockRecurrence,
   createExamEvent,
@@ -755,10 +756,13 @@ export function AutoscuoleAgendaPage({
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
   const [instructorBlocks, setInstructorBlocks] = React.useState<Array<{
-    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; recurrenceGroupId: string | null;
+    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; description: string | null; recurrenceGroupId: string | null;
   }>>([]);
   const [blockDialogOpen, setBlockDialogOpen] = React.useState(false);
-  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+  // Se valorizzato, il dialog blocco è in modalità MODIFICA (aggiorna quel blocco
+  // invece di crearne di nuovi). null = creazione.
+  const [blockEditId, setBlockEditId] = React.useState<string | null>(null);
+  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
   const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
   const [examDialogOpen, setExamDialogOpen] = React.useState(false);
   const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
@@ -852,6 +856,29 @@ export function AutoscuoleAgendaPage({
   // "theory_lesson", niente titolo, avviso "bloccante"). Vedi createInstructorBlock.
   const [blockKind, setBlockKind] = React.useState<"generic" | "theory">("generic");
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
+
+  // Apre il dialog blocco in modalità MODIFICA, pre-riempiendo dal blocco.
+  const openBlockEdit = React.useCallback(
+    (b: { id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; description: string | null }) => {
+      const start = toDate(b.startsAt);
+      const end = toDate(b.endsAt);
+      const durMin = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+      setBlockKind(b.reason === "theory_lesson" ? "theory" : "generic");
+      setBlockForm({
+        instructorId: b.instructorId,
+        date: formatYmd(start),
+        startTime: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+        duration: String(durMin),
+        reason: b.reason === "theory_lesson" ? "" : (b.reason ?? ""),
+        description: b.description ?? "",
+        recurring: false,
+        recurringWeeks: 12,
+      });
+      setBlockEditId(b.id);
+      setBlockDialogOpen(true);
+    },
+    [],
+  );
   const [holidayModalOpen, setHolidayModalOpen] = React.useState(false);
   const [holidayModalInitialDate, setHolidayModalInitialDate] = React.useState<Date | null>(null);
   const [removeHolidayDialogOpen, setRemoveHolidayDialogOpen] = React.useState(false);
@@ -998,6 +1025,7 @@ export function AutoscuoleAgendaPage({
           startsAt: typeof b.startsAt === "string" ? b.startsAt : (b.startsAt as Date).toISOString(),
           endsAt: typeof b.endsAt === "string" ? b.endsAt : (b.endsAt as Date).toISOString(),
           reason: (b.reason as string | null) ?? null,
+          description: (b.description as string | null) ?? null,
           recurrenceGroupId: (b.recurrenceGroupId as string | null) ?? null,
         })));
       }
@@ -2407,7 +2435,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
@@ -2415,7 +2443,7 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "120", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
                 >
                   <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />
                   Lezione teorica
@@ -2598,7 +2626,8 @@ export function AutoscuoleAgendaPage({
                 icon: <Ban className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setBlockKind("generic");
-                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
+                  setBlockEditId(null);
                   setBlockDialogOpen(true);
                 }),
               },
@@ -2608,7 +2637,8 @@ export function AutoscuoleAgendaPage({
                 icon: <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setBlockKind("theory");
-                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "120", reason: "", recurring: false, recurringWeeks: 12 });
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 });
+                  setBlockEditId(null);
                   setBlockDialogOpen(true);
                 }),
               },
@@ -3076,8 +3106,12 @@ export function AutoscuoleAgendaPage({
                                     <div className={cn("text-xs font-semibold", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                     <div className="text-xs text-muted-foreground">{instr.instructorName}</div>
                                     <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                    {b.description && (
+                                      <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
+                                    )}
                                   </div>
-                                  <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
+                                  <Button type="button" variant="ghost" size="sm" className="mt-2 w-full justify-start" onClick={() => openBlockEdit(b)}>Modifica</Button>
+                                  <Button type="button" variant="ghost" size="sm" className="mt-1 w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
                                     onClick={async () => {
                                       if (b.recurrenceGroupId) {
                                         setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
@@ -3548,17 +3582,21 @@ export function AutoscuoleAgendaPage({
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
+                                <span className="truncate font-semibold text-slate-700">{formatBlockReason(b.reason)}</span>
                                 <span className="truncate text-[10px] text-slate-500 block">{formatTimeRange(bStart, bEnd)}</span>
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
                               <div className="space-y-2">
-                                <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                <div className="text-xs font-semibold text-foreground">{formatBlockReason(b.reason)}</div>
                                 <div className="text-xs text-muted-foreground">{instr.name}</div>
                                 <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                {b.description && (
+                                  <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
+                                )}
                               </div>
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
+                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full justify-start" onClick={() => openBlockEdit(b)}>Modifica</Button>
+                              <Button type="button" variant="ghost" size="sm" className="mt-1 w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
                                 onClick={async () => {
                                   if (b.recurrenceGroupId) {
                                     setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
@@ -4629,13 +4667,17 @@ export function AutoscuoleAgendaPage({
       {/* ── Instructor Block Creation Dialog ── */}
       <CreateEventPopover
         open={blockDialogOpen}
-        onClose={() => { if (!blockCreating) setBlockDialogOpen(false); }}
-        title={blockKind === "theory" ? "Nuova lezione teorica" : "Nuovo evento bloccante"}
+        onClose={() => { if (!blockCreating) { setBlockDialogOpen(false); setBlockEditId(null); } }}
+        title={
+          blockEditId
+            ? (blockKind === "theory" ? "Modifica lezione teorica" : "Modifica evento bloccante")
+            : (blockKind === "theory" ? "Nuova lezione teorica" : "Nuovo evento bloccante")
+        }
         subtitle={blockKind === "theory" ? "Blocca la fascia oraria dell'istruttore" : "Blocca l'agenda dell'istruttore per un impegno"}
         anchor={popoverAnchor}
         footer={
           <>
-            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => setBlockDialogOpen(false)}>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => { setBlockDialogOpen(false); setBlockEditId(null); }}>
               Annulla
             </button>
             <button
@@ -4648,11 +4690,37 @@ export function AutoscuoleAgendaPage({
                 const startsAt = blockStart.toISOString();
                 const endsAt = new Date(blockStart.getTime() + parseInt(blockForm.duration, 10) * 60 * 1000).toISOString();
                 const isTheory = blockKind === "theory";
+                const description = blockForm.description.trim() || null;
+
+                // ── MODIFICA (blocco singolo, niente ricorrenza) ──
+                if (blockEditId) {
+                  const res = await updateInstructorBlock({
+                    blockId: blockEditId,
+                    startsAt,
+                    endsAt,
+                    // teorica: reason resta il sentinel; generico: aggiorna il titolo.
+                    reason: isTheory ? undefined : blockForm.reason.trim(),
+                    description,
+                  });
+                  setBlockCreating(false);
+                  if (!res.success) {
+                    toast.error({ description: res.message ?? "Errore salvataggio." });
+                    return;
+                  }
+                  setBlockDialogOpen(false);
+                  setBlockEditId(null);
+                  load({ silent: true });
+                  toast.success({ description: isTheory ? "Lezione teorica aggiornata." : "Evento aggiornato." });
+                  return;
+                }
+
+                // ── CREAZIONE ──
                 const res = await createInstructorBlock({
                   instructorId: blockForm.instructorId,
                   startsAt,
                   endsAt,
                   reason: isTheory ? "theory_lesson" : (blockForm.reason.trim() || undefined),
+                  description: description ?? undefined,
                   recurring: blockForm.recurring,
                   recurringWeeks: blockForm.recurring ? blockForm.recurringWeeks : undefined,
                 });
@@ -4671,7 +4739,7 @@ export function AutoscuoleAgendaPage({
                 });
               }}
             >
-              {blockCreating ? <LoadingDots className="min-h-5" /> : (blockKind === "theory" ? "Crea lezione" : "Crea evento")}
+              {blockCreating ? <LoadingDots className="min-h-5" /> : (blockEditId ? "Salva modifiche" : (blockKind === "theory" ? "Crea lezione" : "Crea evento"))}
             </button>
           </>
         }
@@ -4717,29 +4785,43 @@ export function AutoscuoleAgendaPage({
               <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
             </div>
           )}
-          <div className="space-y-2">
-            <div
-              className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
-              onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
-            >
-              <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
-              <InlineToggle checked={blockForm.recurring} size="sm" />
-            </div>
-            {blockForm.recurring && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ripeti per</span>
-                <Input
-                  type="number"
-                  min={2}
-                  max={52}
-                  value={blockForm.recurringWeeks}
-                  onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
-                  className="h-8 w-16 text-xs"
-                />
-                <span className="text-xs text-muted-foreground">settimane</span>
-              </div>
-            )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Descrizione (opzionale)</p>
+            <Textarea
+              value={blockForm.description}
+              onChange={(e) => setBlockForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder={blockKind === "theory" ? "Es: argomento della lezione, aula, materiale…" : "Note aggiuntive…"}
+              rows={2}
+              maxLength={500}
+              className="resize-none"
+            />
           </div>
+          {/* La ricorrenza vale solo in creazione: in modifica si edita il singolo blocco. */}
+          {!blockEditId && (
+            <div className="space-y-2">
+              <div
+                className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+                onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
+              >
+                <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
+                <InlineToggle checked={blockForm.recurring} size="sm" />
+              </div>
+              {blockForm.recurring && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Ripeti per</span>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={52}
+                    value={blockForm.recurringWeeks}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
+                    className="h-8 w-16 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">settimane</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </CreateEventPopover>
 

@@ -1088,6 +1088,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           startsAt: true,
           endsAt: true,
           reason: true,
+          description: true,
           recurrenceGroupId: true,
           createdAt: true,
           updatedAt: true,
@@ -7014,6 +7015,7 @@ const createInstructorBlockSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string(),
   reason: z.string().optional(),
+  description: z.string().max(500).optional(),
   recurring: z.boolean().optional(),
   recurringWeeks: z.number().int().min(2).max(52).optional(),
 });
@@ -7143,6 +7145,7 @@ export async function createInstructorBlock(
             startsAt: new Date(startsAt.getTime() + i * WEEK_MS),
             endsAt: new Date(endsAt.getTime() + i * WEEK_MS),
             reason: payload.reason ?? null,
+            description: payload.description?.trim() || null,
             recurrenceGroupId,
           },
         }),
@@ -7152,6 +7155,128 @@ export async function createInstructorBlock(
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return { success: true as const, data: blocks[0], count: blocks.length };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const updateInstructorBlockSchema = z.object({
+  blockId: z.string().uuid(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+  reason: z.string().optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+/**
+ * Modifica un SINGOLO blocco istruttore (orario e/o descrizione). Non tocca la
+ * ricorrenza: se il blocco fa parte di un gruppo, cambia solo quell'occorrenza.
+ * Usato dalla modifica delle lezioni teoriche (web + mobile via PATCH).
+ */
+export async function updateInstructorBlock(
+  input: z.infer<typeof updateInstructorBlockSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = updateInstructorBlockSchema.parse(input);
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(membership.autoscuolaRole);
+
+    const block = await prisma.autoscuolaInstructorBlock.findFirst({
+      where: { id: payload.blockId, companyId: membership.companyId },
+    });
+    if (!block) {
+      return { success: false as const, message: "Blocco non trovato." };
+    }
+
+    // Gli istruttori possono modificare solo i propri blocchi.
+    if (!isOwnerOrAdmin) {
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId: membership.companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instructor || block.instructorId !== instructor.id) {
+        return { success: false as const, message: "Non puoi modificare blocchi di altri istruttori." };
+      }
+    }
+
+    const nextStart = payload.startsAt ? new Date(payload.startsAt) : block.startsAt;
+    const nextEnd = payload.endsAt ? new Date(payload.endsAt) : block.endsAt;
+    if (nextEnd <= nextStart) {
+      return { success: false as const, message: "L'orario di fine deve essere successivo all'inizio." };
+    }
+
+    const timeChanged = payload.startsAt !== undefined || payload.endsAt !== undefined;
+    if (timeChanged) {
+      const formatDayItaly = (d: Date) =>
+        d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" });
+      const formatTimeItaly = (d: Date) =>
+        d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+
+      // Stessi controlli di conflitto della creazione, escludendo il blocco stesso.
+      const appointmentConflict = await prisma.autoscuolaAppointment.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: block.instructorId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { lt: nextEnd },
+          endsAt: { gt: nextStart },
+        },
+        select: { id: true, startsAt: true, endsAt: true },
+      });
+      if (appointmentConflict) {
+        const dayStr = formatDayItaly(nextStart);
+        const requested = `${formatTimeItaly(nextStart)}–${formatTimeItaly(nextEnd)}`;
+        const conflictTime = appointmentConflict.endsAt
+          ? `${formatTimeItaly(appointmentConflict.startsAt)}–${formatTimeItaly(appointmentConflict.endsAt)}`
+          : formatTimeItaly(appointmentConflict.startsAt);
+        return {
+          success: false as const,
+          message: `Impossibile spostare a ${dayStr} ${requested}: c'è una guida programmata alle ${conflictTime}.`,
+        };
+      }
+
+      const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: block.instructorId,
+          id: { not: block.id },
+          startsAt: { lt: nextEnd },
+          endsAt: { gt: nextStart },
+        },
+        select: { id: true, startsAt: true, endsAt: true, reason: true },
+      });
+      if (blockConflict) {
+        const dayStr = formatDayItaly(nextStart);
+        const requested = `${formatTimeItaly(nextStart)}–${formatTimeItaly(nextEnd)}`;
+        const conflictTime = `${formatTimeItaly(blockConflict.startsAt)}–${formatTimeItaly(blockConflict.endsAt)}`;
+        const rawReason = blockConflict.reason?.trim();
+        const reasonLabel =
+          rawReason === "theory_lesson" ? "Lezione teorica"
+          : rawReason === "sick_leave" ? "Malattia"
+          : rawReason === "ferie" ? "Ferie"
+          : rawReason;
+        const conflictLabel = reasonLabel ? `«${reasonLabel}» ${conflictTime}` : conflictTime;
+        return {
+          success: false as const,
+          message: `Impossibile spostare a ${dayStr} ${requested}: si sovrappone al blocco ${conflictLabel}.`,
+        };
+      }
+    }
+
+    const updated = await prisma.autoscuolaInstructorBlock.update({
+      where: { id: block.id },
+      data: {
+        startsAt: nextStart,
+        endsAt: nextEnd,
+        ...(payload.reason !== undefined ? { reason: payload.reason.trim() || null } : {}),
+        ...(payload.description !== undefined
+          ? { description: (payload.description ?? "").trim() || null }
+          : {}),
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const, data: updated };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
