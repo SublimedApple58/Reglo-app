@@ -30,4 +30,4 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 ## Note
 
 - Web-only: gli istruttori usano il mobile, non sono il target.
-- Nessun bump del contenuto Novità esistente (veicoli/istruttori/gruppo restano in `NovitaDialog`).
+- Lista Novità (`NOVITA_ENTRIES`): **agenda-pausa** (latest) + **veicoli** + **istruttori**. Rimossa "Guide di gruppo". Le card veicoli/istruttori ora usano registrazioni schermo (`public/videos/novita/{veicoli,istruttori}.mp4`, 1920×1080 H.264) al posto delle immagini statiche.

@@ -1,19 +1,17 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Lightbulb, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "agenda-pausa" | "gruppo" | "istruttori";
+export type NovitaEntryKey = "agenda-pausa" | "veicoli" | "istruttori";
 
 // "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
 // AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
   { key: "agenda-pausa", title: "Richieste agenda in pausa", latest: true },
+  { key: "veicoli", title: "Modulo veicoli" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
-  { key: "gruppo", title: "Guide di gruppo" },
 ];
 
 function StepRow({ num, children }: { num: number; children: React.ReactNode }) {
@@ -47,8 +45,6 @@ export function NovitaDialog({
   entry: NovitaEntryKey | null;
   onClose: () => void;
 }) {
-  const router = useRouter();
-
   React.useEffect(() => {
     if (!entry) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -85,67 +81,34 @@ export function NovitaDialog({
         </div>
 
         <div className="overflow-y-auto px-8 pb-9 pt-7">
-          {entry === "gruppo" && (
+          {entry === "veicoli" && (
             <>
-              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">22 giugno 2026</div>
+              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">12 giugno 2026</div>
               <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
-                Guide di gruppo
+                Modulo veicoli
               </div>
-              <div className="mb-6 h-[300px] overflow-hidden rounded-2xl bg-black leading-none">
+              <div className="mb-6 overflow-hidden rounded-2xl bg-black leading-none">
                 <video
-                  src="/images/novita/guide-gruppo.mp4"
+                  src="/videos/novita/veicoli.mp4"
                   autoPlay
                   muted
                   playsInline
                   loop
-                  className="block h-full w-full object-cover"
+                  className="block aspect-video w-full object-cover"
                 />
               </div>
               <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Ora puoi programmare guide a cui partecipano{" "}
-                <b className="font-bold text-foreground">più allievi insieme</b>, invece di un solo
-                allievo per slot — pensate per uscite collettive e lezioni pratiche di gruppo.
+                Tieni traccia dei veicoli della tua autoscuola e assegnali alle guide, così sai
+                sempre quale mezzo è impegnato e quando.
               </p>
-              <div className="mb-4 text-base font-bold text-foreground">Come funziona</div>
-              <div className="mb-6 flex flex-col gap-4">
-                <StepRow num={1}>
-                  Scegli quali allievi sono <b className="font-bold text-foreground">abilitati</b>{" "}
-                  alle guide di gruppo.
-                </StepRow>
-                <StepRow num={2}>
-                  Crei una guida di gruppo dall&apos;agenda, con data, orario e{" "}
-                  <b className="font-bold text-foreground">numero massimo di posti</b>.
-                </StepRow>
-                <StepRow num={3}>
-                  Gli allievi abilitati ricevono la notifica e{" "}
-                  <b className="font-bold text-foreground">si iscrivono in autonomia</b>, fino a
-                  esaurimento posti.
-                </StepRow>
+              <div className="flex flex-col gap-3.5">
+                <CheckRow>
+                  Aggiungi un veicolo con <b className="font-bold text-foreground">nome, targa e
+                  idoneità patente</b>, in pool condiviso o esclusiva per istruttore.
+                </CheckRow>
+                <CheckRow>Ogni guida può essere associata al veicolo usato.</CheckRow>
+                <CheckRow>Attivi o disattivi il modulo quando vuoi, dalle Impostazioni.</CheckRow>
               </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Le guide di gruppo <b className="font-bold text-foreground">non scalano crediti</b>:
-                ogni partecipante avrà una guida &laquo;da pagare&raquo; al prezzo di una guida
-                normale.
-              </p>
-              <div className="mb-7 flex items-start gap-3 rounded-[14px] border border-[#f0e6d2] bg-[#fbf7ef] px-[18px] py-4">
-                <Lightbulb className="mt-0.5 size-5 shrink-0 text-navy-900" strokeWidth={1.5} />
-                <div className="text-[13.5px] font-medium leading-normal text-[#7a6a4a]">
-                  L&apos;idea arriva dall&apos;<b className="font-bold text-[#5c4f33]">Autoscuola Robatto</b>:
-                  cercavano un modo per organizzare uscite e lezioni pratiche collettive senza
-                  moltiplicare gli slot in agenda. Dal loro feedback è nata questa funzione.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  router.push("/user/autoscuole?tab=settings&pane=bookings");
-                }}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-navy-900 px-6 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-navy-800"
-              >
-                Attiva le guide di gruppo
-                <ArrowRight className="size-4" strokeWidth={1.8} />
-              </button>
             </>
           )}
 
@@ -155,16 +118,15 @@ export function NovitaDialog({
               <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
                 Gestione autonoma degli istruttori
               </div>
-              <div className="mb-6 flex h-[190px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#eeeef4] to-[#eef4fb]">
-                <div className="h-[120px] w-[120px] overflow-hidden rounded-full border-4 border-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]">
-                  <Image
-                    src="/images/settings/istruttore-nuovo.png"
-                    alt=""
-                    width={120}
-                    height={120}
-                    className="block h-[120px] w-[120px] object-cover"
-                  />
-                </div>
+              <div className="mb-6 overflow-hidden rounded-2xl bg-black leading-none">
+                <video
+                  src="/videos/novita/istruttori.mp4"
+                  autoPlay
+                  muted
+                  playsInline
+                  loop
+                  className="block aspect-video w-full object-cover"
+                />
               </div>
               <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
                 Aggiungi e gestisci gli istruttori in autonomia,{" "}
