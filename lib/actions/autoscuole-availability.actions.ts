@@ -27,6 +27,7 @@ import {
   resolveVehiclesForInstructor,
 } from "@/lib/autoscuole/vehicle-resolution";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { isWithinRestrictedWindow, pickRestrictedWindowSlots } from "@/lib/autoscuole/restricted-window";
 import { assignMotoForStudent, eligibleForMotoGroup, groupMotoFollowCarRequired, type FleetVehicle } from "@/lib/autoscuole/group-moto";
 import { findFreeGroupFollowCar } from "@/lib/autoscuole/group-follow-assign";
 import {
@@ -3204,7 +3205,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         // lo marchiamo soltanto (il fallback avviene dopo il ciclo).
         const inRestrictedWindow =
           !restrictToTimeRange ||
-          (minutes >= restrictedStartMin && minutes + payload.durationMinutes <= restrictedEndMin);
+          isWithinRestrictedWindow(minutes, payload.durationMinutes, restrictedStartMin, restrictedEndMin);
 
         if (
           enforceLessonTypeTimeConstraints &&
@@ -3283,9 +3284,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
 
     // Fascia prioritaria "morbida": se il giorno ha slot DENTRO la fascia mostra
     // solo quelli; altrimenti (nessuno dentro) ripiega su tutti (dentro + fuori).
-    const insideWindow = result.filter((s) => s.inRestrictedWindow);
-    const chosen = insideWindow.length > 0 ? insideWindow : result;
-    const data = chosen.map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
+    const data = pickRestrictedWindowSlots(result).map(({ startsAt, endsAt }) => ({ startsAt, endsAt }));
 
     await writeAutoscuoleCache(slotsCacheKey, data, 30); // 30s TTL
     return { success: true, data };
@@ -3727,7 +3726,7 @@ export async function getDateAvailabilityMap(
           // marchiamo — così se dentro la fascia non c'è nulla facciamo fallback.
           const inRestrictedWindow =
             !restrictToTimeRange ||
-            (minutes >= restrictedStartMin && minutes + defaultDuration <= restrictedEndMin);
+            isWithinRestrictedWindow(minutes, defaultDuration, restrictedStartMin, restrictedEndMin);
 
           const candidateEnd = minutes + defaultDuration;
 
