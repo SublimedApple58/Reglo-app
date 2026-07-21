@@ -123,7 +123,7 @@ export function AgendaPrintDialog({
 
   // Scala verticale: prova a far stare l'intervallo visibile in una pagina;
   // se troppo lungo, riduce fino a un minimo leggibile (poi il browser pagina).
-  const targetHeight = orientation === "landscape" ? 520 : 940;
+  const targetHeight = orientation === "landscape" ? 470 : 820;
   const pxPerMin = Math.min(
     orientation === "landscape" ? 1.05 : 1.35,
     Math.max(0.5, targetHeight / rangeMinutes),
@@ -138,15 +138,31 @@ export function AgendaPrintDialog({
 
   return createPortal(
     <>
-      {/* @page + regole di stampa: nasconde tutto tranne il foglio. */}
+      {/* @page + regole di stampa: nasconde l'app e riporta il foglio in flusso
+          statico (niente position:fixed/absolute, che in stampa si ripete o
+          sfora su più pagine). Così esce una sola pagina con l'intestazione. */}
       <style>{`
         @media print {
           @page { size: A4 ${orientation}; margin: 12mm; }
-          body { visibility: hidden !important; }
-          #${PRINT_ROOT_ID}, #${PRINT_ROOT_ID} * { visibility: visible !important; }
+          /* Mostra solo l'overlay del portale, nasconde l'app sotto. */
+          body > *:not(.agenda-print-overlay) { display: none !important; }
+          .agenda-print-overlay {
+            position: static !important;
+            display: block !important;
+            height: auto !important;
+            background: none !important;
+            overflow: visible !important;
+          }
+          .agenda-print-scroll {
+            position: static !important;
+            flex: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            padding: 0 !important;
+          }
+          .agenda-print-noprint { display: none !important; }
           #${PRINT_ROOT_ID} {
-            position: absolute !important;
-            left: 0; top: 0;
+            position: static !important;
             width: 100% !important;
             max-width: none !important;
             margin: 0 !important;
@@ -158,12 +174,11 @@ export function AgendaPrintDialog({
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          .agenda-print-noprint { display: none !important; }
         }
       `}</style>
 
       <div
-        className="fixed inset-0 z-[700] flex flex-col bg-[#3a3a44]/90"
+        className="agenda-print-overlay fixed inset-0 z-[700] flex flex-col bg-[#3a3a44]/90"
         role="dialog"
         aria-modal="true"
         aria-label="Anteprima di stampa dell'agenda"
@@ -198,7 +213,7 @@ export function AgendaPrintDialog({
         </div>
 
         {/* Area anteprima scrollabile */}
-        <div className="flex-1 overflow-auto px-4 py-6">
+        <div className="agenda-print-scroll flex-1 overflow-auto px-4 py-6">
           <div
             id={PRINT_ROOT_ID}
             className="mx-auto rounded-[6px] bg-white p-8 shadow-[0_10px_40px_rgba(0,0,0,0.35)]"
