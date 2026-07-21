@@ -30,4 +30,5 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 ## Note
 
 - Web-only: gli istruttori usano il mobile, non sono il target.
-- Lista Novità (`NOVITA_ENTRIES`): **agenda-pausa** (latest) + **veicoli** + **istruttori**. Rimossa "Guide di gruppo". Le card veicoli/istruttori ora usano registrazioni schermo (`public/videos/novita/{veicoli,istruttori}.mp4`, 1920×1080 H.264) al posto delle immagini statiche.
+- Lista Novità (`NOVITA_ENTRIES`): **agenda-pausa** (latest) + **veicoli** + **istruttori**. Rimossa "Guide di gruppo".
+- Card veicoli/istruttori **allineate 1:1 al prototipo** `Dashboard.dc.html`: titolo "Modulo veicoli per le moto" (12 lug) / "Gestione autonoma degli istruttori" (10 lug), step numerati, CTA "Vai ai veicoli/istruttori" (`?tab=settings&pane=vehicles|instructors`). L'istruttori include la sezione "In evidenza → Parco Allievi" con un 2° video. Video in `public/videos/novita/{veicoli,istruttori,parco-allievi}.mp4` (1920×1080 H.264), cornice ratio naturale su `#eceef2`.
