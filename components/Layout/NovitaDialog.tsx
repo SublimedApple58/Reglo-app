@@ -6,13 +6,12 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Check, Lightbulb, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "agenda-pausa" | "gruppo" | "istruttori" | "veicoli";
+export type NovitaEntryKey = "agenda-pausa" | "gruppo" | "istruttori";
 
 // "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
 // AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
   { key: "agenda-pausa", title: "Richieste agenda in pausa", latest: true },
-  { key: "veicoli", title: "Modulo veicoli" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
   { key: "gruppo", title: "Guide di gruppo" },
 ];
@@ -147,36 +146,6 @@ export function NovitaDialog({
                 Attiva le guide di gruppo
                 <ArrowRight className="size-4" strokeWidth={1.8} />
               </button>
-            </>
-          )}
-
-          {entry === "veicoli" && (
-            <>
-              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">12 giugno 2026</div>
-              <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
-                Modulo veicoli
-              </div>
-              <div className="mb-6 flex h-[190px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#eef4fb] to-[#f4f0fb]">
-                <Image
-                  src="/images/settings/veicolo-nuovo.png"
-                  alt=""
-                  width={150}
-                  height={150}
-                  className="block h-[150px] w-[150px] object-contain"
-                />
-              </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Tieni traccia dei veicoli della tua autoscuola e assegnali alle guide, così sai
-                sempre quale mezzo è impegnato e quando.
-              </p>
-              <div className="flex flex-col gap-3.5">
-                <CheckRow>
-                  Aggiungi un veicolo con <b className="font-bold text-foreground">nome, targa e
-                  idoneità patente</b>, in pool condiviso o esclusiva per istruttore.
-                </CheckRow>
-                <CheckRow>Ogni guida può essere associata al veicolo usato.</CheckRow>
-                <CheckRow>Attivi o disattivi il modulo quando vuoi, dalle Impostazioni.</CheckRow>
-              </div>
             </>
           )}
 
