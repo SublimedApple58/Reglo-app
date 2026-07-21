@@ -195,6 +195,9 @@ model Company {
   createdAt  DateTime @default(now()) @db.Timestamp(6)
   updatedAt  DateTime @updatedAt
   inviteCode String?  @unique
+  /// Public slug for the standalone "rinnovo patente" flow (no-auth citizen
+  /// page at /rinnovo/[slug]). Unique across companies. Null = feature not set up.
+  renewalPublicSlug String? @unique
 
   members                              CompanyMember[]
   activeUsers                          User[]                                 @relation("UserActiveCompany")
@@ -234,6 +237,11 @@ model Company {
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
   quizSessions                         QuizSession[]
   autoscuolaLocations                  AutoscuolaLocation[]
+  renewalMedici                        RenewalMedico[]
+  renewalMedicoAvailabilities          RenewalMedicoAvailability[]
+  renewalRequests                      RenewalRequest[]
+  renewalVisitBookings                 RenewalVisitBooking[]
+  renewalFaqs                          RenewalFaq[]
 }
 
 model CompanyService {
@@ -1373,4 +1381,158 @@ model AulaLesson {
   @@index([companyId])
   @@index([chapterId])
   @@index([isTemplate])
+}
+
+// ---------------------------------------------------------------------------
+// Rinnovo Patenti — standalone public license-renewal module.
+// Public no-auth citizen flow (chatbot) collects documents + books a medical
+// visit; the owner web app manages medici, weekly availability, FAQs and reviews
+// requests. Deliberately decoupled from Appointments/Payments/Booking Engine.
+// See docs/features/rinnovo-patenti.md.
+// ---------------------------------------------------------------------------
+
+model RenewalMedico {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId            String   @db.Uuid
+  name                 String
+  phone                String?
+  email                String?
+  /// Length of a single visit slot in minutes (used to generate bookable slots
+  /// from the weekly windows). Default 20'.
+  visitDurationMinutes Int      @default(20)
+  /// active | inactive. Inactive medici are excluded from slot generation.
+  status               String   @default("active")
+  createdAt            DateTime @default(now()) @db.Timestamp(6)
+  updatedAt            DateTime @updatedAt
+
+  company        Company                     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  availabilities RenewalMedicoAvailability[]
+  bookings       RenewalVisitBooking[]
+
+  @@index([companyId])
+}
+
+model RenewalMedicoAvailability {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId    String   @db.Uuid
+  medicoId     String   @db.Uuid
+  /// Weekday indices this window applies to (0 = Sunday … 6 = Saturday).
+  daysOfWeek   Int[]
+  /// Wall-clock minutes past midnight (e.g. 540 = 09:00). No timezone stored —
+  /// interpreted in the company's local time by application code.
+  startMinutes Int
+  endMinutes   Int
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+  updatedAt    DateTime @updatedAt
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  medico  RenewalMedico @relation(fields: [medicoId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([medicoId])
+}
+
+model RenewalRequest {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @db.Uuid
+  /// submitted | under_review | approved | rejected | cancelled | completed.
+  /// The booking is confirmed immediately; document review is async.
+  status            String    @default("submitted")
+  // Citizen identity (anonymous — no User row). Extracted by the chatbot.
+  firstName         String?
+  lastName          String?
+  email             String?
+  phone             String?
+  codiceFiscale     String?
+  licenseNumber     String?
+  licenseExpiresAt  DateTime? @db.Date
+  birthDate         DateTime? @db.Date
+  /// Free-text admin notes captured during review.
+  reviewNotes       String?
+  /// Resume token emailed to the citizen when the autoscuola asks for document
+  /// integration ("ricontatto automatico"). Lets them reopen THIS request and
+  /// re-upload without an account. Null once consumed/expired.
+  resumeToken          String?   @unique
+  resumeTokenExpiresAt DateTime? @db.Timestamp(6)
+  createdAt         DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt         DateTime  @updatedAt
+
+  company   Company              @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  documents RenewalDocument[]
+  booking   RenewalVisitBooking?
+  messages  RenewalChatMessage[]
+
+  @@index([companyId])
+  @@index([companyId, status])
+}
+
+model RenewalDocument {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId       String   @db.Uuid
+  /// identity | license | photo | anamnestic (anamnestic is optional/conditional).
+  type            String
+  /// R2 object key of the uploaded file.
+  fileKey         String
+  contentType     String?
+  /// uploaded | approved | rejected.
+  status          String   @default("uploaded")
+  /// Non-binding vision soft-check result from the chatbot (guidance only).
+  softCheckResult Json?    @db.Json
+  createdAt       DateTime @default(now()) @db.Timestamp(6)
+  updatedAt       DateTime @updatedAt
+
+  request RenewalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model RenewalVisitBooking {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  requestId String   @unique @db.Uuid
+  medicoId  String   @db.Uuid
+  startAt   DateTime @db.Timestamp(6)
+  endAt     DateTime @db.Timestamp(6)
+  /// confirmed | cancelled | completed | no_show.
+  status    String   @default("confirmed")
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  request RenewalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  medico  RenewalMedico  @relation(fields: [medicoId], references: [id], onDelete: Restrict)
+
+  // One booking per medico per slot start — DB-level guard against double-booking.
+  // The @@unique already provides the (medicoId, startAt) index.
+  @@unique([medicoId, startAt])
+  @@index([companyId])
+  @@index([companyId, startAt])
+}
+
+model RenewalChatMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId String   @db.Uuid
+  /// system | user | assistant | tool.
+  role      String
+  content   String
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  request RenewalRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model RenewalFaq {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  question  String
+  answer    String
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }

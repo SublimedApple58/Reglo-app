@@ -142,6 +142,15 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Student Phase (TEORIA)**: contesto concettuale (lezioni di teoria), ma il live è anonimo → legame volutamente lasco.
 - **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays. Aula è un catalogo a sé (niente crediti/refund/swap/slot). Presenze ↔ agenda è estensione futura fuori scope.
 
+### Rinnovo Patenti
+- → **Auth & RBAC**: pagina cittadino (`/rinnovo/[slug]`) **pubblica, no auth** (whitelist `publicRoutes`); route `/api/renewal/*` fuori dal middleware. Admin gated `requireRenewalOwner` (AUTOSCUOLE + `licenseRenewalEnabled` + OWNER).
+- → **Settings / Backoffice**: flag `licenseRenewalEnabled` in `CompanyService.limits` (toggle backoffice, stesso pattern di `aulaEnabled`). Nav "Rinnovi" gated sul flag via `companyAtom`.
+- → **R2 storage**: documenti cittadino su `renewal/{companyId}/{requestId}/...` (stesso bucket di aula/quiz, helper `putRenewalDocument`).
+- → **Redis**: rate-limit degli endpoint pubblici (`renewalRateLimit` via `getRedis()`). Nessuno stato di sessione effimero (la richiesta è persistita su Postgres).
+- → **Notifications (email)**: `sendRenewalBookingEmails` usa `sendDynamicEmail` (Resend) → conferma cittadino + avviso owner; rispetta il kill-switch `APP_ENV=staging`.
+- → **OpenRouter (nuova dipendenza esterna)**: chatbot via `lib/renewal/openrouter.ts` (env `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`). Unica integrazione LLM diretta del repo.
+- **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays, Cases & Deadlines. Nessun credito/refund/slot-matcher/istruttore/veicolo. Legame solo concettuale con la scadenza medica (`AutoscuolaCase.medicalExpiresAt`), non un'integrazione.
+
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.
 - → **Login**: condivide `buildMobileAuthPayload` (`lib/mobile-auth-payload.ts`) — se cambia la shape di `AuthPayload`, aggiorna login + confirm + mobile types insieme.

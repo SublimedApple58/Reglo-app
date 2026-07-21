@@ -161,6 +161,7 @@ function AutoscuolaDrawerContent({
       : 0;
   const autoAssignQuizOnSignup = Boolean(limits.autoAssignQuizOnSignup);
   const aulaEnabled = Boolean(limits.aulaEnabled);
+  const licenseRenewalEnabled = Boolean(limits.licenseRenewalEnabled);
 
   const [quizSeatsUsed, setQuizSeatsUsed] = useState<number | null>(null);
   useEffect(() => {
@@ -706,6 +707,20 @@ function AutoscuolaDrawerContent({
             checked={aulaEnabled}
             onCheckedChange={(checked) =>
               setLimits((prev) => ({ ...prev, aulaEnabled: Boolean(checked) }))
+            }
+          />
+        </label>
+        <label className="mt-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-white px-3 py-2.5 hover:bg-gray-50/60">
+          <div>
+            <p className="text-sm font-medium text-foreground">Rinnovo Patenti</p>
+            <p className="text-xs text-muted-foreground">
+              Modulo pubblico (chatbot) per rinnovo patente: documenti + prenotazione visita medica. Vedi docs/features/rinnovo-patenti.md.
+            </p>
+          </div>
+          <Checkbox
+            checked={licenseRenewalEnabled}
+            onCheckedChange={(checked) =>
+              setLimits((prev) => ({ ...prev, licenseRenewalEnabled: Boolean(checked) }))
             }
           />
         </label>

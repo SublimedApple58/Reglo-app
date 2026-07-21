@@ -88,6 +88,24 @@ export type ServiceLimits = {
    * Vedi docs/features/reglo-aula.md.
    */
   aulaEnabled?: boolean;
+  /**
+   * Rinnovo Patenti — abilitazione COMMERCIALE del modulo (gestita dal
+   * backoffice). Quando true la company vede la sezione "Rinnovi".
+   * Default false. Vedi docs/features/rinnovo-patenti.md.
+   */
+  licenseRenewalEnabled?: boolean;
+  /**
+   * Rinnovo Patenti — interruttore del TITOLARE: se false il link pubblico è
+   * sospeso (es. medico in ferie) pur restando il modulo abilitato.
+   * `undefined` = attivo (default friendly all'attivazione da backoffice).
+   */
+  licenseRenewalPublicActive?: boolean;
+  /**
+   * Rinnovo Patenti — se true il certificato anamnestico del medico curante è
+   * tra i documenti OBBLIGATORI (la prassi varia per medico/regione: non è
+   * imposto a livello nazionale). Default false = facoltativo.
+   */
+  licenseRenewalAnamnesticRequired?: boolean;
 };
 
 export type CompanyServiceInfo = {

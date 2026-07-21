@@ -62,6 +62,12 @@ export const publicRoutes = [
   // Reglo Aula: pagina pubblica del quiz live (join studente da QR, no auth).
   // `[^/]+` = il joinCode della sessione.
   '/aula-live/[^/]+',
+  // Rinnovo Patenti: pagina pubblica del cittadino (chatbot, no auth).
+  // `[^/]+` = lo slug pubblico dell'autoscuola.
+  '/rinnovo/[^/]+',
+  // Rinnovo Patenti: ripresa richiesta da link email ("ricontatto automatico").
+  // `/rinnovo/{slug}/riprendi/{token}`.
+  '/rinnovo/[^/]+/riprendi/[^/]+',
 ];
 
 export const PAGE_SIZE = 20;

@@ -2,24 +2,42 @@
 
 import { usePathname, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
+import { useAtomValue } from "jotai";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
+import { companyAtom } from "@/atoms/company.store";
+import { getServiceLimits } from "@/lib/services";
 
-const navItems = [
+type NavItem = { label: string; tab: string | null; href: string | null };
+
+const baseNavItems: NavItem[] = [
   { label: "Dashboard", tab: null, href: null },
   { label: "Allievi", tab: "students", href: null },
   { label: "Agenda", tab: "agenda", href: null },
   { label: "Configurazione", tab: "settings", href: null },
   { label: "Pagamenti", tab: "payments", href: null },
   { label: "Segretaria", tab: "voice", href: null },
-  { label: "Users", tab: null, href: "/admin/users" },
 ];
+
+// Tabs that live on their own standalone route instead of ?tab= on the main page.
+const STANDALONE_TABS = new Set(["voice", "rinnovi"]);
 
 export function AutoscuoleNav() {
   const pathname = usePathname() ?? "";
   const searchParams = useSearchParams();
   const locale = useLocale();
+  const company = useAtomValue(companyAtom);
+
+  const renewalEnabled = Boolean(
+    getServiceLimits(company?.services, "AUTOSCUOLE").licenseRenewalEnabled,
+  );
+
+  const navItems: NavItem[] = [
+    ...baseNavItems,
+    ...(renewalEnabled ? [{ label: "Rinnovi", tab: "rinnovi", href: null }] : []),
+    { label: "Users", tab: null, href: "/admin/users" },
+  ];
 
   const currentTab = searchParams.get("tab") ?? null;
   const basePath = `/${locale}/user/autoscuole`;
@@ -49,8 +67,8 @@ export function AutoscuoleNav() {
         // Build href
         const href = item.href
           ? `/${locale}${item.href}`
-          : item.tab === "voice"
-            ? `${basePath}/voice`
+          : item.tab && STANDALONE_TABS.has(item.tab)
+            ? `${basePath}/${item.tab}`
             : item.tab
               ? `${basePath}?tab=${item.tab}`
               : basePath;
