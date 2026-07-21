@@ -383,7 +383,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                           key={item.key}
                           onClick={() =>
                             item.key === "agenda-pausa"
-                              ? setAgendaNewsView("detail")
+                              ? setAgendaNewsView("splash")
                               : setNovitaEntry(item.key)
                           }
                           className="-mx-1.5 flex cursor-pointer items-start gap-3 rounded-[9px] px-1.5 py-[7px]"
