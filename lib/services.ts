@@ -89,8 +89,17 @@ export type ServiceLimits = {
    */
   aulaEnabled?: boolean;
   /**
+   * Modalità "solo Segretaria": la company ha attivato SOLO il modulo
+   * segreteria vocale AI, non l'intera suite autoscuole. Quando true la web
+   * app mostra unicamente l'area Segretaria + le sue impostazioni (niente
+   * Agenda/Allievi/Rinnovi né gli altri pane di configurazione). Richiede
+   * `voiceFeatureEnabled: true` per avere contenuto. Default false.
+   * Vedi docs/features/secretary-only.md.
+   */
+  secretaryOnly?: boolean;
+  /**
    * Rinnovo Patenti — abilitazione COMMERCIALE del modulo (gestita dal
-   * backoffice). Quando true la company vede la sezione "Rinnovi".
+   * backoffice). Quando true la company vede la tab "Rinnovi".
    * Default false. Vedi docs/features/rinnovo-patenti.md.
    */
   licenseRenewalEnabled?: boolean;
@@ -152,3 +161,22 @@ export const getServiceLimits = (
   if (!match?.limits) return DEFAULT_SERVICE_LIMITS[key];
   return { ...DEFAULT_SERVICE_LIMITS[key], ...match.limits };
 };
+
+/**
+ * true se la company è in modalità "solo Segretaria" (ha attivato solo il
+ * modulo segreteria vocale AI). Guida il gating della web app: nav, landing e
+ * pane impostazioni mostrano solo l'area Segretaria.
+ */
+export const isSecretaryOnly = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean => getServiceLimits(services, "AUTOSCUOLE").secretaryOnly === true;
+
+/**
+ * true se la company ha il modulo Rinnovo Patenti abilitato (flag commerciale
+ * del backoffice). Guida la visibilità della tab "Rinnovi": se false la tab
+ * non viene mostrata affatto. Vedi docs/features/rinnovo-patenti.md.
+ */
+export const isLicenseRenewalEnabled = (
+  services: CompanyServiceInfo[] | null | undefined,
+): boolean =>
+  getServiceLimits(services, "AUTOSCUOLE").licenseRenewalEnabled === true;

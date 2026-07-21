@@ -3,15 +3,16 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import Lottie from "lottie-react";
-import { Plus, SlidersHorizontal, CalendarDays, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Loader2, HelpCircle, Car, Bike } from "lucide-react";
-import carAnimation from "@/assets/Car.json";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2 } from "lucide-react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
+import { PageHeader } from "@/components/ui/page-header";
+import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -35,12 +36,17 @@ import {
   removeExamStudent,
   updateExamInstructor,
   updateExamTime,
+  updateExamNotes,
   cancelExamEvent,
 } from "@/lib/actions/autoscuole.actions";
 import { getAutoscuolaLocations } from "@/lib/actions/autoscuola-locations.actions";
-import { AgendaSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
 import { Checkbox } from "@/components/animate-ui/radix/checkbox";
-import { DatePicker } from "@/components/ui/date-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { HolidayModal } from "@/components/pages/Autoscuole/dialogs/HolidayModal";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -48,11 +54,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { ExpandingSearch } from "@/components/ui/expanding-search";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   OutOfAvailabilitySheet,
   type OutOfAvailabilityAppointment,
@@ -63,8 +70,9 @@ import {
 } from "@/components/pages/Autoscuole/EditAppointmentDialog";
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
+import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; licenseCategory?: string | null; transmission?: string | null };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean };
 type ResourceOption = {
   id: string;
   name: string;
@@ -101,7 +109,9 @@ type AppointmentRow = {
 const groupLessonTint = (item: { groupLessonKind?: string | null }) => {
   const moto = item.groupLessonKind === "moto";
   return {
-    card: moto ? "border-orange-300/80 bg-orange-100/90" : "border-teal-300/80 bg-teal-100/90",
+    card: moto
+      ? "bg-[#FFEDD5] shadow-[0_5px_14px_rgba(249,115,22,0.22)]"
+      : "bg-[#ECFDF5] shadow-[0_5px_14px_rgba(16,185,129,0.22)]",
     badge: moto
       ? "border-orange-200 bg-orange-200/60 text-orange-700"
       : "border-teal-200 bg-teal-200/60 text-teal-700",
@@ -124,14 +134,27 @@ type ExamGroup = {
   notes: string | null;
 };
 
+// A studentless "placeholder" row for an exam created before its participants
+// are known (its student is a synthetic `exam-empty:` pseudo-student). Such rows
+// keep the exam slot visible/manageable but must be excluded from the real
+// student list, counts and the manage panel. See materializeExamSlot (backend).
+const isExamPlaceholder = (a: AppointmentRow) =>
+  a.type === "esame" && a.student.id.startsWith("exam-empty");
+
 type AgendaBootstrapPayload = {
   appointments: AppointmentRow[];
   students: Array<{
     id: string;
     firstName: string;
     lastName: string;
+    phone?: string | null;
     licenseCategory?: string | null;
     transmission?: string | null;
+    assignedInstructorId?: string | null;
+    lastInstructorId?: string | null;
+    // True quando l'allievo non ha mai fatto accesso in app (account creato dal
+    // titolare, mai usato → non riceve i promemoria). Guida il badge megafono.
+    neverAccessed?: boolean;
   }>;
   instructors: ResourceOption[];
   vehicles: ResourceOption[];
@@ -153,11 +176,150 @@ const DAY_START_HOUR = 0;
 const DAY_END_HOUR = 24;
 const SLOT_MINUTES = 30;
 const SLOT_OPTIONS = ["30", "45", "60", "90", "120"];
-// Exams can run longer than a normal guida (theory+practice sessions): up to 3h.
-const EXAM_SLOT_OPTIONS = ["30", "45", "60", "90", "120", "150", "180", "210", "240", "270", "300"];
-const PIXELS_PER_MINUTE = 1.6;
-const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
+// Chip durata rapide per gli esami; per durate fuori standard c'è il TimePicker "fine".
+const EXAM_DURATION_CHIPS = [30, 45, 60, 90, 120, 180, 240];
+const fmtExamDuration = (min: number) => {
+  if (min < 60) return `${min}m`;
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `${h}h` : `${h}h${m}`;
+};
+const examTimeToMin = (t: string) => {
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const examMinToTime = (min: number) => {
+  const capped = Math.min(Math.max(min, 0), 1440);
+  return `${String(Math.floor(capped / 60)).padStart(2, "0")}:${String(capped % 60).padStart(2, "0")}`;
+};
+
+/**
+ * Imposta la durata con DUE modalità intercambiabili: chip di durata rapide
+ * OPPURE l'orario di fine (TimePicker). Entrambe aggiornano `durationMin`.
+ * Condiviso da esame (creazione + gestione) e blocca-slot; `chips` personalizza
+ * le durate rapide per il contesto.
+ */
+function DurationField({
+  startTime,
+  durationMin,
+  onDurationChange,
+  chips = EXAM_DURATION_CHIPS,
+}: {
+  startTime: string;
+  durationMin: number;
+  onDurationChange: (min: number) => void;
+  chips?: number[];
+}) {
+  const startMin = examTimeToMin(startTime);
+  const endTime = examMinToTime(startMin + durationMin);
+  // Durata "custom" = impostata dal picker fine, nessuna chip corrisponde.
+  const customDuration = !chips.includes(durationMin);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[13px] font-semibold text-[#6a6a6a]">Durata</div>
+      {/* Una riga sola: chip durata + divisore + picker "fine", stessa cornice →
+          i due modi di impostare la fine collaborano in un unico controllo compatto. */}
+      <div className="flex items-center gap-1 rounded-[12px] border-[1.5px] border-[#e6e6e8] p-1">
+        {chips.map((m) => {
+          const active = durationMin === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onDurationChange(m)}
+              className={cn(
+                "min-w-0 flex-1 cursor-pointer rounded-[8px] py-[7px] text-[12.5px] font-semibold transition-colors",
+                active
+                  ? "bg-[#222222] text-white"
+                  : "text-[#8a8a8f] hover:bg-[#f5f5f5] hover:text-[#222222]",
+              )}
+            >
+              {fmtExamDuration(m)}
+            </button>
+          );
+        })}
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-[#e6e6e8]" />
+        <TimePickerInput
+          value={endTime}
+          minTime={examMinToTime(Math.min(startMin + 15, 1440))}
+          maxTime="24:00"
+          minuteStep={15}
+          className={cn(
+            "shrink-0 gap-1.5 border-0 px-2 py-[7px] text-[12.5px] font-semibold hover:bg-[#f5f5f5]",
+            customDuration ? "bg-[#f2f2f4]" : "bg-transparent",
+          )}
+          onChange={(t) => {
+            const d = examTimeToMin(t) - startMin;
+            if (d > 0) onDurationChange(d);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+const BASE_PIXELS_PER_MINUTE = 1.6;
+// Scala base della griglia (px per minuto). In fullscreen il componente ombreggia
+// questa costante con un fattore di zoom; qui resta la base usata dallo skeleton.
+const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE;
+// Preferenze di visualizzazione agenda (giorni + fascia oraria) persistite in
+// localStorage, indipendenti dai filtri dati. Si resettano solo con "Ripristina".
+// `totalMinutes` è ridefinito nel componente (dipende dalla fascia oraria scelta);
+// DAY_START_HOUR/DAY_END_HOUR restano 0/24 qui per gli orari prenotabili completi.
+const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number };
+// days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24 };
+const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
+  { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
+  { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
+];
+const hourToTime = (h: number) => `${pad(h)}:00`;
+const timeToHour = (t: string) => Number.parseInt(t.split(":")[0] ?? "0", 10);
+function readAgendaViewPrefs(): AgendaViewPrefs {
+  if (typeof window === "undefined") return DEFAULT_VIEW_PREFS;
+  try {
+    const raw = window.localStorage.getItem(AGENDA_VIEW_PREFS_KEY);
+    if (!raw) return DEFAULT_VIEW_PREFS;
+    const p = JSON.parse(raw) as Partial<AgendaViewPrefs>;
+    const days = Array.isArray(p.days)
+      ? p.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      : DEFAULT_VIEW_PREFS.days;
+    const startHour =
+      Number.isInteger(p.startHour) && (p.startHour as number) >= 0 && (p.startHour as number) <= 23
+        ? (p.startHour as number)
+        : DEFAULT_VIEW_PREFS.startHour;
+    let endHour =
+      Number.isInteger(p.endHour) && (p.endHour as number) >= 1 && (p.endHour as number) <= 24
+        ? (p.endHour as number)
+        : DEFAULT_VIEW_PREFS.endHour;
+    if (endHour <= startHour) endHour = DEFAULT_VIEW_PREFS.endHour;
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour };
+  } catch {
+    return DEFAULT_VIEW_PREFS;
+  }
+}
+
+// Persistenza dei filtri agenda in localStorage: restano applicati tra refresh e
+// uscita/rientro nella sezione, si azzerano solo esplicitamente ("Rimuovi filtri").
+const AGENDA_FILTERS_KEY = "reglo-agenda-filters";
+type PersistedAgendaFilters = { instructor: string[]; vehicle: string[]; status: string[]; type: string[] };
+function readAgendaFilters(): PersistedAgendaFilters {
+  const empty: PersistedAgendaFilters = { instructor: [], vehicle: [], status: [], type: [] };
+  if (typeof window === "undefined") return empty;
+  try {
+    const raw = window.localStorage.getItem(AGENDA_FILTERS_KEY);
+    if (!raw) return empty;
+    const parsed = JSON.parse(raw) as Partial<PersistedAgendaFilters>;
+    return {
+      instructor: Array.isArray(parsed.instructor) ? parsed.instructor : [],
+      vehicle: Array.isArray(parsed.vehicle) ? parsed.vehicle : [],
+      status: Array.isArray(parsed.status) ? parsed.status : [],
+      type: Array.isArray(parsed.type) ? parsed.type : [],
+    };
+  } catch {
+    return empty;
+  }
+}
 const LESSON_TYPE_OPTIONS = [
   { value: "guida", label: "Guida" },
   { value: "manovre", label: "Manovre" },
@@ -195,22 +357,24 @@ type InstructorTint = {
   bandStyle?: React.CSSProperties;
 };
 
+// Palette posizionale di fallback (istruttori senza colore scelto). Redesign
+// 2026-07: il primo slot è neutro slate — niente più rosa di default.
 const INSTRUCTOR_COLORS = [
-  { bg: "bg-pink-50/60", border: "border-pink-200/40", text: "text-pink-700", avatar: "bg-pink-100 text-pink-700" },
+  { bg: "bg-slate-100/60", border: "border-slate-200/40", text: "text-slate-700", avatar: "bg-slate-200 text-slate-700" },
   { bg: "bg-sky-50/60", border: "border-sky-200/40", text: "text-sky-700", avatar: "bg-sky-100 text-sky-700" },
   { bg: "bg-emerald-50/60", border: "border-emerald-200/40", text: "text-emerald-700", avatar: "bg-emerald-100 text-emerald-700" },
   { bg: "bg-amber-50/60", border: "border-amber-200/40", text: "text-amber-700", avatar: "bg-amber-100 text-amber-700" },
   { bg: "bg-violet-50/60", border: "border-violet-200/40", text: "text-violet-700", avatar: "bg-violet-100 text-violet-700" },
-  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
   { bg: "bg-teal-50/60", border: "border-teal-200/40", text: "text-teal-700", avatar: "bg-teal-100 text-teal-700" },
   { bg: "bg-orange-50/60", border: "border-orange-200/40", text: "text-orange-700", avatar: "bg-orange-100 text-orange-700" },
+  { bg: "bg-rose-50/60", border: "border-rose-200/40", text: "text-rose-700", avatar: "bg-rose-100 text-rose-700" },
 ];
 
 type FilterKind = "instructor" | "vehicle" | "type" | "status";
 
 type FilterEditorState = {
   kind: FilterKind;
-  value: string;
+  value: string[];
 };
 type FilterOption = {
   value: string;
@@ -219,17 +383,27 @@ type FilterOption = {
 
 function StudentSearchSelect({
   students,
+  instructors,
   value,
   onChange,
 }: {
   students: StudentOption[];
+  /** Per mostrare in lista il nome dell'istruttore assegnato all'allievo. */
+  instructors?: ResourceOption[];
   value: string;
   onChange: (id: string) => void;
 }) {
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
+  // Posizione del flyout: AFFIANCATO alla card del popover (non dentro, dove
+  // coprirebbe i campi successivi). A destra della card, o a sinistra se non
+  // c'è spazio; allineato verticalmente all'input.
+  const [panelPos, setPanelPos] = React.useState<{ left: number; top: number } | null>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  const PANEL_W = 340;
+  const PANEL_MAX_H = 380;
 
   const selected = students.find((s) => s.id === value);
 
@@ -243,6 +417,22 @@ function StudentSearchSelect({
         (s.email && s.email.toLowerCase().includes(q)),
     );
   }, [students, query]);
+
+  const openPanel = React.useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const rect = input.getBoundingClientRect();
+    const card = input.closest('[role="dialog"]')?.getBoundingClientRect();
+    const gap = 14;
+    let left = (card ? card.right : rect.right) + gap;
+    if (left + PANEL_W > window.innerWidth - 8) {
+      left = (card ? card.left : rect.left) - gap - PANEL_W;
+    }
+    left = Math.max(8, left);
+    const top = Math.max(16, Math.min(rect.top, window.innerHeight - PANEL_MAX_H - 16));
+    setPanelPos({ left, top });
+    setOpen(true);
+  }, []);
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -266,49 +456,62 @@ function StudentSearchSelect({
         value={open ? query : selected ? `${selected.firstName} ${selected.lastName}` : query}
         onChange={(e) => {
           setQuery(e.target.value);
-          if (!open) setOpen(true);
+          if (!open) openPanel();
         }}
         onFocus={() => {
-          setOpen(true);
+          openPanel();
           setQuery("");
         }}
       />
-      {open && (
-        <div
-          ref={dropdownRef}
-          className="absolute left-0 top-full z-[9999] mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-white shadow-lg"
-        >
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
-          ) : (
-            filtered.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors",
-                  s.id === value && "bg-muted",
-                )}
-                onClick={() => {
-                  onChange(s.id);
-                  setQuery("");
-                  setOpen(false);
-                }}
-              >
-                <span className="flex min-w-0 flex-col">
-                  <span className="font-medium truncate">{s.firstName} {s.lastName}</span>
-                  {s.email && <span className="text-[11px] text-muted-foreground truncate">{s.email}</span>}
-                </span>
-                {s.licenseCategory ? (
-                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
-                    {s.licenseCategory}
-                  </span>
-                ) : null}
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {open && panelPos &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="fixed z-[60] overflow-y-auto rounded-[14px] border border-[#e3e3e3] bg-white p-1.5 shadow-[0_16px_48px_rgba(0,0,0,0.16)]"
+            style={{ left: panelPos.left, top: panelPos.top, width: PANEL_W, maxHeight: PANEL_MAX_H }}
+          >
+            {filtered.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Nessun risultato</div>
+            ) : (
+              filtered.map((s) => {
+                const assignedInstructor = s.assignedInstructorId
+                  ? instructors?.find((i) => i.id === s.assignedInstructorId)
+                  : null;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between gap-2 rounded-[9px] px-3 py-2 text-left text-sm transition-colors hover:bg-[#f7f7f7]",
+                      s.id === value && "bg-[#f2f2f2]",
+                    )}
+                    onClick={() => {
+                      onChange(s.id);
+                      setQuery("");
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate font-medium">{s.firstName} {s.lastName}</span>
+                      {s.email && <span className="truncate text-[11px] text-muted-foreground">{s.email}</span>}
+                      {assignedInstructor && (
+                        <span className="mt-px truncate text-[11px] font-medium text-[#555555]">
+                          Istruttore · {assignedInstructor.name}
+                        </span>
+                      )}
+                    </span>
+                    {s.licenseCategory ? (
+                      <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground/70">
+                        {s.licenseCategory}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -379,28 +582,110 @@ export function AutoscuoleAgendaPage({
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const [instructorFilter, setInstructorFilter] = React.useState("all");
-  const [vehicleFilter, setVehicleFilter] = React.useState("all");
-  const [statusFilter, setStatusFilter] = React.useState("all");
-  const [typeFilter, setTypeFilter] = React.useState("all");
+  const [searchOpen, setSearchOpen] = React.useState(false);
+  const [filtersMenuOpen, setFiltersMenuOpen] = React.useState(false);
+  const [plusMenuOpen, setPlusMenuOpen] = React.useState(false);
+  // Filtri multi-selezione (redesign 2026-07): array vuoto = nessun filtro.
+  // Applicati client-side sul bootstrap già caricato — cambiare filtro non
+  // rifà la fetch.
+  const [instructorFilter, setInstructorFilter] = React.useState<string[]>(() => readAgendaFilters().instructor);
+  const [vehicleFilter, setVehicleFilter] = React.useState<string[]>(() => readAgendaFilters().vehicle);
+  const [statusFilter, setStatusFilter] = React.useState<string[]>(() => readAgendaFilters().status);
+  const [typeFilter, setTypeFilter] = React.useState<string[]>(() => readAgendaFilters().type);
+  // Salva i filtri a ogni cambio: persistono tra refresh e uscita/rientro nella
+  // sezione. Si azzerano solo con "Rimuovi filtri" (che scrive gli array vuoti).
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AGENDA_FILTERS_KEY,
+        JSON.stringify({ instructor: instructorFilter, vehicle: vehicleFilter, status: statusFilter, type: typeFilter }),
+      );
+    } catch {
+      /* localStorage non disponibile: ignora */
+    }
+  }, [instructorFilter, vehicleFilter, statusFilter, typeFilter]);
+  // Rimuove dai filtri gli ID che non esistono più (istruttore/veicolo cancellato
+  // o cambio autoscuola), così i filtri salvati non svuotano l'agenda per errore.
+  React.useEffect(() => {
+    if (loading) return;
+    if (instructors.length > 0) {
+      setInstructorFilter((prev) => {
+        const valid = prev.filter((id) => instructors.some((i) => i.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+    if (vehicles.length > 0) {
+      setVehicleFilter((prev) => {
+        const valid = prev.filter((id) => vehicles.some((v) => v.id === id));
+        return valid.length === prev.length ? prev : valid;
+      });
+    }
+  }, [loading, instructors, vehicles]);
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
-  const [agendaMode, setAgendaMode] = React.useState<"instructor" | "classic">(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem("reglo-agenda-mode") as "instructor" | "classic") || "instructor";
+  // Schermo intero: overlay `fixed inset-0` (NON la Fullscreen API del browser,
+  // che metterebbe i popup Radix — portati su document.body — sotto al top-layer
+  // rendendoli invisibili). z-40 copre header (z-30) e sidebar (z-10) dell'app ma
+  // resta sotto a dialog/menu/popover (z-50+), che restano cliccabili. Stessa
+  // identica agenda, solo a tutta viewport: il container perde il max-width così
+  // le colonne si allargano.
+  const [isAgendaFullscreen, setIsAgendaFullscreen] = React.useState(false);
+  const toggleAgendaFullscreen = React.useCallback(() => setIsAgendaFullscreen((v) => !v), []);
+  React.useEffect(() => {
+    if (!isAgendaFullscreen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isAgendaFullscreen]);
+  // Preferenze di visualizzazione (giorni + fascia oraria): persistite, resettabili
+  // solo da "Ripristina". Ombreggiamo DAY_START_HOUR/DAY_END_HOUR/totalMinutes così
+  // la griglia si "taglia" alla fascia scelta senza toccare i ~30 punti d'uso, che
+  // sono già parametrizzati su queste costanti.
+  const [viewPrefs, setViewPrefs] = React.useState<AgendaViewPrefs>(() => readAgendaViewPrefs());
+  const [viewPrefsOpen, setViewPrefsOpen] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(AGENDA_VIEW_PREFS_KEY, JSON.stringify(viewPrefs));
+    } catch {
+      /* localStorage non disponibile: ignora */
     }
-    return "instructor";
-  });
-  const toggleAgendaMode = React.useCallback(() => {
-    setAgendaMode((prev) => {
-      const next = prev === "instructor" ? "classic" : "instructor";
-      localStorage.setItem("reglo-agenda-mode", next);
-      return next;
-    });
-  }, []);
+  }, [viewPrefs]);
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const DAY_START_HOUR = viewPrefs.startHour;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const DAY_END_HOUR = viewPrefs.endHour;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
+  // Zoom dell'agenda (attivo solo in fullscreen): scala la densità verticale così
+  // i blocchi diventano più alti/leggibili. Ombreggiamo PIXELS_PER_MINUTE così
+  // tutti i calcoli (posizioni, altezze, drag/click, auto-scroll) si adeguano da
+  // soli. Il testo dei blocchi scala insieme via la CSS var --agenda-fs-scale.
+  const [agendaZoom, setAgendaZoom] = React.useState(1.3);
+  const agendaZoomFactor = isAgendaFullscreen ? agendaZoom : 1;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE * agendaZoomFactor;
+  // eslint-disable-next-line @typescript-eslint/no-shadow
+  const calendarHeight = totalMinutes * PIXELS_PER_MINUTE;
+  const agendaFrameClass = isAgendaFullscreen
+    ? "agenda-grid-zoom"
+    : "rounded-[14px] border border-[#dddddd]";
+  const agendaFrameStyle: React.CSSProperties | undefined = isAgendaFullscreen
+    ? ({ "--agenda-fs-scale": String(agendaZoomFactor) } as React.CSSProperties)
+    : undefined;
+  // Larghezza colonne in fullscreen: ogni colonna ha una larghezza minima comoda
+  // (base 180px) che scala con lo zoom. Quando le colonne eccedono lo schermo parte
+  // lo scroll orizzontale, altrimenti 1fr riempie. Così l'agenda "si apre" in
+  // larghezza già di default (soprattutto nel modo istruttori, prima a 80px).
+  // Fuori fullscreen fsCols() → undefined → template originale invariato.
+  const fsColMin = isAgendaFullscreen ? Math.round(90 * agendaZoom) : 0;
+  const fsCols = (n: number) =>
+    isAgendaFullscreen ? `56px repeat(${n}, minmax(${fsColMin}px, 1fr))` : undefined;
   const [createOpen, setCreateOpen] = React.useState(false);
-  const [createStep, setCreateStep] = React.useState(0);
   const [creating, setCreating] = React.useState(false);
+  // Conferma "prenotazione nel passato" (vedi handleCreate): teniamo lo start
+  // scelto per mostrarlo nell'alert prima di procedere con allowPast.
+  const [pastConfirmOpen, setPastConfirmOpen] = React.useState(false);
+  const [pendingPastStart, setPendingPastStart] = React.useState<Date | null>(null);
   const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
@@ -447,9 +732,59 @@ export function AutoscuoleAgendaPage({
   const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
   const [examCreating, setExamCreating] = React.useState(false);
   const [examStudentSearch, setExamStudentSearch] = React.useState("");
+  // Pannello laterale "Aggiungi allievi" (stesso pattern delle guide di gruppo).
+  const [examBrowseOpen, setExamBrowseOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!examDialogOpen) { setExamBrowseOpen(false); setExamStudentSearch(""); }
+  }, [examDialogOpen]);
+  const examStudentInitials = (first?: string | null, last?: string | null) =>
+    `${(first ?? "").trim()[0] ?? ""}${(last ?? "").trim()[0] ?? ""}`.toUpperCase() || "?";
+  const examAddableCount = React.useMemo(
+    () => students.reduce((n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1), 0),
+    [students, examForm.studentIds],
+  );
+  const examBrowseList = React.useMemo(() => {
+    const q = examStudentSearch.trim().toLowerCase();
+    return students
+      .filter((s) => !examForm.studentIds.includes(s.id))
+      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q));
+  }, [students, examForm.studentIds, examStudentSearch]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
   const [examPanelPending, setExamPanelPending] = React.useState(false);
+  const [examPanelBrowseOpen, setExamPanelBrowseOpen] = React.useState(false);
+  // Modello DRAFT: orario/istruttore/allievi/note si modificano in locale e si
+  // applicano con un unico "Salva modifiche" (niente auto-save a ogni tocco).
+  const [examNoteDraft, setExamNoteDraft] = React.useState("");
+  const [examDraftTime, setExamDraftTime] = React.useState<string | null>(null);
+  const [examDraftDurationMin, setExamDraftDurationMin] = React.useState(60);
+  const [examDraftInstructorId, setExamDraftInstructorId] = React.useState<string | null>(null);
+  const [examDraftStudentIds, setExamDraftStudentIds] = React.useState<string[]>([]);
+  // Init i draft solo alla PRIMA apertura (non a ogni update del gruppo).
+  const examPanelOpenedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (examPanelGroup) {
+      if (!examPanelOpenedRef.current) {
+        const g = examPanelGroup;
+        const gs = toDate(g.startsAt);
+        setExamNoteDraft(g.notes ?? "");
+        setExamDraftTime(g.endsAt ? `${String(gs.getHours()).padStart(2, "0")}:${String(gs.getMinutes()).padStart(2, "0")}` : null);
+        setExamDraftDurationMin(g.endsAt ? Math.max(15, Math.round((toDate(g.endsAt).getTime() - gs.getTime()) / 60000)) : 60);
+        setExamDraftInstructorId(g.instructorId ?? null);
+        setExamDraftStudentIds(g.appointments.filter((a) => !isExamPlaceholder(a)).map((a) => a.student.id));
+        examPanelOpenedRef.current = true;
+      }
+    } else {
+      examPanelOpenedRef.current = false;
+      setExamPanelBrowseOpen(false);
+      setExamPanelStudentSearch("");
+      setExamNoteDraft("");
+      setExamDraftTime(null);
+      setExamDraftDurationMin(60);
+      setExamDraftInstructorId(null);
+      setExamDraftStudentIds([]);
+    }
+  }, [examPanelGroup]);
   const [legendOpen, setLegendOpen] = React.useState(false);
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
@@ -466,12 +801,23 @@ export function AutoscuoleAgendaPage({
     ghostTop: number;
   } | null>(null);
   const [groupLessonPrefill, setGroupLessonPrefill] = React.useState<{ date: string; time: string; instructorId: string | null } | null>(null);
+  // Popover di creazione (redesign 2026-07): ancora viewport della card,
+  // draft della guida di gruppo (lifted dal dialog figlio per il ghost) e
+  // patch slot→gruppo quando si clicca la griglia col popover gruppo aperto.
+  const [popoverAnchor, setPopoverAnchor] = React.useState<{ x: number; y: number } | null>(null);
+  const plusBtnRef = React.useRef<HTMLButtonElement>(null);
+  const [groupDraft, setGroupDraft] = React.useState<{ date: string; time: string; durationMin: number; instructorId: string | null; kind: "standard" | "moto"; capacity: number } | null>(null);
+  const [groupSlotPatch, setGroupSlotPatch] = React.useState<{ date: string; time: string; instructorId: string | null; nonce: number } | null>(null);
+  const [editDraft, setEditDraft] = React.useState<{ date: string; time: string; durationMin: number; instructorId: string | null } | null>(null);
+  const [editSlotPatch, setEditSlotPatch] = React.useState<{ date: string; time: string; instructorId: string | null; nonce: number } | null>(null);
+  const anchorFromPlus = React.useCallback(() => {
+    const rect = plusBtnRef.current?.getBoundingClientRect();
+    setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
+  }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
-  const [holidayDialogOpen, setHolidayDialogOpen] = React.useState(false);
-  const [holidayDialogDate, setHolidayDialogDate] = React.useState<Date | null>(null);
-  const [holidayLabel, setHolidayLabel] = React.useState("");
-  const [holidayPending, setHolidayPending] = React.useState(false);
+  const [holidayModalOpen, setHolidayModalOpen] = React.useState(false);
+  const [holidayModalInitialDate, setHolidayModalInitialDate] = React.useState<Date | null>(null);
   const [removeHolidayDialogOpen, setRemoveHolidayDialogOpen] = React.useState(false);
   const [removeHolidayDate, setRemoveHolidayDate] = React.useState<Date | null>(null);
   const [nowTick, setNowTick] = React.useState(() => Date.now());
@@ -487,7 +833,12 @@ export function AutoscuoleAgendaPage({
     const glMap = new Map<string, AppointmentRow[]>();
     for (const a of appointments) {
       if (a.type === "esame" && a.status !== "cancelled") {
-        const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}`;
+        // Group by time AND instructor: an exam session is one accompanying
+        // instructor + N students. Two exams at the same time with DIFFERENT
+        // instructors must stay separate (own card on each instructor column) —
+        // keying by time only merged them onto the first instructor (Macchiavello
+        // bug, 2026-07-15). Exams without an instructor group under "none".
+        const key = `${new Date(a.startsAt).toISOString()}|${a.endsAt ? new Date(a.endsAt).toISOString() : ""}|${a.instructor?.id ?? "none"}`;
         const list = examMap.get(key) ?? [];
         list.push(a);
         examMap.set(key, list);
@@ -554,14 +905,9 @@ export function AutoscuoleAgendaPage({
         limit: "500",
       });
 
-      if (instructorFilter !== "all") params.set("instructorId", instructorFilter);
-      if (vehicleFilter !== "all") params.set("vehicleId", vehicleFilter);
-      if (statusFilter !== "all") params.set("status", statusFilter);
-      if (typeFilter !== "all") params.set("type", typeFilter);
-
       return `/api/autoscuole/agenda/bootstrap?${params.toString()}`;
     },
-    [instructorFilter, statusFilter, typeFilter, vehicleFilter],
+    [],
   );
 
   const load = React.useCallback(async (options?: {
@@ -714,7 +1060,7 @@ export function AutoscuoleAgendaPage({
       const scrollTarget = currentMinutes * PIXELS_PER_MINUTE - calendarScrollRef.current.clientHeight / 3;
       calendarScrollRef.current.scrollTop = Math.max(0, scrollTarget);
     }
-  }, [loading]);
+  }, [loading, PIXELS_PER_MINUTE, DAY_START_HOUR]);
 
   // Close the slot menu with Escape.
   React.useEffect(() => {
@@ -740,16 +1086,41 @@ export function AutoscuoleAgendaPage({
     const startMin = Math.floor(minutes / SLOT_MINUTES) * SLOT_MINUTES;
     const snapped = startMin + DAY_START_HOUR * 60;
     const normalized = normalizeDay(day);
+    const ymd = formatYmd(normalized);
+    const time = `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`;
+    // Con un flusso di creazione aperto, il click sulla griglia RIPOSIZIONA il
+    // draft (stile Google Calendar) invece di aprire il menu slot.
+    if (createOpen) {
+      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (examDialogOpen) {
+      setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (blockDialogOpen) {
+      setBlockForm((prev) => ({ ...prev, date: ymd, startTime: time, instructorId: instructorId ?? prev.instructorId }));
+      return;
+    }
+    if (createGroupLessonOpen) {
+      setGroupSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      return;
+    }
+    if (editAppointmentTarget) {
+      setEditSlotPatch({ date: ymd, time, instructorId: instructorId ?? null, nonce: Date.now() });
+      return;
+    }
     setSlotMenu({
       day: normalized,
-      ymd: formatYmd(normalized),
-      time: `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`,
+      ymd,
+      time,
       instructorId: instructorId ?? null,
       colLeft: rect.left,
       colRight: rect.right,
       ghostTop: rect.top + startMin * PIXELS_PER_MINUTE,
     });
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
 
   // Ghost block rendered inside the clicked column while the slot menu is open
   // (neutral look: white + dashed gray border, approved via desktop preview).
@@ -789,6 +1160,252 @@ export function AutoscuoleAgendaPage({
     );
   };
 
+  // Sposta il draft attivo su un nuovo slot (click su griglia o drag del ghost).
+  const moveDraftTo = React.useCallback((ymd: string, time: string, instructorId: string | null) => {
+    if (createOpen) {
+      setForm((prev) => ({ ...prev, day: ymd, time, instructorId: instructorId ?? prev.instructorId }));
+    } else if (examDialogOpen) {
+      setExamForm((prev) => ({ ...prev, date: ymd, time, timeSet: true, instructorId: instructorId ?? prev.instructorId }));
+    } else if (blockDialogOpen) {
+      setBlockForm((prev) => ({ ...prev, date: ymd, startTime: time, instructorId: instructorId ?? prev.instructorId }));
+    } else if (createGroupLessonOpen) {
+      setGroupSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    } else if (editAppointmentTarget) {
+      setEditSlotPatch({ date: ymd, time, instructorId, nonce: Date.now() });
+    }
+  }, [createOpen, examDialogOpen, blockDialogOpen, createGroupLessonOpen, editAppointmentTarget]);
+
+  // Drag del ghost: verticale = orario (scatti di 15'), orizzontale = giorno /
+  // colonna istruttore (hit-test su [data-agenda-col-day]).
+  const ghostDragRef = React.useRef(false);
+  const onGhostPointerDown = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const node = event.currentTarget;
+    const grabOffsetY = event.clientY - node.getBoundingClientRect().top;
+    ghostDragRef.current = true;
+    node.style.pointerEvents = "none";
+    document.body.style.cursor = "grabbing";
+    let lastKey = "";
+    const onMove = (ev: PointerEvent) => {
+      const el = document.elementFromPoint(ev.clientX, ev.clientY);
+      const col = el?.closest?.("[data-agenda-col-day]") as HTMLElement | null;
+      if (!col) return;
+      const ymd = col.dataset.agendaColDay as string;
+      const instr = col.dataset.agendaColInstructor || null;
+      const rect = col.getBoundingClientRect();
+      const rawMinutes = (ev.clientY - grabOffsetY - rect.top) / PIXELS_PER_MINUTE;
+      const snapped = Math.max(0, Math.min(totalMinutes - 15, Math.round(rawMinutes / 15) * 15)) + DAY_START_HOUR * 60;
+      const time = `${pad(Math.floor(snapped / 60))}:${pad(snapped % 60)}`;
+      const key = `${ymd}|${time}|${instr ?? ""}`;
+      if (key === lastKey) return;
+      lastKey = key;
+      moveDraftTo(ymd, time, instr);
+    };
+    const onUp = () => {
+      ghostDragRef.current = false;
+      node.style.pointerEvents = "";
+      document.body.style.cursor = "";
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, [moveDraftTo, PIXELS_PER_MINUTE, DAY_START_HOUR, totalMinutes]);
+
+  // ── Draft ghost: anteprima live dell'evento in creazione ──
+  // Derivato dal form del popover attivo; mostra in griglia il blocco che si
+  // creerà, già del colore giusto (durata per le guide, viola esame, grigio
+  // bloccante, verde/arancio gruppo).
+  const draftGhost = React.useMemo<null | {
+    ymd: string;
+    startMin: number;
+    durMin: number;
+    instructorId: string | null;
+    title: string;
+    cardClass: string;
+    dotClass: string;
+  }>(() => {
+    const parseStart = (time: string) => {
+      const [h, m] = time.split(":").map(Number);
+      return h * 60 + m - DAY_START_HOUR * 60;
+    };
+    if (createOpen && form.day && form.time) {
+      const dur = parseInt(form.duration, 10) || 30;
+      const student = students.find((s) => s.id === form.studentId);
+      const cardClass =
+        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
+        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
+        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
+        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
+        "bg-[#FBD9DD]/80 border-[#dd8f99]";
+      const dotClass =
+        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
+      return {
+        ymd: form.day,
+        startMin: parseStart(form.time),
+        durMin: dur,
+        instructorId: form.instructorId || null,
+        title: student ? `${student.firstName} ${student.lastName}` : "Nuova guida",
+        cardClass,
+        dotClass,
+      };
+    }
+    if (editAppointmentTarget && editDraft?.date && editDraft.time) {
+      const dur = editDraft.durationMin || 30;
+      const cardClass =
+        dur <= 30 ? "bg-[#E3EEFF]/80 border-[#8fb8f2]" :
+        dur <= 45 ? "bg-[#EAF7CE]/80 border-[#aecb6b]" :
+        dur <= 60 ? "bg-[#FCEFC7]/80 border-[#dcb84f]" :
+        dur <= 90 ? "bg-[#F9DDF3]/80 border-[#d98cc7]" :
+        "bg-[#FBD9DD]/80 border-[#dd8f99]";
+      const dotClass =
+        dur <= 30 ? "bg-[#3b82f6]" : dur <= 45 ? "bg-[#84cc16]" : dur <= 60 ? "bg-[#f59e0b]" : dur <= 90 ? "bg-[#d946ef]" : "bg-[#f43f5e]";
+      const who = `${editAppointmentTarget.student?.firstName ?? ""} ${editAppointmentTarget.student?.lastName ?? ""}`.trim();
+      return {
+        ymd: editDraft.date,
+        startMin: parseStart(editDraft.time),
+        durMin: dur,
+        instructorId: editDraft.instructorId,
+        title: who || "Guida",
+        cardClass,
+        dotClass,
+      };
+    }
+    if (examDialogOpen && examForm.date && examForm.timeSet && examForm.time) {
+      return {
+        ymd: examForm.date,
+        startMin: parseStart(examForm.time),
+        durMin: parseInt(examForm.duration, 10) || 60,
+        instructorId: examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null,
+        title: examForm.studentIds.length > 1 ? `Esame · ${examForm.studentIds.length} allievi` : "Esame",
+        cardClass: "bg-[#F5F0FF]/80 border-[#b39ddb]",
+        dotClass: "bg-[#8b5cf6]",
+      };
+    }
+    if (blockDialogOpen && blockForm.date && blockForm.startTime) {
+      return {
+        ymd: blockForm.date,
+        startMin: parseStart(blockForm.startTime),
+        durMin: parseInt(blockForm.duration, 10) || 60,
+        instructorId: blockForm.instructorId || null,
+        title: blockForm.reason.trim() || "Evento bloccante",
+        cardClass: "bg-[#F3F4F8]/85 border-[#b8bcc8]",
+        dotClass: "bg-[#9ca3af]",
+      };
+    }
+    if (createGroupLessonOpen && groupDraft?.date && groupDraft.time) {
+      const moto = groupDraft.kind === "moto";
+      return {
+        ymd: groupDraft.date,
+        startMin: parseStart(groupDraft.time),
+        durMin: groupDraft.durationMin,
+        instructorId: groupDraft.instructorId,
+        title: `Guida di gruppo · ${groupDraft.capacity} posti`,
+        cardClass: moto ? "bg-[#FFEDD5]/80 border-[#e8a75e]" : "bg-[#ECFDF5]/80 border-[#6fc9a3]",
+        dotClass: moto ? "bg-[#f97316]" : "bg-[#10b981]",
+      };
+    }
+    return null;
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
+
+  // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
+  // annullato lui una guida che iniziava a questo istante, mostriamo un banner
+  // ambra informativo nel form di prenotazione (non blocca: si può prenotare
+  // lo stesso). La durata è ignorata: conta solo l'orario di inizio.
+  const [studentSlotCancelled, setStudentSlotCancelled] = React.useState(false);
+  React.useEffect(() => {
+    if (!createOpen || !form.studentId || !form.day || !form.time) {
+      setStudentSlotCancelled(false);
+      return;
+    }
+    const start = buildLocalDateTime(form.day, form.time);
+    if (Number.isNaN(start.getTime())) {
+      setStudentSlotCancelled(false);
+      return;
+    }
+    let cancelled = false;
+    setStudentSlotCancelled(false);
+    const params = new URLSearchParams({
+      studentId: form.studentId,
+      startsAt: start.toISOString(),
+    });
+    fetch(`/api/autoscuole/slot-cancellation-check?${params.toString()}`, {
+      cache: "no-store",
+    })
+      .then((r) => r.json())
+      .then((res) => {
+        if (cancelled) return;
+        setStudentSlotCancelled(Boolean(res?.success && res.data?.hadCancellation));
+      })
+      .catch(() => {
+        if (!cancelled) setStudentSlotCancelled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [createOpen, form.studentId, form.day, form.time]);
+
+  // L'agenda segue il draft: se il giorno esce dal range visibile naviga da
+  // sola, e scrolla verticalmente fino all'orario del ghost.
+  React.useEffect(() => {
+    if (!draftGhost || ghostDragRef.current) return;
+    const target = toDate(`${draftGhost.ymd}T00:00:00`);
+    const normalized = normalizeDay(target);
+    if (viewMode === "week") {
+      const ws = startOfWeek(normalized);
+      if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
+    } else if (normalized.getTime() !== dayFocus.getTime()) {
+      setDayFocus(normalized);
+    }
+    const scroller = calendarScrollRef.current;
+    if (scroller) {
+      const top = Math.max(0, draftGhost.startMin * PIXELS_PER_MINUTE - 140);
+      scroller.scrollTo({ top, behavior: "smooth" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftGhost?.ymd, draftGhost?.startMin]);
+
+  // Ghost del draft nella colonna giusta. instructorId=null (vista classica)
+  // → matcha solo il giorno; nelle viste istruttori matcha la colonna, e se
+  // l'istruttore non è ancora scelto appare tratteggiato in tutte (opaco).
+  const renderDraftGhost = (day: Date, instructorId: string | null) => {
+    if (!draftGhost || draftGhost.ymd !== formatYmd(day)) return null;
+    const unassigned = instructorId !== null && draftGhost.instructorId === null;
+    if (instructorId !== null && draftGhost.instructorId !== null && draftGhost.instructorId !== instructorId) return null;
+    const startMin = Math.max(0, draftGhost.startMin);
+    const durMin = Math.min(draftGhost.durMin, totalMinutes - startMin);
+    const endTotal = startMin + DAY_START_HOUR * 60 + durMin;
+    const startLabel = `${pad(Math.floor((startMin + DAY_START_HOUR * 60) / 60))}:${pad((startMin + DAY_START_HOUR * 60) % 60)}`;
+    const endLabel = `${pad(Math.floor(endTotal / 60) % 24)}:${pad(endTotal % 60)}`;
+    const height = Math.max(26, durMin * PIXELS_PER_MINUTE - 2);
+    const small = height < 40;
+    return (
+      <motion.div
+        key={`draft-ghost-${draftGhost.ymd}-${instructorId ?? "day"}`}
+        layout
+        initial={{ opacity: 0, scale: 0.94 }}
+        animate={{ opacity: unassigned ? 0.45 : 1, scale: 1 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className={cn(
+          "absolute left-1 right-1 z-30 cursor-grab touch-none select-none overflow-hidden rounded-lg border-[1.5px] border-dashed px-2 py-1 shadow-[0_6px_22px_rgba(16,24,40,0.16)] active:cursor-grabbing",
+          draftGhost.cardClass,
+        )}
+        style={{ top: startMin * PIXELS_PER_MINUTE, height }}
+        onPointerDown={onGhostPointerDown}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold tabular-nums text-[#222222]">
+          <span className={cn("size-1.5 shrink-0 rounded-full", draftGhost.dotClass)} />
+          {startLabel} – {endLabel}
+        </div>
+        {!small && (
+          <div className="mt-0.5 truncate text-[10.5px] font-medium text-[#555555]">{draftGhost.title}</div>
+        )}
+      </motion.div>
+    );
+  };
+
   // Fetch instructor availability for the visible range
   React.useEffect(() => {
     let cancelled = false;
@@ -818,14 +1435,38 @@ export function AutoscuoleAgendaPage({
         instrMap.set(avail.instructorId, { id: avail.instructorId, name: avail.instructorName, ranges });
       }
     }
-    return Array.from(instrMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [viewMode, instructors, instructorAvailability, dayFocus]);
+    // Filtro istruttori attivo → in vista Istruttori restano solo le loro colonne.
+    const list = Array.from(instrMap.values()).filter(
+      (instr) => instructorFilter.length === 0 || instructorFilter.includes(instr.id),
+    );
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [viewMode, instructors, instructorAvailability, dayFocus, instructorFilter]);
 
   const filtered = React.useMemo(() => {
     return regularAppointments.filter((item) => {
       // Always hide cancelled appointments from the agenda — the cancellation
       // is recorded server-side, but the slot should free up visually.
       if ((item.status ?? "").toLowerCase() === "cancelled") return false;
+
+      // Filtri multi-selezione (vuoto = tutto passa).
+      if (instructorFilter.length > 0 && !instructorFilter.includes(item.instructor?.id ?? "")) {
+        return false;
+      }
+      if (vehicleFilter.length > 0) {
+        const vehicleIds = [
+          item.vehicle?.id,
+          item.followVehicle?.id,
+          ...(item.extraMotoVehicles ?? []).map((v) => v.id),
+        ].filter(Boolean) as string[];
+        if (!vehicleIds.some((id) => vehicleFilter.includes(id))) return false;
+      }
+      if (typeFilter.length > 0) {
+        const itemTypes = [item.type, ...(item.types ?? [])];
+        if (!itemTypes.some((t) => typeFilter.includes(t))) return false;
+      }
+      if (statusFilter.length > 0 && !statusFilter.includes((item.status ?? "").toLowerCase())) {
+        return false;
+      }
 
       const term = search.trim().toLowerCase();
       if (
@@ -840,9 +1481,38 @@ export function AutoscuoleAgendaPage({
       const end = getAppointmentEnd(item);
       return start < rangeEnd && end > rangeStart;
     });
-  }, [appointments, search, rangeStart, rangeEnd]);
+  }, [appointments, search, rangeStart, rangeEnd, instructorFilter, vehicleFilter, typeFilter, statusFilter]);
 
-  const handleCreate = async () => {
+  // Auto-avanzamento del form di creazione: quando un campo obbligatorio viene
+  // compilato, scrolla al prossimo ancora vuoto (allievo → istruttore →
+  // veicolo) e gli dà il focus. Le note sono facoltative e vengono saltate.
+  const createStudentRef = React.useRef<HTMLDivElement>(null);
+  const createInstructorRef = React.useRef<HTMLDivElement>(null);
+  const createVehicleRef = React.useRef<HTMLDivElement>(null);
+  const advanceCreateFocus = (patch: { studentId?: string; instructorId?: string; vehicleId?: string }) => {
+    const next = {
+      studentId: form.studentId,
+      instructorId: form.instructorId,
+      vehicleId: form.vehicleId,
+      ...patch,
+    };
+    const target = !next.studentId
+      ? createStudentRef.current
+      : !next.instructorId
+        ? createInstructorRef.current
+        : vehiclesEnabled && !next.vehicleId
+          ? createVehicleRef.current
+          : null;
+    if (!target) return;
+    // Il delay lascia chiudere il popover della select appena usata (Radix
+    // riporta il focus sul proprio trigger alla chiusura: dobbiamo passare dopo).
+    window.setTimeout(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.querySelector<HTMLElement>("button, input")?.focus({ preventScroll: true });
+    }, 160);
+  };
+
+  const handleCreate = async (opts?: { allowPast?: boolean }) => {
     const isMotoMode = vehiclesEnabled && form.bookingMode === "moto";
     const needFollowCar =
       isMotoMode && Object.values(followCarRules).some((r) => r?.enabled === true);
@@ -870,6 +1540,13 @@ export function AutoscuoleAgendaPage({
       toast.error({ description: "Data o orario non validi." });
       return;
     }
+    // Prenotazione nel passato: non blocchiamo più a priori. Chiediamo conferma
+    // esplicita e, se l'utente procede, ripassiamo con allowPast → il BE la crea.
+    if (!opts?.allowPast && startDate.getTime() < Date.now()) {
+      setPendingPastStart(startDate);
+      setPastConfirmOpen(true);
+      return;
+    }
     setCreating(true);
     const endsAt = new Date(startDate.getTime() + Number(form.duration) * 60 * 1000);
     const makePayload = (skip?: boolean) => ({
@@ -888,6 +1565,7 @@ export function AutoscuoleAgendaPage({
       locationId: form.locationId || null,
       notes: form.notes.trim() || undefined,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
+      ...(opts?.allowPast ? { allowPast: true } : {}),
     });
     const res = await createAutoscuolaAppointment(makePayload());
     if (!res.success) {
@@ -988,12 +1666,17 @@ export function AutoscuoleAgendaPage({
   };
 
   const handleOpenEdit = (item: AppointmentRow) => {
+    // Chiude il menu EVENTO del blocco (Radix, non si chiude da solo aprendo
+    // un popover non-modale) prima di mostrare la card di modifica.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     setEditAppointmentTarget({
       id: item.id,
       startsAt: item.startsAt,
       endsAt: item.endsAt ?? null,
       status: item.status,
       type: item.type ?? null,
+      types: item.types ?? null,
+      rating: item.rating ?? null,
       notes: item.notes ?? null,
       student: {
         firstName: item.student.firstName,
@@ -1020,7 +1703,7 @@ export function AutoscuoleAgendaPage({
     });
   };
 
-  const applyFilter = React.useCallback((kind: FilterKind, value: string) => {
+  const applyFilter = React.useCallback((kind: FilterKind, value: string[]) => {
     if (kind === "instructor") {
       setInstructorFilter(value);
       return;
@@ -1081,16 +1764,44 @@ export function AutoscuoleAgendaPage({
     [studentLicenseById],
   );
 
-  const days = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  // Allievi che non hanno mai aperto l'app (account creato dal titolare, mai
+  // usato) + loro telefono — risolti via la directory bootstrap (stesso spazio
+  // user-id degli appuntamenti), come studentLicenseById. Guidano il badge
+  // megafono sui blocchi individuali.
+  const neverAccessedById = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const s of students) if (s.neverAccessed) set.add(s.id);
+    return set;
+  }, [students]);
+  const phoneById = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of students) if (s.phone) map.set(s.id, s.phone);
+    return map;
+  }, [students]);
+  // Il badge va solo sulle guide individuali (le guide di gruppo hanno più
+  // allievi → niente singolo destinatario da avvisare).
+  const neverAccessedFor = React.useCallback(
+    (item: AppointmentRow): boolean =>
+      item.type !== "group_lesson" && neverAccessedById.has(item.student.id),
+    [neverAccessedById],
+  );
+
+  const allWeekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+  const visibleWeekDays = allWeekDays.filter((d) => viewPrefs.days.includes(d.getDay()));
+  const days = visibleWeekDays.length ? visibleWeekDays : allWeekDays;
   const visibleDays = viewMode === "week" ? days : [dayFocus];
+  // In fullscreen sopra la griglia resta solo la toolbar (niente header app né
+  // titolo), quindi recuperiamo lo spazio verticale liberato.
+  const agendaGridHeight = isAgendaFullscreen ? "calc(100vh - 132px)" : "calc(100vh - 240px)";
   const hourMarks = Array.from(
     { length: DAY_END_HOUR - DAY_START_HOUR + 1 },
     (_, index) => DAY_START_HOUR + index,
   );
   const appointmentsByDay = visibleDays.map((day) => {
     const dayStart = new Date(day);
-    dayStart.setHours(0, 0, 0, 0);
-    const dayEnd = addDays(dayStart, 1);
+    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
+    const dayEnd = new Date(day);
+    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
     return filtered
       .filter((appointment) => {
         const start = toDate(appointment.startsAt);
@@ -1106,154 +1817,327 @@ export function AutoscuoleAgendaPage({
       subTitle="Agenda guide ed esami."
       hideHero
     >
-      <div className="relative w-full space-y-5" data-testid="autoscuole-agenda-page">
-        <LottieLoadingOverlay visible={loading} />
-        <div className="mx-auto max-w-7xl space-y-5">
-          <header className="space-y-1.5">
-            <h1 className="ds-section-primary text-foreground">Agenda</h1>
-            <p className="text-sm text-muted-foreground">Agenda guide ed esami.</p>
-          </header>
+      <div
+        className={cn(
+          "space-y-5",
+          isAgendaFullscreen ? "fixed inset-0 z-40 overflow-y-auto bg-white px-6 py-4" : "relative w-full",
+        )}
+        data-testid="autoscuole-agenda-page"
+      >
+        <div className={cn("mx-auto space-y-5", isAgendaFullscreen ? "max-w-none" : "max-w-7xl")}>
+          {!isAgendaFullscreen && (
+            <PageHeader
+              title="Agenda"
+              subtitle={(() => {
+                const activeCount = filtered.filter((a) => a.status !== "cancelled").length;
+                const todayCount = filtered.filter((a) => {
+                  if (a.status === "cancelled") return false;
+                  const start = toDate(a.startsAt);
+                  return start >= todayNormalized && start < addDays(todayNormalized, 1);
+                }).length;
+                const periodo = viewMode === "week" ? "questa settimana" : "in giornata";
+                return viewMode === "week"
+                  ? [`${todayCount} guide oggi`, `${activeCount} ${periodo}`]
+                  : [`${activeCount} guide ${periodo}`];
+              })()}
+            />
+          )}
           {tabs}
-          {loading && <AgendaSkeleton />}
-          {!loading && (<>
         <div className="flex items-center gap-3">
           {/* Date nav */}
-          <div className="flex items-center gap-1.5">
-            <Button variant="ghost" size="sm" className="size-8 p-0"
+          <div className="flex items-center gap-1">
+            <button type="button"
+              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, -7)) : setDayFocus((prev) => addDays(prev, -1))}>
               <ChevronLeft className="size-4" />
-            </Button>
-            <span className="min-w-[140px] text-center text-sm font-semibold text-foreground">
+            </button>
+            <span className="min-w-[130px] select-none text-center text-[15px] font-semibold text-foreground">
               {viewMode === "week"
                 ? formatRangeLabel(weekStart)
                 : dayFocus.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
             </span>
-            <Button variant="ghost" size="sm" className="size-8 p-0"
+            <button type="button"
+              className="flex size-[30px] cursor-pointer items-center justify-center rounded-full text-[#555] transition-colors hover:bg-[#f2f2f2]"
               onClick={() => viewMode === "week" ? setWeekStart((prev) => addDays(prev, 7)) : setDayFocus((prev) => addDays(prev, 1))}>
               <ChevronRight className="size-4" />
-            </Button>
+            </button>
           </div>
-
-          <div className="h-5 w-px bg-border" />
 
           {/* Period toggle */}
-          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
-            <Button variant={viewMode === "week" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
-              onClick={() => setViewMode("week")}>Settimana</Button>
-            <Button variant={viewMode === "day" ? "default" : "ghost"} size="sm" className="h-7 px-3 text-xs"
-              onClick={() => setViewMode("day")}>Giorno</Button>
-          </div>
+          <SegmentedPill
+            value={viewMode}
+            onChange={(v) => setViewMode(v)}
+            options={[
+              { value: "week", label: "Settimana" },
+              { value: "day", label: "Giorno" },
+            ]}
+          />
 
-          {/* Mode toggle */}
-          <div className="flex items-center gap-0.5 rounded-full border border-border bg-gray-50 p-0.5">
-            <Button variant={agendaMode === "classic" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
-              onClick={() => { if (agendaMode !== "classic") toggleAgendaMode(); }}>
-              <CalendarDays className="size-3" />Classica
-            </Button>
-            <Button variant={agendaMode === "instructor" ? "default" : "ghost"} size="sm" className="h-7 gap-1 px-2.5 text-xs"
-              onClick={() => { if (agendaMode !== "instructor") toggleAgendaMode(); }}>
-              <Users className="size-3" />Istruttori
-            </Button>
-          </div>
+          <div className="min-w-2 flex-1" />
 
-          <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground" onClick={() => setLegendOpen(true)}>
-            <HelpCircle className="size-3" />Legenda
-          </Button>
+          {/* Legenda (icona info, proto) */}
+          <button
+            type="button"
+            title="Legenda"
+            onClick={() => setLegendOpen(true)}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            <Info className="size-4" strokeWidth={1.6} />
+          </button>
 
-          <div className="h-5 w-px bg-border" />
+          {/* Visualizzazione (giorni + fascia oraria) — Popover non-modale, così il
+              popover del TimePicker annidato scrolla (niente scroll-lock da Dialog). */}
+          <PopoverPrimitive.Root open={viewPrefsOpen} onOpenChange={setViewPrefsOpen} modal={false}>
+            <PopoverPrimitive.Trigger asChild>
+              <button
+                type="button"
+                title="Visualizzazione"
+                className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+              >
+                <LayoutGrid className="size-4" strokeWidth={1.6} />
+                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24) && (
+                  <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                )}
+              </button>
+            </PopoverPrimitive.Trigger>
+            <PopoverPrimitive.Portal>
+              <PopoverPrimitive.Content
+                align="end"
+                sideOffset={8}
+                collisionPadding={8}
+                className="z-[60] w-[320px] rounded-xl border border-[#ebebeb] bg-white p-4 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+              >
+                <div className="space-y-4">
+                  <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {WEEKDAY_CHIPS.map(({ dow, label }) => {
+                        const on = viewPrefs.days.includes(dow);
+                        return (
+                          <button
+                            key={dow}
+                            type="button"
+                            onClick={() =>
+                              setViewPrefs((p) => {
+                                const next = p.days.includes(dow)
+                                  ? p.days.filter((d) => d !== dow)
+                                  : [...p.days, dow];
+                                return next.length ? { ...p, days: next } : p;
+                              })
+                            }
+                            className={cn(
+                              "h-8 min-w-[44px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-semibold transition-colors",
+                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">Nascondi i giorni in cui l&apos;autoscuola è chiusa.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Orario visibile</div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-muted-foreground">Dalle</span>
+                      <TimePickerInput
+                        value={hourToTime(viewPrefs.startHour)}
+                        minuteStep={60}
+                        minTime="00:00"
+                        maxTime={hourToTime(viewPrefs.endHour - 1)}
+                        onChange={(v) => setViewPrefs((p) => ({ ...p, startHour: timeToHour(v) }))}
+                      />
+                      <span className="text-[13px] text-muted-foreground">alle</span>
+                      <TimePickerInput
+                        value={hourToTime(viewPrefs.endHour)}
+                        minuteStep={60}
+                        minTime={hourToTime(viewPrefs.startHour + 1)}
+                        maxTime="24:00"
+                        onChange={(v) => setViewPrefs((p) => ({ ...p, endHour: timeToHour(v) }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end border-t border-[#f0f0f0] pt-3">
+                    <button
+                      type="button"
+                      className="cursor-pointer text-[13px] font-semibold text-[#1a1a2e] underline underline-offset-2 hover:opacity-70"
+                      onClick={() => setViewPrefs(DEFAULT_VIEW_PREFS)}
+                    >
+                      Ripristina
+                    </button>
+                  </div>
+                </div>
+              </PopoverPrimitive.Content>
+            </PopoverPrimitive.Portal>
+          </PopoverPrimitive.Root>
 
-          {/* Filters */}
-          <div className="flex items-center gap-1.5">
-            <FilterTag label="Istruttore" value={instructorFilter} allValue="all"
-              onClick={() => setFilterEditor({ kind: "instructor", value: instructorFilter })}
-              displayValue={instructorFilter === "all" ? null : instructors.find((item) => item.id === instructorFilter)?.name ?? "Selezionato"} />
-            {vehiclesEnabled && (
-              <FilterTag label="Veicolo" value={vehicleFilter} allValue="all"
-                onClick={() => setFilterEditor({ kind: "vehicle", value: vehicleFilter })}
-                displayValue={vehicleFilter === "all" ? null : vehicles.find((item) => item.id === vehicleFilter)?.name ?? "Selezionato"} />
-            )}
-            <FilterTag label="Tipo" value={typeFilter} allValue="all"
-              onClick={() => setFilterEditor({ kind: "type", value: typeFilter })}
-              displayValue={typeFilter === "all" ? null : LESSON_TYPE_OPTIONS.find((option) => option.value === typeFilter)?.label ?? typeFilter} />
-            <FilterTag label="Stato" value={statusFilter} allValue="all"
-              onClick={() => setFilterEditor({ kind: "status", value: statusFilter })}
-              displayValue={statusFilter === "all" ? null : getStatusMeta(statusFilter).label} />
-            {(instructorFilter !== "all" || vehicleFilter !== "all" || typeFilter !== "all" || statusFilter !== "all") && (
-              <Button variant="ghost" size="sm" className="h-7 rounded-full text-xs px-2"
-                onClick={() => { setInstructorFilter("all"); setVehicleFilter("all"); setTypeFilter("all"); setStatusFilter("all"); }}>
-                Reset
-              </Button>
-            )}
-          </div>
-
-          {/* Holiday toggle (day view) */}
-          {viewMode === "day" && (
-            <div className="flex items-center gap-1.5">
-              <div className="h-5 w-px bg-border" />
-              {holidaySet.has(formatYmd(dayFocus)) ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2.5 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={() => { setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
-                >
-                  <Ban className="size-3" /> Rimuovi festivo
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2.5 text-xs"
-                  onClick={() => { setHolidayDialogDate(dayFocus); setHolidayLabel(""); setHolidayDialogOpen(true); }}
-                >
-                  <Ban className="size-3" /> Segna festivo
-                </Button>
-              )}
+          {/* Zoom (solo in fullscreen) */}
+          {isAgendaFullscreen && (
+            <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
+              <button
+                type="button"
+                title="Riduci zoom"
+                onClick={() => setAgendaZoom((z) => Math.max(0.9, Math.round((z - 0.15) * 100) / 100))}
+                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              >
+                <ZoomOut className="size-4" strokeWidth={1.7} />
+              </button>
+              <span className="min-w-[40px] select-none text-center text-[12px] font-semibold tabular-nums text-[#555]">
+                {Math.round(agendaZoom * 100)}%
+              </span>
+              <button
+                type="button"
+                title="Aumenta zoom"
+                onClick={() => setAgendaZoom((z) => Math.min(2.2, Math.round((z + 0.15) * 100) / 100))}
+                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
+              >
+                <ZoomIn className="size-4" strokeWidth={1.7} />
+              </button>
             </div>
           )}
 
+          {/* Schermo intero */}
+          <button
+            type="button"
+            title={isAgendaFullscreen ? "Esci da schermo intero" : "Schermo intero"}
+            onClick={toggleAgendaFullscreen}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
+          </button>
+
+          {/* Filtri (menu unico, proto) */}
+          {(() => {
+            const hasActiveFilters =
+              instructorFilter.length > 0 || vehicleFilter.length > 0 || typeFilter.length > 0 || statusFilter.length > 0;
+            const menuEntries: Array<{ kind: FilterKind; label: string; active: boolean; value: string[] }> = [
+              { kind: "instructor", label: "Istruttore", active: instructorFilter.length > 0, value: instructorFilter },
+              ...(vehiclesEnabled
+                ? [{ kind: "vehicle" as FilterKind, label: "Veicolo", active: vehicleFilter.length > 0, value: vehicleFilter }]
+                : []),
+              { kind: "type", label: "Tipo", active: typeFilter.length > 0, value: typeFilter },
+              { kind: "status", label: "Stato", active: statusFilter.length > 0, value: statusFilter },
+            ];
+            return (
+              <DropdownMenu open={filtersMenuOpen} onOpenChange={setFiltersMenuOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 transition-colors hover:bg-[#f0f0f0]"
+                  >
+                    <SlidersHorizontal className="size-4 text-[#888888]" strokeWidth={1.6} />
+                    <span className="text-[13px] font-medium text-[#555555]">Filtri</span>
+                    {hasActiveFilters && (
+                      <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[190px] rounded-xl p-1.5 shadow-dropdown">
+                  {menuEntries.map((entry) => (
+                    <button
+                      key={entry.kind}
+                      type="button"
+                      className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                      onClick={() => { setFiltersMenuOpen(false); setFilterEditor({ kind: entry.kind, value: entry.value }); }}
+                    >
+                      {entry.label}
+                      {entry.active && <span className="ml-auto size-[7px] rounded-full bg-[#1a1a2e]" />}
+                    </button>
+                  ))}
+                  {hasActiveFilters && (
+                    <>
+                      <div className="my-1 border-t border-[#f0f0f0]" />
+                      <button
+                        type="button"
+                        className="flex w-full cursor-pointer items-center rounded-lg px-3 py-[9px] text-[13px] font-medium text-[#1a1a2e] transition-colors hover:bg-[#eeeef4]"
+                        onClick={() => { setFiltersMenuOpen(false); setInstructorFilter([]); setVehicleFilter([]); setTypeFilter([]); setStatusFilter([]); }}
+                      >
+                        Rimuovi filtri
+                      </button>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          })()}
+
+          {/* Cerca (espandibile, proto) */}
+          <ExpandingSearch
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            value={search}
+            onChange={setSearch}
+            placeholder="Cerca in agenda…"
+          />
+
           {/* CTA */}
           <div>
-            <DropdownMenu>
+            <DropdownMenu open={plusMenuOpen} onOpenChange={setPlusMenuOpen}>
               <DropdownMenuTrigger asChild>
-                <Button size="sm">
-                  <Plus className="mr-1.5 size-3.5" />
-                  Nuovo
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => { setCreateStep(0); setCreateOpen(true); }}
+                  ref={plusBtnRef}
+                  title="Inserisci a mano"
+                  className="flex size-[38px] shrink-0 cursor-pointer items-center justify-center rounded-full bg-navy-900 text-white transition-colors hover:bg-navy-800"
                 >
-                  <Plus className="size-3.5 text-pink-500" />
+                  <Plus className="size-[18px]" strokeWidth={2.2} />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 rounded-[12px] shadow-dropdown">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setForm((prev) => ({ ...prev, day: prev.day || formatYmd(normalizeDay(dayFocus)) })); setCreateOpen(true); }}
+                >
+                  <Plus className="size-4 text-foreground" strokeWidth={1.7} />
                   Appuntamento
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => { setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setExamForm({ date: normalizeDay(dayFocus).toISOString().slice(0, 10), time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [], note: "" }); setExamStudentSearch(""); setExamDialogOpen(true); }}
                 >
-                  <GraduationCap className="size-3.5 text-violet-500" />
+                  <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />
                   Esame
                 </button>
                 <button
                   type="button"
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                  onClick={() => { setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
                 >
-                  <Ban className="size-3.5 text-slate-500" />
+                  <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
                 </button>
                 {groupLessonsEnabled && (
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground hover:bg-gray-50 transition-colors cursor-pointer"
-                    onClick={() => setCreateGroupLessonOpen(true)}
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setCreateGroupLessonOpen(true); }}
                   >
-                    <Users className="size-3.5 text-teal-600" />
+                    <Users className="size-4 text-foreground" strokeWidth={1.7} />
                     Guida di gruppo
+                  </button>
+                )}
+                <div className="my-1 border-t border-[#f0f0f0]" />
+                {viewMode === "day" && holidaySet.has(formatYmd(dayFocus)) ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#c13515] hover:bg-red-50 transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); setRemoveHolidayDate(dayFocus); setRemoveHolidayDialogOpen(true); }}
+                  >
+                    <Ban className="size-4" strokeWidth={1.7} />
+                    Rimuovi festivo
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-[#d97706] hover:bg-[#fffbeb] transition-colors cursor-pointer"
+                    onClick={() => { setPlusMenuOpen(false); setHolidayModalInitialDate(viewMode === "day" ? dayFocus : null); setHolidayModalOpen(true); }}
+                  >
+                    <Ban className="size-4" strokeWidth={1.7} />
+                    Segna festivo
                   </button>
                 )}
               </DropdownMenuContent>
@@ -1262,19 +2146,26 @@ export function AutoscuoleAgendaPage({
         </div>
 
         {outOfAvailAppointments.length > 0 && (
-          <div className="flex items-center gap-3 rounded-2xl border border-yellow-200 bg-yellow-50 px-5 py-3">
-            <AlertTriangle className="size-5 shrink-0 text-yellow-600" />
-            <span className="text-sm font-medium text-yellow-800">
-              <strong>{outOfAvailAppointments.length}</strong> guid{outOfAvailAppointments.length === 1 ? "a" : "e"} fuori disponibilità
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto border-yellow-300 bg-white text-yellow-800 hover:bg-yellow-100"
+          <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f8fa] px-4 py-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <AlertTriangle className="size-[18px] shrink-0 text-[#d97706]" strokeWidth={1.8} />
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-foreground">
+                  {outOfAvailAppointments.length} guid{outOfAvailAppointments.length === 1 ? "a" : "e"} fuori
+                  disponibilità
+                </p>
+                <p className="text-[12px] font-medium leading-snug text-[#929292]">
+                  Prenotate fuori dagli orari di disponibilità dell&apos;istruttore.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
               onClick={() => setOutOfAvailSheetOpen(true)}
+              className="flex shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
             >
               Gestisci
-            </Button>
+            </button>
           </div>
         )}
 
@@ -1291,9 +2182,12 @@ export function AutoscuoleAgendaPage({
         <EditAppointmentDialog
           open={editAppointmentTarget !== null}
           onOpenChange={(open) => {
-            if (!open) setEditAppointmentTarget(null);
+            if (!open) { setEditAppointmentTarget(null); setEditDraft(null); setEditSlotPatch(null); }
           }}
           appointment={editAppointmentTarget}
+          anchor={null}
+          onDraftChange={setEditDraft}
+          slotPatch={editSlotPatch}
           instructors={instructors}
           vehicles={vehicles.map((v) => ({
             id: v.id,
@@ -1321,7 +2215,10 @@ export function AutoscuoleAgendaPage({
         />
         <GroupLessonCreateDialog
           open={createGroupLessonOpen}
-          onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) setGroupLessonPrefill(null); }}
+          onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) { setGroupLessonPrefill(null); setGroupDraft(null); setGroupSlotPatch(null); } }}
+          anchor={popoverAnchor}
+          onDraftChange={setGroupDraft}
+          slotPatch={groupSlotPatch}
           instructors={instructors.map((i) => ({ id: i.id, name: i.name }))}
           vehiclesEnabled={vehiclesEnabled}
           followCarRules={followCarRules}
@@ -1345,22 +2242,27 @@ export function AutoscuoleAgendaPage({
             const instructorName = slotMenu.instructorId
               ? instructors.find((i) => i.id === slotMenu.instructorId)?.name ?? null
               : null;
-            const closeAnd = (fn: () => void) => { setSlotMenu(null); fn(); };
+            const closeAnd = (fn: () => void) => {
+              // Anchor al CENTRO della colonna del ghost: CreateEventPopover la
+              // riconosce (data-agenda-col-day) e si affianca sul lato più libero.
+              setPopoverAnchor({ x: (slotMenu.colLeft + slotMenu.colRight) / 2, y: Math.max(80, Math.min(slotMenu.ghostTop - 8, window.innerHeight - 420)) });
+              setSlotMenu(null);
+              fn();
+            };
             const options: Array<{ key: string; label: string; icon: React.ReactNode; onSelect: () => void }> = [
               {
                 key: "appointment",
                 label: "Appuntamento",
-                icon: <Plus className="size-3.5 text-pink-500" />,
+                icon: <Plus className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setForm((prev) => ({ ...prev, day: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId ?? prev.instructorId }));
-                  setCreateStep(0);
                   setCreateOpen(true);
                 }),
               },
               {
                 key: "exam",
                 label: "Esame",
-                icon: <GraduationCap className="size-3.5 text-violet-500" />,
+                icon: <GraduationCap className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setExamForm({ date: slotMenu.ymd, time: slotMenu.time, duration: "60", timeSet: true, instructorId: slotMenu.instructorId ?? "", studentIds: [], note: "" });
                   setExamStudentSearch("");
@@ -1370,7 +2272,7 @@ export function AutoscuoleAgendaPage({
               {
                 key: "block",
                 label: "Evento bloccante",
-                icon: <Ban className="size-3.5 text-slate-500" />,
+                icon: <Ban className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
                   setBlockDialogOpen(true);
@@ -1379,7 +2281,7 @@ export function AutoscuoleAgendaPage({
               ...(groupLessonsEnabled ? [{
                 key: "group",
                 label: "Guida di gruppo",
-                icon: <Users className="size-3.5 text-teal-600" />,
+                icon: <Users className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
                   setGroupLessonPrefill({ date: slotMenu.ymd, time: slotMenu.time, instructorId: slotMenu.instructorId });
                   setCreateGroupLessonOpen(true);
@@ -1397,7 +2299,7 @@ export function AutoscuoleAgendaPage({
                   initial={{ opacity: 0, scale: 0.96, y: -4 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   transition={{ duration: 0.12, ease: "easeOut" }}
-                  className="absolute rounded-xl border border-border bg-white p-1.5 shadow-dropdown"
+                  className="absolute rounded-[12px] border border-border bg-white p-1.5 shadow-dropdown"
                   style={{ left, top, width: MENU_WIDTH }}
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -1413,7 +2315,7 @@ export function AutoscuoleAgendaPage({
                     <button
                       key={option.key}
                       type="button"
-                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-[8px] px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
                       onClick={option.onSelect}
                     >
                       {option.icon}
@@ -1426,294 +2328,43 @@ export function AutoscuoleAgendaPage({
           })(),
           document.body,
         )}
-          </>)}
         </div>
 
-        {!loading && (<>
-        {/* ── CLASSIC VIEW ── */}
-        {agendaMode === "classic" && (
-          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <div ref={calendarScrollRef} className="overflow-y-auto rounded-2xl border border-border bg-white shadow-card" style={{ height: "100%" }}>
-              {/* Sticky day headers */}
-              <div
-                className={`sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}
-              >
-                <div />
-                {visibleDays.map((day) => {
-                  const isDayToday = day.getTime() === todayNormalized.getTime();
-                  return (
-                    <div key={day.toISOString()} className={cn("py-2.5 text-center text-xs font-semibold transition-colors border-l border-border/50", isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground")}>
-                      {day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Calendar body */}
-              <div className={`grid ${viewMode === "week" ? "grid-cols-[56px_repeat(7,1fr)]" : "grid-cols-[56px_1fr]"}`}>
-                {/* Time gutter */}
-                <div className="relative" style={{ height: calendarHeight }}>
-                  {hourMarks.map((hour) => (
-                    <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
-                    </div>
-                  ))}
-                  {(() => {
-                    const now = new Date(nowTick);
-                    const mins = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                    const todayInView = visibleDays.some((d) => d.getTime() === todayNormalized.getTime());
-                    if (!todayInView || mins < 0 || mins > totalMinutes) return null;
-                    return (
-                      <div className="absolute left-0 right-0 z-20 flex items-center" style={{ top: mins * PIXELS_PER_MINUTE }}>
-                        <span className="w-full pr-1 text-right text-[10px] font-semibold tabular-nums text-red-500">{`${pad(now.getHours())}:${pad(now.getMinutes())}`}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-                {/* Day columns */}
-                {visibleDays.map((day, dayIndex) => {
-                  const dayStart = new Date(day); dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
-                  const dayEnd = new Date(day); dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
-                  const dayAppointments = appointmentsByDay[dayIndex] ?? [];
-                  const { laneMap, overflowGroups } = computeLanes(dayAppointments);
-                  const isDayToday = day.getTime() === todayNormalized.getTime();
-                  const now = new Date(nowTick);
-                  const nowMinutes = now.getHours() * 60 + now.getMinutes() - DAY_START_HOUR * 60;
-                  const showNowLine = isDayToday && nowMinutes >= 0 && nowMinutes <= totalMinutes;
-                  return (
-                    <div key={day.toISOString()} className={cn("relative cursor-pointer border-l border-border/50", isDayToday ? "bg-yellow-50/30" : "")} style={{ height: calendarHeight }}
-                      onClick={(event) => openSlotMenu(event, day)}
-                    >
-                      {renderSlotGhost(day, null)}
-                      {hourMarks.map((hour) => (<div key={hour} className="absolute left-0 right-0 h-px bg-border/40" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />))}
-                      {showNowLine && (<div className="pointer-events-none absolute left-0 right-0 z-20 flex items-center" style={{ top: nowMinutes * PIXELS_PER_MINUTE }}><span className="size-2 shrink-0 rounded-full bg-red-500" /><span className="h-[1.5px] flex-1 bg-red-500" /></div>)}
-                      {dayAppointments.map((item) => {
-                        const laneInfo = laneMap.get(item.id);
-                        const lane = laneInfo?.lane ?? 0;
-                        const totalLanes = laneInfo?.totalLanes ?? 1;
-                        if (totalLanes > MAX_VISIBLE_LANES) return null;
-                        const start = toDate(item.startsAt); const end = getAppointmentEnd(item);
-                        const clippedStart = start < dayStart ? dayStart : start; const clippedEnd = end > dayEnd ? dayEnd : end;
-                        const offsetMinutes = Math.max(0, diffMinutes(clippedStart, dayStart));
-                        const durationMinutes = Math.max(15, diffMinutes(clippedEnd, clippedStart));
-                        const top = offsetMinutes * PIXELS_PER_MINUTE; const height = durationMinutes * PIXELS_PER_MINUTE;
-                        const statusMeta = getStatusMeta(item.status, item, new Date(nowTick));
-                        const isExam = item.type === "esame";
-                        const isGroupLesson = item.type === "group_lesson";
-                        const isCompact = height <= 56; const GAP_PX = 2;
-                        const licenseTag = licenseTagFor(item);
-                        const laneLeft = `calc(${(lane / totalLanes) * 100}% + ${GAP_PX / 2}px)`;
-                        const laneWidth = `calc(${(1 / totalLanes) * 100}% - ${GAP_PX}px)`;
-                        const isPendingAction = pendingEventActionId === item.id;
-                        const glTint = groupLessonTint(item);
-                        const cardClassName = isExam
-                          ? "border-violet-300/80 bg-violet-100/90"
-                          : isGroupLesson
-                            ? glTint.card
-                            : statusMeta.className;
-                        return (
-                          <DropdownMenu key={item.id}>
-                            <DropdownMenuTrigger asChild>
-                              <button type="button" className={cn("absolute z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md", isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2", isPendingAction ? "pointer-events-none opacity-75" : "", cardClassName)} style={{ top, height, left: laneLeft, width: laneWidth }} onClick={(e) => e.stopPropagation()}>
-                                {isPendingAction ? (<><div className="flex items-center justify-between gap-2"><div className="h-3 w-24 animate-pulse rounded-full bg-gray-100" /><div className="h-3 w-14 animate-pulse rounded-full bg-gray-100" /></div><div className="h-3 w-20 animate-pulse rounded-full bg-gray-200" /></>) : (<><div className="flex items-center justify-between gap-2"><div className={cn("min-w-0 truncate whitespace-nowrap font-semibold leading-tight", isExam ? "text-violet-800" : "text-foreground", isCompact ? "text-[10px]" : "text-[11px]")}>{isExam && !isCompact ? "🎓 " : ""}{item.student.firstName} {item.student.lastName}</div><Badge variant="secondary" className={cn("shrink-0 font-medium", isExam ? "border-violet-200 bg-violet-200/60 text-violet-700" : isGroupLesson ? glTint.badge : "border-border bg-white text-foreground/80", isCompact ? "px-1.5 py-0 text-[9px]" : "px-2 py-0.5 text-[10px]")}>{isExam ? "Esame" : isGroupLesson ? glTint.label : statusMeta.shortLabel}</Badge></div><div className={cn("truncate whitespace-nowrap text-[11px]", isExam ? "text-violet-600" : isGroupLesson ? glTint.time : "text-muted-foreground")}>{formatTimeRange(start, end)}{!isCompact ? ` · ${Math.round(diffMinutes(end, start))}m` : ""}{!isExam && !isGroupLesson ? ` · ${item.type}` : ""}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>{!isCompact && licenseTag ? (<div className={cn("truncate whitespace-nowrap text-[10px] font-semibold", isExam ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>) : null}</>)}
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="space-y-2"><div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div><div className="rounded-xl border border-border bg-white p-3"><div className="text-sm font-semibold text-foreground">{item.student.firstName} {item.student.lastName}</div><div className="mt-1 text-xs text-muted-foreground">{formatEventType(item.type)} · {formatTimeRange(start, end)}</div><div className="text-xs text-muted-foreground">{start.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}</div><div className="mt-2 space-y-1 text-xs text-muted-foreground"><div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div><VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} /><div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>{item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}</div><div className="mt-2 flex items-center gap-2">{isGroupLesson ? <Badge variant="secondary" className={glTint.detailBadge}>{glTint.label === "Gruppo moto" ? "Guida di gruppo moto" : "Guida di gruppo"}</Badge> : <Badge variant="secondary">{statusMeta.label}</Badge>}{!isGroupLesson && !canUpdateStatus(item) ? <span className="text-[11px] text-muted-foreground">Slot passato o chiuso</span> : null}</div></div></div>
-                              {!isGroupLesson && <div className="mt-3 grid grid-cols-2 gap-2">{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}{!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}<Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button><Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button></div>}
-                              {canRescheduleAppointment(item) && !isGroupLesson ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
-                              {isGroupLesson ? (
-                                <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
-                              ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        );
-                      })}
-                      {overflowGroups.map((group) => {
-                        const blockTop = (group.topMinutes - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
-                        const blockHeight = Math.max(30, group.spanMinutes * PIXELS_PER_MINUTE);
-                        const earliest = toDate(group.allItems[0].startsAt);
-                        const latest = group.allItems.reduce((acc, a) => { const e = getAppointmentEnd(a); return e > acc ? e : acc; }, earliest);
-                        return (
-                          <DropdownMenu key={`overflow-${group.clusterId}`}>
-                            <DropdownMenuTrigger asChild>
-                              <button type="button" className="absolute left-1 right-1 z-10 box-border flex flex-col items-center justify-center gap-0.5 overflow-hidden rounded-lg border border-pink-200 bg-pink-50 text-left shadow-sm transition hover:bg-pink-100 hover:shadow-md" style={{ top: blockTop, height: blockHeight }} onClick={(e) => e.stopPropagation()}>
-                                <span className="text-[12px] font-bold text-pink-600">{group.allItems.length} guide</span>
-                                <span className="text-[10px] text-pink-500/80">{formatTimeRange(earliest, latest)}</span>
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-80 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                              <div className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{group.allItems.length} guide sovrapposte</div>
-                              <div className="space-y-1.5 max-h-72 overflow-y-auto">
-                                {group.allItems.map((item) => {
-                                  const s = toDate(item.startsAt); const e = getAppointmentEnd(item);
-                                  const meta = getStatusMeta(item.status, item, new Date(nowTick));
-                                  return (
-                                    <div key={item.id} className={cn("rounded-lg border p-2.5 text-xs", meta.className)}>
-                                      <div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground truncate">{item.student.firstName} {item.student.lastName}</span><Badge variant="secondary" className="shrink-0 border border-border bg-white px-1.5 py-0 text-[9px] font-medium text-foreground/80">{meta.shortLabel}</Badge></div>
-                                      <div className="text-muted-foreground mt-0.5">{formatEventType(item.type)} · {formatTimeRange(s, e)} · {item.instructor?.name ?? "N/A"}</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        );
-                      })}
-                      {/* Instructor blocks for this day */}
-                      {instructorBlocks
-                        .filter((b) => {
-                          const bStart = toDate(b.startsAt);
-                          return bStart >= dayStart && bStart < dayEnd;
-                        })
-                        .map((b) => {
-                          const bStart = toDate(b.startsAt);
-                          const bEnd = toDate(b.endsAt);
-                          const offsetMin = Math.max(0, diffMinutes(bStart < dayStart ? dayStart : bStart, dayStart));
-                          const durMin = Math.max(15, diffMinutes(bEnd > dayEnd ? dayEnd : bEnd, bStart < dayStart ? dayStart : bStart));
-                          const top = offsetMin * PIXELS_PER_MINUTE;
-                          const height = durMin * PIXELS_PER_MINUTE;
-                          const instrName = instructors.find((i) => i.id === b.instructorId)?.name ?? "";
-                          return (
-                            <DropdownMenu key={`block-${b.id}`}>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
-                                  style={{ top, height }}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
-                                  <span className="truncate text-[10px] text-slate-500">{instrName} · {formatTimeRange(bStart, bEnd)}</span>
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
-                                <div className="space-y-2">
-                                  <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
-                                  <div className="text-xs text-muted-foreground">{instrName}</div>
-                                  <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
-                                </div>
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                  onClick={async () => {
-                                    if (b.recurrenceGroupId) {
-                                      setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                    } else {
-                                      setBlockDeleting(b.id);
-                                      const res = await deleteInstructorBlock(b.id);
-                                      setBlockDeleting(null);
-                                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                                      setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
-                                      toast.success({ description: "Evento eliminato." });
-                                    }
-                                  }}
-                                >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          );
-                        })}
-                      {/* Exam groups for this day */}
-                      {examGroups
-                        .filter((eg) => {
-                          const egStart = toDate(eg.startsAt);
-                          return egStart >= dayStart && egStart < dayEnd;
-                        })
-                        .map((eg) => {
-                          const egStart = toDate(eg.startsAt);
-                          const examHasTime = Boolean(eg.endsAt);
-                          const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
-                          if (!examHasTime) {
-                            // Timeless exam — fixed banner at top
-                            return (
-                              <button
-                                key={`exam-${eg.key}`}
-                                type="button"
-                                className="absolute left-1 right-1 z-20 box-border flex items-center gap-1.5 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50 px-2 py-1.5 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
-                                style={{ top: 0 }}
-                                onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
-                              >
-                                <GraduationCap className="size-3 text-violet-600 shrink-0" />
-                                <span className="text-[10px] font-bold text-violet-700">Esame</span>
-                                <span className="text-[9px] text-violet-500 ml-auto">{eg.appointments.length} all.</span>
-                              </button>
-                            );
-                          }
-                          const offsetMin = Math.max(0, diffMinutes(egStart < dayStart ? dayStart : egStart, dayStart));
-                          const durMin = Math.max(30, diffMinutes(egEnd > dayEnd ? dayEnd : egEnd, egStart < dayStart ? dayStart : egStart));
-                          const top = offsetMin * PIXELS_PER_MINUTE;
-                          const height = durMin * PIXELS_PER_MINUTE;
-                          return (
-                            <button
-                              key={`exam-${eg.key}`}
-                              type="button"
-                              className="absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50 p-2 text-left shadow-sm transition hover:shadow-md hover:bg-violet-100 cursor-pointer"
-                              style={{ top, height }}
-                              onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
-                            >
-                              <div className="flex items-center gap-1.5">
-                                <GraduationCap className="size-3.5 text-violet-600 shrink-0" />
-                                <span className="text-[11px] font-bold text-violet-700 uppercase tracking-wider">Esame</span>
-                                <Badge variant="secondary" className="ml-auto shrink-0 border-violet-200 bg-violet-200/60 text-violet-700 px-1.5 py-0 text-[9px] font-bold">
-                                  {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
-                                </Badge>
-                              </div>
-                              <div className="mt-1 text-[10px] text-violet-600">
-                                {formatTimeRange(egStart, egEnd)}
-                                {eg.instructor ? ` · ${eg.instructor.name}` : ""}
-                              </div>
-                              {height > 60 && (
-                                <div className="mt-1 text-[9px] text-violet-500 truncate">
-                                  {eg.appointments.map((a) => `${a.student.firstName} ${a.student.lastName.charAt(0)}.`).join(", ")}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
+        {loading ? (
+          <AgendaGridSkeleton columns={viewMode === "week" ? 7 : 4} />
+        ) : (<FadeIn>
 
-        {/* ── INSTRUCTOR WEEKLY VIEW ── */}
-        {agendaMode === "instructor" && viewMode === "week" && (() => {
-          const weekInstructors = instructorAvailability.length > 0
+        {/* ── WEEKLY VIEW (istruttori) ── */}
+        {viewMode === "week" && (() => {
+          const weekInstructorsAll = instructorAvailability.length > 0
             ? instructorAvailability
             : instructors.map((i) => ({ instructorId: i.id, instructorName: i.name, days: {} as Record<string, Array<{ startMinutes: number; endMinutes: number }>> }));
+          // Filtro istruttori attivo → solo le colonne selezionate.
+          const weekInstructors = instructorFilter.length > 0
+            ? weekInstructorsAll.filter((i) => instructorFilter.includes(i.instructorId))
+            : weekInstructorsAll;
           const instrCount = Math.max(1, weekInstructors.length);
-          const totalCols = instrCount * 7; // instructor sub-columns across 7 days
+          const totalCols = instrCount * days.length; // sotto-colonne istruttore per i giorni visibili
 
           return (
-          <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
-            <AnimatePresence>
-              {refreshing && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-                  className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50">
-                  <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
-                    <Lottie animationData={carAnimation} loop style={{ width: 100, height: 100 }} />
-                    <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="flex flex-col bg-white" style={{ height: "100%" }}>
+          <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
+            <div className={cn("flex flex-col overflow-hidden bg-white", agendaFrameClass)} style={{ height: "100%", ...agendaFrameStyle }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
-                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
                 <div className="row-span-2" />
                 {days.map((day) => {
                   const isDayToday = day.getTime() === todayNormalized.getTime();
                   const dayHolidayLabel = holidaySet.get(formatYmd(day));
                   const isDayHoliday = dayHolidayLabel !== undefined;
+                  const isWeekendDay = day.getDay() === 0 || day.getDay() === 6;
                   return (
                     <div
                       key={`day-${day.toISOString()}`}
                       className={cn(
-                        "text-center text-xs font-semibold py-1.5 border-l border-border cursor-pointer hover:bg-gray-50 transition-colors",
-                        isDayHoliday ? "bg-red-50 text-red-600" : isDayToday ? "bg-yellow-50 text-yellow-700" : "text-muted-foreground",
+                        "relative flex h-[52px] cursor-pointer flex-col items-center justify-center gap-px border-l border-[#eeeeee] transition-colors hover:bg-[#f7f7f7]",
+                        isDayHoliday ? "bg-[#fffcf0]" : isWeekendDay ? "bg-[#fafafa]" : "bg-white",
                       )}
                       style={{ gridColumn: `span ${instrCount}` }}
                       onClick={() => { setDayFocus(normalizeDay(day)); setViewMode("day"); }}
@@ -1723,14 +2374,23 @@ export function AutoscuoleAgendaPage({
                           setRemoveHolidayDate(normalizeDay(day));
                           setRemoveHolidayDialogOpen(true);
                         } else {
-                          setHolidayDialogDate(normalizeDay(day));
-                          setHolidayLabel("");
-                          setHolidayDialogOpen(true);
+                          setHolidayModalInitialDate(normalizeDay(day));
+                          setHolidayModalOpen(true);
                         }
                       }}
                     >
-                      <span>{day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" })}</span>
-                      {isDayHoliday && <span className="ml-1 inline-flex items-center rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] font-semibold text-red-700">{dayHolidayLabel || "Festivo"}</span>}
+                      <span className={cn("text-[10px] font-semibold uppercase tracking-[0.5px]", isDayHoliday ? "text-amber-500" : "text-[#aaaaaa]")}>
+                        {day.toLocaleDateString("it-IT", { weekday: "short" })}
+                      </span>
+                      <span
+                        className={cn(
+                          "flex size-[26px] items-center justify-center rounded-full text-[13px] font-bold",
+                          isDayToday ? "bg-[#222222] text-white" : isDayHoliday ? "text-amber-600" : isWeekendDay ? "text-[#999999]" : "text-foreground",
+                        )}
+                      >
+                        {day.getDate()}
+                      </span>
+                      {isDayHoliday && <span className="absolute right-1.5 top-1 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">{dayHolidayLabel || "festivo"}</span>}
                     </div>
                   );
                 })}
@@ -1740,7 +2400,7 @@ export function AutoscuoleAgendaPage({
                     const tint = tintFor(instr.instructorId, idx);
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
-                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-gray-400" : "border-border/30")}>
+                      <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
                         <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
                         <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
                       </div>
@@ -1753,7 +2413,7 @@ export function AutoscuoleAgendaPage({
               {/* Exam banners row — sticky between header and body */}
               {examGroups.length > 0 && (
                 <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
-                  <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                  <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                     <div />
                     {days.map((day, dayIdx) => {
                       const dateKey = formatYmd(day);
@@ -1779,7 +2439,7 @@ export function AutoscuoleAgendaPage({
                                   >
                                     <GraduationCap className="size-3 shrink-0" />
                                     <span>Esame {examHasTime ? formatTimeRange(egStart, egEnd) : "· orario da definire"}</span>
-                                    <span className="text-violet-500">· {eg.appointments.length} all.</span>
+                                    <span className="text-violet-500">{(() => { const n = eg.appointments.filter((a) => !isExamPlaceholder(a)).length; return n === 0 ? "· vuoto" : `· ${n} all.`; })()}</span>
                                   </button>
                                 );
                               })}
@@ -1802,12 +2462,12 @@ export function AutoscuoleAgendaPage({
               }}>
 
               {/* Calendar body */}
-              <div style={{ display: "grid", gridTemplateColumns: `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+              <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Time gutter — sticky left */}
-                <div className="sticky left-0 z-20 bg-white relative" style={{ height: calendarHeight }}>
+                <div className="sticky left-0 z-40 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
-                      <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">{`${pad(hour)}:00`}</span>
+                      <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">{`${pad(hour)}:00`}</span>
                     </div>
                   ))}
                   {/* Now label */}
@@ -1845,20 +2505,41 @@ export function AutoscuoleAgendaPage({
                     return (
                       <div
                         key={`${day.toISOString()}-${instr.instructorId}`}
-                        className={cn("relative cursor-pointer overflow-hidden border-l", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-red-50/40" : isDayToday ? "bg-yellow-50/20" : "")}
+                        className={cn("relative cursor-pointer border-l", isColumnHoliday && instrIdx === 0 ? "overflow-visible" : "overflow-hidden", instrIdx === 0 ? "border-gray-400" : "border-border/30", isColumnHoliday ? "bg-[#fffbf3]" : isDayToday ? "bg-yellow-50/20" : "")}
                         style={{ height: calendarHeight }}
+                        data-agenda-col-day={dateKey}
+                        data-agenda-col-instructor={instr.instructorId}
                         onClick={(event) => openSlotMenu(event, day, instr.instructorId)}
                       >
                         {renderSlotGhost(day, instr.instructorId)}
-                        {isColumnHoliday && (
-                          <div className="absolute inset-0 z-[5] flex items-center justify-center pointer-events-none" style={{ backgroundImage: "repeating-linear-gradient(135deg, transparent, transparent 10px, rgba(239,68,68,0.04) 10px, rgba(239,68,68,0.04) 20px)" }}>
-                            {instrIdx === 0 && <Ban className="size-6 text-red-300/60" />}
+                        {renderDraftGhost(day, instr.instructorId)}
+                        {isColumnHoliday && instrIdx === 0 && (
+                          <div className="pointer-events-none sticky top-3 z-20 flex justify-center">
+                            <button
+                              type="button"
+                              title="Rimuovi festivo"
+                              className="group pointer-events-auto flex size-8 cursor-pointer items-center justify-center rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.08)] ring-1 ring-amber-200/70 transition-colors hover:ring-amber-300"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRemoveHolidayDate(normalizeDay(day));
+                                setRemoveHolidayDialogOpen(true);
+                              }}
+                            >
+                              <span className="text-[18px] leading-none group-hover:hidden" aria-hidden>🌴</span>
+                              <X className="hidden size-[18px] text-amber-600 group-hover:block" strokeWidth={2.2} />
+                            </button>
                           </div>
                         )}
-                        {/* Availability bands */}
-                        {ranges.map((range, ri) => (
-                          <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: range.startMinutes * PIXELS_PER_MINUTE, height: (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE }} />
-                        ))}
+                        {/* Availability bands — offset e clip alla finestra oraria visibile
+                            (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
+                        {ranges.map((range, ri) => {
+                          const s = Math.max(range.startMinutes, DAY_START_HOUR * 60);
+                          const e = Math.min(range.endMinutes, DAY_END_HOUR * 60);
+                          if (e <= s) return null;
+                          return (
+                            <div key={ri} className={cn("absolute left-0 right-0", tint.bandClass)} style={{ ...tint.bandStyle, top: (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE, height: (e - s) * PIXELS_PER_MINUTE }} />
+                          );
+                        })}
                         {/* Hour grid lines */}
                         {hourMarks.map((hour) => (
                           <div key={hour} className="absolute left-0 right-0 h-px bg-border/30" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }} />
@@ -1887,16 +2568,17 @@ export function AutoscuoleAgendaPage({
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
                           const instrCardClass = isExamInstr
-                            ? "border-violet-300/80 bg-violet-100/90"
+                            ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
                               : statusMeta.className;
                           return (
-                            <DropdownMenu key={item.id}>
+                            <React.Fragment key={item.id}>
+                            <DropdownMenu modal={false}>
                               <DropdownMenuTrigger asChild>
                                 <button
                                   type="button"
-                                  className={cn("absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
+                                  className={cn("absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
@@ -1910,7 +2592,7 @@ export function AutoscuoleAgendaPage({
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown">
+                              <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"><DraggableEventPanel>
                                 <div className="space-y-2">
                                   <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                                   <div className="rounded-xl border border-border bg-white p-3">
@@ -1947,8 +2629,19 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               )}
-                              </DropdownMenuContent>
+                              </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
+                            {neverAccessedFor(item) ? (
+                              <div className="absolute z-30" style={{ top: Math.max(0, top - 4), right: 2 }}>
+                                <NeverAccessedNudge
+                                  studentFirstName={item.student.firstName}
+                                  phone={phoneById.get(item.student.id) ?? null}
+                                  startsAt={item.startsAt}
+                                  size={16}
+                                />
+                              </div>
+                            ) : null}
+                            </React.Fragment>
                           );
                         })}
                         {/* Exam blocks for this instructor on this day */}
@@ -1962,7 +2655,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   key={`exam-instr-${eg.key}`}
                                   type="button"
-                                  className="absolute left-0.5 right-0.5 z-20 overflow-hidden rounded-lg border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                  className="absolute left-0.5 right-0.5 z-20 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                   style={{ top: 0 }}
                                   onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                                 >
@@ -1984,7 +2677,7 @@ export function AutoscuoleAgendaPage({
                               <button
                                 key={`exam-instr-${eg.key}`}
                                 type="button"
-                                className="absolute left-0.5 right-0.5 z-10 overflow-hidden rounded-xl border-2 border-violet-300 bg-violet-50/90 text-[9px] leading-tight text-left cursor-pointer hover:bg-violet-100 transition-colors"
+                                className="absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)] text-[9px] leading-tight text-left cursor-pointer hover:bg-[#EDE4FF] transition-colors"
                                 style={{ top, height }}
                                 onClick={(e) => { e.stopPropagation(); setExamPanelGroup(eg); setExamPanelStudentSearch(""); }}
                               >
@@ -1992,7 +2685,24 @@ export function AutoscuoleAgendaPage({
                                   <div className="font-bold text-[10px] text-violet-700 flex items-center gap-0.5">
                                     <GraduationCap className="size-2.5 shrink-0" /> Esame
                                   </div>
-                                  <div className="text-[8px] text-violet-500 truncate">{eg.appointments.length} all. · {formatTimeRange(egStart, egEnd)}</div>
+                                  <div className="text-[8px] text-violet-500 truncate">{formatTimeRange(egStart, egEnd)}</div>
+                                  <div className="mt-0.5 flex flex-col gap-px">
+                                    {(() => {
+                                      const real = eg.appointments.filter((a) => !isExamPlaceholder(a));
+                                      if (real.length === 0) {
+                                        return <div className="truncate text-[9px] font-medium italic leading-tight text-violet-500/80">Nessun allievo</div>;
+                                      }
+                                      return real.map((a) => {
+                                        const lic = studentLicenseById.get(a.student.id);
+                                        return (
+                                          <div key={a.id} className="truncate text-[9px] font-semibold leading-tight text-violet-900/85">
+                                            {a.student.firstName} {a.student.lastName}
+                                            {lic ? <span className="font-medium text-violet-500"> · {lic}</span> : null}
+                                          </div>
+                                        );
+                                      });
+                                    })()}
+                                  </div>
                                 </div>
                               </button>
                             );
@@ -2006,6 +2716,7 @@ export function AutoscuoleAgendaPage({
                           .map((b) => {
                             const bStart = toDate(b.startsAt);
                             const bEnd = toDate(b.endsAt);
+                            const blockStyle = blockTint(b.reason);
                             const clippedStart = bStart < dayStart ? dayStart : bStart;
                             const clippedEnd = bEnd > dayEnd ? dayEnd : bEnd;
                             const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
@@ -2017,19 +2728,19 @@ export function AutoscuoleAgendaPage({
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     type="button"
-                                    className="absolute left-0.5 right-0.5 z-[8] overflow-hidden rounded-xl border border-slate-300 bg-slate-100 text-[9px] leading-tight text-left hover:bg-slate-200 transition-colors"
+                                    className={cn("absolute left-0.5 right-0.5 z-[8] flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left transition-colors", blockStyle.card)}
                                     style={{ top, height }}
                                     onClick={(e) => e.stopPropagation()}
                                   >
                                     <div className="p-1">
-                                      <div className="font-semibold truncate text-[10px] text-slate-600">{b.reason || "Blocco"}</div>
+                                      <div className={cn("font-semibold truncate text-[10px]", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                       <div className="text-[8px] truncate text-slate-400">{formatTimeRange(bStart, bEnd)}</div>
                                     </div>
                                   </button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
                                   <div className="space-y-2">
-                                    <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                    <div className={cn("text-xs font-semibold", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                     <div className="text-xs text-muted-foreground">{instr.instructorName}</div>
                                     <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
                                   </div>
@@ -2063,20 +2774,20 @@ export function AutoscuoleAgendaPage({
         })()}
 
         {/* ── INSTRUCTOR DAY VIEW ── */}
-        {agendaMode === "instructor" && viewMode === "day" && (
-        <div className="relative" style={{ height: "calc(100vh - 240px)", minHeight: 400 }}>
+        {viewMode === "day" && (
+        <div className={cn("relative transition-opacity duration-200", refreshing && "opacity-60")} style={{ height: agendaGridHeight, minHeight: 400 }}>
           {/* Holiday banner */}
           {holidaySet.has(formatYmd(dayFocus)) && (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 mb-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-red-700">
-                <Ban className="size-4" />
-                Giorno festivo{holidaySet.get(formatYmd(dayFocus)) ? ` — ${holidaySet.get(formatYmd(dayFocus))}` : ""}
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-amber-200/70 bg-[#fffbf3] px-4 py-2.5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-700">
+                <span className="text-[15px] leading-none" aria-hidden>🌴</span>
+                Giorno festivo{holidaySet.get(formatYmd(dayFocus)) ? ` · ${holidaySet.get(formatYmd(dayFocus))}` : ""}
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-red-600 hover:bg-red-100 hover:text-red-700"
+                className="text-amber-700 hover:bg-amber-100 hover:text-amber-800"
                 onClick={() => {
                   setRemoveHolidayDate(dayFocus);
                   setRemoveHolidayDialogOpen(true);
@@ -2086,33 +2797,16 @@ export function AutoscuoleAgendaPage({
               </Button>
             </div>
           )}
-          {/* Grid-only loading overlay — positioned over the container, not inside the scroll */}
-          <AnimatePresence>
-            {refreshing && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-white/50"
-              >
-                <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-2xl border border-border bg-white px-8 py-5 shadow-card">
-                  <Lottie animationData={carAnimation} loop style={{ width: 140, height: 140 }} />
-                  <span className="text-sm font-medium text-muted-foreground">Caricamento...</span>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
           <div
             ref={calendarScrollRef}
-            className="overflow-y-auto bg-white"
-            style={{ height: "100%" }}
+            className={cn("bg-white", isAgendaFullscreen ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
+            style={{ height: "100%", ...agendaFrameStyle }}
           >
           {/* Sticky instructor headers */}
           {(
             <div
               className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
-              style={{ gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
+              style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
             >
               <div />
               {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
@@ -2126,12 +2820,12 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="flex flex-col items-center gap-1 py-2.5 border-l border-border/50"
+                    className="flex h-16 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
                   >
-                    <div className={cn("flex size-7 items-center justify-center rounded-full text-[10px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
+                    <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
                       {initials}
                     </div>
-                    <span className="text-[11px] font-semibold text-foreground truncate max-w-[90%]">{instr.name}</span>
+                    <span className="max-w-[90%] truncate text-[12px] font-medium text-[#444444]">{instr.name}</span>
                   </div>
                 );
               }) : (
@@ -2146,18 +2840,18 @@ export function AutoscuoleAgendaPage({
           <div
             className="grid"
             style={{
-              gridTemplateColumns: `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
+              gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
             }}
           >
             {/* Time gutter */}
-            <div className="relative" style={{ height: calendarHeight }}>
+            <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
               {hourMarks.map((hour) => (
                 <div
                   key={hour}
                   className="absolute left-0 right-0 flex items-start"
                   style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                 >
-                  <span className="w-full pr-2 text-right text-[11px] leading-none text-muted-foreground/70">
+                  <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">
                     {`${pad(hour)}:00`}
                   </span>
                 </div>
@@ -2210,15 +2904,22 @@ export function AutoscuoleAgendaPage({
                 return (
                   <div
                     key={instr.id}
-                    className="relative cursor-pointer border-l border-border/50"
+                    className="relative cursor-pointer border-l border-[#eeeeee] bg-white"
                     style={{ height: calendarHeight }}
+                    data-agenda-col-day={formatYmd(day)}
+                    data-agenda-col-instructor={instr.id}
                     onClick={(event) => openSlotMenu(event, day, instr.id)}
                   >
                     {renderSlotGhost(day, instr.id)}
-                    {/* Availability bands */}
+                    {renderDraftGhost(day, instr.id)}
+                    {/* Availability bands — offset e clip alla finestra oraria visibile
+                        (startMinutes è da mezzanotte, la griglia parte da DAY_START_HOUR). */}
                     {instr.ranges.map((range, ri) => {
-                      const top = range.startMinutes * PIXELS_PER_MINUTE;
-                      const height = (range.endMinutes - range.startMinutes) * PIXELS_PER_MINUTE;
+                      const s = Math.max(range.startMinutes, DAY_START_HOUR * 60);
+                      const e = Math.min(range.endMinutes, DAY_END_HOUR * 60);
+                      if (e <= s) return null;
+                      const top = (s - DAY_START_HOUR * 60) * PIXELS_PER_MINUTE;
+                      const height = (e - s) * PIXELS_PER_MINUTE;
                       return (
                         <div
                           key={ri}
@@ -2231,7 +2932,7 @@ export function AutoscuoleAgendaPage({
                     {hourMarks.map((hour) => (
                       <div
                         key={hour}
-                        className="absolute left-0 right-0 h-px bg-border/40"
+                        className="absolute left-0 right-0 h-px bg-[#f5f5f5]"
                         style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}
                       />
                     ))}
@@ -2262,18 +2963,19 @@ export function AutoscuoleAgendaPage({
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
                       const dayCardClass = isExamDay
-                        ? "border-violet-300/80 bg-violet-100/90"
+                        ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                         : isGroupLessonDay
                           ? glTintDay.card
                           : statusMeta.className;
 
                       return (
-                        <DropdownMenu key={item.id}>
+                        <React.Fragment key={item.id}>
+                        <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
                             <button
                               type="button"
                               className={cn(
-                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-lg border text-left text-[11px] shadow-sm transition motion-safe:hover:-translate-y-0.5 hover:shadow-md",
+                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5",
                                 isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
@@ -2321,8 +3023,8 @@ export function AutoscuoleAgendaPage({
                             align="start"
                             side="right"
                             sideOffset={12}
-                            className="w-72 rounded-lg border border-border bg-white p-3 shadow-dropdown"
-                          >
+                            className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"
+                          ><DraggableEventPanel>
                             <div className="space-y-2">
                               <div className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Evento</div>
                               <div className="rounded-xl border border-border bg-white p-3">
@@ -2359,8 +3061,19 @@ export function AutoscuoleAgendaPage({
                               ) : (
                                 <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
                               )}
-                          </DropdownMenuContent>
+                          </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
+                        {neverAccessedFor(item) ? (
+                          <div className="absolute z-30" style={{ top: Math.max(0, top - 5), right: 3 }}>
+                            <NeverAccessedNudge
+                              studentFirstName={item.student.firstName}
+                              phone={phoneById.get(item.student.id) ?? null}
+                              startsAt={item.startsAt}
+                              size={18}
+                            />
+                          </div>
+                        ) : null}
+                        </React.Fragment>
                       );
                     })}
                     {/* Instructor blocks for this instructor on this day */}
@@ -2383,7 +3096,7 @@ export function AutoscuoleAgendaPage({
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="absolute left-1 right-1 z-[8] overflow-hidden rounded-lg border border-slate-300 bg-slate-100 p-2 text-left text-[11px] shadow-sm transition hover:bg-slate-200 hover:shadow-md"
+                                className="absolute left-1 right-1 z-[8] flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F3F4F8] p-2 text-left text-[11px] transition hover:bg-[#E7E9F1]"
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
@@ -2423,7 +3136,7 @@ export function AutoscuoleAgendaPage({
         </div>
         </div>
         )}
-        </>)}
+        </FadeIn>)}
       </div>
 
       <Dialog
@@ -2440,26 +3153,54 @@ export function AutoscuoleAgendaPage({
           </DialogHeader>
           {filterEditor ? (
             <div className="space-y-4">
-              <Select
-                value={filterEditor.value}
-                onValueChange={(value) =>
-                  setFilterEditor((current) =>
-                    current ? { ...current, value } : current,
-                  )
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona filtro" />
-                </SelectTrigger>
-                <SelectContent>
-                  {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <DialogFooter>
+              <div className="-mx-1 max-h-72 space-y-0.5 overflow-y-auto px-1">
+                {getFilterOptions(filterEditor.kind, instructors, vehicles).map((item) => {
+                  const checked = filterEditor.value.includes(item.value);
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() =>
+                        setFilterEditor((current) =>
+                          current
+                            ? {
+                                ...current,
+                                value: checked
+                                  ? current.value.filter((v) => v !== item.value)
+                                  : [...current.value, item.value],
+                              }
+                            : current,
+                        )
+                      }
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-foreground transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <span
+                        className={cn(
+                          "flex size-[18px] shrink-0 items-center justify-center rounded-[5px] border transition-colors",
+                          checked ? "border-navy-900 bg-navy-900" : "border-[#c1c1c1] bg-white",
+                        )}
+                      >
+                        {checked ? (
+                          <svg width="11" height="11" viewBox="0 0 14 14" fill="none">
+                            <path d="M3 7.4l2.6 2.6L11 4.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        ) : null}
+                      </span>
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <DialogFooter className="items-center gap-2">
+                <button
+                  type="button"
+                  className="mr-auto cursor-pointer text-sm font-semibold text-foreground underline underline-offset-2 hover:opacity-70"
+                  onClick={() =>
+                    setFilterEditor((current) => (current ? { ...current, value: [] } : current))
+                  }
+                >
+                  Azzera
+                </button>
                 <Button type="button" variant="outline" onClick={() => setFilterEditor(null)}>
                   Chiudi
                 </Button>
@@ -2478,497 +3219,296 @@ export function AutoscuoleAgendaPage({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
-          <DialogTitle className="sr-only">Nuovo appuntamento</DialogTitle>
-          {/* Step indicator */}
-          <div className="flex items-center gap-0 border-b border-border px-6 pt-5 pb-4">
-            {[
-              { icon: CalendarDays, label: "Quando" },
-              { icon: Users, label: "Chi" },
-              { icon: Send, label: "Conferma" },
-            ].map((s, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && (
-                  <div className={cn("mx-2 h-px flex-1 transition-colors", i <= createStep ? "bg-yellow-300" : "bg-border")} />
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (i < createStep) setCreateStep(i);
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
-                    i === createStep
-                      ? "border-yellow-300 bg-yellow-50 text-yellow-700"
-                      : i < createStep
-                        ? "cursor-pointer border-yellow-200 bg-yellow-50/50 text-yellow-600"
-                        : "border-border bg-white text-muted-foreground",
-                  )}
-                >
-                  {i < createStep ? (
-                    <Check className="size-3" />
-                  ) : (
-                    <s.icon className="size-3" />
-                  )}
-                  {s.label}
-                </button>
-              </React.Fragment>
-            ))}
-          </div>
 
+      <CreateEventPopover
+        open={createOpen}
+        onClose={() => { if (!creating) setCreateOpen(false); }}
+        title="Nuovo appuntamento"
+        subtitle="Il blocco tratteggiato in agenda si aggiorna mentre compili"
+        anchor={popoverAnchor}
+        footer={
+          <>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={creating} onClick={() => setCreateOpen(false)}>
+              Annulla
+            </button>
+            <button
+              type="button"
+              disabled={creating || !form.studentId || !form.day || !form.time || !form.instructorId || (vehiclesEnabled && !form.vehicleId)}
+              onClick={() => handleCreate()}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+            >
+              {creating ? <LoadingDots className="min-h-5" /> : "Crea guida"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
+              <DatePickerInput value={form.day} onChange={(value) => setForm((prev) => ({ ...prev, day: value }))} />
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
+              <TimePickerInput value={form.time} onChange={(value) => setForm((prev) => ({ ...prev, time: value }))} />
+            </div>
+          </div>
           <div>
-            {/* Step content area — fixed height for smooth transitions */}
-            <div className="relative min-h-[220px] px-6 py-5">
-              <AnimatePresence mode="wait" initial={false}>
-                {/* Step 1: Quando */}
-                {createStep === 0 && (
-                  <motion.div
-                    key="step-0"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-4"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Quando</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Scegli giorno, orario e durata della guida</p>
-                    </div>
-                    <FieldGroup label="Giorno" required>
-                      <DatePicker
-                        value={form.day}
-                        onChange={(value) => setForm((prev) => ({ ...prev, day: value }))}
-                      />
-                    </FieldGroup>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FieldGroup label="Orario" required>
-                        <Select
-                          value={form.time}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, time: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                          <SelectContent>
-                            {TIME_OPTIONS.map((option) => (
-                              <SelectItem key={option} value={option}>{option}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      <FieldGroup label="Durata">
-                        <Select
-                          value={form.duration}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, duration: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Durata" /></SelectTrigger>
-                          <SelectContent>
-                            {SLOT_OPTIONS.map((option) => (
-                              <SelectItem key={option} value={option}>{option} min</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Step 2: Chi */}
-                {createStep === 1 && (
-                  <motion.div
-                    key="step-1"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-3"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Dettagli</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Tipo di guida, istruttore, allievo e veicolo</p>
-                    </div>
-                    {vehiclesEnabled && (
-                      <FieldGroup label="Modalità" required>
-                        <div className="grid grid-cols-2 gap-2">
-                          {([
-                            { value: "auto", label: "Auto", hint: "1 veicolo", icon: Car },
-                            { value: "moto", label: "Moto", hint: "+ auto al seguito", icon: Bike },
-                          ] as const).map((opt) => {
-                            const active = form.bookingMode === opt.value;
-                            const Icon = opt.icon;
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() =>
-                                  setForm((prev) => ({
-                                    ...prev,
-                                    bookingMode: opt.value,
-                                    // Switching mode resets student + vehicle: the eligible
-                                    // students differ per class (Auto=B, Moto=moto), so a
-                                    // stale selection would be incompatible.
-                                    studentId: "",
-                                    vehicleId: "",
-                                    followVehicleId: "",
-                                    extraMotoVehicleIds: [],
-                                  }))
-                                }
-                                className={cn(
-                                  "flex items-center gap-2 rounded-xl border px-3 py-1.5 text-left transition-colors cursor-pointer",
-                                  active
-                                    ? "border-yellow-400 bg-yellow-50"
-                                    : "border-border/60 hover:bg-gray-50",
-                                )}
-                              >
-                                <Icon className={cn("h-4 w-4 shrink-0", active ? "text-yellow-700" : "text-muted-foreground")} />
-                                <span className="flex min-w-0 items-baseline gap-1.5">
-                                  <span className="text-sm font-medium text-foreground">{opt.label}</span>
-                                  <span className="truncate text-[10px] text-muted-foreground">{opt.hint}</span>
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </FieldGroup>
-                    )}
-                    <FieldGroup label="Tipo guida" required>
-                      <div className="flex flex-wrap gap-1.5">
-                        {LESSON_TYPE_OPTIONS.map((option) => {
-                          const active = form.types.includes(option.value);
-                          return (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() =>
-                                setForm((prev) => {
-                                  const next = active
-                                    ? prev.types.filter((t) => t !== option.value)
-                                    : [...prev.types, option.value];
-                                  const types = next.length ? next : [option.value];
-                                  return { ...prev, types, type: types[0] };
-                                })
-                              }
-                              className={cn(
-                                "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors",
-                                active
-                                  ? "border-yellow-400 bg-yellow-50 text-yellow-700"
-                                  : "border-border bg-gray-50 text-muted-foreground hover:bg-gray-100",
-                              )}
-                            >
-                              {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </FieldGroup>
-                    <FieldGroup label="Allievo" required>
-                      <StudentSearchSelect
-                        students={
-                          vehiclesEnabled
-                            ? students.filter((s) =>
-                                // Hide students of the wrong class for the mode.
-                                // Students without a set license stay visible.
-                                !s.licenseCategory
-                                  ? true
-                                  : form.bookingMode === "moto"
-                                    ? isMotoLicenseCategory(s.licenseCategory)
-                                    : !isMotoLicenseCategory(s.licenseCategory),
-                              )
-                            : students
-                        }
-                        value={form.studentId}
-                        onChange={(id) => setForm((prev) => ({ ...prev, studentId: id, vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
-                      />
-                    </FieldGroup>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FieldGroup label="Istruttore" required>
-                        <Select
-                          value={form.instructorId}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, instructorId: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
-                          <SelectContent>
-                            {instructors.map((instructor) => (
-                              <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                      {vehiclesEnabled && (
-                        <FieldGroup label={form.bookingMode === "moto" ? "Moto" : "Veicolo"} required>
-                          <Select
-                            value={form.vehicleId}
-                            onValueChange={(value) => setForm((prev) => ({ ...prev, vehicleId: value }))}
-                          >
-                            <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
-                            <SelectContent>
-                              {vehicles
-                                .filter((vehicle) =>
-                                  form.bookingMode === "moto"
-                                    ? isMotoLicenseCategory(vehicle.licenseCategory)
-                                    : !isMotoLicenseCategory(vehicle.licenseCategory),
-                                )
-                                .filter((vehicle) => {
-                                  // Only vehicles the selected student is eligible for
-                                  // (moto hierarchy). No student yet → show all of the mode.
-                                  const st = students.find((s) => s.id === form.studentId);
-                                  return st ? vehicleServesLicense(vehicle, st) : true;
-                                })
-                                .map((vehicle) => {
-                                const assignedTo = vehicle.assignedInstructorId
-                                  ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
-                                  : null;
-                                const licenseLabel = vehicle.licenseCategory
-                                  ? `${vehicle.licenseCategory} · ${
-                                      TRANSMISSION_LABELS[
-                                        vehicle.transmission as Transmission
-                                      ] ?? vehicle.transmission
-                                    }`
-                                  : null;
-                                return (
-                                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                                    {vehicle.name}
-                                    {licenseLabel ? (
-                                      <span className="text-muted-foreground"> · {licenseLabel}</span>
-                                    ) : null}
-                                    {assignedTo ? (
-                                      <span className="text-muted-foreground"> · {assignedTo}</span>
-                                    ) : null}
-                                  </SelectItem>
-                                );
-                              })}
-                            </SelectContent>
-                          </Select>
-                        </FieldGroup>
-                      )}
-                      {(() => {
-                        const need =
-                          vehiclesEnabled &&
-                          form.bookingMode === "moto" &&
-                          Object.values(followCarRules).some((r) => r?.enabled === true);
-                        if (!need) return null;
-                        const carOptions = vehicles.filter(
-                          (v) => v.licenseCategory === "B" && v.id !== form.vehicleId,
-                        );
-                        return (
-                          <FieldGroup label="Auto al seguito" required>
-                            <Select
-                              value={form.followVehicleId}
-                              onValueChange={(value) =>
-                                setForm((prev) => ({ ...prev, followVehicleId: value }))
-                              }
-                            >
-                              <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
-                                {carOptions.map((vehicle) => (
-                                  <SelectItem key={vehicle.id} value={vehicle.id}>
-                                    {vehicle.name}
-                                    {vehicle.transmission ? (
-                                      <span className="text-muted-foreground">
-                                        {" · "}
-                                        {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}
-                                      </span>
-                                    ) : null}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </FieldGroup>
-                        );
-                      })()}
-                      {(() => {
-                        if (!vehiclesEnabled || form.bookingMode !== "moto") {
-                          return null;
-                        }
-                        const extraStudent = students.find((s) => s.id === form.studentId);
-                        const motoOptions = vehicles.filter(
-                          (v) =>
-                            isMotoLicenseCategory(v.licenseCategory) &&
-                            v.id !== form.vehicleId &&
-                            // Extra motos follow the same moto hierarchy as the
-                            // primary: only motos the student is eligible for.
-                            (extraStudent ? vehicleServesLicense(v, extraStudent) : true),
-                        );
-                        if (!motoOptions.length) return null;
-                        const toggleExtra = (id: string) =>
-                          setForm((prev) => ({
-                            ...prev,
-                            extraMotoVehicleIds: prev.extraMotoVehicleIds.includes(id)
-                              ? prev.extraMotoVehicleIds.filter((x) => x !== id)
-                              : [...prev.extraMotoVehicleIds, id],
-                          }));
-                        return (
-                          <FieldGroup label="Moto aggiuntive">
-                            <div className="flex flex-wrap gap-2">
-                              {motoOptions.map((vehicle) => {
-                                const active = form.extraMotoVehicleIds.includes(vehicle.id);
-                                return (
-                                  <button
-                                    key={vehicle.id}
-                                    type="button"
-                                    onClick={() => toggleExtra(vehicle.id)}
-                                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                                      active
-                                        ? "border-pink-500 bg-pink-50 text-pink-700"
-                                        : "border-border bg-white text-foreground hover:bg-gray-50"
-                                    }`}
-                                  >
-                                    {vehicle.name}
-                                    {vehicle.licenseCategory ? (
-                                      <span className={active ? "text-pink-500" : "text-muted-foreground"}>
-                                        {" · "}
-                                        {vehicle.licenseCategory}
-                                      </span>
-                                    ) : null}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </FieldGroup>
-                        );
-                      })()}
-                    </div>
-                    {agendaLocations.length > 0 && (
-                      <FieldGroup label="Luogo" description="Modificabile dopo la creazione.">
-                        <Select
-                          value={form.locationId}
-                          onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}
-                        >
-                          <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
-                          <SelectContent>
-                            {agendaLocations.map((loc) => (
-                              <SelectItem key={loc.id} value={loc.id}>
-                                {loc.name}
-                                {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FieldGroup>
-                    )}
-                  </motion.div>
-                )}
-
-                {/* Step 3: Conferma */}
-                {createStep === 2 && (
-                  <motion.div
-                    key="step-2"
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-4"
-                  >
-                    <div>
-                      <h4 className="text-sm font-semibold text-foreground">Riepilogo</h4>
-                      <p className="mt-0.5 text-xs text-muted-foreground">Controlla i dati e conferma</p>
-                    </div>
-                    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
-                      <SummaryRow label="Giorno" value={form.day || "—"} />
-                      <SummaryRow label="Orario" value={`${form.time} · ${form.duration} min`} />
-                      <SummaryRow label="Tipo" value={form.types.map((t) => LESSON_TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t).join(", ")} />
-                      <SummaryRow label="Allievo" value={
-                        students.find((s) => s.id === form.studentId)
-                          ? `${students.find((s) => s.id === form.studentId)!.firstName} ${students.find((s) => s.id === form.studentId)!.lastName}`
-                          : "—"
-                      } />
-                      <SummaryRow label="Istruttore" value={instructors.find((i) => i.id === form.instructorId)?.name ?? "—"} />
-                      {vehiclesEnabled && <SummaryRow label="Veicolo" value={vehicles.find((v) => v.id === form.vehicleId)?.name ?? "—"} />}
-                      {vehiclesEnabled && form.followVehicleId ? (
-                        <SummaryRow
-                          label="Auto al seguito"
-                          value={
-                            form.followVehicleId === "__none__"
-                              ? "Nessuna"
-                              : vehicles.find((v) => v.id === form.followVehicleId)?.name ?? "—"
-                          }
-                        />
-                      ) : null}
-                      {vehiclesEnabled && form.extraMotoVehicleIds.length > 0 ? (
-                        <SummaryRow
-                          label="Moto aggiuntive"
-                          value={form.extraMotoVehicleIds
-                            .map((id) => vehicles.find((v) => v.id === id)?.name ?? "—")
-                            .join(", ")}
-                        />
-                      ) : null}
-                      <SummaryRow
-                        label="Luogo"
-                        value={agendaLocations.find((l) => l.id === form.locationId)?.name ?? "Sede dell'autoscuola"}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <label htmlFor="create-notes" className="text-xs font-medium text-slate-700">
-                        Note
-                      </label>
-                      <Textarea
-                        id="create-notes"
-                        value={form.notes}
-                        onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        placeholder="Note opzionali sulla guida"
-                        rows={3}
-                        disabled={creating}
-                        className="resize-none text-sm"
-                      />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            {/* Footer — always visible */}
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {createStep > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCreateStep((s) => s - 1)}
-                >
-                  <ChevronLeft className="mr-1 size-3.5" />
-                  Indietro
-                </Button>
-              ) : (
-                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>
-                  Annulla
-                </Button>
-              )}
-
-              {createStep < 2 ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    createStep === 0
-                      ? !form.day || !form.time
-                      : !form.studentId || !form.instructorId || (vehiclesEnabled && !form.vehicleId)
-                  }
-                  onClick={() => setCreateStep((s) => s + 1)}
-                >
-                  Avanti
-                  <ChevronRight className="ml-1 size-3.5" />
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    creating ||
-                    !form.studentId ||
-                    !form.day ||
-                    !form.time ||
-                    !form.instructorId ||
-                    (vehiclesEnabled && !form.vehicleId)
-                  }
-                  onClick={handleCreate}
-                >
-                  {creating ? "Salvataggio..." : "Conferma"}
-                </Button>
-              )}
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Durata</p>
+            <div className="flex flex-wrap gap-1.5">
+              {SLOT_OPTIONS.map((option) => {
+                const active = form.duration === option;
+                return (
+                  <button key={option} type="button" onClick={() => setForm((prev) => ({ ...prev, duration: option }))}
+                    className={cn("cursor-pointer rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                    {option} min
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+          {vehiclesEnabled && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Modalità</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "auto", label: "Auto", hint: "1 veicolo", icon: Car },
+                  { value: "moto", label: "Moto", hint: "+ auto al seguito", icon: Bike },
+                ] as const).map((opt) => {
+                  const active = form.bookingMode === opt.value;
+                  const Icon = opt.icon;
+                  return (
+                    <button key={opt.value} type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
+                      className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
+                      <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
+                      <span className="flex min-w-0 items-baseline gap-1.5">
+                        <span className="text-sm font-semibold text-[#222222]">{opt.label}</span>
+                        <span className="truncate text-[10px] font-medium text-[#929292]">{opt.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Tipo guida</p>
+            <div className="flex flex-wrap gap-1.5">
+              {LESSON_TYPE_OPTIONS.map((option) => {
+                const active = form.types.includes(option.value);
+                return (
+                  <button key={option.value} type="button"
+                    onClick={() =>
+                      setForm((prev) => {
+                        const next = active ? prev.types.filter((t) => t !== option.value) : [...prev.types, option.value];
+                        const types = next.length ? next : [option.value];
+                        return { ...prev, types, type: types[0] };
+                      })
+                    }
+                    className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div ref={createStudentRef}>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
+            <StudentSearchSelect
+              students={
+                vehiclesEnabled
+                  ? students.filter((s) =>
+                      !s.licenseCategory
+                        ? true
+                        : form.bookingMode === "moto"
+                          ? isMotoLicenseCategory(s.licenseCategory)
+                          : !isMotoLicenseCategory(s.licenseCategory),
+                    )
+                  : students
+              }
+              instructors={instructors}
+              value={form.studentId}
+              onChange={(id) => {
+                // Preseleziona l'istruttore dell'allievo: quello assegnato, o
+                // in mancanza l'ultimo con cui ha guidato. La scelta dell'allievo
+                // VINCE su un istruttore già impostato (es. colonna cliccata);
+                // solo se l'allievo non ne suggerisce nessuno resta il corrente.
+                const student = students.find((s) => s.id === id);
+                const preferredInstructorId = [student?.assignedInstructorId, student?.lastInstructorId]
+                  .find((candidate) => candidate && instructors.some((i) => i.id === candidate)) ?? "";
+                setForm((prev) => ({
+                  ...prev,
+                  studentId: id,
+                  instructorId: preferredInstructorId || prev.instructorId,
+                  vehicleId: "",
+                  followVehicleId: "",
+                  extraMotoVehicleIds: [],
+                }));
+                if (id) {
+                  advanceCreateFocus({
+                    studentId: id,
+                    instructorId: preferredInstructorId || form.instructorId,
+                    vehicleId: "",
+                  });
+                }
+              }}
+            />
+          </div>
+          {studentSlotCancelled && (
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-md bg-orange-50 px-3 py-2 text-xs text-orange-700"
+            >
+              <AlertTriangle className="size-3.5 shrink-0" strokeWidth={2} aria-hidden />
+              <span>Questo allievo aveva annullato una guida in questo orario.</span>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div ref={createInstructorRef}>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
+              <Select
+                value={form.instructorId}
+                onValueChange={(value) => {
+                  setForm((prev) => ({ ...prev, instructorId: value }));
+                  advanceCreateFocus({ instructorId: value });
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Istruttore" /></SelectTrigger>
+                <SelectContent>
+                  {instructors.map((instructor) => (
+                    <SelectItem key={instructor.id} value={instructor.id}>{instructor.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {vehiclesEnabled && (
+              <div ref={createVehicleRef}>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">{form.bookingMode === "moto" ? "Moto" : "Veicolo"}</p>
+                <Select
+                  value={form.vehicleId}
+                  onValueChange={(value) => {
+                    setForm((prev) => ({ ...prev, vehicleId: value }));
+                    advanceCreateFocus({ vehicleId: value });
+                  }}
+                >
+                  <SelectTrigger><SelectValue placeholder={form.bookingMode === "moto" ? "Moto" : "Veicolo"} /></SelectTrigger>
+                  <SelectContent>
+                    {vehicles
+                      .filter((vehicle) =>
+                        form.bookingMode === "moto"
+                          ? isMotoLicenseCategory(vehicle.licenseCategory)
+                          : !isMotoLicenseCategory(vehicle.licenseCategory),
+                      )
+                      .filter((vehicle) => {
+                        const st = students.find((s) => s.id === form.studentId);
+                        return st ? vehicleServesLicense(vehicle, st) : true;
+                      })
+                      .map((vehicle) => {
+                        const assignedTo = vehicle.assignedInstructorId
+                          ? instructors.find((i) => i.id === vehicle.assignedInstructorId)?.name
+                          : null;
+                        const licenseLabel = vehicle.licenseCategory
+                          ? `${vehicle.licenseCategory} · ${TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}`
+                          : null;
+                        return (
+                          <SelectItem key={vehicle.id} value={vehicle.id}>
+                            {vehicle.name}
+                            {licenseLabel ? <span className="text-muted-foreground"> · {licenseLabel}</span> : null}
+                            {assignedTo ? <span className="text-muted-foreground"> · {assignedTo}</span> : null}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          {(() => {
+            const need = vehiclesEnabled && form.bookingMode === "moto" && Object.values(followCarRules).some((r) => r?.enabled === true);
+            if (!need) return null;
+            const carOptions = vehicles.filter((v) => v.licenseCategory === "B" && v.id !== form.vehicleId);
+            return (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Auto al seguito</p>
+                <Select value={form.followVehicleId} onValueChange={(value) => setForm((prev) => ({ ...prev, followVehicleId: value }))}>
+                  <SelectTrigger><SelectValue placeholder="Auto al seguito" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuna auto al seguito</SelectItem>
+                    {carOptions.map((vehicle) => (
+                      <SelectItem key={vehicle.id} value={vehicle.id}>
+                        {vehicle.name}
+                        {vehicle.transmission ? (
+                          <span className="text-muted-foreground"> · {TRANSMISSION_LABELS[vehicle.transmission as Transmission] ?? vehicle.transmission}</span>
+                        ) : null}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            );
+          })()}
+          {(() => {
+            if (!vehiclesEnabled || form.bookingMode !== "moto") return null;
+            const extraStudent = students.find((s) => s.id === form.studentId);
+            const motoOptions = vehicles.filter(
+              (v) => isMotoLicenseCategory(v.licenseCategory) && v.id !== form.vehicleId && (extraStudent ? vehicleServesLicense(v, extraStudent) : true),
+            );
+            if (!motoOptions.length) return null;
+            const toggleExtra = (id: string) =>
+              setForm((prev) => ({
+                ...prev,
+                extraMotoVehicleIds: prev.extraMotoVehicleIds.includes(id)
+                  ? prev.extraMotoVehicleIds.filter((x) => x !== id)
+                  : [...prev.extraMotoVehicleIds, id],
+              }));
+            return (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Moto aggiuntive</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {motoOptions.map((vehicle) => {
+                    const active = form.extraMotoVehicleIds.includes(vehicle.id);
+                    return (
+                      <button key={vehicle.id} type="button" onClick={() => toggleExtra(vehicle.id)}
+                        className={cn("cursor-pointer rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors", active ? "border-[#222222] bg-[#222222] text-white" : "border-[#dddddd] bg-white text-[#555555] hover:border-[#929292]")}>
+                        {vehicle.name}
+                        {vehicle.licenseCategory ? <span className={active ? "text-white/70" : "text-[#929292]"}> · {vehicle.licenseCategory}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+          {agendaLocations.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Luogo</p>
+              <Select value={form.locationId} onValueChange={(value) => setForm((prev) => ({ ...prev, locationId: value }))}>
+                <SelectTrigger><SelectValue placeholder="Sede dell'autoscuola" /></SelectTrigger>
+                <SelectContent>
+                  {agendaLocations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                      {loc.isDefault ? " · Sede" : loc.isPrecise ? " · Preciso" : " · Generico"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+              placeholder="Note opzionali sulla guida"
+              rows={2}
+              disabled={creating}
+              className="resize-none text-sm"
+            />
+          </div>
+        </div>
+      </CreateEventPopover>
 
       {/* ── Recurring Block Delete Confirmation ── */}
       <Dialog open={blockDeleteConfirm !== null} onOpenChange={(open) => { if (!open) setBlockDeleteConfirm(null); }}>
@@ -3027,165 +3567,209 @@ export function AutoscuoleAgendaPage({
         <DialogContent className="sm:max-w-[420px] p-0">
           <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100">
-              <HelpCircle className="h-4 w-4 text-gray-600" />
+              <Info className="h-4 w-4 text-gray-600" />
             </div>
             <DialogTitle className="text-sm font-semibold">Legenda colori agenda</DialogTitle>
           </div>
           <div className="px-6 py-5 space-y-5">
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per durata</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per durata</p>
               <div className="space-y-1.5">
                 {[
-                  { label: "30 minuti", className: "border-teal-200 bg-teal-50" },
-                  { label: "45 minuti", className: "border-lime-200 bg-lime-50" },
-                  { label: "60 minuti", className: "border-yellow-200 bg-yellow-50" },
-                  { label: "90 minuti", className: "border-fuchsia-200 bg-fuchsia-50" },
-                  { label: "120 minuti", className: "border-rose-200 bg-rose-50" },
+                  { label: "Fino a 30 minuti", className: "bg-[#E3EEFF] shadow-[0_3px_8px_rgba(59,130,246,0.35)]" },
+                  { label: "31–45 minuti", className: "bg-[#EAF7CE] shadow-[0_3px_8px_rgba(132,204,22,0.35)]" },
+                  { label: "46–60 minuti", className: "bg-[#FCEFC7] shadow-[0_3px_8px_rgba(245,158,11,0.35)]" },
+                  { label: "61–90 minuti", className: "bg-[#F9DDF3] shadow-[0_3px_8px_rgba(217,70,239,0.35)]" },
+                  { label: "Oltre 90 minuti", className: "bg-[#FBD9DD] shadow-[0_3px_8px_rgba(244,63,94,0.35)]" },
                 ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded border-2", item.className)} />
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
                     <span className="text-xs text-foreground">{item.label}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Veicolo</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-orange-300 bg-orange-100" />
-                  <span className="text-xs text-foreground">Patente moto</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-blue-200 bg-blue-50" />
-                  <span className="text-xs text-foreground">Cambio automatico</span>
-                </div>
+                {[
+                  { label: "Cambio automatico", className: "bg-[#CFFAFE] shadow-[0_3px_8px_rgba(6,182,212,0.35)]" },
+                  { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
+                  { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
+                  { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },
+                  { label: "Evento bloccante", className: "bg-[#F3F4F8]" },
+                  { label: "Annullata / Assente", className: "bg-[#F3F4F8]" },
+                ].map((item) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
+                    <span className="text-xs text-foreground">{item.label}</span>
+                  </div>
+                ))}
               </div>
               <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
-                Le guide con un veicolo per la patente moto (AM, A1, A2, A) o con cambio automatico usano questo colore al posto di quello della durata.
+                Lo stato della guida (programmata, presente, completata…) è indicato dal badge sul blocco: il colore di sfondo racconta durata o tipo.
               </p>
-            </div>
-            <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Altro</p>
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-violet-300 bg-violet-100" />
-                  <span className="text-xs text-foreground">Esame</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-rose-200 bg-rose-100" />
-                  <span className="text-xs text-foreground">Assente</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="h-5 w-8 rounded border-2 border-gray-200 bg-gray-100 opacity-60" />
-                  <span className="text-xs text-foreground">Annullata</span>
-                </div>
-              </div>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
       {/* ── Exam Detail Panel ── */}
-      <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }}>
-        <DialogContent className="sm:max-w-[460px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
+      <Dialog open={examPanelGroup !== null} onOpenChange={(open) => { if (!open) setExamPanelGroup(null); }} modal={false}>
+        <DialogContent
+          className="max-w-[480px] gap-0 overflow-visible rounded-[20px] p-0"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           {examPanelGroup && (() => {
             const eg = examPanelGroup;
             const egStart = toDate(eg.startsAt);
             const examHasTime = Boolean(eg.endsAt);
             const egEnd = eg.endsAt ? toDate(eg.endsAt) : new Date(egStart.getTime() + 60 * 60 * 1000);
+            const studentById = new Map(students.map((s) => [s.id, s] as const));
+            const draftStudents = examDraftStudentIds
+              .map((id) => studentById.get(id))
+              .filter((s): s is (typeof students)[number] => Boolean(s));
+            const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
+            const examQuery = examPanelStudentSearch.trim().toLowerCase();
+            const examBrowse = examAddable.filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery));
+            // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
+            const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
+            const origInstructorId = eg.instructorId ?? null;
+            const origStudentIds = eg.appointments.filter((a) => !isExamPlaceholder(a)).map((a) => a.student.id);
+            const placeholderApptIds = eg.appointments.filter((a) => isExamPlaceholder(a)).map((a) => a.id);
+            const sortIds = (a: string[]) => [...a].sort().join(",");
+            const origDurationMin = examHasTime ? Math.max(15, Math.round((egEnd.getTime() - egStart.getTime()) / 60000)) : 60;
+            const timeChanged = examDraftTime !== origTime;
+            // La durata conta solo quando c'è un orario (con "da definire" non ha senso).
+            const durationChanged = examDraftTime !== null && examDraftDurationMin !== origDurationMin;
+            const timingChanged = timeChanged || durationChanged;
+            const instrChanged = examDraftInstructorId !== origInstructorId;
+            const noteChanged = examNoteDraft.trim() !== (eg.notes ?? "").trim();
+            const studentsChanged = sortIds(examDraftStudentIds) !== sortIds(origStudentIds);
+            const examDirty = timingChanged || instrChanged || noteChanged || studentsChanged;
+            // endsAt = start + durata scelta. Preservare la durata è ciò che tiene
+            // insieme il gruppo esame (chiave = start|end|istruttore): un allievo
+            // aggiunto o un cambio orario mantengono lo stesso [start,end].
+            const buildExamStart = () => {
+              const base = new Date(egStart);
+              if (examDraftTime) {
+                const [h, m] = examDraftTime.split(":").map(Number);
+                base.setHours(h, m, 0, 0);
+                return { startsAt: base.toISOString(), endsAt: new Date(base.getTime() + examDraftDurationMin * 60000).toISOString() as string | undefined };
+              }
+              base.setHours(0, 0, 0, 0);
+              return { startsAt: base.toISOString(), endsAt: undefined as string | undefined };
+            };
+            const saveExam = async () => {
+              // Zero students is allowed: the exam keeps a single studentless
+              // placeholder row (created/kept server-side) so the slot survives.
+              setExamPanelPending(true);
+              try {
+                const studentToAppt = new Map(eg.appointments.map((a) => [a.student.id, a.id] as const));
+                const removed = origStudentIds.filter((id) => !examDraftStudentIds.includes(id));
+                const added = examDraftStudentIds.filter((id) => !origStudentIds.includes(id));
+                const { startsAt, endsAt } = buildExamStart();
+                for (const sid of removed) {
+                  const apptId = studentToAppt.get(sid);
+                  if (!apptId) continue;
+                  const r = await removeExamStudent(apptId);
+                  if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                }
+                // Move any empty placeholder to the target slot BEFORE adding, so the
+                // first added student converts it (matched by slot) rather than
+                // spawning a ghost row at the old time.
+                if (placeholderApptIds.length && (timingChanged || instrChanged)) {
+                  if (timingChanged) {
+                    const r = await updateExamTime({ appointmentIds: placeholderApptIds, startsAt, endsAt });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (instrChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: placeholderApptIds, instructorId: examDraftInstructorId });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                }
+                for (const sid of added) {
+                  const r = await addExamStudent({ studentId: sid, startsAt, endsAt, instructorId: examDraftInstructorId, notes: examNoteDraft.trim() || undefined });
+                  if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                }
+                const keptApptIds = origStudentIds
+                  .filter((id) => examDraftStudentIds.includes(id))
+                  .map((id) => studentToAppt.get(id))
+                  .filter((x): x is string => Boolean(x));
+                // When no student was added, the exam is still empty → apply
+                // metadata to the surviving placeholder row(s).
+                const metaApptIds = added.length === 0 ? [...keptApptIds, ...placeholderApptIds] : keptApptIds;
+                if (metaApptIds.length) {
+                  if (timingChanged) {
+                    const r = await updateExamTime({ appointmentIds: metaApptIds, startsAt, endsAt });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (instrChanged) {
+                    const r = await updateExamInstructor({ appointmentIds: metaApptIds, instructorId: examDraftInstructorId });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                  if (noteChanged) {
+                    const r = await updateExamNotes({ appointmentIds: metaApptIds, notes: examNoteDraft.trim() || null });
+                    if (!r.success) { toast.error({ description: r.message ?? "Errore." }); setExamPanelPending(false); return; }
+                  }
+                }
+                setExamPanelPending(false);
+                setExamPanelGroup(null);
+                load({ silent: true });
+                toast.success({ description: "Esame aggiornato." });
+              } catch {
+                setExamPanelPending(false);
+                toast.error({ description: "Errore durante il salvataggio." });
+              }
+            };
             return (
               <>
+                <div className="flex max-h-[88vh] flex-col rounded-[20px]">
+                <div className="min-h-0 flex-1 overflow-y-auto p-7 pb-4">
                 {/* Header */}
-                <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-100">
-                    <GraduationCap className="h-5 w-5 text-violet-600" />
-                  </div>
-                  <div className="flex-1">
-                    <DialogTitle className="text-sm font-semibold">Esame</DialogTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
-                      {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="border-violet-200 bg-violet-100 text-violet-700 text-xs font-bold">
-                    {eg.appointments.length} {eg.appointments.length === 1 ? "allievo" : "allievi"}
-                  </Badge>
+                <div className="flex items-center gap-2.5 pr-10">
+                  <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">Esame</DialogTitle>
+                  <span className="shrink-0 rounded-full bg-[#ede9fe] px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-[#6d28d9]">
+                    {draftStudents.length} {draftStudents.length === 1 ? "allievo" : "allievi"}
+                  </span>
                 </div>
+                <DialogDescription className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
+                  {egStart.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long" })}
+                  {examHasTime ? ` · ${formatTimeRange(egStart, egEnd)}` : " · Orario da definire"}
+                </DialogDescription>
 
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-                  {/* Orario */}
+                <div className="mt-5 space-y-5">
+                  {/* Orario — TimePicker (onClear = orario da definire) */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Orario</p>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : "__none__"}
-                        onValueChange={async (v) => {
-                          if (v === "__none__") {
-                            // Remove time
-                            setExamPanelPending(true);
-                            const dateOnly = new Date(egStart);
-                            dateOnly.setHours(0, 0, 0, 0);
-                            const res = await updateExamTime({
-                              appointmentIds: eg.appointments.map((a) => a.id),
-                              startsAt: dateOnly.toISOString(),
-                              endsAt: undefined,
-                            });
-                            setExamPanelPending(false);
-                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                            setExamPanelGroup({ ...eg, startsAt: dateOnly.toISOString(), endsAt: null });
-                            load({ silent: true });
-                          } else {
-                            // Set time (default 1h duration)
-                            setExamPanelPending(true);
-                            const [h, m] = v.split(":").map(Number);
-                            const newStart = new Date(egStart);
-                            newStart.setHours(h, m, 0, 0);
-                            const newEnd = new Date(newStart.getTime() + 60 * 60 * 1000);
-                            const res = await updateExamTime({
-                              appointmentIds: eg.appointments.map((a) => a.id),
-                              startsAt: newStart.toISOString(),
-                              endsAt: newEnd.toISOString(),
-                            });
-                            setExamPanelPending(false);
-                            if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                            setExamPanelGroup({ ...eg, startsAt: newStart.toISOString(), endsAt: newEnd.toISOString() });
-                            load({ silent: true });
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
-                          <SelectValue placeholder="Da definire" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Da definire</SelectItem>
-                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Orario</div>
+                    <TimePickerInput
+                      value={examDraftTime}
+                      placeholder="Orario da definire"
+                      minuteStep={15}
+                      className="w-full justify-between py-[11px]"
+                      onChange={(t) => setExamDraftTime(t)}
+                      onClear={examDraftTime ? () => setExamDraftTime(null) : undefined}
+                    />
                   </div>
+
+                  {/* Durata / fine — solo se l'esame ha un orario */}
+                  {examDraftTime ? (
+                    <DurationField
+                      startTime={examDraftTime}
+                      durationMin={examDraftDurationMin}
+                      onDurationChange={setExamDraftDurationMin}
+                    />
+                  ) : null}
 
                   {/* Istruttore */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Istruttore accompagnatore</div>
                     <div className="flex items-center gap-2">
                       <Select
-                        value={eg.instructorId ?? "__none__"}
-                        onValueChange={async (v) => {
-                          setExamPanelPending(true);
-                          const newInstrId = v === "__none__" ? null : v;
-                          const res = await updateExamInstructor({
-                            appointmentIds: eg.appointments.map((a) => a.id),
-                            instructorId: newInstrId,
-                          });
-                          setExamPanelPending(false);
-                          if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                          const newInstr = newInstrId ? instructors.find((i) => i.id === newInstrId) ?? null : null;
-                          setExamPanelGroup({ ...eg, instructorId: newInstrId, instructor: newInstr });
-                          load({ silent: true });
-                        }}
+                        value={examDraftInstructorId ?? "__none__"}
+                        onValueChange={(v) => setExamDraftInstructorId(v === "__none__" ? null : v)}
                       >
-                        <SelectTrigger className="flex-1" disabled={examPanelPending}>
+                        <SelectTrigger className="h-auto w-full rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]" disabled={examPanelPending}>
                           <SelectValue placeholder="Nessuno" />
                         </SelectTrigger>
                         <SelectContent>
@@ -3196,128 +3780,181 @@ export function AutoscuoleAgendaPage({
                     </div>
                   </div>
 
-                  {/* Allievi */}
+                  {/* Allievi iscritti */}
                   <div>
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Allievi iscritti</p>
-                    <div className="rounded-xl border border-border divide-y divide-border">
-                      {eg.appointments.map((a) => (
-                        <div key={a.id} className="flex items-center justify-between px-3.5 py-2.5">
-                          <span className="text-xs font-medium text-foreground">{a.student.firstName} {a.student.lastName}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50"
-                            disabled={examPanelPending || eg.appointments.length <= 1}
-                            onClick={async () => {
-                              setExamPanelPending(true);
-                              const res = await removeExamStudent(a.id);
-                              setExamPanelPending(false);
-                              if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                              const updated = { ...eg, appointments: eg.appointments.filter((x) => x.id !== a.id) };
-                              setExamPanelGroup(updated);
-                              load({ silent: true });
-                              toast.success({ description: "Allievo rimosso dall'esame." });
-                            }}
+                    <div className="mb-3 mt-6 flex items-baseline justify-between gap-3">
+                      <span className="text-[15px] font-semibold text-foreground">Allievi iscritti</span>
+                      <span className="text-[12.5px] font-medium text-[#929292]">
+                        {draftStudents.length} {draftStudents.length === 1 ? "iscritto" : "iscritti"}
+                      </span>
+                    </div>
+                    <div className="rounded-[12px] border-[1.5px] border-[#ededed]">
+                      {draftStudents.map((s, idx) => (
+                        <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
+                          <span className="flex min-w-0 items-center gap-3">
+                            <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                              {examStudentInitials(s.firstName, s.lastName)}
+                            </span>
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                              {s.licenseCategory ? (
+                                <span className="truncate text-[12px] font-medium text-[#929292]">
+                                  Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                </span>
+                              ) : null}
+                            </span>
+                          </span>
+                          <button
+                            type="button"
+                            title="Rimuovi dall'esame"
+                            disabled={examPanelPending || draftStudents.length <= 1}
+                            onClick={() => setExamDraftStudentIds((prev) => prev.filter((id) => id !== s.id))}
+                            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:cursor-not-allowed disabled:opacity-40"
                           >
-                            Rimuovi
-                          </Button>
+                            <Trash2 className="size-4" strokeWidth={1.8} />
+                          </button>
                         </div>
                       ))}
                     </div>
-
-                    {/* Aggiungi allievo */}
-                    <div className="mt-3">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                        <Input
-                          value={examPanelStudentSearch}
-                          onChange={(e) => setExamPanelStudentSearch(e.target.value)}
-                          placeholder="Aggiungi allievo..."
-                          className="pl-9 h-8 text-xs"
-                        />
-                      </div>
-                      {examPanelStudentSearch.trim().length >= 2 && (() => {
-                        const q = examPanelStudentSearch.toLowerCase();
-                        const existingIds = new Set(eg.appointments.map((a) => a.student.id));
-                        const results = students
-                          .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
-                          .filter((s) => !existingIds.has(s.id))
-                          .slice(0, 10);
-                        return results.length > 0 ? (
-                          <div className="mt-1.5 max-h-[120px] overflow-y-auto rounded-lg border border-border">
-                            {results.map((s) => (
-                              <button
-                                key={s.id}
-                                type="button"
-                                disabled={examPanelPending}
-                                onClick={async () => {
-                                  setExamPanelPending(true);
-                                  const res = await addExamStudent({
-                                    studentId: s.id,
-                                    startsAt: eg.startsAt,
-                                    endsAt: eg.endsAt ?? undefined,
-                                    instructorId: eg.instructorId,
-                                    notes: eg.notes ?? undefined,
-                                  });
-                                  setExamPanelPending(false);
-                                  if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                                  const newAppt: AppointmentRow = {
-                                    id: (res.data as { appointmentId: string }).appointmentId,
-                                    type: "esame",
-                                    status: "scheduled",
-                                    startsAt: eg.startsAt,
-                                    endsAt: eg.endsAt,
-                                    student: s,
-                                    instructor: eg.instructor,
-                                  };
-                                  setExamPanelGroup({ ...eg, appointments: [...eg.appointments, newAppt] });
-                                  setExamPanelStudentSearch("");
-                                  load({ silent: true });
-                                  toast.success({ description: `${s.firstName} aggiunto all'esame.` });
-                                }}
-                                className="flex w-full items-center gap-2.5 px-3 py-2 text-xs hover:bg-violet-50 text-left transition-colors border-b border-border last:border-b-0"
-                              >
-                                <Plus className="size-3 text-violet-500 shrink-0" />
-                                <span className="font-medium">{s.firstName} {s.lastName}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-1.5 text-center text-[11px] text-muted-foreground">Nessun allievo trovato</p>
-                        );
-                      })()}
-                    </div>
                   </div>
 
-                  {/* Note */}
-                  {eg.notes && (
-                    <div>
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
-                      <p className="text-xs text-muted-foreground">{eg.notes}</p>
-                    </div>
-                  )}
+                  {/* Aggiungi allievi — trigger del pannello laterale */}
+                  <div>
+                    <div className="mb-2 mt-6 text-[15px] font-semibold text-foreground">Aggiungi allievi</div>
+                    <button
+                      type="button"
+                      onClick={() => setExamPanelBrowseOpen((v) => !v)}
+                      disabled={examAddable.length === 0}
+                      className={cn(
+                        "inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] px-[22px] py-[11px] text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                        examPanelBrowseOpen
+                          ? "border-[#222222] bg-[#f7f7f7] text-foreground"
+                          : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
+                      )}
+                    >
+                      <Plus className="size-4" strokeWidth={2} />
+                      {examAddable.length > 0 ? `Sfoglia allievi · ${examAddable.length}` : "Tutti gli allievi aggiunti"}
+                    </button>
+                  </div>
+
+                  {/* Note — editabili */}
+                  <div>
+                    <div className="mb-1.5 text-[13px] font-semibold text-[#6a6a6a]">Note</div>
+                    <textarea
+                      value={examNoteDraft}
+                      onChange={(e) => setExamNoteDraft(e.target.value)}
+                      rows={3}
+                      maxLength={2000}
+                      disabled={examPanelPending}
+                      placeholder="Es: Esame pratico patente B, sede Motorizzazione…"
+                      className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] disabled:opacity-60"
+                    />
+                  </div>
+                </div>
                 </div>
 
-                {/* Footer */}
-                <div className="border-t border-border px-6 py-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-                    disabled={examPanelPending}
-                    onClick={async () => {
-                      setExamPanelPending(true);
-                      const res = await cancelExamEvent(eg.appointments.map((a) => a.id));
-                      setExamPanelPending(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
-                      setExamPanelGroup(null);
-                      load({ silent: true });
-                      toast.success({ description: "Esame annullato." });
-                    }}
-                  >
-                    {examPanelPending ? "Annullamento..." : "Annulla esame"}
-                  </Button>
+                {/* Footer pinnato: "Salva" sempre raggiungibile anche col dialog lungo */}
+                <div className="shrink-0 space-y-2 rounded-b-[20px] border-t border-[#f0f0f0] bg-white px-7 py-4">
+                    <button
+                      type="button"
+                      disabled={!examDirty || examPanelPending}
+                      onClick={saveExam}
+                      className="flex w-full cursor-pointer items-center justify-center rounded-full bg-[#222222] py-3 text-sm font-semibold text-white transition-colors hover:bg-black disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      {examPanelPending ? <LoadingDots className="min-h-5" /> : "Salva modifiche"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={examPanelPending}
+                      onClick={async () => {
+                        setExamPanelPending(true);
+                        const res = await cancelExamEvent(eg.appointments.map((a) => a.id));
+                        setExamPanelPending(false);
+                        if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
+                        setExamPanelGroup(null);
+                        load({ silent: true });
+                        toast.success({ description: "Esame annullato." });
+                      }}
+                      className="flex w-full cursor-pointer items-center justify-center rounded-full py-3 text-sm font-semibold text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-60"
+                    >
+                      Annulla esame
+                    </button>
                 </div>
+                </div>
+
+                {/* Pannello laterale "Aggiungi allievi": card gemella a destra */}
+                <AnimatePresence>
+                  {examPanelBrowseOpen && (
+                    <motion.div
+                      key="exam-add-panel"
+                      initial={{ opacity: 0, x: -14 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      transition={{ duration: 0.18, ease: "easeOut" }}
+                      className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">Aggiungi allievi</span>
+                        <button
+                          type="button"
+                          aria-label="Chiudi elenco"
+                          onClick={() => setExamPanelBrowseOpen(false)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                        >
+                          <X className="size-3.5 text-foreground" strokeWidth={2} />
+                        </button>
+                      </div>
+                      <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                        {draftStudents.length} iscritti · {examAddable.length} da aggiungere
+                      </p>
+                      <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                        <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                        <input
+                          value={examPanelStudentSearch}
+                          onChange={(e) => setExamPanelStudentSearch(e.target.value)}
+                          placeholder="Cerca un allievo"
+                          autoFocus
+                          className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                        />
+                      </div>
+                      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                        {examBrowse.length === 0 ? (
+                          <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                            {examPanelStudentSearch.trim()
+                              ? `Nessun allievo trovato per «${examPanelStudentSearch.trim()}».`
+                              : "Tutti gli allievi sono già iscritti."}
+                          </p>
+                        ) : (
+                          examBrowse.map((s, idx) => (
+                            <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                  {examStudentInitials(s.firstName, s.lastName)}
+                                </span>
+                                <span className="flex min-w-0 flex-col">
+                                  <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                  {s.licenseCategory ? (
+                                    <span className="truncate text-[11.5px] font-medium text-[#929292]">
+                                      Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                disabled={examPanelPending}
+                                onClick={() => setExamDraftStudentIds((prev) => (prev.includes(s.id) ? prev : [...prev, s.id]))}
+                                className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
+                              >
+                                <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                              </button>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </>
             );
           })()}
@@ -3325,298 +3962,238 @@ export function AutoscuoleAgendaPage({
       </Dialog>
 
       {/* ── Exam Creation Dialog ── */}
-      <Dialog open={examDialogOpen} onOpenChange={(open) => { if (!examCreating) setExamDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-hidden flex flex-col gap-0 p-0">
-          <div className="flex items-center gap-3 border-b border-border px-6 pt-5 pb-4">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-50">
-              <GraduationCap className="h-4 w-4 text-yellow-600" />
-            </div>
-            <div>
-              <DialogTitle className="text-sm font-semibold">Nuovo esame</DialogTitle>
-              <p className="text-xs text-muted-foreground">Pianifica un esame per uno o più allievi</p>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-            {/* Data e orario */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Quando</p>
-              <div className="space-y-3">
-                <FieldGroup label="Giorno" required>
-                  <DatePicker value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
-                </FieldGroup>
-                <div
-                  className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2 cursor-pointer"
-                  onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
+      <CreateEventPopover
+        open={examDialogOpen}
+        onClose={() => { if (!examCreating) setExamDialogOpen(false); }}
+        title="Nuovo esame"
+        subtitle="Pianifica un esame per uno o più allievi"
+        anchor={popoverAnchor}
+        sidePanel={
+          examBrowseOpen ? (
+            <div className="flex max-h-[80vh] w-[320px] flex-col rounded-[20px] border border-[#dddddd] bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.18)]">
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-[#222222]">Aggiungi allievi</span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setExamBrowseOpen(false)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
                 >
-                  <span className="text-xs text-muted-foreground">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
-                  <InlineToggle checked={examForm.timeSet} size="sm" />
-                </div>
-                {examForm.timeSet && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <FieldGroup label="Orario">
-                      <Select value={examForm.time} onValueChange={(v) => setExamForm((f) => ({ ...f, time: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {TIME_OPTIONS.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                    <FieldGroup label="Durata">
-                      <Select value={examForm.duration} onValueChange={(v) => setExamForm((f) => ({ ...f, duration: v }))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {EXAM_SLOT_OPTIONS.map((o) => <SelectItem key={o} value={o}>{o} min</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </FieldGroup>
-                  </div>
-                )}
+                  <X className="size-3.5 text-[#222222]" strokeWidth={2} />
+                </button>
               </div>
-            </div>
-
-            {/* Istruttore */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Istruttore accompagnatore</p>
-              <Select value={examForm.instructorId} onValueChange={(v) => setExamForm((f) => ({ ...f, instructorId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Nessuno (facoltativo)" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">Nessuno</SelectItem>
-                  {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Allievi */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                Allievi
-                {examForm.studentIds.length > 0 && (
-                  <span className="ml-2 inline-flex items-center justify-center rounded-full bg-yellow-100 px-2 py-0.5 text-[10px] font-bold text-yellow-700">
-                    {examForm.studentIds.length}
-                  </span>
-                )}
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                {examForm.studentIds.length} selezionati · {examAddableCount} da aggiungere
               </p>
-
-              {/* Selected students chips */}
-              {examForm.studentIds.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {examForm.studentIds.map((id) => {
-                    const s = students.find((st) => st.id === id);
-                    if (!s) return null;
-                    return (
-                      <button
-                        key={id}
-                        type="button"
-                        onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
-                        className="flex items-center gap-1.5 rounded-full border border-yellow-200 bg-yellow-50 px-2.5 py-1 text-[11px] font-medium text-yellow-700 transition-colors hover:bg-yellow-100 hover:border-yellow-300 cursor-pointer"
-                      >
-                        {s.firstName} {s.lastName}
-                        <span className="text-yellow-400 hover:text-yellow-600">&times;</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground pointer-events-none" />
-                <Input
+              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                <input
                   value={examStudentSearch}
                   onChange={(e) => setExamStudentSearch(e.target.value)}
-                  placeholder="Cerca allievo per nome..."
-                  className="pl-9 h-9 text-xs"
+                  placeholder="Cerca un allievo"
+                  autoFocus
+                  className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-[#222222] outline-none placeholder:text-[#c1c1c1]"
                 />
               </div>
-
-              {/* Student results — only shown when searching */}
-              {examStudentSearch.trim().length >= 2 && (() => {
-                const q = examStudentSearch.toLowerCase();
-                const results = students
-                  .filter((s) => `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
-                  .filter((s) => !examForm.studentIds.includes(s.id))
-                  .slice(0, 20);
-                return (
-                  <div className="mt-2 max-h-[160px] overflow-y-auto rounded-xl border border-border">
-                    {results.map((s) => (
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {examBrowseList.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    {examStudentSearch.trim()
+                      ? `Nessun allievo trovato per «${examStudentSearch.trim()}».`
+                      : "Tutti gli allievi sono già stati aggiunti."}
+                  </p>
+                ) : (
+                  examBrowseList.map((st, idx) => (
+                    <div
+                      key={st.id}
+                      className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                          {examStudentInitials(st.firstName, st.lastName)}
+                        </span>
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                          {st.licenseCategory ? (
+                            <span className="truncate text-[11.5px] font-medium text-[#929292]">
+                              Patente {st.licenseCategory}{st.transmission === "automatic" ? " · autom." : ""}
+                            </span>
+                          ) : null}
+                        </span>
+                      </span>
                       <button
-                        key={s.id}
                         type="button"
-                        onClick={() => {
-                          setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, s.id] }));
-                          setExamStudentSearch("");
-                        }}
-                        className="flex w-full items-center gap-3 px-3.5 py-2.5 text-xs cursor-pointer transition-colors border-b border-border last:border-b-0 hover:bg-yellow-50/60 text-left"
+                        onClick={() => setExamForm((f) => ({ ...f, studentIds: [...f.studentIds, st.id] }))}
+                        className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#f7f7f7]"
                       >
-                        <Plus className="size-3 text-muted-foreground shrink-0" />
-                        <span className="font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                        <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
                       </button>
-                    ))}
-                    {results.length === 0 && (
-                      <p className="px-4 py-4 text-center text-xs text-muted-foreground">Nessun allievo trovato</p>
-                    )}
-                  </div>
-                );
-              })()}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-
-            {/* Note */}
-            <div>
-              <p className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Note</p>
-              <Input
-                value={examForm.note}
-                onChange={(e) => setExamForm((f) => ({ ...f, note: e.target.value }))}
-                placeholder="Es: Esame pratico patente B, sede Motorizzazione..."
-              />
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-between border-t border-border px-6 py-4">
-            <p className="text-[11px] text-muted-foreground">
+          ) : null
+        }
+        footer={
+          <>
+            <p className="text-[11px] font-medium text-[#929292]">
               {examForm.studentIds.length === 0
-                ? "Seleziona almeno un allievo"
+                ? "Nessun allievo — potrai aggiungerli in seguito"
                 : `${examForm.studentIds.length} alliev${examForm.studentIds.length === 1 ? "o" : "i"} selezionat${examForm.studentIds.length === 1 ? "o" : "i"}`}
             </p>
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setExamDialogOpen(false)} disabled={examCreating}>Annulla</Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={examCreating || !examForm.date || !examForm.studentIds.length}
-                onClick={async () => {
-                  setExamCreating(true);
-                  const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
-                  let startsAtIso: string;
-                  let endsAtIso: string | undefined;
-                  if (examForm.timeSet) {
-                    const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
-                    const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
-                    const endsAt = new Date(startsAt.getTime() + durationMs);
-                    startsAtIso = startsAt.toISOString();
-                    endsAtIso = endsAt.toISOString();
-                  } else {
-                    startsAtIso = new Date(`${examForm.date}T00:00:00`).toISOString();
-                    endsAtIso = undefined;
-                  }
-
-                  const res = await createExamEvent({
-                    studentIds: examForm.studentIds,
-                    startsAt: startsAtIso,
-                    endsAt: endsAtIso,
-                    instructorId: instrId,
-                    notes: examForm.note.trim() || undefined,
-                  });
-
-                  setExamCreating(false);
-                  if (res.success) {
-                    const count = (res.data as { count: number }).count;
-                    toast.success({
-                      description: `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.`,
-                    });
-                    setExamDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: res.message ?? "Impossibile creare l'esame." });
-                  }
-                }}
-              >
-                {examCreating ? (
-                  <><Loader2 className="size-3.5 animate-spin mr-1.5" />Creazione...</>
-                ) : (
-                  <><GraduationCap className="size-3.5 mr-1.5" />Crea esame</>
-                )}
-              </Button>
+            <button
+              type="button"
+              disabled={examCreating || !examForm.date}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
+              onClick={async () => {
+                setExamCreating(true);
+                const instrId = examForm.instructorId && examForm.instructorId !== "__none__" ? examForm.instructorId : null;
+                let startsAtIso: string;
+                let endsAtIso: string | undefined;
+                if (examForm.timeSet) {
+                  const durationMs = parseInt(examForm.duration, 10) * 60 * 1000;
+                  const startsAt = new Date(`${examForm.date}T${examForm.time}:00`);
+                  const endsAt = new Date(startsAt.getTime() + durationMs);
+                  startsAtIso = startsAt.toISOString();
+                  endsAtIso = endsAt.toISOString();
+                } else {
+                  startsAtIso = new Date(`${examForm.date}T00:00:00`).toISOString();
+                  endsAtIso = undefined;
+                }
+                const res = await createExamEvent({
+                  studentIds: examForm.studentIds,
+                  startsAt: startsAtIso,
+                  endsAt: endsAtIso,
+                  instructorId: instrId,
+                  notes: examForm.note.trim() || undefined,
+                });
+                setExamCreating(false);
+                if (res.success) {
+                  const count = (res.data as { count: number }).count;
+                  toast.success({ description: count === 0 ? "Esame creato — aggiungi gli allievi quando vuoi." : `Esame creato per ${count} alliev${count === 1 ? "o" : "i"}.` });
+                  setExamDialogOpen(false);
+                  load({ silent: true });
+                } else {
+                  toast.error({ description: res.message ?? "Impossibile creare l'esame." });
+                }
+              }}
+            >
+              {examCreating ? <LoadingDots className="min-h-5" /> : "Crea esame"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Giorno</p>
+              <DatePickerInput value={examForm.date} onChange={(v) => setExamForm((f) => ({ ...f, date: v }))} />
             </div>
+            {examForm.timeSet && (
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-[#555555]">Orario</p>
+                <TimePickerInput value={examForm.time} onChange={(v) => setExamForm((f) => ({ ...f, time: v }))} />
+              </div>
+            )}
           </div>
-        </DialogContent>
-      </Dialog>
+          <div
+            className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+            onClick={() => setExamForm((f) => ({ ...f, timeSet: !f.timeSet }))}
+          >
+            <span className="text-[13px] font-medium text-[#555555]">{examForm.timeSet ? "Orario specificato" : "Orario da definire"}</span>
+            <InlineToggle checked={examForm.timeSet} size="sm" />
+          </div>
+          {examForm.timeSet && (
+            <DurationField
+              startTime={examForm.time}
+              durationMin={parseInt(examForm.duration, 10) || 60}
+              onDurationChange={(m) => setExamForm((f) => ({ ...f, duration: String(m) }))}
+            />
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore accompagnatore</p>
+            <Select value={examForm.instructorId} onValueChange={(v) => setExamForm((f) => ({ ...f, instructorId: v }))}>
+              <SelectTrigger><SelectValue placeholder="Nessuno (facoltativo)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Nessuno</SelectItem>
+                {instructors.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">
+              Allievi
+              {examForm.studentIds.length > 0 && (
+                <span className="ml-2 inline-flex items-center justify-center rounded-full bg-[#f2f2f2] px-2 py-0.5 text-[10px] font-bold text-[#222222]">
+                  {examForm.studentIds.length}
+                </span>
+              )}
+            </p>
+            {examForm.studentIds.length > 0 && (
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {examForm.studentIds.map((id) => {
+                  const s = students.find((st) => st.id === id);
+                  if (!s) return null;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setExamForm((f) => ({ ...f, studentIds: f.studentIds.filter((x) => x !== id) }))}
+                      className="flex cursor-pointer items-center gap-1.5 rounded-full border border-[#222222] bg-white px-2.5 py-1 text-[11px] font-semibold text-[#222222] transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      {s.firstName} {s.lastName}
+                      {s.licenseCategory ? (
+                        <span className="font-medium text-[#929292]">· {s.licenseCategory}{s.transmission === "automatic" ? " aut." : ""}</span>
+                      ) : null}
+                      <span className="text-[#929292]">&times;</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setExamBrowseOpen((v) => !v)}
+              disabled={examAddableCount === 0}
+              className={cn(
+                "inline-flex cursor-pointer select-none items-center gap-2 self-start rounded-full border-[1.5px] px-[18px] py-[9px] text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                examBrowseOpen
+                  ? "border-[#222222] bg-[#f7f7f7] text-[#222222]"
+                  : "border-[#dddddd] text-[#222222] hover:border-[#222222] hover:bg-[#f7f7f7]",
+              )}
+            >
+              <Plus className="size-4" strokeWidth={2} />
+              {examAddableCount > 0 ? `Sfoglia allievi · ${examAddableCount}` : "Tutti gli allievi aggiunti"}
+            </button>
+          </div>
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Note</p>
+            <Input
+              value={examForm.note}
+              onChange={(e) => setExamForm((f) => ({ ...f, note: e.target.value }))}
+              placeholder="Es: Esame pratico patente B, sede Motorizzazione..."
+            />
+          </div>
+        </div>
+      </CreateEventPopover>
 
       {/* ── Instructor Block Creation Dialog ── */}
-      <Dialog open={blockDialogOpen} onOpenChange={(open) => { if (!blockCreating) setBlockDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Nuovo evento bloccante</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Istruttore</label>
-              <Select value={blockForm.instructorId} onValueChange={(v) => setBlockForm((f) => ({ ...f, instructorId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
-                <SelectContent>
-                  {instructors.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Data</label>
-              <DatePicker value={blockForm.date} onChange={(v) => setBlockForm((f) => ({ ...f, date: v }))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Ora inizio</label>
-                <Select value={blockForm.startTime} onValueChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 48 }, (_, i) => { const h = Math.floor(i * 30 / 60); const m = (i * 30) % 60; const v = `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`; return <SelectItem key={v} value={v}>{v}</SelectItem>; })}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Durata</label>
-                <Select value={blockForm.duration} onValueChange={(v) => setBlockForm((f) => ({ ...f, duration: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[
-                      { value: "15", label: "15 min" },
-                      { value: "30", label: "30 min" },
-                      { value: "45", label: "45 min" },
-                      { value: "60", label: "1 ora" },
-                      { value: "90", label: "1h 30m" },
-                      { value: "120", label: "2 ore" },
-                    ].map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Titolo (opzionale)</label>
-              <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
-            </div>
-            {/* Ricorrenza */}
-            <div className="space-y-2">
-              <div
-                className="flex items-center justify-between rounded-lg border border-border/60 bg-white/70 px-3 py-2.5 cursor-pointer"
-                onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
-              >
-                <span className="text-xs font-medium">Evento ricorrente</span>
-                <InlineToggle checked={blockForm.recurring} size="sm" />
-              </div>
-              {blockForm.recurring && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Ripeti per</span>
-                  <Input
-                    type="number"
-                    min={2}
-                    max={52}
-                    value={blockForm.recurringWeeks}
-                    onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
-                    className="w-16 h-8 text-xs"
-                  />
-                  <span className="text-xs text-muted-foreground">settimane</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setBlockDialogOpen(false)} disabled={blockCreating}>Annulla</Button>
-            <Button
+      <CreateEventPopover
+        open={blockDialogOpen}
+        onClose={() => { if (!blockCreating) setBlockDialogOpen(false); }}
+        title="Nuovo evento bloccante"
+        subtitle="Blocca l'agenda dell'istruttore per un impegno"
+        anchor={popoverAnchor}
+        footer={
+          <>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => setBlockDialogOpen(false)}>
+              Annulla
+            </button>
+            <button
               type="button"
-              size="sm"
               disabled={blockCreating || !blockForm.instructorId || !blockForm.date}
+              className="flex cursor-pointer items-center gap-2 rounded-[10px] bg-[#222222] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-40"
               onClick={async () => {
                 setBlockCreating(true);
                 const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
@@ -3641,119 +4218,77 @@ export function AutoscuoleAgendaPage({
                 toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
               }}
             >
-              {blockCreating ? "Creazione..." : "Crea evento"}
-            </Button>
+              {blockCreating ? <LoadingDots className="min-h-5" /> : "Crea evento"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Istruttore</p>
+            <Select value={blockForm.instructorId} onValueChange={(v) => setBlockForm((f) => ({ ...f, instructorId: v }))}>
+              <SelectTrigger><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
+              <SelectContent>
+                {instructors.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Holiday Creation Dialog ── */}
-      <Dialog open={holidayDialogOpen} onOpenChange={(open) => { if (!holidayPending) setHolidayDialogOpen(open); }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Segna come festivo</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <p className="text-sm text-muted-foreground">
-              {holidayDialogDate?.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-            </p>
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="holiday-label" className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Nome festività (opzionale)
-              </label>
-              <Input
-                id="holiday-label"
-                placeholder="es. Ferragosto, Ferie estive..."
-                value={holidayLabel}
-                onChange={(e) => setHolidayLabel(e.target.value)}
-                disabled={holidayPending}
-              />
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Data</p>
+              <DatePickerInput value={blockForm.date} onChange={(v) => setBlockForm((f) => ({ ...f, date: v }))} />
             </div>
-            {(() => {
-              const dayApptCount = holidayDialogDate
-                ? appointments.filter((a) => {
-                    const d = new Date(a.startsAt);
-                    return formatYmd(d) === formatYmd(holidayDialogDate) && a.status !== "cancelled";
-                  }).length
-                : 0;
-              if (dayApptCount > 0) {
-                return (
-                  <p className="text-sm text-amber-600">
-                    <AlertTriangle className="mr-1 inline size-4" />
-                    {dayApptCount === 1
-                      ? "C'è 1 guida prenotata questo giorno."
-                      : `Ci sono ${dayApptCount} guide prenotate questo giorno.`}
-                  </p>
-                );
-              }
-              return null;
-            })()}
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Ora inizio</p>
+              <TimePickerInput value={blockForm.startTime} onChange={(v) => setBlockForm((f) => ({ ...f, startTime: v }))} />
+            </div>
           </div>
-          <div className="flex flex-col gap-2 pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full rounded-lg"
-              disabled={holidayPending}
-              onClick={async () => {
-                if (!holidayDialogDate) return;
-                setHolidayPending(true);
-                try {
-                  const res = await fetch("/api/autoscuole/holidays", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: false }),
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    toast.success({ description: "Giorno festivo aggiunto." });
-                    setHolidayDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: data.message ?? "Errore." });
-                  }
-                } catch { toast.error({ description: "Errore di rete." }); }
-                finally { setHolidayPending(false); }
-              }}
-            >
-              Chiudi e mantieni guide
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full rounded-lg"
-              disabled={holidayPending}
-              onClick={async () => {
-                if (!holidayDialogDate) return;
-                setHolidayPending(true);
-                try {
-                  const res = await fetch("/api/autoscuole/holidays", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ date: formatYmd(holidayDialogDate), label: holidayLabel || undefined, cancelAppointments: true }),
-                  });
-                  const data = await res.json();
-                  if (data.success) {
-                    const count = data.data?.cancelledCount ?? 0;
-                    toast.success({
-                      description: count > 0
-                        ? `Giorno festivo aggiunto. ${count} ${count === 1 ? "guida cancellata" : "guide cancellate"}.`
-                        : "Giorno festivo aggiunto.",
-                    });
-                    setHolidayDialogOpen(false);
-                    load({ silent: true });
-                  } else {
-                    toast.error({ description: data.message ?? "Errore." });
-                  }
-                } catch { toast.error({ description: "Errore di rete." }); }
-                finally { setHolidayPending(false); }
-              }}
-            >
-              Chiudi e cancella guide
-            </Button>
+          <DurationField
+            startTime={blockForm.startTime}
+            durationMin={parseInt(blockForm.duration, 10) || 60}
+            onDurationChange={(m) => setBlockForm((f) => ({ ...f, duration: String(m) }))}
+            chips={[15, 30, 45, 60, 90, 120]}
+          />
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
+            <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
           </div>
-        </DialogContent>
-      </Dialog>
+          <div className="space-y-2">
+            <div
+              className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+              onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
+            >
+              <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
+              <InlineToggle checked={blockForm.recurring} size="sm" />
+            </div>
+            {blockForm.recurring && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Ripeti per</span>
+                <Input
+                  type="number"
+                  min={2}
+                  max={52}
+                  value={blockForm.recurringWeeks}
+                  onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
+                  className="h-8 w-16 text-xs"
+                />
+                <span className="text-xs text-muted-foreground">settimane</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </CreateEventPopover>
+
+      {/* ── Holiday Creation Modal (single day + range) ── */}
+      <HolidayModal
+        open={holidayModalOpen}
+        onClose={() => setHolidayModalOpen(false)}
+        initialDate={holidayModalInitialDate}
+        existingHolidays={holidaySet}
+        onDone={() => load({ silent: true })}
+      />
 
       {/* ── Holiday Removal AlertDialog ── */}
       <AlertDialog open={removeHolidayDialogOpen} onOpenChange={setRemoveHolidayDialogOpen}>
@@ -3788,6 +4323,43 @@ export function AutoscuoleAgendaPage({
               }}
             >
               Rimuovi
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Conferma prenotazione nel passato ── */}
+      <AlertDialog open={pastConfirmOpen} onOpenChange={setPastConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="mb-1 flex size-11 items-center justify-center rounded-[14px] border border-[#f3e2c0] bg-[#fff8ec]">
+              <History className="size-[22px] text-[#e8a020]" strokeWidth={2} />
+            </div>
+            <AlertDialogTitle>Stai prenotando nel passato</AlertDialogTitle>
+            <AlertDialogDescription>
+              L&apos;orario selezionato è già trascorso. Vuoi prenotare la guida comunque?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {pendingPastStart ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#f3e2c0] bg-[#fff8ec] px-3 py-2 text-sm font-semibold text-[#8a6416]">
+              <History className="size-4 shrink-0 text-[#e8a020]" strokeWidth={2} />
+              <span className="capitalize">
+                {pendingPastStart.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+                {" · "}
+                {pendingPastStart.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          ) : null}
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-[#1a1a2e] hover:bg-[#0f0f22]"
+              onClick={() => {
+                setPastConfirmOpen(false);
+                void handleCreate({ allowPast: true });
+              }}
+            >
+              Prenota comunque
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3961,11 +4533,12 @@ function isProposalStatus(appointment: AppointmentRow) {
 
 function canUpdateStatus(appointment: AppointmentRow) {
   const normalized = (appointment.status ?? "").toLowerCase();
-  // pending_review can be acted on at any time (no time window)
-  if (normalized === "pending_review") return true;
-  const endTime = getAppointmentEnd(appointment);
-  const isPast = endTime.getTime() < Date.now();
-  return !isPast && !["cancelled", "completed", "no_show"].includes(normalized);
+  // Presente/Assente restano disponibili anche sulle guide PASSATE e per
+  // correggere un esito già dato (no_show / completed): il titolare sistema i
+  // record a posteriori — es. annullare un'assenza messa per sbaglio. Nessun
+  // limite temporale. Solo 'cancelled' resta escluso (si ripristina con
+  // l'azione di annullamento dedicata).
+  return normalized !== "cancelled";
 }
 
 function canCompleteStatus(appointment: AppointmentRow) {
@@ -3995,6 +4568,34 @@ function formatYmd(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/** Etichetta leggibile per il motivo di un blocco istruttore (evita di
+ * mostrare valori grezzi tipo "sick_leave"/"ferie" in agenda). */
+function formatBlockReason(reason: string | null | undefined) {
+  switch ((reason ?? "").trim()) {
+    case "sick_leave":
+      return "Malattia";
+    case "ferie":
+      return "Ferie";
+    case "":
+      return "Blocco";
+    default:
+      return reason as string;
+  }
+}
+
+/** Tinta del blocco istruttore per tipo — palette condivisa con il mobile:
+ * malattia = arancio, ferie = teal, generico = grigio. */
+function blockTint(reason: string | null | undefined): { card: string; text: string } {
+  switch ((reason ?? "").trim()) {
+    case "sick_leave":
+      return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
+    case "ferie":
+      return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+    default:
+      return { card: "bg-[#F3F4F8] hover:bg-[#E7E9F1]", text: "text-slate-600" };
+  }
+}
+
 function buildLocalDateTime(day: string, time: string) {
   if (!day || !time) return new Date("");
   const [hoursRaw, minutesRaw] = time.split(":").map(Number);
@@ -4004,29 +4605,33 @@ function buildLocalDateTime(day: string, time: string) {
   return date;
 }
 
+// Sistema colori unificato web+mobile (Reglo-Colori-Blocchi-Guida, decisioni
+// 2026-06-29): guide normali per DURATA (freddo→caldo), esami/gruppi per tipo,
+// annullata/assente muted. Stile: NIENTE bordo, sfondo vivo, ombra in tinta
+// (opacity .22). Gli override moto/automatico sono stati RIMOSSI; il ≤30 min è
+// blu (il teal è riservato alle guide di gruppo). Lo stato vive sul badge.
+// Guide a CAMBIO AUTOMATICO: colore dedicato (ciano) che SOSTITUISCE quello di
+// durata, così si distinguono a colpo d'occhio. Automatica se il veicolo usato è
+// automatico o, in mancanza, se l'allievo segue il percorso automatico.
+const AUTOMATIC_CLASS = "bg-[#CFFAFE] shadow-[0_5px_14px_rgba(6,182,212,0.22)]";
+
+function isAutomaticLesson(appointment: AppointmentRow): boolean {
+  return (
+    appointment.vehicle?.transmission === "automatic" ||
+    appointment.student?.transmission === "automatic"
+  );
+}
+
 function getScheduledDurationClass(appointment: AppointmentRow): string {
-  // Moto guides (vehicle assigned to a motorcycle license: AM/A1/A2/A) get a
-  // dedicated colour that OVERRIDES the per-duration palette. Keyed off the
-  // vehicle only — guides without a vehicle skip this check. Wins over the
-  // automatic colour so a moto stays a moto even on an automatic scooter.
-  if (isMotoLicenseCategory(appointment.vehicle?.licenseCategory)) {
-    return "border-orange-300/70 bg-orange-100/70";
-  }
-  // Automatic-transmission guides get a dedicated colour that OVERRIDES the
-  // per-duration palette, so schools can spot them at a glance (requested by
-  // the autoscuole). Exam/group keep their own identity colour upstream, and
-  // the "Assente"/"Annullata" states still win in getStatusMeta.
-  if ((appointment.vehicle?.transmission ?? "").toLowerCase() === "automatic") {
-    return "border-blue-300/70 bg-blue-50/80";
-  }
+  if (isAutomaticLesson(appointment)) return AUTOMATIC_CLASS;
   const start = toDate(appointment.startsAt);
   const end = getAppointmentEnd(appointment);
   const dur = Math.round(diffMinutes(end, start));
-  if (dur <= 30) return "border-teal-200/70 bg-teal-50/80";
-  if (dur <= 45) return "border-lime-200/70 bg-lime-50/80";
-  if (dur <= 60) return "border-yellow-200/70 bg-yellow-50/80";
-  if (dur <= 90) return "border-fuchsia-200/70 bg-fuchsia-50/80";
-  return "border-rose-200/70 bg-rose-50/80";
+  if (dur <= 30) return "bg-[#E3EEFF] shadow-[0_5px_14px_rgba(59,130,246,0.22)]";
+  if (dur <= 45) return "bg-[#EAF7CE] shadow-[0_5px_14px_rgba(132,204,22,0.22)]";
+  if (dur <= 60) return "bg-[#FCEFC7] shadow-[0_5px_14px_rgba(245,158,11,0.22)]";
+  if (dur <= 90) return "bg-[#F9DDF3] shadow-[0_5px_14px_rgba(217,70,239,0.22)]";
+  return "bg-[#FBD9DD] shadow-[0_5px_14px_rgba(244,63,94,0.22)]";
 }
 
 function getStatusMeta(
@@ -4054,10 +4659,12 @@ function getStatusMeta(
     return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
   }
   if (normalized === "completed") {
+    // Lo stato vive sul badge, non sullo sfondo: la completata tiene il
+    // colore della durata (sistema unificato 2026-06-29).
     return { label: "Completa", shortLabel: "Completata", className: durationClass };
   }
   if (normalized === "no_show") {
-    return { label: "Assente", shortLabel: "Assente", className: "border-rose-200/70 bg-rose-100/70" };
+    return { label: "Assente", shortLabel: "Assente", className: "bg-[#F3F4F8] text-[#8A90A6]" };
   }
   if (normalized.includes("proposal")) {
     return { label: "Proposta", shortLabel: "Proposta", className: durationClass };
@@ -4066,7 +4673,7 @@ function getStatusMeta(
     return { label: "Da confermare", shortLabel: "Da confermare", className: durationClass };
   }
   if (normalized === "cancelled") {
-    return { label: "Annullata", shortLabel: "Annullata", className: "border-gray-200/70 bg-gray-100/60 opacity-60 line-through" };
+    return { label: "Annullata", shortLabel: "Annullata", className: "bg-[#F3F4F8] text-[#8A90A6] opacity-70 line-through" };
   }
   return { label: "Programmata", shortLabel: "Programmata", className: durationClass };
 }
@@ -4084,33 +4691,37 @@ function getFilterOptions(
   vehicles: ResourceOption[],
 ): FilterOption[] {
   if (kind === "instructor") {
-    return [
-      { value: "all", label: "Tutti gli istruttori" },
-      ...instructors.map((item) => ({ value: item.id, label: item.name })),
-    ];
+    return instructors.map((item) => ({ value: item.id, label: item.name }));
   }
   if (kind === "vehicle") {
-    return [
-      { value: "all", label: "Tutti i veicoli" },
-      ...vehicles.map((item) => ({ value: item.id, label: item.name })),
-    ];
+    return vehicles.map((item) => ({ value: item.id, label: item.name }));
   }
   if (kind === "type") {
-    return [
-      { value: "all", label: "Tutti i tipi" },
-      ...LESSON_TYPE_OPTIONS.map((option) => ({
-        value: option.value,
-        label: option.label,
-      })),
-    ];
+    return LESSON_TYPE_OPTIONS.map((option) => ({
+      value: option.value,
+      label: option.label,
+    }));
   }
   return [
-    { value: "all", label: "Tutti gli stati" },
     { value: "scheduled", label: "In programma" },
     { value: "checked_in", label: "Presente" },
     { value: "completed", label: "Completata" },
     { value: "no_show", label: "Assente" },
   ];
+}
+
+/** Rende trascinabile il pannello dettaglio EVENTO dentro i menu Radix. */
+function DraggableEventPanel({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.div
+      drag
+      dragMomentum={false}
+      dragElastic={0}
+      className="cursor-grab rounded-lg border border-border bg-white p-3 shadow-dropdown active:cursor-grabbing"
+    >
+      {children}
+    </motion.div>
+  );
 }
 
 function SummaryRow({ label, value }: { label: string; value: string }) {
@@ -4122,38 +4733,130 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FilterTag({
-  label,
-  value,
-  allValue,
-  onClick,
-  displayValue,
-}: {
-  label: string;
-  value: string;
-  allValue: string;
-  onClick: () => void;
-  displayValue?: string | null;
-}) {
-  const active = value !== allValue;
+/**
+ * Intestazione colonna giorno del redesign Airbnb: DOW 10px uppercase +
+ * numero in cerchio 34px (oggi = pieno scuro), festivo con sole ambra.
+ */
+// Blocchi-guida finti per colonna (minuti dall'inizio della finestra visibile):
+// pattern deterministico che ricalca la densità reale dell'agenda.
+const SKELETON_GRID_BLOCKS: Array<Array<{ start: number; duration: number }>> = [
+  [{ start: 75, duration: 60 }, { start: 250, duration: 90 }],
+  [{ start: 30, duration: 90 }, { start: 210, duration: 60 }, { start: 350, duration: 60 }],
+  [{ start: 130, duration: 60 }, { start: 290, duration: 120 }],
+  [{ start: 55, duration: 60 }, { start: 190, duration: 90 }, { start: 390, duration: 60 }],
+  [{ start: 105, duration: 90 }, { start: 320, duration: 60 }],
+  [{ start: 45, duration: 60 }, { start: 240, duration: 60 }],
+  [{ start: 160, duration: 90 }, { start: 370, duration: 60 }],
+];
+
+/**
+ * Skeleton locale della griglia agenda: header giorni + gutter orario +
+ * colonne con blocchi-guida shimmer. Mostrato SOLO al primissimo caricamento
+ * (i refetch tengono la griglia reale montata, solo attenuata).
+ */
+function AgendaGridSkeleton({ columns }: { columns: number }) {
+  const hourRows = Array.from({ length: 10 }, (_, i) => i);
+  const gridTemplateColumns = `56px repeat(${columns}, 1fr)`;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-sm transition",
-        active
-          ? "border-yellow-200 bg-yellow-50 text-yellow-700 shadow-sm"
-          : "border-dashed border-border bg-white text-muted-foreground hover:bg-gray-50",
-      )}
+    <div
+      className="overflow-hidden rounded-2xl border border-border bg-white shadow-card"
+      style={{ height: "calc(100vh - 240px)", minHeight: 400 }}
     >
-      <SlidersHorizontal className="h-3.5 w-3.5" />
-      <span>{label}</span>
-      {displayValue ? (
-        <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-[11px] font-medium text-yellow-700">
-          {displayValue}
-        </span>
-      ) : null}
-    </button>
+      {/* Day headers */}
+      <div className="grid border-b border-[#eeeeee]" style={{ gridTemplateColumns }}>
+        <div className="border-r border-[#eeeeee] bg-[#fafafa]" />
+        {Array.from({ length: columns }).map((_, index) => (
+          <div key={index} className="flex flex-col items-center gap-1.5 border-l border-[#eeeeee] py-2">
+            <Skeleton className="h-2 w-7 rounded-full" />
+            <Skeleton className="size-[34px] rounded-full" />
+          </div>
+        ))}
+      </div>
+      {/* Body: time gutter + columns */}
+      <div className="relative grid h-full" style={{ gridTemplateColumns }}>
+        <div className="relative border-r border-[#eeeeee] bg-[#fafafa]">
+          {hourRows.map((row) => (
+            <div
+              key={row}
+              className="absolute left-0 right-0 flex justify-end pr-2"
+              style={{ top: row * 60 * PIXELS_PER_MINUTE + 4 }}
+            >
+              <Skeleton className="h-2.5 w-8 rounded-full" />
+            </div>
+          ))}
+        </div>
+        {Array.from({ length: columns }).map((_, colIndex) => (
+          <div key={colIndex} className="relative border-l border-[#eeeeee] bg-white">
+            {hourRows.map((row) => (
+              <div
+                key={row}
+                className="absolute left-0 right-0 h-px bg-[#f5f5f5]"
+                style={{ top: row * 60 * PIXELS_PER_MINUTE }}
+              />
+            ))}
+            {SKELETON_GRID_BLOCKS[colIndex % SKELETON_GRID_BLOCKS.length].map((block, blockIndex) => (
+              <Skeleton
+                key={blockIndex}
+                className="absolute left-[3px] right-[3px] rounded-[10px]"
+                style={{
+                  top: block.start * PIXELS_PER_MINUTE,
+                  height: block.duration * PIXELS_PER_MINUTE - 2,
+                }}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
+
+function AgendaDayHeader({
+  day,
+  isToday,
+  isHoliday,
+}: {
+  day: Date;
+  isToday: boolean;
+  isHoliday: boolean;
+}) {
+  const dow = day.getDay();
+  const isWeekend = dow === 0 || dow === 6;
+  return (
+    <div
+      className={cn(
+        "relative flex h-16 flex-col items-center justify-center gap-0.5 border-l border-[#eeeeee]",
+        isHoliday ? "bg-[#fffcf0]" : isWeekend ? "bg-[#fafafa]" : "bg-white",
+      )}
+    >
+      <div
+        className={cn(
+          "text-[10px] font-semibold uppercase tracking-[0.5px]",
+          isHoliday ? "text-amber-500" : "text-[#aaaaaa]",
+        )}
+      >
+        {day.toLocaleDateString("it-IT", { weekday: "short" })}
+      </div>
+      <div
+        className={cn(
+          "flex size-[34px] items-center justify-center rounded-full text-[17px] font-bold",
+          isToday
+            ? "bg-[#222222] text-white"
+            : isHoliday
+              ? "text-amber-600"
+              : isWeekend
+                ? "text-[#999999]"
+                : "text-foreground",
+        )}
+      >
+        {day.getDate()}
+      </div>
+      {isHoliday ? (
+        <span className="absolute right-2 top-1.5 text-[9px] font-semibold uppercase tracking-[0.3px] text-amber-500">
+          festivo
+        </span>
+      ) : null}
+    </div>
+  );
+}
+

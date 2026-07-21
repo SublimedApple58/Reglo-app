@@ -26,3 +26,8 @@
 - `CompanyMember.autoscuolaRole`: OWNER, INSTRUCTOR_OWNER, INSTRUCTOR, STUDENT
 - Helpers: `isOwner()`, `isInstructor()` in `lib/autoscuole/roles.ts`
 - Per-student flags: `bookingBlocked`, `weeklyBookingLimitExempt`, `assignedInstructorId`
+
+## Web app: solo admin / istruttori admin
+- La web app (tutto sotto `/[locale]/user/*`) è **riservata a OWNER e INSTRUCTOR_OWNER**.
+- Gate in `app/[locale]/user/layout.tsx` → `requireCompanyAdmin(locale)` (`membership.role === 'admin'`, cioè OWNER/INSTRUCTOR_OWNER). Allievi e istruttori "semplici" (STUDENT/INSTRUCTOR) vengono reindirizzati a `/[locale]/unauthorized`.
+- `app/[locale]/unauthorized/page.tsx` — schermata "Accesso riservato" brandizzata (in italiano), personalizzata con nome+ruolo quando disponibili, con logout (`signOutUser`) e rimando all'app mobile. Loro usano l'app mobile Reglo.

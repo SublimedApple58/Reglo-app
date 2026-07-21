@@ -24,7 +24,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 import { DashboardSkeleton } from "@/components/ui/page-skeleton";
 
 type Overview = {
@@ -134,7 +133,6 @@ export function AutoscuoleDashboardPage({
       subTitle={`Vista rapida su guide, pratiche e incassi — ${todayLabel}`}
     >
       <div className="relative w-full space-y-6" data-testid="autoscuole-dashboard-page">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
         {loading ? (

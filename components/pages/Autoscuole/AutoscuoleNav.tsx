@@ -1,27 +1,27 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
-import Link from "next/link";
 
-import { cn } from "@/lib/utils";
 import { companyAtom } from "@/atoms/company.store";
-import { getServiceLimits } from "@/lib/services";
+import { isSecretaryOnly, isLicenseRenewalEnabled } from "@/lib/services";
+import { cn } from "@/lib/utils";
 
-type NavItem = { label: string; tab: string | null; href: string | null };
-
-const baseNavItems: NavItem[] = [
-  { label: "Dashboard", tab: null, href: null },
-  { label: "Allievi", tab: "students", href: null },
-  { label: "Agenda", tab: "agenda", href: null },
-  { label: "Configurazione", tab: "settings", href: null },
-  { label: "Pagamenti", tab: "payments", href: null },
-  { label: "Segretaria", tab: "voice", href: null },
-];
-
-// Tabs that live on their own standalone route instead of ?tab= on the main page.
-const STANDALONE_TABS = new Set(["voice", "rinnovi"]);
+/**
+ * Top nav del redesign Airbnb: tab centrali con icona 3D sopra la label e
+ * underline navy sull'attiva (stile tri-tab category picker). Dashboard non
+ * esiste più: la landing è l'Agenda. Configurazione/Pagamenti/Utenti vivono
+ * nel menu hamburger della shell.
+ */
+const navItems = [
+  { label: "Agenda", tab: "agenda", icon: "/images/nav/agenda-3d.png" },
+  { label: "Allievi", tab: "students", icon: "/images/nav/allievi-3d.png" },
+  { label: "Segretaria", tab: "voice", icon: "/images/nav/segretaria-3d.png" },
+  { label: "Rinnovi", tab: "rinnovi", icon: "/images/nav/rinnovi-3d.png" },
+] as const;
 
 export function AutoscuoleNav() {
   const pathname = usePathname() ?? "";
@@ -29,62 +29,60 @@ export function AutoscuoleNav() {
   const locale = useLocale();
   const company = useAtomValue(companyAtom);
 
-  const renewalEnabled = Boolean(
-    getServiceLimits(company?.services, "AUTOSCUOLE").licenseRenewalEnabled,
-  );
-
-  const navItems: NavItem[] = [
-    ...baseNavItems,
-    ...(renewalEnabled ? [{ label: "Rinnovi", tab: "rinnovi", href: null }] : []),
-    { label: "Users", tab: null, href: "/admin/users" },
-  ];
-
   const currentTab = searchParams.get("tab") ?? null;
   const basePath = `/${locale}/user/autoscuole`;
+  const isOnAutoscuolePage = pathname === basePath;
 
-  // Handle both ?tab= navigation and standalone path navigation
-  const isOnAutoscuolePage = pathname === basePath || pathname.startsWith(`${basePath}?`);
+  // Modalità "solo Segretaria": mostra unicamente la tab Segretaria.
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  // Rinnovo Patenti: se la company non ha il modulo, la tab non esiste proprio.
+  const renewalEnabled = isLicenseRenewalEnabled(company?.services ?? null);
+  const items = secretaryOnly
+    ? navItems.filter((item) => item.tab === "voice")
+    : navItems.filter((item) => item.tab !== "rinnovi" || renewalEnabled);
 
   return (
-    <nav className="flex items-center gap-1 rounded-full bg-pink-50/80 p-1.5 border border-pink-200/50 shadow-[0_1px_3px_rgba(0,0,0,0.12)] backdrop-blur-md">
-      {navItems.map((item) => {
+    <nav className="flex h-full items-stretch justify-center overflow-x-auto [scrollbar-width:none]">
+      {items.map((item) => {
         let isActive: boolean;
-        if (item.href) {
-          // Standalone path (e.g. /admin/users)
-          const fullHref = `/${locale}${item.href}`;
-          isActive = pathname === fullHref || pathname.startsWith(`${fullHref}/`);
+        if (item.tab === "voice") {
+          isActive = pathname.startsWith(`${basePath}/voice`);
         } else if (isOnAutoscuolePage) {
-          // Tab-based navigation (AutoscuoleTabsPage)
-          isActive = currentTab === item.tab;
+          // L'agenda è la landing: attiva anche senza ?tab.
+          isActive = currentTab === item.tab || (item.tab === "agenda" && currentTab === null);
         } else {
-          // Standalone path navigation (e.g. /user/autoscuole/voice)
-          const itemPath = item.tab ? `${basePath}/${item.tab}` : basePath;
-          isActive =
-            pathname === itemPath ||
-            (item.tab !== null && pathname.startsWith(`${itemPath}/`));
+          isActive = false;
         }
 
-        // Build href
-        const href = item.href
-          ? `/${locale}${item.href}`
-          : item.tab && STANDALONE_TABS.has(item.tab)
-            ? `${basePath}/${item.tab}`
-            : item.tab
-              ? `${basePath}?tab=${item.tab}`
-              : basePath;
+        const href =
+          item.tab === "voice" ? `${basePath}/voice` : `${basePath}?tab=${item.tab}`;
 
         return (
           <Link
             key={item.label}
             href={href}
             className={cn(
-              "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-all duration-[var(--motion-fast)]",
-              isActive
-                ? "bg-white text-primary shadow-sm border border-pink-200/60"
-                : "text-pink-800/50 hover:text-pink-800",
+              "flex shrink-0 select-none flex-col items-center justify-center border-b-2 px-4 transition-colors sm:px-[22px]",
+              isActive ? "border-navy-900" : "border-transparent",
             )}
           >
-            {item.label}
+            <div className="mb-1 flex h-[46px] w-[46px] shrink-0 items-center justify-center">
+              <Image
+                src={item.icon}
+                alt=""
+                width={42}
+                height={42}
+                className="block h-[42px] w-[42px] object-contain"
+              />
+            </div>
+            <span
+              className={cn(
+                "whitespace-nowrap text-xs transition-colors",
+                isActive ? "font-semibold text-foreground" : "font-medium text-[#6a6a6a]",
+              )}
+            >
+              {item.label}
+            </span>
           </Link>
         );
       })}

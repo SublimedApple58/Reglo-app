@@ -38,6 +38,12 @@ type AutoscuolaRole = "OWNER" | "INSTRUCTOR_OWNER" | "INSTRUCTOR" | "STUDENT";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Blocca il ruolo (nasconde la select) — es. "Aggiungi istruttore" dalle Impostazioni. */
+  fixedAutoscuolaRole?: AutoscuolaRole;
+  title?: string;
+  description?: string;
+  /** Chiamata dopo una creazione andata a buon fine (es. refresh lista istruttori). */
+  onCreated?: () => void;
 };
 
 const NO_INSTRUCTOR = "__none__";
@@ -52,11 +58,27 @@ const defaultForm = {
   assignedInstructorId: NO_INSTRUCTOR,
 };
 
-export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.ReactElement {
+export function AdminUsersCreateDialog({
+  open,
+  onOpenChange,
+  fixedAutoscuolaRole,
+  title,
+  description,
+  onCreated,
+}: Props): React.ReactElement {
   const company = useAtomValue(companyAtom);
   const toast = useFeedbackToast();
-  const [form, setForm] = React.useState(defaultForm);
+  const [form, setForm] = React.useState({
+    ...defaultForm,
+    ...(fixedAutoscuolaRole ? { autoscuolaRole: fixedAutoscuolaRole } : {}),
+  });
   const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (open && fixedAutoscuolaRole) {
+      setForm((p) => ({ ...p, autoscuolaRole: fixedAutoscuolaRole }));
+    }
+  }, [open, fixedAutoscuolaRole]);
 
   const isAutoscuola =
     company?.services?.some((s) => s.key === "AUTOSCUOLE" && s.status === "active") ?? false;
@@ -119,8 +141,12 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
       if (!res.success) throw new Error(res.message ?? "Errore.");
 
       toast.success({ title: "Utente creato", description: res.message });
-      setForm(defaultForm);
+      setForm({
+        ...defaultForm,
+        ...(fixedAutoscuolaRole ? { autoscuolaRole: fixedAutoscuolaRole } : {}),
+      });
       onOpenChange(false);
+      onCreated?.();
     } catch (error) {
       toast.error({
         description: error instanceof Error ? error.message : "Errore nella creazione.",
@@ -134,9 +160,9 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Crea utente</DialogTitle>
+          <DialogTitle>{title ?? "Crea utente"}</DialogTitle>
           <DialogDescription>
-            Crea direttamente un account e aggiungilo alla tua company.
+            {description ?? "Crea direttamente un account e aggiungilo alla tua company."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -173,7 +199,7 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
               minLength={6}
             />
           </div>
-          {isAutoscuola && (
+          {isAutoscuola && !fixedAutoscuolaRole && (
             <div className="space-y-2">
               <Label>Ruolo autoscuola</Label>
               <Select
@@ -260,7 +286,7 @@ export function AdminUsersCreateDialog({ open, onOpenChange }: Props): React.Rea
           <DialogFooter>
             <Button type="submit" disabled={loading} className="w-full sm:w-auto">
               <UserPlus className="h-4 w-4" />
-              {loading ? "Creazione..." : "Crea utente"}
+              {loading ? "Creazione..." : title ?? "Crea utente"}
             </Button>
           </DialogFooter>
         </form>

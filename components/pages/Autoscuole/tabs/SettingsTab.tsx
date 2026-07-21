@@ -2,17 +2,26 @@
 
 import React from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Bell, CalendarDays, Check, ChevronDown, ClipboardList, KeyRound, Loader2, MapPin } from "lucide-react";
+import {
+  ArrowRight,
+  Bell,
+  Check,
+  ChevronDown,
+  ClipboardList,
+  Coffee,
+  MapPin,
+  Moon,
+  Plus,
+  Send,
+  X,
+} from "lucide-react";
 
 import { LocationsSection } from "@/components/pages/Autoscuole/locations/LocationsSection";
-
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/animate-ui/radix/checkbox";
-import {
-  getQuizSeatsContext,
-  setAutoAssignQuizOnSignup,
-} from "@/lib/actions/autoscuole-settings.actions";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { triggerEmptySlotNotification } from "@/lib/actions/autoscuole-settings.actions";
+
 import {
   Select,
   SelectContent,
@@ -20,10 +29,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FieldGroup } from "@/components/ui/field-group";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { InlineToggle } from "@/components/ui/inline-toggle";
-import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -35,22 +44,23 @@ type LessonConstraintMap = Record<LessonTypeValue, LessonConstraintState>;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const BOOKING_DURATION_OPTIONS = [30, 45, 60, 90, 120] as const;
-const APP_BOOKING_ACTOR_OPTIONS = [
-  { value: "students", label: "Solo allievi" },
-  { value: "instructors", label: "Solo istruttori" },
-  { value: "both", label: "Entrambi" },
-] as const;
-const INSTRUCTOR_BOOKING_MODE_OPTIONS = [
-  { value: "manual_full", label: "Manuale totale" },
-  { value: "manual_engine", label: "Manuale + motore annullamenti" },
-] as const;
 const CHANNEL_OPTIONS = [
-  { value: "push", label: "Push" },
+  { value: "push", label: "Notifica" },
   { value: "whatsapp", label: "WhatsApp" },
   { value: "email", label: "Email" },
 ] as const;
 const REMINDER_OPTIONS = [120, 60, 30, 20, 15] as const;
+// Mezz'ore accettate dal backend per gli invii della notifica slot vuoti
+const NOTIFICATION_TIME_OPTIONS = [
+  "08:00", "08:30", "09:00", "09:30",
+  "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30",
+  "14:00", "14:30", "15:00", "15:30",
+  "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30",
+  "20:00", "20:30", "21:00", "21:30",
+  "22:00",
+];
 const LESSON_TYPE_OPTIONS = [
   { value: "manovre", label: "Manovre" },
   { value: "urbano", label: "Urbano" },
@@ -93,42 +103,48 @@ function formatMinutes(totalMinutes: number) {
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
+/** Chiavi delle sezioni renderizzabili in modalità standalone (overlay Impostazioni) */
+export type SettingsSectionKey = "reminders" | "policy" | "locations";
+
 export type SettingsTabProps = {
   expandedSection: string | null;
   toggleSection: (key: string) => void;
-  // Booking settings
-  availabilityWeeks: string;
-  setAvailabilityWeeks: (v: string) => void;
-  bookingMinStartDate: string;
-  setBookingMinStartDate: (v: string) => void;
-  appBookingActors: string;
-  setAppBookingActors: (v: string) => void;
-  instructorBookingMode: string;
-  setInstructorBookingMode: (v: string) => void;
-  bookingSlotDurations: number[];
-  toggleBookingDuration: (d: number) => void;
-  roundedHoursOnly: boolean;
-  setRoundedHoursOnly: React.Dispatch<React.SetStateAction<boolean>>;
-  // Reminders
+  /**
+   * Se valorizzata, renderizza SOLO quella sezione senza chrome accordion
+   * (usata dall'overlay "Impostazioni dell'account" del redesign).
+   */
+  section?: SettingsSectionKey;
+  // Reminders (pane auto-save: ogni modifica persiste subito il campo toccato)
   studentReminderMinutes: string;
-  setStudentReminderMinutes: (v: string) => void;
   studentReminderMorningEnabled: boolean;
-  setStudentReminderMorningEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentReminderMorningTime: string;
-  setStudentReminderMorningTime: (v: string) => void;
   studentReminderDayBeforeEnabled: boolean;
-  setStudentReminderDayBeforeEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   studentReminderDayBeforeTime: string;
-  setStudentReminderDayBeforeTime: (v: string) => void;
   instructorReminderMinutes: string;
-  setInstructorReminderMinutes: (v: string) => void;
+  instructorReminderEnabled: boolean;
   slotFillChannels: ChannelValue[];
   studentReminderChannels: ChannelValue[];
   instructorReminderChannels: ChannelValue[];
-  toggleChannel: (channel: ChannelValue, setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>) => void;
-  setSlotFillChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
-  setStudentReminderChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
-  setInstructorReminderChannels: React.Dispatch<React.SetStateAction<ChannelValue[]>>;
+  updateReminderSettings: (patch: {
+    studentReminderMinutes?: number;
+    instructorReminderMinutes?: number;
+    instructorReminderEnabled?: boolean;
+    studentReminderMorningEnabled?: boolean;
+    studentReminderMorningTime?: string;
+    studentReminderDayBeforeEnabled?: boolean;
+    studentReminderDayBeforeTime?: string;
+    slotFillChannels?: ChannelValue[];
+    studentReminderChannels?: ChannelValue[];
+    instructorReminderChannels?: ChannelValue[];
+  }) => Promise<void>;
+  // Notifica slot vuoti (card del proto nel pane reminders; spostata da
+  // "Prenotazioni e allievi > App allievi" il 2026-07-12)
+  emptySlotNotificationEnabled: boolean;
+  setEmptySlotNotificationEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  emptySlotNotificationTarget: "all" | "availability_matching";
+  setEmptySlotNotificationTarget: (v: "all" | "availability_matching") => void;
+  emptySlotNotificationTimes: string[];
+  setEmptySlotNotificationTimes: React.Dispatch<React.SetStateAction<string[]>>;
   // Policy
   lessonPolicyEnabled: boolean;
   setLessonPolicyEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -140,134 +156,9 @@ export type SettingsTabProps = {
   toggleConstraintEnabled: (t: LessonTypeValue) => void;
   toggleConstraintDay: (t: LessonTypeValue, d: number) => void;
   updateConstraintWindow: (t: LessonTypeValue, field: "startMinutes" | "endMinutes", v: string) => void;
-  // Save
-  handleSaveSettings: () => Promise<void>;
-  savingSettings: boolean;
 };
 
 // ── Sub-components (local) ────────────────────────────────────────────────────
-
-/**
- * Self-contained accordion section for the "Modalità registrazione allievi"
- * setting. Fetches its own quiz-seats context (so it can show the live
- * counter + preview the FIFO promotion when toggling ON) and persists
- * autoAssignQuizOnSignup through its own server action.
- *
- * Visible only when the autoscuola has 'TEORIA' in phasesEnabled — otherwise
- * the toggle has no semantic meaning.
- */
-function RegistrationModeSection({
-  expanded,
-  onToggle,
-}: {
-  expanded: boolean;
-  onToggle: () => void;
-}) {
-  const toast = useFeedbackToast();
-  type Ctx = {
-    quizSeats: number;
-    used: number;
-    available: number;
-    phasesEnabled: ("TEORIA" | "PRATICA")[];
-    autoAssignQuizOnSignup: boolean;
-  };
-  const [ctx, setCtx] = React.useState<Ctx | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [saving, setSaving] = React.useState(false);
-
-  const refresh = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getQuizSeatsContext();
-      if (res.success) setCtx(res.data);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  // If TEORIA is not part of the autoscuola's journey, the toggle has no
-  // meaning — hide the entire section.
-  if (!loading && (!ctx || !ctx.phasesEnabled.includes("TEORIA"))) {
-    return null;
-  }
-
-  const handleToggle = async (next: boolean) => {
-    setSaving(true);
-    try {
-      const res = await setAutoAssignQuizOnSignup({ enabled: next });
-      if (!res.success) {
-        toast.error({ description: res.message ?? "Impossibile aggiornare." });
-        return;
-      }
-      toast.success({ description: res.message ?? "Modalità aggiornata." });
-      await refresh();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const enabled = ctx?.autoAssignQuizOnSignup ?? false;
-  const available = ctx?.available ?? 0;
-  const used = ctx?.used ?? 0;
-  const quizSeats = ctx?.quizSeats ?? 0;
-
-  return (
-    <AccordionSection
-      icon={KeyRound}
-      title="Modalità registrazione allievi"
-      description="Cosa succede quando un nuovo allievo si registra con il codice autoscuola."
-      expanded={expanded}
-      onToggle={onToggle}
-      isLast
-    >
-      <div className="space-y-4">
-        <div className="rounded-xl border border-border bg-white p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                Assegnazione automatica della licenza quiz alla registrazione
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {enabled
-                  ? "I nuovi allievi ricevono subito una licenza quiz (se disponibile) e partono direttamente in fase Teoria."
-                  : "I nuovi allievi entrano in stato 'In attesa di attivazione'. Devi assegnare la licenza manualmente per farli partire dalla teoria."}
-              </p>
-              {!enabled && available > 0 && (
-                <p className="mt-2 text-[11px] text-amber-700">
-                  Attivando l&apos;auto-assegnazione, gli allievi attualmente in attesa
-                  riceveranno automaticamente una licenza (fino a {available} posti
-                  liberi, ordine cronologico di registrazione).
-                </p>
-              )}
-            </div>
-            <Checkbox
-              checked={enabled}
-              disabled={saving || loading}
-              onCheckedChange={(checked) => void handleToggle(Boolean(checked))}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between rounded-xl border border-border bg-gray-50/60 px-4 py-3 text-xs">
-          <span className="text-muted-foreground">Licenze quiz</span>
-          <span className="font-medium text-foreground tabular-nums">
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <>
-                {used} <span className="text-muted-foreground">/ {quizSeats}</span> usate
-              </>
-            )}
-          </span>
-        </div>
-      </div>
-    </AccordionSection>
-  );
-}
 
 function AccordionSection({
   icon: Icon,
@@ -277,6 +168,7 @@ function AccordionSection({
   onToggle,
   isFirst,
   isLast,
+  standalone,
   children,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -286,8 +178,20 @@ function AccordionSection({
   onToggle: () => void;
   isFirst?: boolean;
   isLast?: boolean;
+  /** Rende solo il contenuto, senza header cliccabile né bordi (overlay Impostazioni) */
+  standalone?: boolean;
   children: React.ReactNode;
 }) {
+  if (standalone) {
+    return (
+      <div>
+        {description && (
+          <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">{description}</p>
+        )}
+        {children}
+      </div>
+    );
+  }
   return (
     <div className={cn(!isFirst && "border-t border-border")}>
       <div
@@ -302,8 +206,8 @@ function AccordionSection({
         )}
       >
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-yellow-50">
-            <Icon className="h-4 w-4 text-yellow-600" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eef0f6]">
+            <Icon className="h-4 w-4 text-navy-900" />
           </span>
           <div>
             <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -348,56 +252,321 @@ function PolicySwitch({
   description?: string;
 }) {
   return (
-    <div
-      role="switch"
-      tabIndex={0}
-      aria-checked={checked}
-      onClick={onChange}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onChange(); } }}
-      className={cn(
-        "flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border px-4 py-3 text-left transition-all duration-150",
-        checked
-          ? "border-yellow-200 bg-yellow-50 hover:bg-yellow-100/50"
-          : "border-border bg-white hover:bg-gray-50",
-      )}
-    >
+    <div className="flex w-full items-center justify-between gap-4 rounded-[10px] bg-[#f8f8f8] p-4 text-left">
       <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
+        <div className="text-sm font-semibold text-foreground">{label}</div>
         {description && (
-          <div className="text-xs text-muted-foreground">{description}</div>
+          <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{description}</div>
         )}
       </div>
-      <InlineToggle checked={checked} />
+      <InlineToggle checked={checked} onChange={onChange} size="lg" />
     </div>
   );
 }
 
-function ChannelGroup({
+/** Card "Modalità di invio" del proto: canali con check circolari near-black. */
+function ChannelCard({
   title,
+  info,
   value,
-  onToggle,
+  onChange,
+  disabled,
 }: {
   title: string;
+  /** Testo del tooltip info accanto al titolo (stile proto, dark). */
+  info?: string;
   value: ChannelValue[];
-  onToggle: (channel: ChannelValue) => void;
+  onChange: (next: ChannelValue[]) => void;
+  /** Attenua la card quando il promemoria relativo è disattivato. */
+  disabled?: boolean;
+}) {
+  const [infoOpen, setInfoOpen] = React.useState(false);
+  return (
+    <div
+      className={cn(
+        "rounded-[12px] border border-[#e8e8e8] bg-white p-4",
+        disabled && "pointer-events-none opacity-45",
+      )}
+    >
+      <div className="mb-3 flex items-center gap-1.5">
+        <span className="text-[13px] font-semibold text-[#222222]">{title}</span>
+        {info && (
+          <span
+            className="relative inline-flex items-center"
+            onMouseEnter={() => setInfoOpen(true)}
+            onMouseLeave={() => setInfoOpen(false)}
+            onClick={() => setInfoOpen((prev) => !prev)}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" className="flex-none cursor-pointer">
+              <circle cx="7" cy="7" r="6" stroke="#b0b0b0" strokeWidth="1.2" />
+              <path d="M7 6.2v3.3" stroke="#b0b0b0" strokeWidth="1.4" strokeLinecap="round" />
+              <circle cx="7" cy="4.2" r="0.85" fill="#b0b0b0" />
+            </svg>
+            {infoOpen && (
+              <div className="absolute bottom-[calc(100%+8px)] left-1/2 z-[300] w-[210px] -translate-x-1/2 rounded-[8px] bg-[#222222] px-[11px] py-[9px] text-[11.5px] font-normal leading-[1.45] text-white shadow-[0_4px_14px_rgba(0,0,0,0.18)]">
+                {info}
+                <span className="absolute left-1/2 top-full -translate-x-1/2 border-[5px] border-transparent border-t-[#222222]" />
+              </div>
+            )}
+          </span>
+        )}
+      </div>
+      <div className="flex flex-col gap-2.5">
+        {CHANNEL_OPTIONS.map((channel) => {
+          const checked = value.includes(channel.value);
+          return (
+            <div key={channel.value} className="flex items-center justify-between">
+              <span className="text-[13px] font-medium text-[#555555]">{channel.label}</span>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                aria-label={`${channel.label} — ${title}`}
+                onClick={() =>
+                  onChange(
+                    checked
+                      ? value.filter((item) => item !== channel.value)
+                      : [...value, channel.value],
+                  )
+                }
+                className={cn(
+                  "flex size-[22px] shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors",
+                  checked
+                    ? "bg-[#222222]"
+                    : "border-[1.5px] border-[#d6d6d6] bg-white hover:border-[#929292]",
+                )}
+              >
+                {checked && <Check className="size-3 text-white" strokeWidth={2.6} />}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Riga FLAT del proto (Promemoria mattutino / giorno prima): icona+titolo,
+ *  sub grigio, toggle a destra, divider sotto; orario rivelato quando attivo. */
+function ReminderBanner({
+  icon: Icon,
+  title,
+  description,
+  checked,
+  onToggle,
+  timeValue,
+  minTime,
+  maxTime,
+  onTimeChange,
+}: {
+  icon: React.ComponentType<{ className?: string; strokeWidth?: string | number }>;
+  title: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+  timeValue: string;
+  /** Limiti opzionali: senza, il picker naviga tutte le 24 ore. */
+  minTime?: string;
+  maxTime?: string;
+  onTimeChange: (v: string) => void;
 }) {
   return (
-    <div className="space-y-2 rounded-xl border border-border bg-gray-50/50 p-3">
-      <div className="text-xs font-medium text-foreground">{title}</div>
-      <div className="space-y-2">
-        {CHANNEL_OPTIONS.map((channel) => (
-          <label
-            key={channel.value}
-            className="flex cursor-pointer items-center justify-between gap-2 text-xs text-foreground"
-          >
-            <span>{channel.label}</span>
-            <Checkbox
-              checked={value.includes(channel.value)}
-              onCheckedChange={() => onToggle(channel.value)}
-            />
-          </label>
-        ))}
+    <div className="border-b border-[#ebebeb] py-[18px]">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 text-[15px] font-semibold text-[#222222]">
+            <Icon className="size-[17px] shrink-0" strokeWidth={2} />
+            {title}
+          </div>
+          <div className="mt-0.5 text-sm font-medium text-[#929292]">{description}</div>
+        </div>
+        <InlineToggle checked={checked} onChange={onToggle} size="lg" />
       </div>
+      {checked && (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-[#555555]">Orario di invio</span>
+          <TimePickerInput
+            value={timeValue}
+            onChange={onTimeChange}
+            minTime={minTime}
+            maxTime={maxTime}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Sezione FLAT "Notifica slot disponibili domani" del proto: riga
+ *  titolo+sub+toggle con divider, poi Destinatari, Orari di invio e la riga
+ *  "Invia ora per domani" con bottone pill outline. Nessuna card. */
+function EmptySlotNotificationSection({
+  enabled,
+  setEnabled,
+  target,
+  setTarget,
+  times,
+  setTimes,
+}: {
+  enabled: boolean;
+  setEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  target: "all" | "availability_matching";
+  setTarget: (v: "all" | "availability_matching") => void;
+  times: string[];
+  setTimes: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
+  const toast = useFeedbackToast();
+  const [sending, setSending] = React.useState(false);
+  // Overlay di esito del proto ("Notifica inviata!")
+  const [sentOverlay, setSentOverlay] = React.useState(false);
+
+  return (
+    <div className="mt-7">
+      <SuccessOverlay
+        open={sentOverlay}
+        onClose={() => setSentOverlay(false)}
+        image="/images/settings/notifica-inviata.png"
+        title="Notifica inviata!"
+        subtitle="Gli allievi idonei riceveranno la notifica a breve."
+        blend
+      />
+      {/* Riga toggle */}
+      <div className="flex items-center justify-between gap-4 border-b border-[#ebebeb] pb-[18px]">
+        <div>
+          <div className="text-[15px] font-semibold text-foreground">
+            Notifica slot disponibili domani
+          </div>
+          <div className="mt-0.5 text-sm font-medium text-[#929292]">
+            Ogni sera gli allievi riceveranno una notifica push se ci sono guide libere
+            per il giorno dopo.
+          </div>
+        </div>
+        <InlineToggle checked={enabled} onChange={() => setEnabled((prev) => !prev)} size="lg" />
+      </div>
+
+      {enabled && (
+        <>
+              <div className="mt-4">
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Destinatari</div>
+                <Select
+                  value={target}
+                  onValueChange={(value) => setTarget(value as "all" | "availability_matching")}
+                >
+                  <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[320px] max-w-full")}>
+                    <SelectValue placeholder="Destinatari" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="availability_matching">
+                      Solo allievi con disponibilità corrispondente
+                    </SelectItem>
+                    <SelectItem value="all">Tutti gli allievi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2.5 text-xs font-semibold text-[#555555]">Orari di invio</div>
+                {/* Un TimePicker per ogni invio della giornata: la "x" toglie
+                    l'orario (min 1), il "+" ne aggiunge un altro. Il backend
+                    accetta solo mezz'ore tra 08:00 e 22:00. */}
+                <div className="flex flex-wrap items-center gap-2.5">
+                  {times.map((time) => (
+                    <div key={time} className="group relative">
+                      <TimePickerInput
+                        value={time}
+                        minTime="08:00"
+                        maxTime="22:00"
+                        minuteStep={30}
+                        onChange={(next) => {
+                          setTimes((prev) => {
+                            if (prev.includes(next)) {
+                              toast.error({
+                                description: `Le ${next} sono già tra gli orari di invio.`,
+                              });
+                              return prev;
+                            }
+                            return prev.map((t) => (t === time ? next : t)).sort();
+                          });
+                        }}
+                      />
+                      {times.length > 1 && (
+                        <button
+                          type="button"
+                          aria-label={`Rimuovi orario ${time}`}
+                          onClick={() => setTimes((prev) => prev.filter((t) => t !== time))}
+                          className="absolute -right-1.5 -top-1.5 flex size-[18px] cursor-pointer items-center justify-center rounded-full bg-[#222222] text-white opacity-0 shadow-sm transition-opacity hover:bg-black focus-visible:opacity-100 group-hover:opacity-100"
+                        >
+                          <X className="size-3" strokeWidth={2.4} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {times.length < NOTIFICATION_TIME_OPTIONS.length && (
+                    <button
+                      type="button"
+                      aria-label="Aggiungi orario di invio"
+                      onClick={() =>
+                        setTimes((prev) => {
+                          // Primo slot libero dopo l'ultimo orario scelto (poi da capo)
+                          const last = prev[prev.length - 1];
+                          const free = [
+                            ...NOTIFICATION_TIME_OPTIONS.filter((t) => t > last),
+                            ...NOTIFICATION_TIME_OPTIONS,
+                          ].find((t) => !prev.includes(t));
+                          return free ? [...prev, free].sort() : prev;
+                        })
+                      }
+                      className="flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] border-dashed border-[#c9c9c9] text-[#222222] transition-colors hover:border-[#222222] hover:bg-[#fafafa]"
+                    >
+                      <Plus className="size-4" strokeWidth={2.2} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Invia ora per domani (riga del proto) */}
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-foreground">Invia ora per domani</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-[#929292]">
+                    Invia subito la notifica di guide disponibili per domani a tutti gli
+                    allievi idonei.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={sending}
+                  onClick={async () => {
+                    setSending(true);
+                    try {
+                      const res = await triggerEmptySlotNotification();
+                      if (res.success && res.data) {
+                        setSentOverlay(true);
+                      } else {
+                        toast.error({
+                          description: res.message ?? "Impossibile inviare la notifica.",
+                        });
+                      }
+                    } catch {
+                      toast.error({ description: "Impossibile inviare la notifica." });
+                    } finally {
+                      setSending(false);
+                    }
+                  }}
+                  className="inline-flex shrink-0 cursor-pointer items-center gap-2 rounded-full border-[1.5px] border-[#dddddd] px-[22px] py-[11px] text-[15px] font-semibold text-foreground transition-colors hover:border-[#222222] disabled:pointer-events-none disabled:opacity-60"
+                >
+                  {sending ? (
+                    <LoadingDots className="min-h-[1.5em] scale-[0.8]" />
+                  ) : (
+                    <>
+                      <Send className="size-[15px]" strokeWidth={1.7} />
+                      Invia notifica
+                    </>
+                  )}
+                </button>
+              </div>
+        </>
+      )}
     </div>
   );
 }
@@ -407,37 +576,23 @@ function ChannelGroup({
 function SettingsTab({
   expandedSection,
   toggleSection,
-  availabilityWeeks,
-  setAvailabilityWeeks,
-  bookingMinStartDate,
-  setBookingMinStartDate,
-  appBookingActors,
-  setAppBookingActors,
-  instructorBookingMode,
-  setInstructorBookingMode,
-  bookingSlotDurations,
-  toggleBookingDuration,
-  roundedHoursOnly,
-  setRoundedHoursOnly,
   studentReminderMinutes,
-  setStudentReminderMinutes,
   studentReminderMorningEnabled,
-  setStudentReminderMorningEnabled,
   studentReminderMorningTime,
-  setStudentReminderMorningTime,
   studentReminderDayBeforeEnabled,
-  setStudentReminderDayBeforeEnabled,
   studentReminderDayBeforeTime,
-  setStudentReminderDayBeforeTime,
   instructorReminderMinutes,
-  setInstructorReminderMinutes,
+  instructorReminderEnabled,
   slotFillChannels,
   studentReminderChannels,
   instructorReminderChannels,
-  toggleChannel,
-  setSlotFillChannels,
-  setStudentReminderChannels,
-  setInstructorReminderChannels,
+  updateReminderSettings,
+  emptySlotNotificationEnabled,
+  setEmptySlotNotificationEnabled,
+  emptySlotNotificationTarget,
+  setEmptySlotNotificationTarget,
+  emptySlotNotificationTimes,
+  setEmptySlotNotificationTimes,
   lessonPolicyEnabled,
   setLessonPolicyEnabled,
   lessonRequiredTypesEnabled,
@@ -448,150 +603,37 @@ function SettingsTab({
   toggleConstraintEnabled,
   toggleConstraintDay,
   updateConstraintWindow,
-  handleSaveSettings,
-  savingSettings,
+  section,
 }: SettingsTabProps) {
+  const standalone = Boolean(section);
+  const show = (key: SettingsSectionKey) => !section || section === key;
   return (
     <>
-      {/* Accordion settings card */}
-      <div className="rounded-2xl border border-border bg-white shadow-card">
-        {/* ── Prenotazioni ── */}
-        <AccordionSection
-          icon={CalendarDays}
-          title="Prenotazioni"
-          description="Durate, attori e settimane di disponibilità visibili in app."
-          expanded={expandedSection === "bookings"}
-          onToggle={() => toggleSection("bookings")}
-          isFirst
-        >
-          <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-              <FieldGroup label="Settimane di disponibilità">
-                <Select value={availabilityWeeks} onValueChange={setAvailabilityWeeks}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Settimane" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Array.from({ length: 12 }, (_, idx) => idx + 1).map((weeks) => (
-                      <SelectItem key={weeks} value={String(weeks)}>
-                        {weeks} settimane
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldGroup>
-
-              <FieldGroup
-                label="Prenotazioni aperte dal"
-                description="Lascia vuoto per nessun limite."
-              >
-                <div className="flex items-center gap-2">
-                  <DatePickerInput
-                    value={bookingMinStartDate}
-                    onChange={setBookingMinStartDate}
-                    placeholder="Nessun limite"
-                  />
-                  {bookingMinStartDate ? (
-                    <button
-                      type="button"
-                      onClick={() => setBookingMinStartDate("")}
-                      className="shrink-0 text-xs text-muted-foreground hover:text-foreground transition"
-                    >
-                      Rimuovi
-                    </button>
-                  ) : null}
-                </div>
-              </FieldGroup>
-
-              <FieldGroup label="Chi può prenotare">
-                <Select
-                  value={appBookingActors}
-                  onValueChange={(value) =>
-                    setAppBookingActors(value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona policy" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {APP_BOOKING_ACTOR_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldGroup>
-
-              {appBookingActors === "instructors" || appBookingActors === "both" ? (
-                <FieldGroup label="Modalità istruttore">
-                  <Select
-                    value={instructorBookingMode}
-                    onValueChange={(value) =>
-                      setInstructorBookingMode(value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleziona modalità" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INSTRUCTOR_BOOKING_MODE_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              ) : null}
-
-            </div>
-
-            <FieldGroup label="Durata prenotazione allievo">
-              <div className="flex flex-wrap gap-2">
-                {BOOKING_DURATION_OPTIONS.map((duration) => (
-                  <ToggleChip
-                    key={duration}
-                    active={bookingSlotDurations.includes(duration)}
-                    onClick={() => toggleBookingDuration(duration)}
-                  >
-                    {duration} min
-                  </ToggleChip>
-                ))}
-              </div>
-            </FieldGroup>
-
-            <div
-              className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-              onClick={() => setRoundedHoursOnly((prev) => !prev)}
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium">Solo orari tondi</span>
-                <span className="text-xs text-muted-foreground">
-                  Proponi agli allievi solo orari pieni (16:00, 17:00, ecc.)
-                </span>
-              </div>
-              <InlineToggle checked={roundedHoursOnly} size="sm" />
-            </div>
-          </div>
-        </AccordionSection>
-
-        {/* ── Reminder e notifiche ── */}
+      {/* Accordion settings card (chrome solo in modalità tab legacy) */}
+      <div className={standalone ? undefined : "rounded-2xl border border-border bg-white shadow-card"}>
+        {/* ── Promemoria e notifiche (layout proto, auto-save) ── */}
+        {show("reminders") && (
         <AccordionSection
           icon={Bell}
-          title="Reminder e notifiche"
-          description="Quando e su quali canali inviare promemoria a allievi e istruttori."
+          title="Promemoria e notifiche"
+          description={standalone ? "" : "Quando e su quali canali inviare promemoria a allievi e istruttori."}
           expanded={expandedSection === "reminders"}
           onToggle={() => toggleSection("reminders")}
+          isFirst
+          standalone={standalone}
         >
-          <div className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-              <FieldGroup label="Reminder allievo">
+          <div>
+            {/* Preavviso a minuti */}
+            <div className="mb-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria allievo</div>
                 <Select
                   value={studentReminderMinutes}
-                  onValueChange={setStudentReminderMinutes}
+                  onValueChange={(value) =>
+                    updateReminderSettings({ studentReminderMinutes: Number(value) })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
                     <SelectValue placeholder="Minuti" />
                   </SelectTrigger>
                   <SelectContent>
@@ -602,13 +644,21 @@ function SettingsTab({
                     ))}
                   </SelectContent>
                 </Select>
-              </FieldGroup>
-              <FieldGroup label="Reminder istruttore">
+              </div>
+              <div>
+                <div className="mb-2 text-xs font-semibold text-[#555555]">Promemoria istruttore</div>
                 <Select
-                  value={instructorReminderMinutes}
-                  onValueChange={setInstructorReminderMinutes}
+                  value={instructorReminderEnabled ? instructorReminderMinutes : "off"}
+                  onValueChange={(value) =>
+                    value === "off"
+                      ? updateReminderSettings({ instructorReminderEnabled: false })
+                      : updateReminderSettings({
+                          instructorReminderEnabled: true,
+                          instructorReminderMinutes: Number(value),
+                        })
+                  }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
                     <SelectValue placeholder="Minuti" />
                   </SelectTrigger>
                   <SelectContent>
@@ -617,100 +667,112 @@ function SettingsTab({
                         {minutes} minuti prima
                       </SelectItem>
                     ))}
+                    <SelectItem value="off">Non inviare</SelectItem>
                   </SelectContent>
                 </Select>
-              </FieldGroup>
-            </div>
-
-            {/* Morning reminder */}
-            <div className="max-w-2xl space-y-3">
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setStudentReminderMorningEnabled((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Reminder mattina del giorno</span>
-                  <span className="text-xs text-muted-foreground">
-                    Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti.
-                  </span>
-                </div>
-                <InlineToggle checked={studentReminderMorningEnabled} size="sm" />
               </div>
-              {studentReminderMorningEnabled && (
-                <FieldGroup label="Orario invio">
-                  <Select value={studentReminderMorningTime} onValueChange={setStudentReminderMorningTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["06:00","06:30","07:00","07:30","08:00","08:30","09:00","09:30","10:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
             </div>
 
-            {/* Day-before reminder */}
-            <div className="max-w-2xl space-y-3">
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setStudentReminderDayBeforeEnabled((prev) => !prev)}
-              >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Reminder il giorno prima</span>
-                  <span className="text-xs text-muted-foreground">
-                    Invia un promemoria il giorno prima della guida, all&apos;orario scelto.
-                  </span>
-                </div>
-                <InlineToggle checked={studentReminderDayBeforeEnabled} size="sm" />
+            {/* Righe flat promemoria extra (proto) */}
+            <div className="mt-1">
+              <ReminderBanner
+                icon={Coffee}
+                title="Promemoria mattutino"
+                description="Invia un promemoria la mattina del giorno della guida, in aggiunta al reminder a minuti."
+                checked={studentReminderMorningEnabled}
+                onToggle={() =>
+                  updateReminderSettings({
+                    studentReminderMorningEnabled: !studentReminderMorningEnabled,
+                  })
+                }
+                timeValue={studentReminderMorningTime}
+                minTime="05:00"
+                maxTime="12:00"
+                onTimeChange={(value) =>
+                  updateReminderSettings({ studentReminderMorningTime: value })
+                }
+              />
+              <ReminderBanner
+                icon={Moon}
+                title="Promemoria il giorno prima"
+                description="Invia un promemoria il giorno prima della guida, all'orario scelto."
+                checked={studentReminderDayBeforeEnabled}
+                onToggle={() =>
+                  updateReminderSettings({
+                    studentReminderDayBeforeEnabled: !studentReminderDayBeforeEnabled,
+                  })
+                }
+                timeValue={studentReminderDayBeforeTime}
+                onTimeChange={(value) =>
+                  updateReminderSettings({ studentReminderDayBeforeTime: value })
+                }
+              />
+            </div>
+
+            {/* Modalità di invio */}
+            <div className="mb-2.5 mt-6">
+              <div className="text-[13px] font-semibold text-[#222222]">Modalità di invio</div>
+              <div className="mt-0.5 text-xs font-medium text-[#929292]">
+                Sconsigliamo l&apos;email per la scarsa leggibilità.
               </div>
-              {studentReminderDayBeforeEnabled && (
-                <FieldGroup label="Orario invio">
-                  <Select value={studentReminderDayBeforeTime} onValueChange={setStudentReminderDayBeforeTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
             </div>
-
             <div className="grid gap-3 sm:grid-cols-3">
-              <ChannelGroup
-                title="Slot fill"
-                value={slotFillChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setSlotFillChannels)
-                }
-              />
-              <ChannelGroup
-                title="Reminder allievo"
+              <ChannelCard
+                title="Promemoria allievo"
                 value={studentReminderChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setStudentReminderChannels)
-                }
+                onChange={(next) => updateReminderSettings({ studentReminderChannels: next })}
               />
-              <ChannelGroup
-                title="Reminder istruttore"
+              <ChannelCard
+                title="Promemoria istruttore"
                 value={instructorReminderChannels}
-                onToggle={(channel) =>
-                  toggleChannel(channel, setInstructorReminderChannels)
-                }
+                onChange={(next) => updateReminderSettings({ instructorReminderChannels: next })}
+                disabled={!instructorReminderEnabled}
+              />
+              <ChannelCard
+                title="Cancellazioni"
+                info="Quando un allievo annulla una guida, invia una notifica per riempire lo slot rimasto libero."
+                value={slotFillChannels}
+                onChange={(next) => updateReminderSettings({ slotFillChannels: next })}
               />
             </div>
+
+            {/* Rimando a Invia comunicato (flat come nel proto, niente box) */}
+            <div className="mt-6 flex flex-wrap items-center gap-2 text-sm font-medium text-[#6a6a6a]">
+              <span>Per inviare un comunicato personalizzato vai su</span>
+              <span className="inline-flex size-[26px] shrink-0 items-center justify-center rounded-full border border-[#e0e0e0] bg-white">
+                <svg width="14" height="11" viewBox="0 0 18 13" fill="none">
+                  <path d="M1 1h16M1 6.5h16M1 12h16" stroke="#222" strokeWidth="1.7" strokeLinecap="round" />
+                </svg>
+              </span>
+              <ArrowRight className="size-[15px] text-[#bbbbbb]" strokeWidth={2} />
+              <span className="inline-flex items-center gap-[5px] font-semibold text-[#222222]">
+                <Bell className="size-[15px]" strokeWidth={2} />
+                Invia comunicato
+              </span>
+            </div>
+
+            {/* Notifica slot disponibili domani (flat, in fondo al pane) */}
+            <EmptySlotNotificationSection
+              enabled={emptySlotNotificationEnabled}
+              setEnabled={setEmptySlotNotificationEnabled}
+              target={emptySlotNotificationTarget}
+              setTarget={setEmptySlotNotificationTarget}
+              times={emptySlotNotificationTimes}
+              setTimes={setEmptySlotNotificationTimes}
+            />
           </div>
         </AccordionSection>
+        )}
 
         {/* ── Policy tipi guida ── */}
+        {show("policy") && (
         <AccordionSection
           icon={ClipboardList}
           title="Policy tipi guida"
           description="Regole opzionali su copertura tipi e finestre settimanali per ogni tipo guida."
           expanded={expandedSection === "policy"}
           onToggle={() => toggleSection("policy")}
+          standalone={standalone}
         >
           <div className="space-y-5">
             {/* Global toggles */}
@@ -729,12 +791,12 @@ function SettingsTab({
               />
             </div>
 
-            {/* Per-type cards — unified required + limit in one card */}
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-muted-foreground">
+            {/* Per-type cards — chip proto (check azzurra) + limite orario */}
+            <div>
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5px] text-[#929292]">
                 Configura per tipo di guida
               </div>
-              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
                 {LESSON_TYPE_OPTIONS.map((option) => {
                   const constraint = lessonConstraints[option.value] ?? DEFAULT_LESSON_CONSTRAINT;
                   const isRequired = lessonRequiredTypes.includes(option.value);
@@ -743,24 +805,38 @@ function SettingsTab({
                     <div
                       key={option.value}
                       className={cn(
-                        "rounded-xl border bg-white p-3 transition-all duration-200",
-                        hasLimit ? "border-yellow-200" : "border-border",
+                        "rounded-[12px] border-[1.5px] p-[13px] transition-colors",
+                        isRequired ? "border-[#9fc3f0] bg-[#eaf2fd]" : "border-[#e8e8e8] bg-white",
                       )}
                     >
-                      {/* Header: name + pill actions */}
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="flex-1 text-sm font-semibold text-foreground">
+                      {/* Header proto: cerchio check + label, click = obbligatorio */}
+                      <div
+                        role="switch"
+                        tabIndex={0}
+                        aria-checked={isRequired}
+                        aria-label={`Segna ${option.label} come obbligatorio`}
+                        onClick={() => toggleRequiredType(option.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleRequiredType(option.value); } }}
+                        className="flex cursor-pointer select-none items-center gap-2.5 px-0.5"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full transition-colors",
+                            isRequired ? "bg-[#cfe0fb]" : "border-[1.5px] border-[#dcdcdc]",
+                          )}
+                        >
+                          {isRequired && (
+                            <Check className="size-3 text-[#1a2b45]" strokeWidth={2.4} />
+                          )}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[13.5px] font-semibold",
+                            isRequired ? "text-[#1a2b45]" : "text-[#444444]",
+                          )}
+                        >
                           {option.label}
                         </span>
-                        <ToggleChip
-                          active={isRequired}
-                          onClick={() => toggleRequiredType(option.value)}
-                          size="sm"
-                          aria-label={`Segna ${option.label} come obbligatorio`}
-                        >
-                          {isRequired && <Check className="inline size-2.5 mr-0.5" />}
-                          Obbl.
-                        </ToggleChip>
                       </div>
 
                       {/* Limite orario toggle row */}
@@ -772,10 +848,11 @@ function SettingsTab({
                         onClick={() => toggleConstraintEnabled(option.value)}
                         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleConstraintEnabled(option.value); } }}
                         className={cn(
-                          "flex w-full cursor-pointer items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-all duration-150",
+                          "mt-3 flex w-full cursor-pointer items-center justify-between rounded-[8px] px-2.5 py-2 text-xs transition-colors",
                           hasLimit
-                            ? "bg-yellow-50 text-foreground"
-                            : "bg-gray-50 text-muted-foreground hover:bg-gray-100",
+                            ? "bg-white text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+                            : "bg-[#f8f8f8] text-[#6a6a6a] hover:bg-[#f2f2f2]",
+                          isRequired && !hasLimit && "bg-white/60 hover:bg-white/80",
                         )}
                       >
                         <span className="font-medium">Limite orario</span>
@@ -784,7 +861,7 @@ function SettingsTab({
 
                       {/* Expanded: days + time window */}
                       {hasLimit && (
-                        <div className="mt-3 space-y-2.5 border-t border-border pt-2.5">
+                        <div className="mt-3 space-y-2.5 border-t border-black/[0.06] pt-2.5">
                           <div className="flex flex-wrap gap-1">
                             {WEEKDAY_OPTIONS.map((day) => (
                               <ToggleChip
@@ -848,35 +925,24 @@ function SettingsTab({
             </div>
           </div>
         </AccordionSection>
+        )}
 
         {/* ── Sede e luoghi ── */}
+        {show("locations") && (
         <AccordionSection
           icon={MapPin}
           title="Sede e luoghi"
-          description="Sede dell'autoscuola e luoghi extra per le guide. Mostrati agli allievi nel dettaglio della guida."
+          // Sottotitolo dentro LocationsSection: nell'onboarding non deve vedersi
+          description=""
           expanded={expandedSection === "locations"}
           onToggle={() => toggleSection("locations")}
+          standalone={standalone}
         >
           <LocationsSection />
         </AccordionSection>
-
-        {/* ── Modalità registrazione allievi (solo se TEORIA è attiva) ── */}
-        <RegistrationModeSection
-          expanded={expandedSection === "registration"}
-          onToggle={() => toggleSection("registration")}
-        />
+        )}
       </div>
 
-      {/* Save button */}
-      <div className="flex justify-end">
-        <Button
-          onClick={handleSaveSettings}
-          disabled={savingSettings}
-          className="min-w-[180px]"
-        >
-          {savingSettings ? "Salvataggio..." : "Salva configurazione"}
-        </Button>
-      </div>
     </>
   );
 }

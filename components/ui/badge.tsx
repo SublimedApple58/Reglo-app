@@ -10,7 +10,7 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-pink-200 bg-pink-50 text-primary",
+          "border-[#e2e2e8] bg-navy-50 text-navy-900",
         success:
           "border-[#BBF7D0] bg-[#F0FDF4] text-[#16A34A]",
         warning:
@@ -20,7 +20,7 @@ const badgeVariants = cva(
         outline:
           "border-border bg-white text-foreground",
         secondary:
-          "border-pink-200 bg-pink-50 text-primary",
+          "border-[#e2e2e8] bg-navy-50 text-navy-900",
       },
     },
     defaultVariants: {

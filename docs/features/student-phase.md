@@ -37,10 +37,14 @@ Migrazioni:
 | Push reminders TEORIA | `lib/autoscuole/theory-reminders.ts` |
 | Cron orchestrator | `trigger/autoscuole-reminders.ts` |
 | Web dialog cambio fase titolare | `components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog.tsx` |
-| Web allievi (banner + sezione AWAITING) | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` |
+| Web allievi (banner + tab In attesa/Teoria/Pratica/Patentati; redesign Airbnb 2026-07 con detail panel destro) | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` |
 | Web settings (auto-assign toggle) | `components/pages/Autoscuole/tabs/SettingsTab.tsx` |
 | Backoffice card licenze + fasi | `components/pages/Backoffice/BackofficeCompaniesPage.tsx` |
 | Backoffice resolve dialog | `components/pages/Backoffice/BackofficeResolveTeoriaDeactivationDialog.tsx` |
+
+## Creazione account allievo da web (titolare)
+
+`createCompanyUser` (`lib/actions/user.actions.ts`) accetta `studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA'` (solo ruolo STUDENT). AWAITING/TEORIA richiedono `'TEORIA' ∈ phasesEnabled`; TEORIA consuma un seat (check posti + `quizSeatGrantedAt = now`), altrimenti errore "Posti quiz esauriti". Usato dal dialog "Crea account allievo" della sezione Allievi (`AutoscuoleStudentsPage.tsx`, default fase = stessa regola della self-registration mobile) e da `AdminUsersCreateDialog` (che non passa la fase → default PRATICA).
 
 ## Decisione di fase alla registrazione
 

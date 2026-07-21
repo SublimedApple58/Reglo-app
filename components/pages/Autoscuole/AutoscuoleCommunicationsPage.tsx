@@ -26,7 +26,6 @@ import {
 } from "@/lib/actions/autoscuola-communications.actions";
 import { autoscuolaTemplateVariables } from "@/lib/autoscuole/variables";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
 
 type Rule = {
   id: string;
@@ -96,7 +95,6 @@ export function AutoscuoleCommunicationsPage({
       subTitle="Comunicazioni automatiche con allievi e staff."
     >
       <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
         {tabs}
 
         <section className="glass-panel glass-strong p-6">

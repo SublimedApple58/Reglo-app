@@ -1820,7 +1820,9 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
       appointments: Array<{
         instructorId: string | null;
         vehicleId: string | null;
-        studentId: string;
+        // Null only for studentless exam placeholders — they still reserve the
+        // instructor/vehicle but have no student interval to record.
+        studentId: string | null;
         startsAt: Date;
         endsAt: Date | null;
         appointmentVehicles?: Array<{ vehicleId: string }>;
@@ -1846,7 +1848,7 @@ export async function createBookingRequest(input: z.infer<typeof bookingRequestS
         const start = appointment.startsAt.getTime();
         const end =
           appointment.endsAt?.getTime() ?? start + SLOT_MINUTES * 60 * 1000;
-        add(appointment.studentId, start, end);
+        if (appointment.studentId) add(appointment.studentId, start, end);
         if (appointment.instructorId) {
           add(appointment.instructorId, start, end);
         }
@@ -3081,7 +3083,7 @@ export async function getAllAvailableSlots(input: z.infer<typeof availableSlotsS
         set.add(start);
         starts.set(ownerId, set);
       };
-      addInterval(appt.studentId);
+      if (appt.studentId) addInterval(appt.studentId); // null only for studentless exam placeholders
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
       for (const link of appt.appointmentVehicles ?? []) {
@@ -3544,7 +3546,7 @@ export async function getDateAvailabilityMap(
         list.push({ start, end });
         intervals.set(ownerId, list);
       };
-      addInterval(appt.studentId);
+      if (appt.studentId) addInterval(appt.studentId); // null only for studentless exam placeholders
       if (appt.instructorId) addInterval(appt.instructorId);
       if (appt.vehicleId) addInterval(appt.vehicleId);
       for (const link of appt.appointmentVehicles ?? []) {
@@ -4440,6 +4442,7 @@ export async function broadcastWaitlistOffer({
     Array<{ startsAt: Date; endsAt: Date | null }>
   >();
   for (const appointment of appointments) {
+    if (!appointment.studentId) continue; // studentless exam placeholder
     const list = appointmentsByStudent.get(appointment.studentId) ?? [];
     list.push({ startsAt: appointment.startsAt, endsAt: appointment.endsAt });
     appointmentsByStudent.set(appointment.studentId, list);
@@ -4667,6 +4670,7 @@ export async function broadcastGroupLessonInvite({
   });
   const appointmentsByStudent = new Map<string, Array<{ startsAt: Date; endsAt: Date | null }>>();
   for (const appointment of appointments) {
+    if (!appointment.studentId) continue; // studentless exam placeholder
     const list = appointmentsByStudent.get(appointment.studentId) ?? [];
     list.push({ startsAt: appointment.startsAt, endsAt: appointment.endsAt });
     appointmentsByStudent.set(appointment.studentId, list);
@@ -5121,7 +5125,8 @@ export async function cancelGroupLessonParticipantAppointment({
         timeZone: AUTOSCUOLA_TIMEZONE,
       });
       const student = await prisma.user.findUnique({
-        where: { id: appt.studentId },
+        // Non-null: this is a group-lesson seat, which always has a student.
+        where: { id: appt.studentId! },
         select: { name: true },
       });
       try {

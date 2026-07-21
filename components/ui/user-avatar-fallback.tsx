@@ -17,7 +17,7 @@ export function UserAvatarFallback({
   return (
     <AvatarFallback
       className={cn(
-        "rounded-lg border border-pink-200 bg-gradient-to-br from-pink-500 to-pink-700 text-white shadow-cta",
+        "rounded-full bg-navy-900 text-white",
         className,
       )}
     >

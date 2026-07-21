@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
+import { FadeIn } from "@/components/ui/fade-in";
 import {
   getLateCancellations,
   resolveLateCancellation,
@@ -128,83 +128,89 @@ export function AutoscuoleLateCancellationsPanel({
 
   if (loading) {
     return (
-      <div className="relative space-y-4">
-        <LottieLoadingOverlay visible />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
+      <div className="flex flex-col gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="rounded-[14px] border border-[#dddddd] bg-white p-6">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <Skeleton className="h-5 w-44 rounded" />
+              <Skeleton className="h-6 w-32 rounded-full" />
+            </div>
+            <div className="mb-5 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, j) => (
+                <div key={j}>
+                  <Skeleton className="mb-1.5 h-3 w-24 rounded" />
+                  <Skeleton className="h-3.5 w-44 max-w-full rounded" />
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2.5 border-t border-[#f2f2f2] pt-5">
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-32 rounded-md" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!items.length) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-border bg-white p-12 shadow-card">
-        <p className="text-sm text-muted-foreground">
+      <FadeIn className="flex min-h-[280px] flex-col items-center justify-center border-t border-[#ebebeb] text-center">
+        <p className="text-sm font-semibold text-foreground">Tutto in ordine</p>
+        <p className="mt-1 text-[13px] font-medium text-[#929292]">
           Nessuna cancellazione tardiva o no-show da gestire.
         </p>
-      </div>
+      </FadeIn>
     );
   }
 
+  const infoField = (label: string, value: React.ReactNode, valueClassName = "text-[#222222]") => (
+    <div>
+      <p className="mb-0.5 text-[12px] font-medium text-[#929292]">{label}</p>
+      <p className={`text-[13px] font-medium ${valueClassName}`}>{value}</p>
+    </div>
+  );
+
   return (
-    <div className="space-y-4">
+    <FadeIn className="flex flex-col gap-4">
       {items.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-[16px] border border-border bg-white p-4 shadow-card space-y-3"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground">
+        <div key={item.id} className="rounded-[14px] border border-[#dddddd] bg-white p-6">
+          <div className="mb-5 flex items-start justify-between gap-4">
+            <p className="text-base font-semibold text-foreground">
               {item.studentName ?? "Allievo sconosciuto"}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex shrink-0 items-center gap-1.5">
               {item.kind === "no_show" && (
-                <Badge variant="outline" className="border-orange-200 bg-orange-50 text-orange-700">
+                <Badge variant="outline" className="rounded-full border-[#f0e060] bg-[#fffce0] text-[#7a6a00]">
                   Assente
                 </Badge>
               )}
-              <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
+              <Badge variant="outline" className="rounded-full border-[#fad4cc] bg-[#fff4f2] text-[#c13515]">
                 {item.studentLateCancellationsCount} tardiv{item.studentLateCancellationsCount === 1 ? "a" : "e"} (4 sett.)
               </Badge>
             </div>
           </div>
 
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p>
-              <span className="inline-block w-36 font-medium text-foreground">Guida prevista:</span>
-              {formatDateTime(item.startsAt)} · {item.durationMinutes} min
-            </p>
-            <p>
-              <span className="inline-block w-36 font-medium text-foreground">Prenotata il:</span>
-              {formatDateOnly(item.createdAt)}
-            </p>
+          <div className="mb-5 grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+            {infoField("Guida prevista", `${formatDateTime(item.startsAt)} · ${item.durationMinutes} min`)}
+            {infoField("Prenotata il", formatDateOnly(item.createdAt))}
             {item.kind === "late_cancellation" && (
               <>
-                <p>
-                  <span className="inline-block w-36 font-medium text-foreground">Annullata il:</span>
-                  {item.cancelledAt ? formatDateTime(item.cancelledAt) : "—"}
-                </p>
-                <p>
-                  <span className="inline-block w-36 font-medium text-foreground">Preavviso dato:</span>
-                  {item.timeDeltaMinutes != null
+                {infoField("Annullata il", item.cancelledAt ? formatDateTime(item.cancelledAt) : "—")}
+                {infoField(
+                  "Preavviso dato",
+                  item.timeDeltaMinutes != null
                     ? formatNoticeGiven(item.timeDeltaMinutes, item.penaltyCutoffHours)
-                    : "—"}
-                </p>
+                    : "—",
+                  "text-[#c13515]",
+                )}
               </>
             )}
-            {item.kind === "no_show" && (
-              <p>
-                <span className="inline-block w-36 font-medium text-foreground">Esito:</span>
-                Non presentato
-              </p>
-            )}
-            <p>
-              <span className="inline-block w-36 font-medium text-foreground">Istruttore:</span>
-              {item.instructorName ?? "—"} · Tipo: {formatLessonType(item.lessonType)}
-            </p>
+            {item.kind === "no_show" && infoField("Esito", "Non presentato", "text-[#c13515]")}
+            {infoField("Istruttore", `${item.instructorName ?? "—"} · ${formatLessonType(item.lessonType)}`)}
           </div>
 
-          <div className="flex items-center gap-3 pt-1">
+          <div className="flex items-center gap-2.5 border-t border-[#f2f2f2] pt-5">
             <Button
               size="sm"
               disabled={resolving === item.id}
@@ -223,6 +229,6 @@ export function AutoscuoleLateCancellationsPanel({
           </div>
         </div>
       ))}
-    </div>
+    </FadeIn>
   );
 }

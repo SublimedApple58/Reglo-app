@@ -11,6 +11,11 @@ import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect"
 import { isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
+  NATIONAL_HOLIDAY_IDS,
+  parseNationalHolidaySettings,
+} from "@/lib/autoscuole/national-holidays";
+import { syncCompanyNationalHolidays } from "@/lib/autoscuole/national-holidays-sync";
+import {
   parseFollowCarRulesFromLimits,
   readFollowCarMotoEnabled,
   followCarRulesForEnabled,
@@ -256,6 +261,7 @@ const autoscuolaSettingsPatchSchema = z
     studentReminderDayBeforeEnabled: z.boolean().optional(),
     studentReminderDayBeforeTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     instructorReminderMinutes: reminderMinutesSchema.optional(),
+    instructorReminderEnabled: z.boolean().optional(),
     slotFillChannels: channelListSchema.optional(),
     studentReminderChannels: channelListSchema.optional(),
     instructorReminderChannels: channelListSchema.optional(),
@@ -352,6 +358,10 @@ const autoscuolaSettingsPatchSchema = z
     studentNotesEnabled: z.boolean().optional(),
     autoCheckinEnabled: z.boolean().optional(),
     vehiclesEnabled: z.boolean().optional(),
+    nationalHolidaysEnabled: z.boolean().optional(),
+    nationalHolidaysDisabled: z
+      .array(z.string().refine((id) => NATIONAL_HOLIDAY_IDS.includes(id), { message: "Festività sconosciuta." }))
+      .optional(),
     // Default license path assigned to a student at registration. Lets moto-only
     // schools onboard new students already on the right category.
     defaultLicenseCategory: z.enum(LICENSE_CATEGORIES).optional(),
@@ -372,75 +382,11 @@ const autoscuolaSettingsPatchSchema = z
     studentCancellationEnabled: z.boolean().optional(),
   })
   .refine(
-    (value) =>
-      value.availabilityWeeks !== undefined ||
-      value.studentReminderMinutes !== undefined ||
-      value.studentReminderMorningEnabled !== undefined ||
-      value.studentReminderMorningTime !== undefined ||
-      value.studentReminderDayBeforeEnabled !== undefined ||
-      value.studentReminderDayBeforeTime !== undefined ||
-      value.instructorReminderMinutes !== undefined ||
-      value.slotFillChannels !== undefined ||
-      value.studentReminderChannels !== undefined ||
-      value.instructorReminderChannels !== undefined ||
-      value.autoPaymentsEnabled !== undefined ||
-      value.lessonPrice30 !== undefined ||
-      value.lessonPrice60 !== undefined ||
-      value.penaltyCutoffHoursPreset !== undefined ||
-      value.penaltyPercentPreset !== undefined ||
-      value.paymentNotificationChannels !== undefined ||
-      value.ficVatTypeId !== undefined ||
-      value.ficPaymentMethodId !== undefined ||
-      value.stripeConnectedAccountId !== undefined ||
-      value.lessonPolicyEnabled !== undefined ||
-      value.lessonRequiredTypesEnabled !== undefined ||
-      value.lessonRequiredTypes !== undefined ||
-      value.lessonTypeConstraints !== undefined ||
-      value.bookingSlotDurations !== undefined ||
-      value.appBookingActors !== undefined ||
-      value.instructorBookingMode !== undefined ||
-      value.swapEnabled !== undefined ||
-      value.swapNotifyMode !== undefined ||
-      value.bookingCutoffEnabled !== undefined ||
-      value.bookingCutoffTime !== undefined ||
-      value.emptySlotNotificationEnabled !== undefined ||
-      value.emptySlotNotificationTarget !== undefined ||
-      value.emptySlotNotificationTimes !== undefined ||
-      value.weeklyBookingLimitEnabled !== undefined ||
-      value.weeklyBookingLimit !== undefined ||
-      value.examPriorityEnabled !== undefined ||
-      value.examPriorityDaysBeforeExam !== undefined ||
-      value.examPriorityPausedUntil !== undefined ||
-      value.examPriorityBlockNonExam !== undefined ||
-      value.restrictedTimeRangeEnabled !== undefined ||
-      value.restrictedTimeRangeStart !== undefined ||
-      value.restrictedTimeRangeEnd !== undefined ||
-      value.instructorPreferenceEnabled !== undefined ||
-      value.voiceAssistantEnabled !== undefined ||
-      value.voiceBookingEnabled !== undefined ||
-      value.voiceLanguage !== undefined ||
-      value.voiceLegalGreetingEnabled !== undefined ||
-      value.voiceOfficeHours !== undefined ||
-      value.voiceHandoffPhone !== undefined ||
-      value.voiceHandoffDuringCallEnabled !== undefined ||
-      value.voiceHandoffDuringCallInstructions !== undefined ||
-      value.voiceFallbackMode !== undefined ||
-      value.voiceRecordingEnabled !== undefined ||
-      value.voiceTranscriptionEnabled !== undefined ||
-      value.voiceRetentionDays !== undefined ||
-      value.voiceInstructions !== undefined ||
-      value.voiceAllowedActions !== undefined ||
-      value.voiceCustomGreeting !== undefined ||
-      value.studentNotesEnabled !== undefined ||
-      value.autoCheckinEnabled !== undefined ||
-      value.vehiclesEnabled !== undefined ||
-      value.defaultLicenseCategory !== undefined ||
-      value.defaultTransmission !== undefined ||
-      value.followCarMotoEnabled !== undefined ||
-      value.followCarRules !== undefined ||
-      value.groupLessonsEnabled !== undefined ||
-      value.quizEnabled !== undefined ||
-      value.studentCancellationEnabled !== undefined,
+    // Almeno un campo presente: check generico su tutte le chiavi dello schema
+    // (la vecchia lista esplicita si era gia' dimenticata bookingMinStartDate,
+    // roundedHoursOnly e voiceAssistantVoice -> "Nessuna impostazione da
+    // aggiornare" su auto-save di quei singoli campi).
+    (value) => Object.values(value).some((v) => v !== undefined),
     { message: "Nessuna impostazione da aggiornare." },
   )
   .superRefine((value, ctx) => {
@@ -543,6 +489,7 @@ export type AutoscuolaSettingsData = {
   studentReminderDayBeforeEnabled: boolean;
   studentReminderDayBeforeTime: string;
   instructorReminderMinutes: number;
+  instructorReminderEnabled: boolean;
   slotFillChannels: string[];
   studentReminderChannels: string[];
   instructorReminderChannels: string[];
@@ -618,6 +565,8 @@ export type AutoscuolaSettingsData = {
   studentNotesEnabled: boolean;
   autoCheckinEnabled: boolean;
   vehiclesEnabled: boolean;
+  nationalHolidaysEnabled: boolean;
+  nationalHolidaysDisabled: string[];
   defaultLicenseCategory: string;
   defaultTransmission: string;
   followCarMotoEnabled: boolean;
@@ -662,6 +611,9 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.instructorReminderMinutes === "number"
       ? limits.instructorReminderMinutes
       : DEFAULT_INSTRUCTOR_REMINDER_MINUTES;
+  // Default true: il promemoria istruttore resta attivo finché non viene
+  // esplicitamente disattivato ("Non inviare" nella pane Promemoria).
+  const instructorReminderEnabled = limits.instructorReminderEnabled !== false;
   const slotFillChannels = asChannelList(
     limits.slotFillChannels,
     DEFAULT_SLOT_FILL_CHANNELS,
@@ -892,6 +844,7 @@ const resolveAutoscuolaSettingsData = async (
     studentReminderDayBeforeEnabled,
     studentReminderDayBeforeTime,
     instructorReminderMinutes,
+    instructorReminderEnabled,
     slotFillChannels,
     studentReminderChannels,
     instructorReminderChannels,
@@ -957,6 +910,8 @@ const resolveAutoscuolaSettingsData = async (
     studentNotesEnabled,
     autoCheckinEnabled,
     vehiclesEnabled: limits.vehiclesEnabled !== false,
+    nationalHolidaysEnabled: limits.nationalHolidaysEnabled === true,
+    nationalHolidaysDisabled: parseNationalHolidaySettings(limits).disabled,
     defaultLicenseCategory:
       typeof limits.defaultLicenseCategory === "string"
         ? limits.defaultLicenseCategory
@@ -1431,6 +1386,8 @@ export async function updateAutoscuolaSettings(
         payload.studentReminderDayBeforeTime ?? (typeof limits.studentReminderDayBeforeTime === "string" ? limits.studentReminderDayBeforeTime : "19:00"),
       instructorReminderMinutes:
         payload.instructorReminderMinutes ?? previousInstructorReminderMinutes,
+      instructorReminderEnabled:
+        payload.instructorReminderEnabled ?? (limits.instructorReminderEnabled !== false),
       slotFillChannels: payload.slotFillChannels ?? previousSlotFillChannels,
       studentReminderChannels:
         payload.studentReminderChannels ?? previousStudentReminderChannels,
@@ -1504,6 +1461,10 @@ export async function updateAutoscuolaSettings(
       studentNotesEnabled: nextStudentNotesEnabled,
       autoCheckinEnabled: nextAutoCheckinEnabled,
       vehiclesEnabled: nextVehiclesEnabled,
+      nationalHolidaysEnabled:
+        payload.nationalHolidaysEnabled ?? (limits.nationalHolidaysEnabled === true),
+      nationalHolidaysDisabled:
+        payload.nationalHolidaysDisabled ?? parseNationalHolidaySettings(limits).disabled,
       defaultLicenseCategory: nextDefaultLicenseCategory,
       defaultTransmission: nextDefaultTransmission,
       followCarMotoEnabled: nextFollowCarMotoEnabled,
@@ -1529,6 +1490,19 @@ export async function updateAutoscuolaSettings(
       });
     }
 
+    // Festività nazionali: materializza/riallinea le righe AutoscuolaHoliday
+    // del preset quando il payload tocca quei campi.
+    if (
+      payload.nationalHolidaysEnabled !== undefined ||
+      payload.nationalHolidaysDisabled !== undefined
+    ) {
+      await syncCompanyNationalHolidays({
+        prisma,
+        companyId: membership.companyId,
+        limits: nextLimits as Record<string, unknown>,
+      });
+    }
+
     await invalidateAutoscuoleCache({
       companyId: membership.companyId,
       segments: [
@@ -1549,6 +1523,7 @@ export async function updateAutoscuolaSettings(
         studentReminderDayBeforeEnabled: nextLimits.studentReminderDayBeforeEnabled,
         studentReminderDayBeforeTime: nextLimits.studentReminderDayBeforeTime,
         instructorReminderMinutes: nextLimits.instructorReminderMinutes,
+        instructorReminderEnabled: nextLimits.instructorReminderEnabled,
         slotFillChannels: nextLimits.slotFillChannels,
         studentReminderChannels: nextLimits.studentReminderChannels,
         instructorReminderChannels: nextLimits.instructorReminderChannels,
@@ -1609,6 +1584,8 @@ export async function updateAutoscuolaSettings(
         voiceAssistantVoice: nextLimits.voiceAssistantVoice,
         voiceCustomGreeting: nextLimits.voiceCustomGreeting,
         vehiclesEnabled: nextVehiclesEnabled,
+        nationalHolidaysEnabled: nextLimits.nationalHolidaysEnabled,
+        nationalHolidaysDisabled: nextLimits.nationalHolidaysDisabled,
         groupLessonsEnabled: nextGroupLessonsEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,

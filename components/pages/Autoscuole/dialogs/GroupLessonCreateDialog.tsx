@@ -1,15 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Bike, Car, Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
+import { Bike, Car, History, Loader2, Megaphone, Plus, Search, Users, X } from "lucide-react";
 
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/CreateEventPopover";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import {
   Select,
   SelectContent,
@@ -21,9 +17,19 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import {
   createGroupLesson,
@@ -66,6 +72,12 @@ type Props = {
   /** Optional instructor to pre-select (agenda slot click on an instructor column). */
   defaultInstructorId?: string | null;
   onCreated: () => void;
+  /** Ancora viewport della card popover (bottone + o slot cliccato). */
+  anchor?: { x: number; y: number } | null;
+  /** Notifica il parent del draft corrente per il blocco ghost in agenda. */
+  onDraftChange?: (draft: { date: string; time: string; durationMin: number; instructorId: string | null; kind: "standard" | "moto"; capacity: number } | null) => void;
+  /** Click su uno slot della griglia col popover aperto → riposiziona il draft. */
+  slotPatch?: { date: string; time: string; instructorId: string | null; nonce: number } | null;
 };
 
 const MOTO_CATEGORIES = new Set<string>(MOTO_LICENSE_CATEGORIES);
@@ -106,6 +118,9 @@ export function GroupLessonCreateDialog({
   defaultTime,
   defaultInstructorId,
   onCreated,
+  anchor,
+  onDraftChange,
+  slotPatch,
 }: Props) {
   const toast = useFeedbackToast();
   const [loading, setLoading] = React.useState(false);
@@ -127,11 +142,33 @@ export function GroupLessonCreateDialog({
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [openInvites, setOpenInvites] = React.useState(true);
   const [studentQuery, setStudentQuery] = React.useState("");
+  const [browseOpen, setBrowseOpen] = React.useState(false);
+  // Conferma "guida nel passato": nessun blocco BE per le guide di gruppo, ma
+  // avvisiamo comunque prima di crearla (coerente con le guide autonome).
+  const [pastConfirmOpen, setPastConfirmOpen] = React.useState(false);
+  const [pendingPastStart, setPendingPastStart] = React.useState<Date | null>(null);
 
   const isMoto = kind === "moto";
   // Free choice for both kinds (moto participants may outnumber the fleet and
   // ride in turns). Clamped to the backend's 1–12 sanity range.
   const CAPACITY = Math.min(12, Math.max(1, Number(capacityStr) || 1));
+
+  // Ghost live in agenda: comunica il draft al parent a ogni modifica.
+  React.useEffect(() => {
+    if (!onDraftChange) return;
+    if (!open) { onDraftChange(null); return; }
+    onDraftChange({ date: day, time, durationMin: Number(durationMin) || 180, instructorId: instructorId || null, kind, capacity: CAPACITY });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, day, time, durationMin, instructorId, kind, CAPACITY]);
+
+  // Click su slot della griglia col popover aperto → sposta il draft.
+  React.useEffect(() => {
+    if (!slotPatch || !open) return;
+    setDay(slotPatch.date);
+    setTime(slotPatch.time);
+    if (slotPatch.instructorId) setInstructorId(slotPatch.instructorId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotPatch?.nonce]);
 
   // Accent tint follows the agenda card colour: teal = standard, ORANGE = moto.
   const tint = isMoto
@@ -275,7 +312,21 @@ export function GroupLessonCreateDialog({
     return eligibleStudents.filter((st) => normalizeQuery(st.name ?? "").includes(q));
   }, [eligibleStudents, studentQuery]);
 
-  const showSearch = eligibleStudents.length > 6;
+  // Allievi ancora aggiungibili (idonei non già pre-inseriti) per il pannello laterale.
+  const addableCount = React.useMemo(
+    () => eligibleStudents.reduce((n, st) => (selectedIds.includes(st.id) ? n : n + 1), 0),
+    [eligibleStudents, selectedIds],
+  );
+  const browseList = React.useMemo(
+    () => filteredStudents.filter((st) => !selectedIds.includes(st.id)),
+    [filteredStudents, selectedIds],
+  );
+  React.useEffect(() => {
+    if (!open) {
+      setBrowseOpen(false);
+      setStudentQuery("");
+    }
+  }, [open]);
 
   const toggleStudent = (id: string) => {
     setSelectedIds((prev) => {
@@ -285,7 +336,7 @@ export function GroupLessonCreateDialog({
     });
   };
 
-  const handleCreate = async () => {
+  const handleCreate = async (opts?: { confirmedPast?: boolean }) => {
     if (!day || !time) {
       toast.error({ description: "Imposta data e ora della guida." });
       return;
@@ -308,6 +359,12 @@ export function GroupLessonCreateDialog({
     const start = new Date(`${day}T${time}:00`);
     if (Number.isNaN(start.getTime())) {
       toast.error({ description: "Data non valida." });
+      return;
+    }
+    // Guida di gruppo nel passato: consentita con conferma esplicita.
+    if (!opts?.confirmedPast && start.getTime() < Date.now()) {
+      setPendingPastStart(start);
+      setPastConfirmOpen(true);
       return;
     }
     const end = new Date(start.getTime() + Number(durationMin) * 60 * 1000);
@@ -356,21 +413,85 @@ export function GroupLessonCreateDialog({
     }
   };
 
+  const initials = (n?: string | null) =>
+    (n ?? "").trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
+
+  // Pannello laterale "Aggiungi allievi" — gemello di quello della dialog di gestione:
+  // ricerca + "+ Aggiungi" per pre-inserire gli allievi idonei.
+  const browsePanel = (
+    <div className="flex max-h-[80vh] w-[320px] flex-col rounded-[20px] border border-border bg-white p-5 shadow-card-primary">
+      <div className="flex items-center justify-between">
+        <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">Aggiungi allievi</span>
+        <button
+          type="button"
+          aria-label="Chiudi elenco"
+          onClick={() => setBrowseOpen(false)}
+          className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+        >
+          <X className="size-3.5 text-foreground" strokeWidth={2} />
+        </button>
+      </div>
+      <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+        {selectedIds.length}/{CAPACITY} pre-inseriti · {addableCount} da aggiungere
+      </p>
+      <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+        <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+        <input
+          value={studentQuery}
+          onChange={(e) => setStudentQuery(e.target.value)}
+          placeholder="Cerca un allievo"
+          autoFocus
+          className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+        />
+      </div>
+      <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+        {browseList.length === 0 ? (
+          <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+            {studentQuery.trim()
+              ? `Nessun allievo trovato per «${studentQuery.trim()}».`
+              : "Tutti gli allievi idonei sono già stati aggiunti."}
+          </p>
+        ) : (
+          browseList.map((st, idx) => {
+            const atCapacity = selectedIds.length >= CAPACITY;
+            return (
+              <div
+                key={st.id}
+                className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                    {initials(st.name)}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{st.name ?? "Allievo"}</span>
+                </span>
+                <button
+                  type="button"
+                  disabled={atCapacity}
+                  onClick={() => toggleStudent(st.id)}
+                  className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!saving) onOpenChange(o); }}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            Nuova guida di gruppo
-            <Badge variant="secondary" className={tint.headerBadge}>
-              fino a {CAPACITY} allievi
-            </Badge>
-          </DialogTitle>
-          <DialogDescription>
-            1 istruttore · {vehiclesEnabled ? "1 veicolo · " : ""}fino a {CAPACITY} allievi. Pre-inserisci
-            gli allievi abilitati o apri i posti agli inviti.
-          </DialogDescription>
-        </DialogHeader>
+    <>
+    <CreateEventPopover
+      open={open}
+      onClose={() => { if (!saving) onOpenChange(false); }}
+      title="Nuova guida di gruppo"
+      subtitle={`1 istruttore · ${vehiclesEnabled ? "1 veicolo · " : ""}fino a ${CAPACITY} allievi`}
+      anchor={anchor ?? null}
+      width={440}
+      sidePanel={browseOpen ? browsePanel : null}
+    >
 
         {loading ? (
           <div className="flex justify-center py-10">
@@ -419,21 +540,11 @@ export function GroupLessonCreateDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Giorno</Label>
-                <Input
-                  type="date"
-                  value={day}
-                  onChange={(e) => setDay(e.target.value)}
-                  className="cursor-pointer"
-                />
+                <DatePickerInput value={day} onChange={setDay} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Ora inizio</Label>
-                <Input
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                  className="cursor-pointer"
-                />
+                <TimePickerInput value={time} onChange={setTime} />
               </div>
               <div className="space-y-1">
                 <Label className="text-[11px] text-muted-foreground">Durata</Label>
@@ -637,66 +748,20 @@ export function GroupLessonCreateDialog({
                     </div>
                   ) : null}
 
-                  {showSearch ? (
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        type="text"
-                        value={studentQuery}
-                        onChange={(e) => setStudentQuery(e.target.value)}
-                        placeholder={`Cerca tra ${eligibleStudents.length} allievi…`}
-                        className="pl-9 pr-9"
-                      />
-                      {studentQuery ? (
-                        <button
-                          type="button"
-                          onClick={() => setStudentQuery("")}
-                          className="absolute right-2 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-gray-100 hover:text-foreground"
-                          aria-label="Pulisci ricerca"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-
-                  <div className="max-h-60 space-y-1.5 overflow-y-auto rounded-2xl border border-border/60 bg-gray-50/50 p-2">
-                    {filteredStudents.length === 0 ? (
-                      <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-                        Nessun allievo trovato per &laquo;{studentQuery.trim()}&raquo;.
-                      </p>
-                    ) : (
-                      filteredStudents.map((st) => {
-                        const checked = selectedIds.includes(st.id);
-                        const atCapacity = !checked && selectedIds.length >= CAPACITY;
-                        return (
-                          <label
-                            key={st.id}
-                            className={cn(
-                              "flex cursor-pointer items-center gap-2.5 rounded-xl border bg-white px-3 py-2 transition-colors",
-                              checked ? tint.rowOn : "border-border/60",
-                              atCapacity && "cursor-not-allowed opacity-40",
-                            )}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              disabled={atCapacity}
-                              onCheckedChange={() => toggleStudent(st.id)}
-                            />
-                            <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                              {st.name ?? "Allievo"}
-                            </span>
-                            {st.licenseCategory ? (
-                              <span className="shrink-0 text-[11px] text-muted-foreground">
-                                {st.licenseCategory}
-                                {st.transmission ? ` · ${st.transmission}` : ""}
-                              </span>
-                            ) : null}
-                          </label>
-                        );
-                      })
+                  <button
+                    type="button"
+                    onClick={() => setBrowseOpen((v) => !v)}
+                    disabled={addableCount === 0}
+                    className={cn(
+                      "inline-flex cursor-pointer select-none items-center gap-2 self-start rounded-full border-[1.5px] px-[18px] py-[9px] text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                      browseOpen
+                        ? "border-[#222222] bg-[#f7f7f7] text-foreground"
+                        : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
                     )}
-                  </div>
+                  >
+                    <Plus className="size-4" strokeWidth={2} />
+                    {addableCount > 0 ? `Sfoglia allievi idonei · ${addableCount}` : "Tutti gli idonei aggiunti"}
+                  </button>
                 </>
               )}
             </div>
@@ -724,20 +789,59 @@ export function GroupLessonCreateDialog({
             {/* CTA */}
             <Button
               type="button"
-              className="w-full cursor-pointer bg-pink-500 text-white hover:bg-pink-600"
+              className="w-full cursor-pointer bg-[#222222] text-white hover:bg-black"
               disabled={saving}
-              onClick={handleCreate}
+              onClick={() => handleCreate()}
             >
               {saving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <LoadingDots />
               ) : (
-                <Plus className="mr-1.5 h-4 w-4" />
+                <>
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  Crea guida di gruppo
+                </>
               )}
-              Crea guida di gruppo
             </Button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </CreateEventPopover>
+
+    {/* ── Conferma guida di gruppo nel passato ── */}
+    <AlertDialog open={pastConfirmOpen} onOpenChange={setPastConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <div className="mb-1 flex size-11 items-center justify-center rounded-[14px] border border-[#f3e2c0] bg-[#fff8ec]">
+            <History className="size-[22px] text-[#e8a020]" strokeWidth={2} />
+          </div>
+          <AlertDialogTitle>Stai creando una guida nel passato</AlertDialogTitle>
+          <AlertDialogDescription>
+            L&apos;orario selezionato è già trascorso. Vuoi creare la guida di gruppo comunque?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {pendingPastStart ? (
+          <div className="flex items-center gap-2 rounded-xl border border-[#f3e2c0] bg-[#fff8ec] px-3 py-2 text-sm font-semibold text-[#8a6416]">
+            <History className="size-4 shrink-0 text-[#e8a020]" strokeWidth={2} />
+            <span className="capitalize">
+              {pendingPastStart.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" })}
+              {" · "}
+              {pendingPastStart.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          </div>
+        ) : null}
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annulla</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-[#1a1a2e] hover:bg-[#0f0f22]"
+            onClick={() => {
+              setPastConfirmOpen(false);
+              void handleCreate({ confirmedPast: true });
+            }}
+          >
+            Crea comunque
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

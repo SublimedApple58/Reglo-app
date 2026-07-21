@@ -151,7 +151,22 @@ export async function getUserById(userId: string) {
 }
 
 // Update the user profile
-export async function updateProfile(user: { name: string; email: string }) {
+/** Profilo dell'utente loggato (per la pane "Informazioni aziendali" e simili). */
+export async function getMyProfile() {
+  try {
+    const session = await auth();
+    const currentUser = await prisma.user.findFirst({
+      where: { id: session?.user?.id },
+      select: { id: true, name: true, email: true, phone: true },
+    });
+    if (!currentUser) throw new Error('User not found');
+    return { success: true as const, data: currentUser };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+export async function updateProfile(user: { name: string; email: string; phone?: string | null }) {
   try {
     const session = await auth();
 
@@ -169,6 +184,7 @@ export async function updateProfile(user: { name: string; email: string }) {
       },
       data: {
         name: user.name,
+        ...(user.phone !== undefined ? { phone: user.phone?.trim() || null } : {}),
       },
     });
 
@@ -188,6 +204,8 @@ export async function updateProfile(user: { name: string; email: string }) {
 type PaginatedUsers<T> = {
   data: T[];
   totalPages: number;
+  /** Conteggio complessivo (post filtri) — presente solo per getCompanyUsers. */
+  total?: number;
 };
 
 type CompanyUserRow = {
@@ -224,10 +242,12 @@ export async function getCompanyUsers({
   limit = PAGE_SIZE,
   page,
   query = '',
+  role,
 }: {
   limit?: number;
   page: number;
   query?: string;
+  role?: 'OWNER' | 'INSTRUCTOR_OWNER' | 'INSTRUCTOR' | 'STUDENT';
 }): Promise<PaginatedUsers<CompanyUserRow>> {
   const context = await requireCompanyAdminContext();
 
@@ -304,9 +324,9 @@ export async function getCompanyUsers({
     createdAt: member.createdAt,
   }));
 
-  const rows = [...inviteRows, ...memberRows].sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
-  );
+  const rows = [...inviteRows, ...memberRows]
+    .filter((row) => !role || (row.autoscuolaRole ?? 'STUDENT') === role)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   const dataCount = rows.length;
   const paged = rows.slice((page - 1) * limit, page * limit);
@@ -316,6 +336,7 @@ export async function getCompanyUsers({
       ({ createdAt, ...rest }) => rest as CompanyUserRow
     ),
     totalPages: Math.ceil(dataCount / limit),
+    total: dataCount,
   };
 }
 
@@ -444,7 +465,11 @@ export async function deleteUser(id: string) {
       where: { userId: id },
     });
     if (remainingMemberships === 0) {
-      await deleteAndAnonymizeUserAccount(id);
+      await deleteAndAnonymizeUserAccount(id, {
+        trigger: "directory_removal",
+        actorUserId: context.userId,
+        companyId: context.companyId,
+      });
     }
 
     revalidatePath('/admin/users');
@@ -545,6 +570,10 @@ export async function createCompanyUser(input: {
   licenseCategory?: string;
   transmission?: string;
   assignedInstructorId?: string | null;
+  // Student-only: starting phase. TEORIA consumes a quiz seat (same rules as
+  // grantQuizSeat); AWAITING/TEORIA are valid only if the school has the
+  // TEORIA phase enabled. Omitted → PRATICA (schema default).
+  studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA';
 }) {
   try {
     const session = await auth();
@@ -566,6 +595,9 @@ export async function createCompanyUser(input: {
       licenseCategory: string;
       transmission: string;
       assignedInstructorId: string | null;
+      studentPhase?: 'AWAITING' | 'TEORIA' | 'PRATICA';
+      quizSeatGrantedAt?: Date;
+      phaseClassifiedAt?: Date;
     } | null = null;
     if (input.autoscuolaRole === 'STUDENT') {
       const service = await prisma.companyService.findFirst({
@@ -601,6 +633,42 @@ export async function createCompanyUser(input: {
             : 'manual',
         assignedInstructorId,
       };
+
+      if (input.studentPhase && input.studentPhase !== 'PRATICA') {
+        const phasesEnabledRaw = Array.isArray(limits?.phasesEnabled)
+          ? (limits.phasesEnabled as unknown[])
+          : ['PRATICA'];
+        const teoriaEnabled = phasesEnabledRaw.includes('TEORIA');
+        if (!teoriaEnabled) {
+          throw new Error('La fase Teoria non è attiva per questa autoscuola.');
+        }
+        if (input.studentPhase === 'TEORIA') {
+          const quizSeats =
+            typeof limits?.quizSeats === 'number' && Number.isFinite(limits.quizSeats)
+              ? Math.max(0, Math.floor(limits.quizSeats))
+              : 0;
+          const used = await prisma.companyMember.count({
+            where: {
+              companyId: input.companyId,
+              role: 'member',
+              quizSeatGrantedAt: { not: null },
+            },
+          });
+          if (used >= quizSeats) {
+            throw new Error('Posti quiz esauriti. Contatta Reglo per acquistarne altri.');
+          }
+          const now = new Date();
+          studentFields.studentPhase = 'TEORIA';
+          studentFields.quizSeatGrantedAt = now;
+          studentFields.phaseClassifiedAt = now;
+        } else {
+          studentFields.studentPhase = 'AWAITING';
+          studentFields.phaseClassifiedAt = new Date();
+        }
+      } else if (input.studentPhase === 'PRATICA') {
+        studentFields.studentPhase = 'PRATICA';
+        studentFields.phaseClassifiedAt = new Date();
+      }
     }
 
     // Orphaned accounts (deleted from the Directory but still holding the

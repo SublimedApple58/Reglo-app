@@ -7,9 +7,10 @@ import { test, expect } from "@playwright/test";
  * REDESIGN UI (usage-mode control) is present.
  */
 test.describe("Staging smoke — vehicles release", () => {
-  test("dashboard, agenda, and vehicles redesign load @staging", async ({ page }) => {
+  test("landing (agenda), agenda tab, and vehicles redesign load @staging", async ({ page }) => {
+    // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
-    await expect(page.getByTestId("autoscuole-dashboard-page").first()).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60_000 });
 
     await page.goto("/it/user/autoscuole?tab=agenda");
     await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60_000 });

@@ -20,6 +20,10 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Group Lessons (per-student notes, 2026-06-16)**: a group-lesson seat is an appointment, so `updateAutoscuolaAppointmentDetails({notes})` is the per-student note editor; the seat note reaches the student via the normal `getAppointments`/`latest-note` paths (mobile teal note card). See `features/group-lessons.md`.
 - → **Group Lessons MOTO (`kind="moto"`, 2026-06-25)**: a moto group reserves a **fleet of motos** (`AutoscuolaGroupLessonVehicle`) + **one shared follow car** (`AutoscuolaGroupLesson.followVehicleId`) — both reserved at the **container level** for the whole window (`group-lesson-busy.ts`). Each participant gets an **auto-assigned** fleet moto (`lib/autoscuole/group-moto.ts`); mixed categories allowed. `findGroupLessonOverlap` now takes `vehicleIds[]` and checks other containers' fleet/follow car. Any new group-lesson conflict check must consider the fleet + follow car, not a single `vehicleId`. See `features/group-lessons.md`.
 
+### Locations (Sede e luoghi)
+- → **Appointments**: guide e prenotazioni selezionano un luogo (default = sede `isDefault`); mostrato agli allievi nel dettaglio guida
+- → **Mobile**: dettaglio guida apre Google Maps quando `isPrecise` (address+coords da Google Places)
+
 ### Availability
 - → **Booking Engine**: `getPublicationModeFilter()` gates student booking; slot-matcher reads weekly/daily/published data
 - → **Repositioning**: reposition uses slot-matcher which reads availability
@@ -59,11 +63,14 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Booking Engine**: slot-matcher excludes holiday dates
 - → **Cache**: invalidates AGENDA + PAYMENTS
 - → **Mobile**: `TitolareHomeScreen`, `NotificationOverlay`
+- ← **Settings**: `updateAutoscuolaSettings` chiama `syncCompanyNationalHolidays` sui campi `nationalHolidaysEnabled/Disabled` (preset festività nazionali → righe con `presetId`)
+- ← **Trigger.dev**: cron giornaliero `autoscuole-national-holidays` (rolling window annuale del preset)
 
 ### Notifications
 - → **ALL features**: every feature sends push via `sendAutoscuolaPushToUsers()`
 - → **Mobile (full checklist for new kind)**: `NotificationOverlay`, `NotificationInboxScreen`, `notifications.ts` types, `notificationStore.ts`
 - → **Recovery endpoint**: `app/api/autoscuole/notifications/route.ts` — queries DB fields per kind
+- → **Web Settings**: pane "Promemoria e notifiche" (`tabs/SettingsTab.tsx` sezione reminders) — preavvisi, canali e card "Notifica slot vuoti" (`emptySlotNotification*`, spostata da Prenotazioni e allievi il 2026-07-12)
 
 ### Instructor Clusters
 - → **Student Phase + Quiz Seats**: instructor invite code accettato da `student-register` (assegna `assignedInstructorId` alla registrazione; valido solo se active+autonomousMode)
@@ -78,6 +85,22 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Istruttori/Agenda**: `deleteUser` di un istruttore → `AutoscuolaInstructor` inactive + guide future annullate (`operationallyCancelAppointmentsByResource`)
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email
 - → **Mobile auth**: self-deletion mobile usa lo stesso `deleteAndAnonymizeUserAccount`
+
+### Company Plan
+- → **Backoffice**: dialog piano nella lista companies (auth cookie); NON sincronizza i CompanyService.limits (attivazione operativa separata in "Gestisci")
+- → **Support Center**: "Gestisci" della card porta alla chat assistenza
+- → **Area personale**: pane Abbonamento (riservata OWNER/INSTRUCTOR_OWNER)
+
+### Company Documents
+- → **Backoffice**: dialog documenti nella lista companies (stessa auth cookie); upload via API route dedicata
+- → **Storage R2**: stesso client di avatar/aula; download solo con URL firmati (mai public base)
+- → **Area personale**: pane "Contratto e fattura" (riservata OWNER/INSTRUCTOR_OWNER)
+
+### Support Center + Feedback
+- → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
+- → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti
+- → **Shell web**: `AutoscuoleShell` polla `getSupportUnreadCount` (badge hamburger + voce menu)
+- → **Email**: avvisi al team via `sendDynamicEmail` (no-op staging)
 
 ### Instructor Colors
 - → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
@@ -111,6 +134,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 ### Voice AI
 - → **Instructor Clusters**: voice settings stored in company settings
 - → **Notifications**: callback tasks, missed call handling
+- → **Settings (web)**: le impostazioni segretaria sono il pane `voice` di AutoscuoleResourcesPage (`?tab=settings&pane=voice`)
+- → **Support Center**: lo stato "feature non attiva" (VoiceInactiveState) invia la richiesta di attivazione via `sendSupportMessage`
 - → Mostly self-contained (Twilio/Telnyx webhooks, knowledge base, call records)
 
 ### Quiz Teoria
@@ -128,7 +153,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Communications / Background Jobs**: `processAutoscuolaTheoryReminders` esegue countdown T-7/T-3/T-1 e nudge inattività 5gg per TEORIA.
 - → **Notifications**: kinds `theory_exam_countdown` e `theory_quiz_inactivity` (mobile-inbox-only).
 - → **Mobile**: 4 home screen per fase (AWAITING / TEORIA / PRATICA / PATENTATO). AWAITING nasconde tutte le tab funzionali; il tab Quiz richiede `hasQuizAccess`.
-- → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `SettingsTab` espone toggle "Modalità registrazione allievi" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
+- → **Web Titolare**: `AutoscuoleStudentsPage` mostra banner licenze, sezione "In attesa di attivazione" con bottone "Assegna quiz", drawer con cambio fase + grant seat. `tabs/BookingsTab.tsx` (pane "Prenotazioni e allievi", sub-tab App allievi) espone il toggle "Assegnazione automatica della licenza quiz" (autoAssignQuizOnSignup) visibile solo se TEORIA è attiva.
 - → **Backoffice**: gestione licenze + fasi attive + dialog di risoluzione disattivazione TEORIA (`getQuizSeatsUsage`, `getTeoriaAffectedStudents`, `deactivateTeoriaWithResolution`).
 - → **Student Registration**: `POST /api/mobile/auth/student-register` decide fase + seat in transaction in base a `phasesEnabled` + `autoAssignQuizOnSignup` + seat disponibili.
 
@@ -150,6 +175,18 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Notifications (email)**: `sendRenewalBookingEmails` usa `sendDynamicEmail` (Resend) → conferma cittadino + avviso owner; rispetta il kill-switch `APP_ENV=staging`.
 - → **OpenRouter (nuova dipendenza esterna)**: chatbot via `lib/renewal/openrouter.ts` (env `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`). Unica integrazione LLM diretta del repo.
 - **Volutamente NON connesso**: Appointments, Payments, Booking Engine, Swaps, Holidays, Cases & Deadlines. Nessun credito/refund/slot-matcher/istruttore/veicolo. Legame solo concettuale con la scadenza medica (`AutoscuolaCase.medicalExpiresAt`), non un'integrazione.
+### Never-accessed nudge (allievo mai loggato)
+- → **Mobile Auth / Push**: `neverAccessed` = nessun `MobileAccessToken` (login mobile) **e** nessun `MobilePushDevice` (push) per lo userId. Se cambia come/quando vengono creati quei record, cambia il significato del flag. Nessun `lastLoginAt` su `User`.
+- → **Appointments / Agenda**: il flag viaggia nell'array `students` del bootstrap agenda (`getAutoscuolaAgendaBootstrapAction` → `listDirectoryStudents`); la web page costruisce mappe client (`neverAccessedById`, `phoneById`) come `studentLicenseById`. Solo guide **individuali** (no gruppo).
+- → **Students directory**: `getAutoscuolaStudentsWithProgress` annota il flag → `AutoscuoleStudentsPage`.
+- → **Cache**: entra nel payload bootstrap in cache Redis (segmento AGENDA, 20s) → il badge sparisce entro ~20s dal primo accesso dell'allievo.
+- → **Design system**: icone 3D Fluent (MIT) in `public/images/3d/`; animazione `.megaphone-ring` in `globals.css` rispetta `prefers-reduced-motion`.
+
+### Owner notifications (bell annullamenti allievi)
+- → **Appointments / Appointment Cancel**: il trigger vive dentro `cancelAutoscuolaAppointment` — quando l'attore è un **allievo** (non staff), guida **futura non-esame**, crea una `AutoscuolaNotification` via `after()`. Se cambia chi/come annulla (o il rilevamento dell'attore-allievo), aggiorna il trigger.
+- → **Shell / Layout**: `OwnerNotificationsBell` è montato in `AutoscuoleShell` (cluster destro). Owner-only: l'endpoint risponde 403 ai non-titolari → il bell si auto-nasconde.
+- → **Mobile Notifications**: NON confondere con `/api/autoscuole/notifications` (feed recovery mobile, derivato da altre tabelle). Il bell titolare usa `/api/autoscuole/owner-notifications` + tabella `AutoscuolaNotification`.
+- → **DB**: nuova tabella `AutoscuolaNotification` (`readAt` per-azienda, snapshot display). Real-time = polling 25s (nessuna infra); rimpiazzabile con servizio gestito senza toccare la UI.
 
 ### Password Reset (mobile)
 - → **Auth & RBAC**: riusa `MobileAccessToken` + `issueMobileToken`; il confirm revoca TUTTE le sessioni mobile dell'utente (`deleteMany`) e ne emette una nuova.

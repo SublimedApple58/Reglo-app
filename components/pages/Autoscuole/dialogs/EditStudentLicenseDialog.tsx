@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Loader2 } from "lucide-react";
 
 import {
   Dialog,
@@ -22,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { updateStudentLicensePath } from "@/lib/actions/autoscuole.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   LICENSE_CATEGORIES,
   LICENSE_CATEGORY_LABELS,
@@ -155,8 +155,7 @@ export function EditStudentLicenseDialog({
               disabled={saving || unchanged}
               className="cursor-pointer"
             >
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-              {saving ? "Salvataggio…" : "Salva"}
+              {saving ? <LoadingDots /> : "Salva"}
             </Button>
           </DialogFooter>
         </form>

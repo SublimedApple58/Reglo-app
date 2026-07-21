@@ -29,10 +29,10 @@ setup("authenticate as owner", async ({ page, baseURL }) => {
     },
   });
 
-  // Verify the session is real: the autoscuole dashboard renders (no redirect
-  // back to /sign-in). First hit may compile the route — allow generous time.
+  // Verify the session is real: the autoscuole landing (Agenda, redesign 2026-07)
+  // renders (no redirect back to /sign-in). First hit may compile the route.
   await page.goto("/it/user/autoscuole");
-  await expect(page.getByTestId("autoscuole-dashboard-page").first()).toBeVisible({
+  await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({
     timeout: 60_000,
   });
 

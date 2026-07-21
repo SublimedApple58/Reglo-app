@@ -3,16 +3,15 @@ import { z } from "zod";
 import { prisma } from "@/db/prisma";
 import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
-import { createExamEvent, updateExamTime } from "@/lib/actions/autoscuole.actions";
+import { createExamEvent, updateExamTime, materializeExamSlot } from "@/lib/actions/autoscuole.actions";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
-import { BOOKING_SOURCE } from "@/lib/autoscuole/booking-source";
 
 const createExamSchema = z.object({
-  studentIds: z.array(z.string().uuid()).min(1),
+  studentIds: z.array(z.string().uuid()),
   startsAt: z.string(),
   endsAt: z.string().optional().nullable(),
   instructorId: z.string().uuid().optional().nullable(),
@@ -128,6 +127,10 @@ export async function POST(request: Request) {
               status: { in: activeStatuses },
               startsAt: { lt: endsAt },
               endsAt: { gt: startsAt },
+              // Exclude THIS exam's own rows (same slot+instructor): adding a
+              // student to an exam the instructor already accompanies — incl. an
+              // empty exam's placeholder — is not a real conflict.
+              NOT: { type: "esame", instructorId: resolvedInstructorId, startsAt, endsAt },
             },
             select: { id: true },
           });
@@ -156,25 +159,17 @@ export async function POST(request: Request) {
         }
       }
 
-      const appointments = await prisma.$transaction(
-        payload.studentIds.map((studentId) =>
-          prisma.autoscuolaAppointment.create({
-            data: {
-              companyId,
-              studentId,
-              bookingSource: BOOKING_SOURCE.exam,
-              type: "esame",
-              startsAt,
-              endsAt: endsAt ?? undefined,
-              status: "scheduled",
-              instructorId: resolvedInstructorId,
-              vehicleId: null,
-              notes: payload.notes ?? null,
-              paymentRequired: false,
-            },
-          }),
-        ),
-      );
+      // One row per student — or a single studentless placeholder when no
+      // students were selected (the autoscuola will add them later). Consumes an
+      // existing placeholder for this slot on first add (see materializeExamSlot).
+      const count = await materializeExamSlot({
+        companyId,
+        studentIds: payload.studentIds,
+        startsAt,
+        endsAt,
+        instructorId: resolvedInstructorId,
+        notes: payload.notes ?? null,
+      });
 
       await invalidateAutoscuoleCache({
         companyId,
@@ -183,7 +178,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
-        data: { count: appointments.length },
+        data: { count },
       });
     }
 

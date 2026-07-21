@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AnimatePresence, motion } from "motion/react";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -87,8 +87,8 @@ function CalendarGrid({
                 "h-8 w-8 mx-auto rounded-full text-xs font-medium transition-colors cursor-pointer",
                 !day && "opacity-0 pointer-events-none",
                 day && !isSelected && !isToday && "text-foreground hover:bg-gray-100",
-                isToday && !isSelected && "bg-yellow-50 text-yellow-700 border border-yellow-200",
-                isSelected && "bg-yellow-400 text-white",
+                isToday && !isSelected && "border border-[#dddddd] bg-white text-foreground",
+                isSelected && "bg-[#222222] text-white",
               )}
             >
               {day?.getDate() ?? ""}
@@ -139,6 +139,8 @@ export function DatePicker({
 
 /**
  * DatePickerInput — trigger input that opens a calendar popover.
+ * Basato su Radix Popover (Portal + collision handling): non viene tagliato
+ * dai contenitori con overflow e convive con le Dialog modali (layer stack).
  */
 export function DatePickerInput({
   value,
@@ -154,17 +156,6 @@ export function DatePickerInput({
   const [open, setOpen] = React.useState(false);
   const [month, setMonth] = React.useState<Date>(() => (value ? new Date(value) : new Date()));
   const selectedDate = value ? new Date(value) : null;
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  // Close on outside click
-  React.useEffect(() => {
-    if (!open) return;
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open]);
 
   // Sync month when value changes externally
   React.useEffect(() => {
@@ -174,40 +165,46 @@ export function DatePickerInput({
   }, [value]);
 
   return (
-    <div ref={ref} className={cn("relative", className)}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex h-10 w-full items-center gap-2 rounded-lg border bg-white px-3 text-sm transition-colors",
-          open ? "border-yellow-300 ring-1 ring-yellow-200" : "border-border",
-          value ? "text-foreground" : "text-muted-foreground",
-        )}
-      >
-        <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-left truncate">{value ? formatDisplay(value) : placeholder}</span>
-      </button>
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
-            className="absolute left-0 top-[calc(100%+4px)] z-50 w-[280px] origin-top rounded-xl border border-border bg-white p-3 shadow-dropdown"
-          >
-            <CalendarGrid
-              month={month}
-              setMonth={setMonth}
-              selectedDate={selectedDate}
-              onSelect={(day) => {
-                onChange(formatDateLocal(day));
-                setOpen(false);
-              }}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+    // NON-modale + pointer-events-auto sul content: dentro le Dialog modali il
+    // body ha pointer-events:none (che il content sovrascrive); la variante
+    // `modal` innescava una race di cleanup con la Dialog che lasciava il body
+    // congelato dopo la chiusura.
+    <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex h-10 w-full cursor-pointer items-center gap-2 rounded-lg border bg-white px-3 text-sm transition-colors",
+            open ? "border-[#222222]" : "border-border hover:border-[#929292]",
+            value ? "text-foreground" : "text-muted-foreground",
+            className,
+          )}
+        >
+          <CalendarDays className="size-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-left truncate">
+            {value ? formatDisplay(value) : placeholder}
+          </span>
+        </button>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          side="bottom"
+          align="start"
+          sideOffset={4}
+          collisionPadding={8}
+          className="pointer-events-auto z-[200] w-[280px] rounded-xl border border-border bg-white p-3 shadow-dropdown outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1"
+        >
+          <CalendarGrid
+            month={month}
+            setMonth={setMonth}
+            selectedDate={selectedDate}
+            onSelect={(day) => {
+              onChange(formatDateLocal(day));
+              setOpen(false);
+            }}
+          />
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   );
 }

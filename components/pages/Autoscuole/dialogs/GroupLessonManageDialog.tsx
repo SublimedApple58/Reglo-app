@@ -1,13 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Send, StickyNote, Trash2, X } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { Plus, Search as SearchIcon, Send, StickyNote, Trash2, X } from "lucide-react";
 
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -17,12 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   getGroupLesson,
   getAutoscuolaVehicles,
@@ -32,6 +31,8 @@ import {
   listEligibleGroupLessonInvitees,
   cancelGroupLesson,
   updateAutoscuolaAppointmentDetails,
+  setGroupLessonSeatOutcome,
+  markGroupLessonAllPresent,
 } from "@/lib/actions/autoscuole.actions";
 import { inviteToGroupLesson } from "@/lib/actions/autoscuole-availability.actions";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
@@ -71,6 +72,7 @@ type GroupLessonDetail = {
     appointmentId: string;
     studentId: string;
     studentName: string | null;
+    attendance: "present" | "absent" | "pending";
     notes: string | null;
     vehicleId?: string | null;
     vehicleName?: string | null;
@@ -105,6 +107,92 @@ const durationOf = (startIso: string, endIso: string | null) => {
   if (!endIso) return 180;
   return Math.max(60, Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000));
 };
+const fmtTime = (d: Date) => d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+const fmtWhen = (startIso: string, endIso: string | null) => {
+  const start = new Date(startIso);
+  const date = start.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  return `${date.charAt(0).toUpperCase()}${date.slice(1)} · ${fmtTime(start)}${endIso ? ` – ${fmtTime(new Date(endIso))}` : ""}`;
+};
+const initialsOf = (name: string | null | undefined) =>
+  (name ?? "Allievo")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || "A";
+
+/** Riga di dettaglio stile Informazioni aziendali: label + valore + "Modifica";
+ *  in modifica la riga si espande con l'editor passato come children. */
+function DetailRow({
+  label,
+  value,
+  editing,
+  onEdit,
+  children,
+}: {
+  label: string;
+  value: React.ReactNode;
+  editing: boolean;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border-b border-[#ebebeb] py-4">
+      {editing ? (
+        <div>
+          <p className="mb-2.5 text-[15px] font-semibold text-foreground">{label}</p>
+          {children}
+        </div>
+      ) : (
+        <div className="flex items-start justify-between">
+          <div className="min-w-0">
+            <p className="text-[15px] font-semibold text-foreground">{label}</p>
+            <p className="mt-0.5 text-[13.5px] font-medium leading-snug text-[#6a6a6a]">{value}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="ml-6 shrink-0 cursor-pointer whitespace-nowrap text-sm font-semibold text-foreground underline underline-offset-2 hover:decoration-2"
+          >
+            Modifica
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Footer degli editor inline: Salva near-black + Annulla testo. */
+function EditFooter({
+  busy,
+  onSave,
+  onCancel,
+}: {
+  busy: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-3.5 flex items-center gap-2.5">
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onSave}
+        className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+      >
+        {busy ? <LoadingDots /> : "Salva"}
+      </button>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onCancel}
+        className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+      >
+        Annulla
+      </button>
+    </div>
+  );
+}
 
 export function GroupLessonManageDialog({
   open,
@@ -120,7 +208,13 @@ export function GroupLessonManageDialog({
   const [loading, setLoading] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [eligible, setEligible] = React.useState<ResourceOption[]>([]);
-  const [addId, setAddId] = React.useState<string>("");
+  // Pannello laterale (uno alla volta): elenco allievi idonei o parco moto.
+  const [sidePanel, setSidePanel] = React.useState<null | "students" | "fleet">(null);
+  const [addSearch, setAddSearch] = React.useState("");
+  const [addingId, setAddingId] = React.useState<string | null>(null);
+  const [inviting, setInviting] = React.useState(false);
+  const [fleetSearch, setFleetSearch] = React.useState("");
+  const [togglingMotoId, setTogglingMotoId] = React.useState<string | null>(null);
   // Per-student note editing: which seat appointment is open + its draft text.
   const [noteEditing, setNoteEditing] = React.useState<string | null>(null);
   const [noteDraft, setNoteDraft] = React.useState("");
@@ -134,10 +228,21 @@ export function GroupLessonManageDialog({
   const [fleetIds, setFleetIds] = React.useState<string[]>([]);
   const [followId, setFollowId] = React.useState<string>("");
   const [allVehicles, setAllVehicles] = React.useState<VehicleWithLicense[]>([]);
+  // Conferma annullamento inline (niente window.confirm).
+  const [confirmCancel, setConfirmCancel] = React.useState(false);
+  // Riga dei dettagli attualmente in modifica (pattern Informazioni aziendali:
+  // una riga alla volta, editor inline con Salva/Annulla).
+  const [editingField, setEditingField] = React.useState<
+    null | "when" | "capacity" | "instructor" | "vehicle" | "fleet" | "follow"
+  >(null);
 
-  const reload = React.useCallback(async () => {
+  // silent = refetch in background senza rimettere il dialog in loading: niente
+  // flash/skeleton a ogni azione, si aggiornano solo i dati. Su silent NON
+  // resettiamo i campi dei form di modifica (rispecchiano già i valori appena
+  // salvati dall'utente); il reset serve solo al primo caricamento all'apertura.
+  const reload = React.useCallback(async (silent = false) => {
     if (!groupLessonId) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const [res, elig] = await Promise.all([
         getGroupLesson(groupLessonId),
@@ -145,26 +250,36 @@ export function GroupLessonManageDialog({
       ]);
       if (res.success && res.data) {
         setLesson(res.data);
-        setStartLocal(toLocalInput(res.data.startsAt));
-        setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
-        setCapacityStr(String(res.data.capacity ?? 3));
-        setInstructorId(res.data.instructorId ?? "");
-        setVehicleId(res.data.vehicleId ?? "");
-        setFleetIds((res.data.fleet ?? []).map((f) => f.id));
-        setFollowId(res.data.followVehicleId ?? "");
+        if (!silent) {
+          setStartLocal(toLocalInput(res.data.startsAt));
+          setDurationMin(String(durationOf(res.data.startsAt, res.data.endsAt)));
+          setCapacityStr(String(res.data.capacity ?? 3));
+          setInstructorId(res.data.instructorId ?? "");
+          setVehicleId(res.data.vehicleId ?? "");
+          setFleetIds((res.data.fleet ?? []).map((f) => f.id));
+          setFollowId(res.data.followVehicleId ?? "");
+        }
       }
       if (elig.success && elig.data) {
         setEligible(elig.data.map((e) => ({ id: e.id, name: e.name ?? "Allievo" })));
-        setAddId("");
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [groupLessonId]);
 
   React.useEffect(() => {
     if (open && groupLessonId) reload();
-    if (!open) { setLesson(null); setEligible([]); }
+    if (!open) {
+      setLesson(null);
+      setEligible([]);
+      setConfirmCancel(false);
+      setNoteEditing(null);
+      setEditingField(null);
+      setSidePanel(null);
+      setAddSearch("");
+      setFleetSearch("");
+    }
   }, [open, groupLessonId, reload]);
 
   // Full vehicle list (with license + access info) for the moto fleet /
@@ -252,7 +367,37 @@ export function GroupLessonManageDialog({
 
   const handleRemove = async (studentId: string) => {
     if (!groupLessonId) return;
-    if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload();
+    if (await run(() => removeGroupLessonParticipant({ groupLessonId, studentId }), "Allievo rimosso.")) reload(true);
+  };
+  // Presence outcome for a single seat (present/absent). Pure record-keeping —
+  // does not change the "da pagare" charge. We patch local state in place (no
+  // reload) so the dialog doesn't flash a full-content loader on every tap.
+  const handleSetOutcome = async (appointmentId: string, outcome: "present" | "absent") => {
+    const ok = await run(
+      () => setGroupLessonSeatOutcome({ appointmentId, outcome }),
+      outcome === "present" ? "Segnato presente." : "Segnato assente.",
+    );
+    if (ok) {
+      setLesson((prev) =>
+        prev
+          ? {
+              ...prev,
+              participants: prev.participants.map((p) =>
+                p.appointmentId === appointmentId ? { ...p, attendance: outcome } : p,
+              ),
+            }
+          : prev,
+      );
+    }
+  };
+  const handleAllPresent = async () => {
+    if (!groupLessonId) return;
+    const ok = await run(() => markGroupLessonAllPresent({ groupLessonId }), "Tutti segnati presenti.");
+    if (ok) {
+      setLesson((prev) =>
+        prev ? { ...prev, participants: prev.participants.map((p) => ({ ...p, attendance: "present" as const })) } : prev,
+      );
+    }
   };
   const startEditNote = (appointmentId: string, current: string | null) => {
     setNoteEditing(appointmentId);
@@ -265,30 +410,84 @@ export function GroupLessonManageDialog({
     if (await run(
       () => updateAutoscuolaAppointmentDetails({ appointmentId, notes: next || null }),
       "Nota salvata.",
-    )) { setNoteEditing(null); reload(); }
+    )) { setNoteEditing(null); reload(true); }
   };
-  const handleAdd = async () => {
-    if (!groupLessonId || !addId) return;
-    if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId: addId }), "Allievo aggiunto.")) reload();
+  const handleAdd = async (studentId: string) => {
+    if (!groupLessonId || !studentId) return;
+    setAddingId(studentId);
+    try {
+      if (await run(() => addGroupLessonParticipant({ groupLessonId, studentId }), "Allievo aggiunto.")) reload(true);
+    } finally {
+      setAddingId(null);
+    }
   };
   const handleInvite = async () => {
     if (!groupLessonId) return;
-    await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
+    setInviting(true);
+    try {
+      await run(() => inviteToGroupLesson({ groupLessonId }), "Invito inviato agli allievi idonei.");
+    } finally {
+      setInviting(false);
+    }
+  };
+  const filteredEligible = React.useMemo(() => {
+    const q = addSearch.trim().toLowerCase();
+    return q ? eligible.filter((e) => e.name.toLowerCase().includes(q)) : eligible;
+  }, [eligible, addSearch]);
+  // Parco moto nel pannello: in guida prima, poi le altre; filtro per nome.
+  const fleetPanelRows = React.useMemo(() => {
+    const inFleet = new Set((lesson?.fleet ?? []).map((f) => f.id));
+    const q = fleetSearch.trim().toLowerCase();
+    return fleetOptions
+      .filter((v) => !q || v.name.toLowerCase().includes(q))
+      .map((v) => ({ ...v, inFleet: inFleet.has(v.id) }))
+      .sort((a, b) => Number(b.inFleet) - Number(a.inFleet));
+  }, [fleetOptions, lesson, fleetSearch]);
+  // Toggle immediato di una moto nel parco: salva subito (payload dai valori
+  // salvati della guida, non dai draft) e ricarica.
+  const toggleFleetMoto = async (motoId: string) => {
+    if (!groupLessonId || !lesson) return;
+    const current = (lesson.fleet ?? []).map((f) => f.id);
+    const inFleet = current.includes(motoId);
+    const next = inFleet ? current.filter((x) => x !== motoId) : [...current, motoId];
+    if (!next.length) {
+      toast.error({ description: "La guida deve avere almeno una moto." });
+      return;
+    }
+    setTogglingMotoId(motoId);
+    try {
+      if (await run(
+        () => updateGroupLesson({
+          groupLessonId,
+          startsAt: lesson.startsAt,
+          endsAt:
+            lesson.endsAt ??
+            new Date(new Date(lesson.startsAt).getTime() + 180 * 60000).toISOString(),
+          instructorId: lesson.instructorId ?? null,
+          capacity: lesson.capacity,
+          vehicleIds: next,
+          followVehicleId: lesson.followVehicleId ?? null,
+        }),
+        inFleet ? "Moto rimossa dalla guida." : "Moto aggiunta alla guida.",
+      )) reload(true);
+    } finally {
+      setTogglingMotoId(null);
+    }
   };
   const isMoto = lesson?.kind === "moto";
   const handleSaveEdit = async () => {
-    if (!groupLessonId || !startLocal) return;
+    if (!groupLessonId || !startLocal) return false;
     if (!instructorId) {
       toast.error({ description: "Seleziona l'istruttore della guida di gruppo." });
-      return;
+      return false;
     }
     if (isMoto && fleetIds.length === 0) {
       toast.error({ description: "Seleziona almeno una moto per la guida di gruppo." });
-      return;
+      return false;
     }
     const start = new Date(startLocal);
     const end = new Date(start.getTime() + Number(durationMin) * 60 * 1000);
-    if (await run(
+    const ok = await run(
       () => updateGroupLesson({
         groupLessonId,
         startsAt: start.toISOString(),
@@ -302,54 +501,248 @@ export function GroupLessonManageDialog({
           : { vehicleId: vehicleId || null }),
       }),
       "Guida di gruppo aggiornata.",
-    )) reload();
+    );
+    if (ok) reload(true);
+    return ok;
+  };
+  // Apre l'editor di una riga risincronizzando i draft dallo stato salvato
+  // (una modifica annullata in precedenza non deve lasciare valori sporchi).
+  const startEditField = (field: NonNullable<typeof editingField>) => {
+    if (!lesson) return;
+    setStartLocal(toLocalInput(lesson.startsAt));
+    setDurationMin(String(durationOf(lesson.startsAt, lesson.endsAt)));
+    setCapacityStr(String(lesson.capacity ?? 3));
+    setInstructorId(lesson.instructorId ?? "");
+    setVehicleId(lesson.vehicleId ?? "");
+    setFleetIds((lesson.fleet ?? []).map((f) => f.id));
+    setFollowId(lesson.followVehicleId ?? "");
+    setEditingField(field);
+  };
+  const saveEditingField = async () => {
+    if (await handleSaveEdit()) setEditingField(null);
   };
   const handleCancelLesson = async () => {
     if (!groupLessonId) return;
-    if (!window.confirm("Annullare la guida di gruppo? Tutti i partecipanti verranno avvisati.")) return;
     if (await run(() => cancelGroupLesson(groupLessonId), "Guida di gruppo annullata.")) onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+      {/* overflow-visible sul Content: il pannello "Aggiungi allievi" sporge
+          a destra della card; lo scroll vive sul wrapper interno. */}
+      <DialogContent className="max-w-[520px] gap-0 overflow-visible rounded-[20px] p-0">
+        <div className="max-h-[88vh] overflow-y-auto rounded-[20px] p-7 pb-6">
+        {/* ── Header ── */}
+        <div className="flex items-center gap-2.5 pr-10">
+          <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
             {lesson?.kind === "moto" ? "Guida di gruppo moto" : "Guida di gruppo"}
-            {lesson ? (
-              <Badge
-                variant="secondary"
-                className={lesson.kind === "moto" ? "border-orange-200 bg-orange-100 text-orange-700" : "border-teal-200 bg-teal-100 text-teal-700"}
-              >
-                {lesson.filledSeats}/{lesson.capacity} posti
-              </Badge>
-            ) : null}
           </DialogTitle>
-          <DialogDescription>
-            Gestisci i partecipanti, l&apos;istruttore, il veicolo e l&apos;orario. Le modifiche valgono per tutti gli iscritti.
-          </DialogDescription>
-        </DialogHeader>
+          {lesson ? (
+            <span
+              className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold tracking-[0.3px]",
+                lesson.kind === "moto" ? "bg-[#fdeedd] text-[#b45309]" : "bg-[#f2f2f2] text-[#555555]",
+              )}
+            >
+              {lesson.filledSeats}/{lesson.capacity} posti
+            </span>
+          ) : null}
+        </div>
+        <DialogDescription className="mt-1 text-[13px] font-medium leading-normal text-[#929292]">
+          Gestisci i partecipanti, l&apos;istruttore, il veicolo e l&apos;orario. Le modifiche valgono per tutti gli iscritti.
+        </DialogDescription>
 
         {loading || !lesson ? (
-          <div className="flex justify-center py-10">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          <div className="flex justify-center py-14">
+            <LoadingDots className="text-[#929292]" />
           </div>
         ) : (
-          <div className="space-y-5">
-            {/* Roster */}
-            <div className="space-y-2">
-              <Label>Partecipanti</Label>
-              {lesson.participants.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Nessun iscritto. Aggiungi un allievo o invia gli inviti.</p>
+          <div className="mt-4">
+            {/* ── Dettagli della guida: righe con Modifica inline ── */}
+            <DetailRow
+              label="Data e ora"
+              value={fmtWhen(lesson.startsAt, lesson.endsAt)}
+              editing={editingField === "when"}
+              onEdit={() => startEditField("when")}
+            >
+              <div className="grid grid-cols-[1.6fr_1fr_1fr] gap-2.5">
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Data</div>
+                  <DatePickerInput
+                    value={startLocal.slice(0, 10)}
+                    onChange={(d) => setStartLocal(`${d}T${startLocal.slice(11, 16) || "09:00"}`)}
+                    className="h-auto rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-[11px]"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Inizio</div>
+                  <TimePickerInput
+                    value={startLocal.slice(11, 16) || null}
+                    onChange={(t) => setStartLocal(`${startLocal.slice(0, 10)}T${t}`)}
+                    minTime="06:00"
+                    maxTime="22:00"
+                    minuteStep={30}
+                    className="w-full justify-between py-[11px]"
+                  />
+                </div>
+                <div>
+                  <div className="mb-1.5 text-[12px] font-semibold text-[#6a6a6a]">Durata</div>
+                  <Select value={durationMin} onValueChange={setDurationMin}>
+                    <SelectTrigger className={PROTO_SELECT_TRIGGER}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {DURATIONS.map((d) => (
+                        <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            <DetailRow
+              label="Capienza"
+              value={`${lesson.capacity} ${lesson.capacity === 1 ? "posto" : "posti"} · ${lesson.filledSeats} ${lesson.filledSeats === 1 ? "occupato" : "occupati"}`}
+              editing={editingField === "capacity"}
+              onEdit={() => startEditField("capacity")}
+            >
+              <input
+                type="number"
+                autoFocus
+                min={Math.max(1, lesson.filledSeats)}
+                max={12}
+                value={capacityStr}
+                onChange={(e) => setCapacityStr(e.target.value)}
+                className={cn(PROTO_INPUT, "max-w-[140px]")}
+              />
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            <DetailRow
+              label="Istruttore"
+              value={lesson.instructorName ?? "Da assegnare"}
+              editing={editingField === "instructor"}
+              onEdit={() => startEditField("instructor")}
+            >
+              <Select value={instructorId} onValueChange={setInstructorId}>
+                <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                  <SelectValue placeholder="Seleziona istruttore" />
+                </SelectTrigger>
+                <SelectContent>
+                  {instructors.map((i) => (
+                    <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+            </DetailRow>
+
+            {vehiclesEnabled && !isMoto ? (
+              <DetailRow
+                label="Veicolo"
+                value={lesson.vehicleName ?? "Nessuno"}
+                editing={editingField === "vehicle"}
+                onEdit={() => startEditField("vehicle")}
+              >
+                <Select value={vehicleId} onValueChange={setVehicleId}>
+                  <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                    <SelectValue placeholder="Nessuno" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {standardVehicles.map((v) => (
+                      <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+              </DetailRow>
+            ) : null}
+
+            {isMoto ? (
+              <>
+                {/* Il parco moto si gestisce nel pannello laterale (come gli allievi). */}
+                <DetailRow
+                  label="Moto della guida"
+                  value={
+                    (lesson.fleet ?? []).length
+                      ? (lesson.fleet ?? []).map((f) => f.name).join(", ")
+                      : "Nessuna moto"
+                  }
+                  editing={false}
+                  onEdit={() => setSidePanel((v) => (v === "fleet" ? null : "fleet"))}
+                >
+                  <></>
+                </DetailRow>
+
+                <DetailRow
+                  label="Auto al seguito"
+                  value={lesson.followVehicleName ?? "Nessuna"}
+                  editing={editingField === "follow"}
+                  onEdit={() => startEditField("follow")}
+                >
+                  <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
+                    <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "max-w-[320px]")}>
+                      <SelectValue placeholder="Nessuna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
+                      {carVehicles.map((v) => (
+                        <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
+                      ))}
+                      {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
+                        <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  <p className="mt-[7px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+                    La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
+                  </p>
+                  <EditFooter busy={busy} onSave={saveEditingField} onCancel={() => setEditingField(null)} />
+                </DetailRow>
+              </>
+            ) : null}
+
+            {/* ── Partecipanti ── */}
+            <div className="mb-3 mt-6 flex items-baseline justify-between gap-3">
+              <span className="text-[15px] font-semibold text-foreground">Partecipanti</span>
+              {lesson.participants.length > 1 &&
+              lesson.participants.some((p) => p.attendance === "pending") ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleAllPresent}
+                  className={cn(
+                    "shrink-0 cursor-pointer text-[12.5px] font-semibold underline underline-offset-2 transition-all hover:decoration-2 disabled:opacity-50",
+                    isMoto ? "text-[#C2410C]" : "text-[#0f766e]",
+                  )}
+                >
+                  Segna tutti presenti
+                </button>
               ) : (
-                <div className="space-y-1.5">
-                  {lesson.participants.map((p) => (
-                    <div key={p.appointmentId} className="rounded-xl border border-border/60 bg-white px-3 py-2">
-                      <div className="flex items-center justify-between">
+                <span className="text-[12.5px] font-medium text-[#929292]">
+                  {lesson.openSeats > 0
+                    ? `${lesson.openSeats} ${lesson.openSeats === 1 ? "posto libero" : "posti liberi"}`
+                    : "Posti esauriti"}
+                </span>
+              )}
+            </div>
+            {lesson.participants.length === 0 ? (
+              <p className="text-[12.5px] font-medium text-[#929292]">
+                Nessun iscritto. Aggiungi un allievo o invia gli inviti.
+              </p>
+            ) : (
+              <div className="rounded-[12px] border-[1.5px] border-[#ededed]">
+                {lesson.participants.map((p, idx) => (
+                  <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                          {initialsOf(p.studentName)}
+                        </span>
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium text-foreground">{p.studentName ?? "Allievo"}</span>
+                          <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
                           {isMoto ? (
-                            <span className="block text-[11px] text-muted-foreground">
+                            <span className="block text-[12px] font-medium text-[#929292]">
                               {p.vehicleName ? (
                                 <>
                                   {p.vehicleName}
@@ -361,197 +754,379 @@ export function GroupLessonManageDialog({
                             </span>
                           ) : null}
                         </span>
-                        <div className="flex items-center gap-1">
-                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-teal-700 hover:bg-teal-50" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)} title="Nota per l'allievo">
-                            <StickyNote className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="sm" className="h-7 cursor-pointer px-2 text-rose-600 hover:bg-rose-50" disabled={busy} onClick={() => handleRemove(p.studentId)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                      </span>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <button
+                          type="button"
+                          title="Nota per l'allievo"
+                          disabled={busy}
+                          onClick={() => startEditNote(p.appointmentId, p.notes)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#6a6a6a] transition-colors hover:bg-[#f7f7f7] hover:text-foreground disabled:opacity-50"
+                        >
+                          <StickyNote className="size-4" strokeWidth={1.8} />
+                        </button>
+                        <button
+                          type="button"
+                          title="Rimuovi dalla guida"
+                          disabled={busy}
+                          onClick={() => handleRemove(p.studentId)}
+                          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-50"
+                        >
+                          <Trash2 className="size-4" strokeWidth={1.8} />
+                        </button>
+                      </div>
+                    </div>
+                    {/* Presenza: tint (teal auto / arancio moto) = presente,
+                        grigio = assente, nessuno = da confermare. */}
+                    <div className="mt-2.5 inline-flex items-center rounded-full bg-[#f4f4f5] p-0.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSetOutcome(p.appointmentId, "present")}
+                        className={cn(
+                          "cursor-pointer rounded-full px-3.5 py-1 text-[12px] font-semibold transition-colors disabled:opacity-50",
+                          p.attendance === "present"
+                            ? isMoto
+                              ? "bg-[#C2410C] text-white"
+                              : "bg-[#0f766e] text-white"
+                            : "text-[#6a6a6a] hover:text-foreground",
+                        )}
+                      >
+                        Presente
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleSetOutcome(p.appointmentId, "absent")}
+                        className={cn(
+                          "cursor-pointer rounded-full px-3.5 py-1 text-[12px] font-semibold transition-colors disabled:opacity-50",
+                          p.attendance === "absent"
+                            ? "bg-[#52525b] text-white"
+                            : "text-[#6a6a6a] hover:text-foreground",
+                        )}
+                      >
+                        Assente
+                      </button>
+                    </div>
+                    {noteEditing === p.appointmentId ? (
+                      <div className="mt-2">
+                        <textarea
+                          value={noteDraft}
+                          onChange={(e) => setNoteDraft(e.target.value)}
+                          rows={3}
+                          maxLength={2000}
+                          placeholder="Nota per questo allievo (la vedrà nella sua app)"
+                          className="w-full resize-y rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 py-2.5 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222]"
+                        />
+                        <div className="mt-1.5 flex items-center justify-end gap-3">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setNoteEditing(null)}
+                            className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                          >
+                            Annulla
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => handleSaveNote(p.appointmentId)}
+                            className="flex min-w-[96px] cursor-pointer items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+                          >
+                            {busy ? <LoadingDots className="scale-[0.6]" /> : "Salva nota"}
+                          </button>
                         </div>
                       </div>
-                      {noteEditing === p.appointmentId ? (
-                        <div className="mt-2 space-y-2">
-                          <Textarea
-                            value={noteDraft}
-                            onChange={(e) => setNoteDraft(e.target.value)}
-                            rows={3}
-                            maxLength={2000}
-                            placeholder="Nota per questo allievo (la vedrà nella sua app)"
-                            className="text-sm"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <Button type="button" variant="ghost" size="sm" className="cursor-pointer" disabled={busy} onClick={() => setNoteEditing(null)}>Annulla</Button>
-                            <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={() => handleSaveNote(p.appointmentId)}>
-                              {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva nota
-                            </Button>
-                          </div>
-                        </div>
-                      ) : p.notes?.trim() ? (
-                        <p className="mt-1.5 whitespace-pre-wrap text-xs text-muted-foreground">{p.notes.trim()}</p>
-                      ) : (
-                        <button type="button" className="mt-1 cursor-pointer text-xs text-teal-700 hover:underline" disabled={busy} onClick={() => startEditNote(p.appointmentId, p.notes)}>
-                          + Aggiungi nota
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Add participant */}
-            {lesson.openSeats > 0 ? (
-              <div className="space-y-2">
-                <Label>Aggiungi allievo</Label>
-                <div className="flex gap-2">
-                  <Select value={addId} onValueChange={setAddId}>
-                    <SelectTrigger className="cursor-pointer">
-                      <SelectValue placeholder={eligible.length ? "Seleziona allievo idoneo" : "Nessun allievo idoneo"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {eligible.map((e) => (
-                        <SelectItem key={e.id} value={e.id} className="cursor-pointer">{e.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button type="button" size="sm" className="cursor-pointer shrink-0" disabled={busy || !addId} onClick={handleAdd}>
-                    <Plus className="mr-1 h-4 w-4" /> Aggiungi
-                  </Button>
-                </div>
-                <Button type="button" variant="outline" size="sm" className="cursor-pointer" disabled={busy} onClick={handleInvite}>
-                  <Send className="mr-1.5 h-4 w-4" /> Invita allievi idonei ({lesson.openSeats} {lesson.openSeats === 1 ? "posto" : "posti"})
-                </Button>
+                    ) : p.notes?.trim() ? (
+                      <p className="mt-1.5 whitespace-pre-wrap text-[12.5px] font-medium text-[#929292]">{p.notes.trim()}</p>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => startEditNote(p.appointmentId, p.notes)}
+                        className="mt-1 cursor-pointer text-[12.5px] font-semibold text-foreground underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+                      >
+                        + Aggiungi nota
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">Posti esauriti.</p>
             )}
 
-            {/* Edit time / instructor / vehicle */}
-            <div className="space-y-3 rounded-2xl border border-border/60 bg-gray-50/50 p-3">
-              <Label>Modifica guida (vale per tutti)</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Inizio</span>
-                  <Input type="datetime-local" value={startLocal} onChange={(e) => setStartLocal(e.target.value)} className="cursor-pointer" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Durata</span>
-                  <Select value={durationMin} onValueChange={setDurationMin}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {DURATIONS.map((d) => (
-                        <SelectItem key={d.value} value={d.value} className="cursor-pointer">{d.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Capienza</span>
-                  <Input
-                    type="number"
-                    min={Math.max(1, lesson?.filledSeats ?? 1)}
-                    max={12}
-                    value={capacityStr}
-                    onChange={(e) => setCapacityStr(e.target.value)}
-                    className="cursor-pointer"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-[11px] text-muted-foreground">Istruttore (obbligatorio)</span>
-                  <Select value={instructorId} onValueChange={setInstructorId}>
-                    <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Seleziona istruttore" /></SelectTrigger>
-                    <SelectContent>
-                      {instructors.map((i) => (
-                        <SelectItem key={i.id} value={i.id} className="cursor-pointer">{i.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                {vehiclesEnabled && !isMoto ? (
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">Veicolo</span>
-                    <Select value={vehicleId} onValueChange={setVehicleId}>
-                      <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuno" /></SelectTrigger>
-                      <SelectContent>
-                        {standardVehicles.map((v) => (
-                          <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-              </div>
+            {/* ── Aggiungi allievi: trigger del pannello laterale ── */}
+            {lesson.openSeats > 0 ? (
+              <>
+                <div className="mb-2 mt-6 text-[15px] font-semibold text-foreground">Aggiungi allievi</div>
+                {eligible.length === 0 ? (
+                  <p className="text-[12.5px] font-medium text-[#929292]">
+                    Nessun allievo idoneo da aggiungere in questo momento.
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSidePanel((v) => (v === "students" ? null : "students"))}
+                    className={cn(
+                      "inline-flex cursor-pointer select-none items-center gap-2 rounded-full border-[1.5px] px-[22px] py-[11px] text-sm font-semibold transition-colors",
+                      sidePanel === "students"
+                        ? "border-[#222222] bg-[#f7f7f7] text-foreground"
+                        : "border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
+                    )}
+                  >
+                    <Plus className="size-4" strokeWidth={2} />
+                    Sfoglia allievi idonei · {eligible.length}
+                  </button>
+                )}
 
-              {/* Moto group: editable fleet + shared follow car (mirrors mobile). */}
-              {isMoto ? (
-                <div className="space-y-3 rounded-xl border border-border/50 bg-white px-3 py-2.5">
-                  <div className="space-y-1.5">
-                    <span className="text-[11px] text-muted-foreground">Moto della guida</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {fleetOptions.map((v) => {
-                        const checked = fleetIds.includes(v.id);
-                        // A moto already ridden by a participant can't be dropped.
-                        const locked = checked && assignedMotoIds.has(v.id);
-                        return (
-                          <button
-                            key={v.id}
-                            type="button"
-                            disabled={busy || locked}
-                            title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
-                            onClick={() =>
-                              setFleetIds((prev) =>
-                                prev.includes(v.id) ? prev.filter((x) => x !== v.id) : [...prev, v.id],
-                              )
-                            }
-                            className={cn(
-                              "flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                              checked
-                                ? "border-orange-300 bg-orange-50 text-orange-800"
-                                : "border-border/60 bg-white text-foreground hover:bg-gray-50",
-                              locked && "cursor-not-allowed opacity-70",
-                            )}
-                          >
-                            <span className="max-w-[160px] truncate">{v.name}</span>
-                            {v.licenseCategory ? (
-                              <span className="text-[10px] text-muted-foreground">{v.licenseCategory}</span>
-                            ) : null}
-                          </button>
-                        );
-                      })}
+                {/* Invito in app agli idonei non ancora iscritti */}
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-[12px] bg-[#f7f8fa] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Send className="size-4 shrink-0 text-[#6a6a6a]" strokeWidth={1.8} />
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-semibold text-foreground">Invita gli allievi idonei</p>
+                      <p className="text-[12px] font-medium leading-snug text-[#929292]">
+                        Notifica in app a chi può partecipare · {lesson.openSeats}{" "}
+                        {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
+                      </p>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <span className="text-[11px] text-muted-foreground">Auto al seguito (facoltativa)</span>
-                    <Select value={followId || "__none__"} onValueChange={(v) => setFollowId(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="cursor-pointer"><SelectValue placeholder="Nessuna" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__" className="cursor-pointer">Nessuna</SelectItem>
-                        {carVehicles.map((v) => (
-                          <SelectItem key={v.id} value={v.id} className="cursor-pointer">{v.name}</SelectItem>
-                        ))}
-                        {followId && !carVehicles.some((v) => v.id === followId) && lesson.followVehicleName ? (
-                          <SelectItem value={followId} className="cursor-pointer">{lesson.followVehicleName}</SelectItem>
-                        ) : null}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground">
-                      La tua scelta vale sempre: se la togli, la guida resta senza auto al seguito.
-                    </p>
-                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleInvite}
+                    className="flex min-w-[84px] shrink-0 cursor-pointer select-none items-center justify-center rounded-full bg-[#1a1a2e] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] disabled:opacity-60"
+                  >
+                    {inviting ? <LoadingDots className="scale-[0.6]" /> : "Invita"}
+                  </button>
                 </div>
-              ) : null}
-              <Button type="button" size="sm" className="w-full cursor-pointer" disabled={busy} onClick={handleSaveEdit}>
-                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Salva modifiche
-              </Button>
-            </div>
+              </>
+            ) : null}
 
-            {/* Cancel */}
-            <Button type="button" variant="ghost" size="sm" className="w-full cursor-pointer text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={busy} onClick={handleCancelLesson}>
-              <X className="mr-1.5 h-4 w-4" /> Annulla guida di gruppo
-            </Button>
+            {/* ── Annulla guida (conferma inline) ── */}
+            {confirmCancel ? (
+              <div className="mt-4 flex items-center justify-between gap-3 rounded-[12px] bg-[#fdf3f1] px-4 py-3">
+                <span className="text-[13px] font-medium leading-snug text-[#7a2e1d]">
+                  Annullare la guida? Tutti i partecipanti verranno avvisati.
+                </span>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirmCancel(false)}
+                    className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleCancelLesson}
+                    className="flex min-w-[100px] cursor-pointer items-center justify-center rounded-full bg-[#c13515] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d12] disabled:opacity-60"
+                  >
+                    {busy ? <LoadingDots className="scale-[0.6]" /> : "Sì, annulla"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setConfirmCancel(true)}
+                className="mt-3 flex w-full cursor-pointer items-center justify-center rounded-full py-3 text-sm font-semibold text-[#c13515] transition-colors hover:bg-[#fdf3f1] disabled:opacity-60"
+              >
+                Annulla guida di gruppo
+              </button>
+            )}
           </div>
         )}
+        </div>
+
+        {/* ── Pannello laterale "Aggiungi allievi": card gemella a destra ── */}
+        <AnimatePresence>
+          {sidePanel === "students" && lesson && lesson.openSeats > 0 && eligible.length > 0 && (
+            <motion.div
+              key="students-panel"
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">
+                  Aggiungi allievi
+                </span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setSidePanel(null)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                >
+                  <X className="size-3.5 text-foreground" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                Idonei per questa guida · {lesson.openSeats}{" "}
+                {lesson.openSeats === 1 ? "posto libero" : "posti liberi"}
+              </p>
+              <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                <input
+                  value={addSearch}
+                  onChange={(e) => setAddSearch(e.target.value)}
+                  placeholder="Cerca un allievo"
+                  autoFocus
+                  className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                />
+              </div>
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {filteredEligible.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    Nessun allievo trovato per &laquo;{addSearch}&raquo;.
+                  </p>
+                ) : (
+                  filteredEligible.map((e, idx) => (
+                    <div
+                      key={e.id}
+                      className={cn(
+                        "flex items-center justify-between gap-3 px-3.5 py-2.5",
+                        idx > 0 && "border-t border-[#f0f0f0]",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                          {initialsOf(e.name)}
+                        </span>
+                        <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => handleAdd(e.id)}
+                        className="flex min-w-[88px] shrink-0 cursor-pointer select-none items-center justify-center gap-1 rounded-full border-[1.5px] border-[#dddddd] px-3 py-1.5 text-[13px] font-semibold text-foreground transition-colors hover:border-[#222222] hover:bg-[#f7f7f7] disabled:opacity-50"
+                      >
+                        {addingId === e.id ? (
+                          <LoadingDots className="scale-[0.6]" />
+                        ) : (
+                          <>
+                            <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── Pannello laterale "Moto della guida": toggle immediato ── */}
+          {sidePanel === "fleet" && lesson && isMoto && (
+            <motion.div
+              key="fleet-panel"
+              initial={{ opacity: 0, x: -14 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="absolute left-[calc(100%+14px)] top-0 flex max-h-[88vh] w-[340px] flex-col rounded-[20px] border border-border bg-white p-6 shadow-card-primary"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[17px] font-bold tracking-[-0.2px] text-foreground">
+                  Moto della guida
+                </span>
+                <button
+                  type="button"
+                  aria-label="Chiudi elenco"
+                  onClick={() => setSidePanel(null)}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+                >
+                  <X className="size-3.5 text-foreground" strokeWidth={2} />
+                </button>
+              </div>
+              <p className="mt-0.5 text-[12.5px] font-medium text-[#929292]">
+                Le modifiche si salvano subito · {(lesson.fleet ?? []).length} moto in guida
+              </p>
+              {fleetOptions.length > 5 && (
+                <div className="mt-3 flex items-center gap-2.5 rounded-[10px] border-[1.5px] border-[#dddddd] px-3.5 transition-colors focus-within:border-[#222222]">
+                  <SearchIcon className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                  <input
+                    value={fleetSearch}
+                    onChange={(e) => setFleetSearch(e.target.value)}
+                    placeholder="Cerca una moto"
+                    className="min-w-0 flex-1 bg-transparent py-[9px] text-sm font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
+                  />
+                </div>
+              )}
+              <div className="mt-2.5 min-h-0 flex-1 overflow-y-auto rounded-[12px] border-[1.5px] border-[#ededed]">
+                {fleetPanelRows.length === 0 ? (
+                  <p className="px-4 py-3.5 text-[12.5px] font-medium text-[#929292]">
+                    {fleetSearch
+                      ? `Nessuna moto trovata per «${fleetSearch}».`
+                      : "Nessuna moto utilizzabile dall'istruttore selezionato."}
+                  </p>
+                ) : (
+                  fleetPanelRows.map((v, idx) => {
+                    // Una moto già assegnata a un partecipante non può uscire dal parco.
+                    const locked = v.inFleet && assignedMotoIds.has(v.id);
+                    return (
+                      <div
+                        key={v.id}
+                        className={cn(
+                          "flex items-center justify-between gap-3 px-3.5 py-2.5",
+                          idx > 0 && "border-t border-[#f0f0f0]",
+                        )}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <span
+                            className={cn(
+                              "flex size-8 shrink-0 select-none items-center justify-center rounded-full text-[11px] font-bold",
+                              v.inFleet ? "bg-[#fdf0e3] text-[#9a5b1f]" : "bg-[#f2f2f2] text-[#555555]",
+                            )}
+                          >
+                            {v.licenseCategory ?? initialsOf(v.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-foreground">{v.name}</span>
+                            {locked && (
+                              <span className="block text-[11px] font-medium text-[#a3a3a3]">
+                                Assegnata a un partecipante
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          disabled={busy || locked}
+                          title={locked ? "Assegnata a un partecipante: non rimovibile" : undefined}
+                          onClick={() => toggleFleetMoto(v.id)}
+                          className={cn(
+                            "flex min-w-[88px] shrink-0 select-none items-center justify-center gap-1 rounded-full border-[1.5px] px-3 py-1.5 text-[13px] font-semibold transition-colors",
+                            locked
+                              ? "cursor-not-allowed border-[#eeeeee] text-[#c1c1c1]"
+                              : v.inFleet
+                                ? "cursor-pointer border-[#dddddd] text-[#c13515] hover:border-[#c13515] hover:bg-[#fdf3f1]"
+                                : "cursor-pointer border-[#dddddd] text-foreground hover:border-[#222222] hover:bg-[#f7f7f7]",
+                            busy && !locked && "opacity-50",
+                          )}
+                        >
+                          {togglingMotoId === v.id ? (
+                            <LoadingDots className="scale-[0.6]" />
+                          ) : v.inFleet ? (
+                            "Rimuovi"
+                          ) : (
+                            <>
+                              <Plus className="size-3.5" strokeWidth={2} /> Aggiungi
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </DialogContent>
     </Dialog>
   );

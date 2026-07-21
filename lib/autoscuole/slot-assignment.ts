@@ -218,7 +218,9 @@ export async function buildSlotAssignmentContext(args: {
   for (const appt of appointments) {
     const start = appt.startsAt.getTime();
     const end = appt.endsAt?.getTime() ?? start + 30 * 60 * 1000;
-    add(appt.studentId, start, end);
+    // studentId is null only for studentless exam placeholders (no student
+    // interval to reserve); instructor/vehicle below are still reserved.
+    if (appt.studentId) add(appt.studentId, start, end);
     if (appt.instructorId) add(appt.instructorId, start, end);
     if (appt.vehicleId) add(appt.vehicleId, start, end);
     for (const link of appt.appointmentVehicles ?? []) {

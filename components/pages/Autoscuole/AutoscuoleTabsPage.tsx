@@ -2,12 +2,13 @@
 
 import React from "react";
 import dynamic from "next/dynamic";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useLocale } from "next-intl";
 import { useAtomValue } from "jotai";
-import { RegloTabs } from "@/components/ui/reglo-tabs";
-import { companyAtom } from "@/atoms/company.store";
 
-import { AutoscuoleDashboardPage } from "./AutoscuoleDashboardPage";
+import { companyAtom } from "@/atoms/company.store";
+import { isSecretaryOnly, isLicenseRenewalEnabled } from "@/lib/services";
+import { AutoscuoleRinnoviTeaser } from "./AutoscuoleRinnoviTeaser";
 
 const AutoscuoleStudentsPage = dynamic(
   () =>
@@ -37,46 +38,34 @@ const AutoscuolePaymentsPage = dynamic(
     })),
   { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
 );
+const AutoscuoleRenewalPage = dynamic(
+  () =>
+    import("./AutoscuoleRenewalPage").then((module) => ({
+      default: module.AutoscuoleRenewalPage,
+    })),
+  { loading: () => <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" /> },
+);
 
-type AutoscuoleTabKey =
-  | "dashboard"
-  | "students"
-  | "agenda"
-  | "settings"
-  | "payments";
+// Redesign 2026-07: la Dashboard è stata ritirata — l'Agenda è la landing
+// (nessun ?tab). Configurazione/Pagamenti vivono nel menu hamburger della
+// shell; "rinnovi" è il teaser della feature in arrivo.
+type AutoscuoleTabKey = "students" | "agenda" | "settings" | "payments" | "rinnovi";
 
-type TabItem = {
-  key: AutoscuoleTabKey;
-  label: string;
-};
-
-const TAB_ITEMS: TabItem[] = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "students", label: "Allievi" },
-  { key: "agenda", label: "Agenda" },
-  { key: "settings", label: "Configurazione" },
-  { key: "payments", label: "Pagamenti" },
-];
+const TAB_KEYS: AutoscuoleTabKey[] = ["students", "agenda", "settings", "payments", "rinnovi"];
 
 function normalizeTab(value: string | null): AutoscuoleTabKey {
-  if (!value) return "dashboard";
+  if (!value) return "agenda";
   if (value === "disponibilita") return "settings";
-  const found = TAB_ITEMS.find((item) => item.key === value);
-  return found?.key ?? "dashboard";
+  return (TAB_KEYS as string[]).includes(value) ? (value as AutoscuoleTabKey) : "agenda";
 }
 
 export function AutoscuoleTabsPage() {
-  const pathname = usePathname();
-  const router = useRouter();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const locale = useLocale();
   const company = useAtomValue(companyAtom);
-
-  const isAutoscuoleOnlyCompany = React.useMemo(() => {
-    const activeServices =
-      company?.services?.filter((service) => service.status === "active") ?? [];
-    if (!company?.services?.length) return false;
-    return activeServices.length === 1 && activeServices[0]?.key === "AUTOSCUOLE";
-  }, [company?.services]);
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const renewalEnabled = isLicenseRenewalEnabled(company?.services ?? null);
 
   const initialTab = React.useMemo(
     () => normalizeTab(searchParams.get("tab")),
@@ -89,19 +78,25 @@ export function AutoscuoleTabsPage() {
     setActiveTab(tab);
   }, [searchParams]);
 
+  // Modalità "solo Segretaria": le tab dell'autoscuola (agenda/allievi/…) non
+  // esistono — reindirizza alla pagina Segretaria. Le Impostazioni restano
+  // accessibili (mostreranno solo il pane Segretaria).
+  React.useEffect(() => {
+    if (secretaryOnly && activeTab !== "settings") {
+      router.replace(`/${locale}/user/autoscuole/voice`);
+    }
+  }, [secretaryOnly, activeTab, router, locale]);
+
   React.useEffect(() => {
     const preloaders: Record<AutoscuoleTabKey, Array<() => Promise<unknown>>> = {
-      dashboard: [
-        () => import("./AutoscuoleStudentsPage"),
-        () => import("./AutoscuoleAgendaPage"),
-      ],
       students: [() => import("./AutoscuoleAgendaPage")],
       agenda: [
-        () => import("./AutoscuolePaymentsPage"),
+        () => import("./AutoscuoleStudentsPage"),
         () => import("./AutoscuoleResourcesPage"),
       ],
       settings: [() => import("./AutoscuoleAgendaPage")],
       payments: [() => import("./AutoscuoleAgendaPage")],
+      rinnovi: [() => import("./AutoscuoleAgendaPage")],
     };
 
     const runPrefetch = () => {
@@ -129,45 +124,27 @@ export function AutoscuoleTabsPage() {
     return () => window.clearTimeout(timeout);
   }, [activeTab]);
 
-  const selectTab = React.useCallback(
-    (tab: AutoscuoleTabKey) => {
-      setActiveTab(tab);
-      const next = new URLSearchParams(searchParams.toString());
-      if (tab === "dashboard") {
-        next.delete("tab");
-      } else {
-        next.set("tab", tab);
-      }
-      const query = next.toString();
-      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
-    },
-    [pathname, router, searchParams],
-  );
-  const tabsNode = isAutoscuoleOnlyCompany ? null : (
-    <RegloTabs
-      items={TAB_ITEMS}
-      activeKey={activeTab}
-      onChange={selectTab}
-      ariaLabel="Sezioni autoscuole"
-    />
-  );
+  // Modalità "solo Segretaria": tutto ciò che non è "settings" reindirizza a
+  // /voice (effetto sopra) — mostra un placeholder mentre avviene.
+  if (secretaryOnly && activeTab !== "settings") {
+    return <div className="h-40 w-full animate-pulse rounded-3xl bg-white/40" />;
+  }
 
   return (
     <div className="w-full">
-      {activeTab === "dashboard" ? (
-        <AutoscuoleDashboardPage tabs={tabsNode} />
-      ) : null}
-      {activeTab === "students" ? (
-        <AutoscuoleStudentsPage tabs={tabsNode} />
-      ) : null}
-      {activeTab === "agenda" ? (
-        <AutoscuoleAgendaPage tabs={tabsNode} />
-      ) : null}
-      {activeTab === "settings" ? (
-        <AutoscuoleResourcesPage tabs={tabsNode} />
-      ) : null}
-      {activeTab === "payments" ? (
-        <AutoscuolePaymentsPage tabs={tabsNode} />
+      {activeTab === "students" ? <AutoscuoleStudentsPage tabs={null} /> : null}
+      {activeTab === "agenda" ? <AutoscuoleAgendaPage tabs={null} /> : null}
+      {activeTab === "settings" ? <AutoscuoleResourcesPage tabs={null} /> : null}
+      {activeTab === "payments" ? <AutoscuolePaymentsPage tabs={null} /> : null}
+      {/* Rinnovi: pannello vero se la company ha il modulo, altrimenti il
+          teaser "in arrivo" (la nav nasconde già la tab a chi non ce l'ha,
+          questo copre l'accesso da URL diretto). */}
+      {activeTab === "rinnovi" ? (
+        renewalEnabled ? (
+          <AutoscuoleRenewalPage />
+        ) : (
+          <AutoscuoleRinnoviTeaser />
+        )
       ) : null}
     </div>
   );

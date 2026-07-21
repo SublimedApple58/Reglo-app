@@ -34,9 +34,9 @@ export default function BackofficeSignInPage() {
   return (
     <div className="relative flex min-h-svh items-center justify-center bg-gray-50/50 px-6 py-10">
       {/* Brand gradient blurs */}
-      <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-pink-500/15 blur-[100px]" />
-      <div className="pointer-events-none absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-yellow-400/20 blur-[100px]" />
-      <div className="pointer-events-none absolute left-1/2 top-1/3 h-48 w-48 -translate-x-1/2 rounded-full bg-pink-400/10 blur-[80px]" />
+      <div className="pointer-events-none absolute -left-24 top-12 h-72 w-72 rounded-full bg-[#1a1a2e]/10 blur-[100px]" />
+      <div className="pointer-events-none absolute -right-24 bottom-12 h-72 w-72 rounded-full bg-[#cfe0fb]/50 blur-[100px]" />
+      <div className="pointer-events-none absolute left-1/2 top-1/3 h-48 w-48 -translate-x-1/2 rounded-full bg-[#9fc3f0]/20 blur-[80px]" />
 
       <div className="w-full max-w-md space-y-8">
         {/* Brand header */}
@@ -48,9 +48,9 @@ export default function BackofficeSignInPage() {
               <p className="text-xs text-muted-foreground">Pannello di amministrazione</p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 rounded-full border border-pink-200 bg-pink-50 px-3 py-1">
-            <Shield className="h-3 w-3 text-pink-600" />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-pink-700">
+          <div className="flex items-center gap-1.5 rounded-full border border-[#dddddd] bg-[#f8f8f8] px-3 py-1">
+            <Shield className="h-3 w-3 text-[#222222]" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-[#444444]">
               Accesso riservato
             </span>
           </div>

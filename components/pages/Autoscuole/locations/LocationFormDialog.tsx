@@ -1,19 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapPin, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { MapPin, Search, X } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { FieldGroup } from "@/components/ui/field-group";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
+import { cn } from "@/lib/utils";
 
 export type LocationFormValues = {
   name: string;
@@ -40,6 +39,19 @@ type Suggestion = {
   secondaryText: string;
 };
 
+/** Input della modale dal proto: bg #f7f8fa, bordo 1.5 #ededed, radius 12,
+ *  al focus bordo near-black e fondo bianco. */
+const FIELD_CLASS =
+  "w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white";
+
+/**
+ * Modale sede/luogo guida dal proto (sedeModalOpen): card 480px radius 20,
+ * header centrato con illustrazione (sede-autoscuola / luogo-guida), campi
+ * su fondo #f7f8fa, toggle "Posizione precisa", footer Annulla + CTA pill
+ * navy "Salva luogo" (grigia finché il nome è vuoto, LoadingDots in salvataggio).
+ * La logica (autocomplete Google Places con session token, coordinate,
+ * validazione) è invariata rispetto alla versione precedente.
+ */
 export function LocationFormDialog({
   open,
   onClose,
@@ -71,8 +83,6 @@ export function LocationFormDialog({
       setSuggestions([]);
     }
   }, [open, mode, initialValue]);
-
-  const lockPreciseToggle = false;
 
   useEffect(() => {
     if (!PLACES_API_KEY) return;
@@ -181,7 +191,7 @@ export function LocationFormDialog({
   }, [name, isPrecise, address, latitude, longitude]);
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || saving) return;
     setSaving(true);
     try {
       await onSubmit({
@@ -203,67 +213,87 @@ export function LocationFormDialog({
     }
   };
 
+  const isEditSede = mode === "default";
+  const title = isEditSede
+    ? "Sede dell'autoscuola"
+    : initialValue?.id
+      ? "Modifica luogo guida"
+      : "Nuovo luogo guida";
+  const subtitle = isEditSede
+    ? "Modificabile solo dal titolare. Usata come luogo di default."
+    : "Un luogo extra da cui le guide possono partire.";
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-yellow-600" />
-            {mode === "default"
-              ? "Sede dell'autoscuola"
-              : initialValue?.id
-                ? "Modifica luogo"
-                : "Aggiungi luogo"}
+      {/* X di default del DialogContent nascosta: il proto usa la sua tonda #f7f7f7 */}
+      <DialogContent className="max-w-[480px] gap-0 rounded-[20px] p-7 pb-6 [&>button:last-child]:hidden">
+        {/* ── Header centrato con illustrazione dal proto ── */}
+        <div className="mb-[22px] flex flex-col items-center px-2 text-center">
+          <Image
+            src={isEditSede ? "/images/settings/sede-autoscuola.png" : "/images/settings/luogo-guida.png"}
+            alt=""
+            width={118}
+            height={118}
+            className="mb-1.5 block size-[118px] select-none object-contain"
+          />
+          <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
+            {title}
           </DialogTitle>
-        </DialogHeader>
+          <div className="mt-[3px] text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+            {subtitle}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Chiudi"
+          className="absolute right-5 top-5 flex size-8 cursor-pointer items-center justify-center rounded-full bg-[#f7f7f7] transition-colors hover:bg-[#e9e9e9]"
+        >
+          <X className="size-3 text-foreground" strokeWidth={2} />
+        </button>
 
-        <div className="space-y-4">
-          <FieldGroup label="Nome del luogo">
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Es. Piazzale del Comune"
-              maxLength={80}
-            />
-          </FieldGroup>
+        {/* ── Nome ── */}
+        <div className="mb-2 text-[13px] font-semibold text-foreground">Nome del luogo</div>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Es. Sede principale, Parcheggio stazione…"
+          maxLength={80}
+          autoFocus
+          className={FIELD_CLASS}
+        />
 
-          {!lockPreciseToggle && (
-            <div
-              role="switch"
-              tabIndex={0}
-              aria-checked={isPrecise}
-              onClick={() => setIsPrecise((v) => !v)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setIsPrecise((v) => !v);
-                }
-              }}
-              className="flex w-full cursor-pointer items-center justify-between gap-4 rounded-xl border border-border bg-white px-4 py-3 transition-colors hover:bg-gray-50"
-            >
-              <div>
-                <div className="text-sm font-medium text-foreground">
-                  Posizione precisa
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  Gli allievi potranno aprire il luogo in Google Maps.
-                </div>
-              </div>
-              <InlineToggle checked={isPrecise} />
+        {/* ── Posizione precisa ── */}
+        <div
+          role="switch"
+          tabIndex={0}
+          aria-checked={isPrecise}
+          onClick={() => setIsPrecise((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsPrecise((v) => !v);
+            }
+          }}
+          className="mt-4 flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded-[12px] border-[1.5px] border-[#ededed] px-4 py-[15px]"
+        >
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-foreground">Posizione precisa</div>
+            <div className="mt-0.5 text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+              Gli allievi potranno aprire il luogo in Google Maps.
             </div>
-          )}
+          </div>
+          <InlineToggle checked={isPrecise} size="lg" />
+        </div>
 
-          {isPrecise && (
-            <FieldGroup
-              label="Indirizzo"
-              description={
-                PLACES_API_KEY
-                  ? "Cerca via, città o luogo. Selezionalo per agganciare le coordinate."
-                  : "Configura NEXT_PUBLIC_GOOGLE_MAPS_API_KEY per abilitare l'autocomplete."
-              }
-            >
-              <div className="relative">
-                <Input
+        {/* ── Indirizzo (solo posizione precisa) ── */}
+        {isPrecise && (
+          <>
+            <div className="mb-2 mt-5 text-[13px] font-semibold text-foreground">Indirizzo</div>
+            <div className="relative">
+              <div className="flex items-center gap-2.5 rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] transition-colors focus-within:border-[#222222] focus-within:bg-white">
+                <Search className="size-4 shrink-0 text-[#a8a8a8]" strokeWidth={1.8} />
+                <input
                   value={address}
                   onChange={(e) => {
                     setAddress(e.target.value);
@@ -273,49 +303,62 @@ export function LocationFormDialog({
                   }}
                   placeholder="Es. Via Roma 14, Milano"
                   disabled={!PLACES_API_KEY}
+                  className="min-w-0 flex-1 bg-transparent py-[13px] text-[15px] font-medium text-foreground outline-none placeholder:text-[#c1c1c1]"
                 />
-                {searching && (
-                  <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
-                )}
-                {suggestions.length > 0 && (
-                  <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-white shadow-lg">
-                    {suggestions.map((s) => (
-                      <button
-                        key={s.placeId}
-                        type="button"
-                        onClick={() => selectSuggestion(s)}
-                        className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50"
-                      >
-                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium text-foreground">
-                            {s.primaryText}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {s.secondaryText}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {searching && <LoadingDots className="shrink-0 scale-[0.6] text-[#a8a8a8]" />}
               </div>
-              {latitude != null && longitude != null && (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Coordinate: {latitude.toFixed(5)}, {longitude.toFixed(5)}
+              {suggestions.length > 0 && (
+                <div className="absolute z-50 mt-1.5 w-full overflow-hidden rounded-[12px] border border-[#ededed] bg-white shadow-dropdown">
+                  {suggestions.map((s) => (
+                    <button
+                      key={s.placeId}
+                      type="button"
+                      onClick={() => selectSuggestion(s)}
+                      className="flex w-full cursor-pointer items-start gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors hover:bg-[#f7f7f7]"
+                    >
+                      <MapPin className="mt-0.5 size-4 shrink-0 text-[#929292]" strokeWidth={1.6} />
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold text-foreground">{s.primaryText}</div>
+                        <div className="truncate text-xs font-medium text-[#929292]">
+                          {s.secondaryText}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
                 </div>
               )}
-            </FieldGroup>
-          )}
-        </div>
+            </div>
+            <div className="mt-[9px] text-xs font-medium leading-[1.45] text-[#a3a3a3]">
+              {PLACES_API_KEY
+                ? "Inizia a digitare per cercare l'indirizzo. Verrà mostrato agli allievi nel dettaglio della guida."
+                : "Configura NEXT_PUBLIC_GOOGLE_MAPS_API_KEY per abilitare la ricerca dell'indirizzo."}
+            </div>
+          </>
+        )}
 
-        <div className="mt-2 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
+        {/* ── Footer dal proto: Annulla testo + CTA pill navy ── */}
+        <div className="mt-[26px] flex items-center justify-end gap-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="cursor-pointer select-none px-2 py-[11px] text-sm font-semibold text-foreground transition-colors hover:text-[#555555]"
+          >
             Annulla
-          </Button>
-          <Button onClick={handleSubmit} disabled={!canSubmit || saving}>
-            {saving ? "Salvataggio…" : "Salva luogo"}
-          </Button>
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSubmit || saving}
+            className={cn(
+              "flex min-w-[128px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
+              canSubmit
+                ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                : "cursor-not-allowed bg-[#c4c4d4]",
+            )}
+          >
+            {saving ? <LoadingDots /> : "Salva luogo"}
+          </button>
         </div>
       </DialogContent>
     </Dialog>

@@ -65,65 +65,87 @@
   --radius-pill: 9999px;
   --radius-card-primary: 35px;
 
-  /* Shadows */
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-card-primary: 0 4px 12px rgba(0, 0, 0, 0.12);
-  --shadow-cta: 0 6px 12px rgba(236, 72, 153, 0.3);
-  --shadow-accent: 0 10px 20px rgba(180, 83, 9, 0.35);
-  --shadow-dropdown: 0 8px 16px rgba(0, 0, 0, 0.1);
+  /* Shadows — redesign Airbnb: liste senza ombra, elevazione solo su pannelli/overlay */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-card-primary: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-panel: rgba(0, 0, 0, 0.02) 0 0 0 1px, rgba(0, 0, 0, 0.04) 0 2px 6px 0, rgba(0, 0, 0, 0.1) 0 4px 8px 0;
+  --shadow-cta: 0 6px 12px rgba(26, 26, 46, 0.18);
+  --shadow-accent: 0 10px 20px rgba(26, 26, 46, 0.18);
+  --shadow-dropdown: rgba(0, 0, 0, 0.14) 0 8px 32px;
   --shadow-drawer: 0 -6px 18px rgba(0, 0, 0, 0.12);
   --shadow-toast-success: 0 8px 16px rgba(22, 163, 74, 0.3);
   --shadow-toast-danger: 0 8px 16px rgba(220, 38, 38, 0.3);
   --shadow-toast-info: 0 8px 16px rgba(15, 23, 42, 0.3);
+
+  /* Scala navy (accento redesign) */
+  --color-navy-50: var(--navy-50);
+  --color-navy-100: var(--navy-100);
+  --color-navy-700: var(--navy-700);
+  --color-navy-800: var(--navy-800);
+  --color-navy-900: var(--navy-900);
 }
 
 :root {
-  /* Radii — 20px base (radii.sm del DS) */
-  --radius: 1.25rem;
+  /* Radii — 14px base (container Airbnb; sm=10 input, lg=14 card, xl=18) */
+  --radius: 0.875rem;
 
-  /* Brand */
-  --primary: #EC4899;
+  /* Brand — redesign Airbnb 2026-07: accento navy, superfici neutre */
+  --primary: #1a1a2e;
   --primary-foreground: #FFFFFF;
-  --accent: #FACC15;
-  --accent-foreground: #92400E;
-  --destructive: #EF4444;
+  --accent: #f7f7f7;
+  --accent-foreground: #222222;
+  --destructive: #c13515;
   --destructive-foreground: #FFFFFF;
   --positive: #22C55E;
   --positive-foreground: #FFFFFF;
 
   /* Superfici */
   --background: #FFFFFF;
-  --foreground: #1F2937;
+  --foreground: #222222;
   --card: #FFFFFF;
-  --card-foreground: #1F2937;
+  --card-foreground: #222222;
   --popover: #FFFFFF;
-  --popover-foreground: #1F2937;
+  --popover-foreground: #222222;
 
   /* Neutri */
-  --secondary: #F8FAFC;
-  --secondary-foreground: #1F2937;
-  --muted: #F8FAFC;
-  --muted-foreground: #6B7280;
-  --border: #E5E7EB;
-  --input: #E2E8F0;
-  --ring: #EC4899;
+  --secondary: #f7f7f7;
+  --secondary-foreground: #222222;
+  --muted: #f7f7f7;
+  --muted-foreground: #6a6a6a;
+  --border: #dddddd;
+  --input: #dddddd;
+  --ring: #222222;
 
-  /* Charts — tema rosa/giallo */
-  --chart-1: #EC4899;
-  --chart-2: #FACC15;
+  /* Charts — neutri + navy */
+  --chart-1: #1a1a2e;
+  --chart-2: #6a6a6a;
   --chart-3: #22C55E;
-  --chart-4: #FDF2F8;
-  --chart-5: #FEF9C3;
+  --chart-4: #eeeef4;
+  --chart-5: #f2f2f2;
 
   /* Sidebar */
   --sidebar: #FFFFFF;
-  --sidebar-foreground: #1F2937;
-  --sidebar-primary: #EC4899;
+  --sidebar-foreground: #222222;
+  --sidebar-primary: #1a1a2e;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #FDF2F8;
-  --sidebar-accent-foreground: #1F2937;
-  --sidebar-border: #E5E7EB;
-  --sidebar-ring: #EC4899;
+  --sidebar-accent: #f7f7f7;
+  --sidebar-accent-foreground: #222222;
+  --sidebar-border: #dddddd;
+  --sidebar-ring: #222222;
+
+  /* Scala navy (accento redesign) */
+  --navy-900: #1a1a2e;
+  --navy-800: #2d2d4a;
+  --navy-700: #33334d;
+  --navy-100: #e2e2e8;
+  --navy-50: #eeeef4;
+
+  /* Grigi Airbnb diretti */
+  --gray-hairline: #dddddd;
+  --gray-secondary: #6a6a6a;
+  --gray-mute: #929292;
+  --gray-cloud: #f7f7f7;
+  --gray-offwhite: #f2f2f2;
 
   /* Motion — custom properties per animazioni */
   --motion-micro: 100ms;
@@ -189,6 +211,11 @@
   }
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: #cfe0fb;
+    color: #1a2b45;
   }
 }
 
@@ -394,4 +421,91 @@
   50% {
     transform: translateY(12px) translateX(-8px);
   }
+}
+
+/* Loading dots (proto .ab-dots) — 3 puntini che pulsano a cascata, lo stato
+   di loading unico di TUTTI i bottoni (componente ui/loading-dots.tsx) */
+@keyframes loading-dots-pulse {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.4);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Anello brand del login (auth/BrandCarousel) — rotazione continua del
+   cilindro di card, stile hero Bending Spoons */
+@keyframes brand-ring-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-360deg);
+  }
+}
+
+/* Skeleton shimmer — sweep di luce sui placeholder (skeleton "vivi") */
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Megafono "allievo mai loggato" — squillo tipo campanella, una volta (all'apertura
+   agenda e all'hover del badge). Il componente ri-aggiunge la classe per ri-triggerare.
+   Rispetta prefers-reduced-motion → nessun movimento (icona ferma ma visibile). */
+@keyframes megaphone-bell {
+  0% { transform: rotate(0); }
+  8% { transform: rotate(19deg); }
+  18% { transform: rotate(-16deg); }
+  28% { transform: rotate(13deg); }
+  38% { transform: rotate(-10deg); }
+  48% { transform: rotate(7deg); }
+  58% { transform: rotate(-4deg); }
+  68% { transform: rotate(2deg); }
+  100% { transform: rotate(0); }
+}
+.megaphone-ring {
+  transform-origin: 50% 20%;
+  animation: megaphone-bell 0.85s ease-out 1;
+}
+
+/* Agenda a schermo intero: quando la griglia è in modalità fullscreen scaliamo
+   il testo dei blocchi insieme allo zoom verticale (--agenda-fs-scale = fattore
+   di zoom). Le utility Tailwind di font-size stanno in @layer, quindi queste
+   regole unlayered vincono senza bisogno di !important. */
+.agenda-grid-zoom {
+  --agenda-fs-scale: 1;
+}
+.agenda-grid-zoom .text-xs {
+  font-size: calc(0.75rem * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[8px\] {
+  font-size: calc(8px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[9px\] {
+  font-size: calc(9px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[10px\] {
+  font-size: calc(10px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[11px\] {
+  font-size: calc(11px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[12px\] {
+  font-size: calc(12px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[13px\] {
+  font-size: calc(13px * var(--agenda-fs-scale));
+}
+.agenda-grid-zoom .text-\[18px\] {
+  font-size: calc(18px * var(--agenda-fs-scale));
 }

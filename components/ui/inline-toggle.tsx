@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * InlineToggle — iOS-style toggle switch.
- * Uses yellow when on, gray when off.
+ * Navy when on (redesign Airbnb), gray when off.
  */
 export function InlineToggle({
   checked,
@@ -15,13 +15,20 @@ export function InlineToggle({
   checked: boolean;
   onChange?: () => void;
   disabled?: boolean;
-  size?: "sm" | "default";
+  size?: "sm" | "default" | "lg" | "xl";
 }) {
-  const trackSize = size === "sm" ? "h-4 w-7" : "h-5 w-9";
-  const thumbSize = size === "sm" ? "h-3 w-3" : "h-4 w-4";
-  const translate = size === "sm"
-    ? checked ? "translate-x-[13px]" : "translate-x-[2px]"
-    : checked ? "translate-x-[18px]" : "translate-x-[2px]";
+  const trackSize =
+    size === "sm" ? "h-4 w-7" : size === "lg" ? "h-[26px] w-11" : size === "xl" ? "h-8 w-[52px]" : "h-5 w-9";
+  const thumbSize =
+    size === "sm" ? "h-3 w-3" : size === "lg" ? "h-5 w-5" : size === "xl" ? "h-[26px] w-[26px]" : "h-4 w-4";
+  const translate =
+    size === "sm"
+      ? checked ? "translate-x-[13px]" : "translate-x-[2px]"
+      : size === "lg"
+        ? checked ? "translate-x-[21px]" : "translate-x-[3px]"
+        : size === "xl"
+          ? checked ? "translate-x-[23px]" : "translate-x-[3px]"
+          : checked ? "translate-x-[18px]" : "translate-x-[2px]";
 
   return (
     <button
@@ -33,7 +40,7 @@ export function InlineToggle({
       className={cn(
         "relative inline-flex shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200",
         trackSize,
-        checked ? "bg-yellow-400" : "bg-black/15",
+        checked ? "bg-navy-900" : "bg-black/15",
         disabled && "pointer-events-none opacity-40",
       )}
     >

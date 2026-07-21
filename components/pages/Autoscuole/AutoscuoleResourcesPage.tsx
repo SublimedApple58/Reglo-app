@@ -1,11 +1,27 @@
 "use client";
 
 import React from "react";
-import dynamic from "next/dynamic";
+import Image from "next/image";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, ChevronDown, ChevronLeft, ChevronRight, Clock, Settings2, Users, Truck, UserRoundCog } from "lucide-react";
+import { useAtomValue } from "jotai";
+import { Plus, ChevronLeft, ChevronRight, X, type LucideIcon } from "lucide-react";
 
-import { PageWrapper } from "@/components/Layout/PageWrapper";
+import { companyAtom } from "@/atoms/company.store";
+import { isSecretaryOnly } from "@/lib/services";
+
+import {
+  BellProtoIcon,
+  CalendarProtoIcon,
+  CarProtoIcon,
+  FoldedMapIcon,
+  NotepadProtoIcon,
+  PhoneProtoIcon,
+  UserRoundProtoIcon,
+  UsersProtoIcon,
+  type ProtoIcon,
+} from "@/components/ui/proto-icons";
+
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,11 +41,20 @@ import {
   type LicenseCategory,
 } from "@/lib/autoscuole/license";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { TimePickerInput } from "@/components/ui/time-picker";
+import { DatePickerInput } from "@/components/ui/date-picker";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 
-const SettingsTab = dynamic(() => import("./tabs/SettingsTab"));
-const InstructorsTab = dynamic(() => import("./tabs/InstructorsTab"));
-const StudentsTab = dynamic(() => import("./tabs/StudentsTab"));
-const VehiclesTab = dynamic(() => import("./tabs/VehiclesTab"));
+// Import statici: i pane dell'overlay restano montati (keep-alive) e non
+// devono scaricare chunk al cambio sezione — il lazy-loading qui causava lo
+// "scatto" bianco a ogni switch.
+import SettingsTab, { type SettingsSectionKey } from "./tabs/SettingsTab";
+import InstructorsTab from "./tabs/InstructorsTab";
+import BookingsTab from "./tabs/BookingsTab";
+import VehiclesTab from "./tabs/VehiclesTab";
+import { VoiceSettingsPane } from "./VoiceSettingsPane";
+import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
   getAutoscuolaVehicles,
@@ -44,7 +69,7 @@ import {
   updateAutoscuolaInstructor,
   getAutoscuolaStudentsWithProgress,
 } from "@/lib/actions/autoscuole.actions";
-import { AdminUsersInviteDialog } from "@/components/pages/AdminUsers/AdminUsersInviteDialog";
+import { AdminUsersCreateDialog } from "@/components/pages/AdminUsers/AdminUsersCreateDialog";
 import {
   getAvailabilitySlots,
   setWeeklyAvailabilityOverride,
@@ -52,8 +77,6 @@ import {
   deleteWeeklyAvailabilityOverride,
   getWeeklyAvailabilityOverrides,
 } from "@/lib/actions/autoscuole-availability.actions";
-import { InstructorPublicationEditor } from "@/components/pages/Autoscuole/InstructorPublicationEditor";
-import { InstructorHoursDashboard } from "@/components/pages/Autoscuole/InstructorHoursDashboard";
 
 /** Availability mode from the instructor settings JSON ("default" unless explicitly "publication"). */
 const readAvailabilityMode = (settings: unknown): "default" | "publication" =>
@@ -81,8 +104,38 @@ import {
   triggerEmptySlotNotification,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { cn } from "@/lib/utils";
-import { LottieLoadingOverlay } from "@/components/ui/lottie-loading-overlay";
-import { SettingsSkeleton } from "@/components/ui/page-skeleton";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
+
+/**
+ * Skeleton locale del contenuto pane dell'overlay Impostazioni: righe flat
+ * "titolo + descrizione + toggle tondo" separate da hairline, fedeli alle
+ * liste reali delle pane (header/sidebar/titolo restano visibili).
+ */
+function SettingsPaneSkeleton() {
+  return (
+    <div className="max-w-[640px]">
+      <Skeleton className="mb-8 h-4 w-[420px] max-w-full" />
+      <div className="flex flex-col">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <div
+            key={i}
+            className={cn(
+              "flex items-start justify-between gap-6 py-5",
+              i < 4 && "border-b border-[#ebebeb]",
+            )}
+          >
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-44 max-w-full" />
+              <Skeleton className="mt-2.5 h-3.5 w-72 max-w-full" />
+            </div>
+            <Skeleton className="mt-0.5 h-5 w-9 shrink-0 rounded-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 type ResourceOption = { id: string; name: string };
 type InstructorDetail = { id: string; name: string; status: string; autonomousMode?: boolean; settings?: unknown; color?: string | null; inviteCode?: string | null; _count?: { assignedStudents: number } };
@@ -194,8 +247,6 @@ const WEEKDAY_OPTIONS = [
   { value: 0, label: "Dom" },
 ] as const;
 
-const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => index * 30);
-const END_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => (index + 1) * 30);
 
 type WeekOption = { label: string; weekStart: string }; // weekStart = YYYY-MM-DD of Monday
 
@@ -234,17 +285,129 @@ type OverrideInfo = {
   schedule: DayScheduleEntry[];
 };
 
+/** Voci della sidebar dell'overlay "Impostazioni dell'account" (pattern proto #section-configurazione) */
+type ConfigPane =
+  | "business"
+  | "locations"
+  | "bookings"
+  | "policy"
+  | "reminders"
+  | "instructors"
+  | "vehicles"
+  | "voice";
+
+// Dipendenze dati per pane: chi legge i settings autoscuola, chi le risorse
+// (istruttori/veicoli/slot). Business e Fatturazione si caricano da sole.
+const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "vehicles"];
+const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
+
+// Icone 1:1 dal proto (components/ui/proto-icons.tsx): lucide ha varianti
+// diverse dagli SVG del proto per quasi tutte le voci della sidebar.
+const CONFIG_PANE_GROUPS: Array<
+  Array<{ key: ConfigPane; label: string; icon: LucideIcon | ProtoIcon }>
+> = [
+  [
+    { key: "business", label: "Informazioni aziendali", icon: UserRoundProtoIcon },
+    { key: "locations", label: "Sede e luoghi", icon: FoldedMapIcon },
+  ],
+  [
+    { key: "bookings", label: "Prenotazioni e allievi", icon: CalendarProtoIcon },
+    { key: "policy", label: "Policy tipi guida", icon: NotepadProtoIcon },
+    { key: "reminders", label: "Promemoria e notifiche", icon: BellProtoIcon },
+  ],
+  [
+    { key: "instructors", label: "Istruttori", icon: UsersProtoIcon },
+    { key: "vehicles", label: "Veicoli", icon: CarProtoIcon },
+  ],
+  [{ key: "voice", label: "Segretaria", icon: PhoneProtoIcon }],
+];
+
+/**
+ * Keep-alive dei pannelli dell'overlay: monta il contenuto al primo accesso
+ * (o subito, se `eager`) e poi lo nasconde via CSS invece di smontarlo. Così
+ * le fetch interne di ogni pannello girano UNA volta e il cambio sezione è
+ * istantaneo, senza flash bianchi né loader ripetuti.
+ */
+function KeepAlivePane({
+  active,
+  eager,
+  children,
+}: {
+  active: boolean;
+  eager?: boolean;
+  children: React.ReactNode;
+}) {
+  const mountedRef = React.useRef(false);
+  if (active || eager) mountedRef.current = true;
+  if (!mountedRef.current) return null;
+  return <div className={active ? undefined : "hidden"}>{children}</div>;
+}
+
+const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
+  business: "Informazioni aziendali",
+  locations: "Sede e luoghi",
+  bookings: "Prenotazioni e allievi",
+  policy: "Policy tipi guida",
+  reminders: "Promemoria e notifiche",
+  instructors: "Istruttori",
+  vehicles: "Veicoli",
+  voice: "Segretaria AI",
+};
+
 export function AutoscuoleResourcesPage({
   tabs,
 }: {
   tabs?: React.ReactNode;
 } = {}) {
   const toast = useFeedbackToast();
-  const [configTab, setConfigTab] = React.useState<"settings" | "instructors" | "vehicles" | "students" | "hours">("settings");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const company = useAtomValue(companyAtom);
+  // Modalità "solo Segretaria": l'overlay Impostazioni mostra solo il pane
+  // Segretaria (niente Prenotazioni/Istruttori/Veicoli/…).
+  const secretaryOnly = isSecretaryOnly(company?.services ?? null);
+  const paneGroups = secretaryOnly
+    ? [CONFIG_PANE_GROUPS[CONFIG_PANE_GROUPS.length - 1]]
+    : CONFIG_PANE_GROUPS;
+  const [configTab, setConfigTab] = React.useState<ConfigPane>(() => {
+    if (secretaryOnly) return "voice";
+    // "students" (Gestione allievi) e "payments" (Fatturazione e pagamenti)
+    // sono i vecchi pane ora fusi in "bookings" (link legacy in giro per l'app).
+    const raw = searchParams?.get("pane");
+    const pane = raw === "students" || raw === "payments" ? "bookings" : raw;
+    return pane && CONFIG_PANE_GROUPS.flat().some((p) => p.key === pane)
+      ? (pane as ConfigPane)
+      : "bookings";
+  });
   const [expandedSection, setExpandedSection] = React.useState<string | null>("bookings");
   const [date] = React.useState(() => formatDateLocal(new Date()));
   const [loading, setLoading] = React.useState(false);
-  const [savingSettings, setSavingSettings] = React.useState(false);
+  // true dopo il primo caricamento: da lì in poi niente più skeleton globale
+  const [hasLoadedOnce, setHasLoadedOnce] = React.useState(false);
+  // true quando getAutoscuolaSettings ha risposto: le pane impostazioni non
+  // devono uscire dallo skeleton prima, altrimenti mostrano i default per un
+  // attimo e poi "scattano" sui valori reali
+  const [settingsLoaded, setSettingsLoaded] = React.useState(false);
+  // dopo il primo paint, monta anche i pannelli non ancora visitati (prefetch)
+  const [mountAllPanes, setMountAllPanes] = React.useState(false);
+  // Dettaglio istruttore aperto: l'hub ha il suo header, il titolo pane sparisce
+  const [instructorsDetailOpen, setInstructorsDetailOpen] = React.useState(false);
+  const contentScrollRef = React.useRef<HTMLDivElement>(null);
+
+  const goToPane = React.useCallback((pane: ConfigPane) => {
+    setConfigTab(pane);
+    contentScrollRef.current?.scrollTo({ top: 0 });
+  }, []);
+
+  // In modalità "solo Segretaria" l'atom company può caricarsi DOPO il primo
+  // render (quando configTab è già stato inizializzato a "bookings"): appena
+  // sappiamo che è secretary-only, forza il pane su "voice".
+  React.useEffect(() => {
+    if (secretaryOnly && configTab !== "voice") {
+      setConfigTab("voice");
+    }
+  }, [secretaryOnly, configTab]);
   const [availabilityWeeks, setAvailabilityWeeks] = React.useState("4");
   const [studentReminderMinutes, setStudentReminderMinutes] = React.useState("60");
   const [studentReminderMorningEnabled, setStudentReminderMorningEnabled] = React.useState(false);
@@ -252,6 +415,7 @@ export function AutoscuoleResourcesPage({
   const [studentReminderDayBeforeEnabled, setStudentReminderDayBeforeEnabled] = React.useState(false);
   const [studentReminderDayBeforeTime, setStudentReminderDayBeforeTime] = React.useState("19:00");
   const [instructorReminderMinutes, setInstructorReminderMinutes] = React.useState("60");
+  const [instructorReminderEnabled, setInstructorReminderEnabled] = React.useState(true);
   const [slotFillChannels, setSlotFillChannels] = React.useState<ChannelValue[]>([
     "push",
     "whatsapp",
@@ -273,6 +437,8 @@ export function AutoscuoleResourcesPage({
   );
   const [bookingSlotDurations, setBookingSlotDurations] = React.useState<number[]>([30, 60]);
   const [roundedHoursOnly, setRoundedHoursOnly] = React.useState(false);
+  const [nationalHolidaysEnabled, setNationalHolidaysEnabled] = React.useState(false);
+  const [nationalHolidaysDisabled, setNationalHolidaysDisabled] = React.useState<string[]>([]);
   const [swapEnabled, setSwapEnabled] = React.useState(false);
   const [swapNotifyMode, setSwapNotifyMode] = React.useState<"all" | "available_only">("available_only");
   const [studentCancellationEnabled, setStudentCancellationEnabled] = React.useState(true);
@@ -290,7 +456,6 @@ export function AutoscuoleResourcesPage({
   const [emptySlotNotificationEnabled, setEmptySlotNotificationEnabled] = React.useState(false);
   const [emptySlotNotificationTarget, setEmptySlotNotificationTarget] = React.useState<"all" | "availability_matching">("availability_matching");
   const [emptySlotNotificationTimes, setEmptySlotNotificationTimes] = React.useState<string[]>(["18:00"]);
-  const [triggeringNotification, setTriggeringNotification] = React.useState(false);
   const [instructorPreferenceEnabled, setInstructorPreferenceEnabled] = React.useState(false);
   const [studentNotesEnabled, setStudentNotesEnabled] = React.useState(false);
   const [autoCheckinEnabled, setAutoCheckinEnabled] = React.useState(false);
@@ -302,44 +467,11 @@ export function AutoscuoleResourcesPage({
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
-  const [clusterInstructor, setClusterInstructor] = React.useState<InstructorDetail | null>(null);
-  const [clusterAutonomous, setClusterAutonomous] = React.useState(false);
-  const [clusterDurations, setClusterDurations] = React.useState<number[]>([30, 60]);
-  const [clusterRoundedHours, setClusterRoundedHours] = React.useState(false);
-  const [clusterStudentIds, setClusterStudentIds] = React.useState<string[]>([]);
-  const [clusterSaving, setClusterSaving] = React.useState(false);
-  const [clusterStudentSearch, setClusterStudentSearch] = React.useState("");
   // Task 3: new cluster booking settings
-  const [clusterAppBookingActors, setClusterAppBookingActors] = React.useState<"students" | "instructors" | "both" | undefined>(undefined);
-  const [clusterInstructorBookingMode, setClusterInstructorBookingMode] = React.useState<"manual_full" | "manual_engine" | undefined>(undefined);
-  const [clusterSwapEnabled, setClusterSwapEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterStudentCancellationEnabled, setClusterStudentCancellationEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterSwapNotifyMode, setClusterSwapNotifyMode] = React.useState<"all" | "available_only" | undefined>(undefined);
-  const [clusterBookingCutoffEnabled, setClusterBookingCutoffEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterBookingCutoffTime, setClusterBookingCutoffTime] = React.useState<string | undefined>(undefined);
-  const [clusterWeeklyLimitEnabled, setClusterWeeklyLimitEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterWeeklyLimit, setClusterWeeklyLimit] = React.useState<number | undefined>(undefined);
-  const [clusterEmptySlotEnabled, setClusterEmptySlotEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterEmptySlotTarget, setClusterEmptySlotTarget] = React.useState<"all" | "availability_matching" | undefined>(undefined);
-  const [clusterEmptySlotTimes, setClusterEmptySlotTimes] = React.useState<string[] | undefined>(undefined);
-  const [clusterRestrictedTimeEnabled, setClusterRestrictedTimeEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterRestrictedTimeStart, setClusterRestrictedTimeStart] = React.useState<string | undefined>(undefined);
-  const [clusterRestrictedTimeEnd, setClusterRestrictedTimeEnd] = React.useState<string | undefined>(undefined);
-  const [clusterWeeklyAbsenceEnabled, setClusterWeeklyAbsenceEnabled] = React.useState<boolean | undefined>(undefined);
-  const [clusterWorkingHoursStart, setClusterWorkingHoursStart] = React.useState<string | undefined>(undefined);
-  const [clusterWorkingHoursEnd, setClusterWorkingHoursEnd] = React.useState<string | undefined>(undefined);
-  const [clusterAvailabilityMode, setClusterAvailabilityMode] = React.useState<"default" | "publication">("default");
-  const [allStudents, setAllStudents] = React.useState<Array<{ id: string; firstName: string; lastName: string; assignedInstructorId: string | null; licenseCategory: string | null; transmission: string | null }>>([]);
   const [appBookingActors, setAppBookingActors] = React.useState<AppBookingActorsValue>("students");
   const [instructorBookingMode, setInstructorBookingMode] = React.useState<InstructorBookingModeValue>("manual_engine");
   const [instructors, setInstructors] = React.useState<InstructorDetail[]>([]);
   // Sick leave state
-  const [sickLeaveInstructor, setSickLeaveInstructor] = React.useState<InstructorDetail | null>(null);
-  const [sickLeaveStartDate, setSickLeaveStartDate] = React.useState("");
-  const [sickLeaveEndDate, setSickLeaveEndDate] = React.useState("");
-  const [sickLeaveHalfDay, setSickLeaveHalfDay] = React.useState(false);
-  const [sickLeaveStartTime, setSickLeaveStartTime] = React.useState("14:00");
-  const [sickLeaveSaving, setSickLeaveSaving] = React.useState(false);
   const [instructorWeeklyAvailability, setInstructorWeeklyAvailability] = React.useState<
     Record<string, VehicleWeeklyAvailability>
   >({});
@@ -352,27 +484,15 @@ export function AutoscuoleResourcesPage({
   const [availDialogTab, setAvailDialogTab] = React.useState<"default" | "calendar">("default");
   // Mode of the instructor currently open in the availability dialog
   // (publication → week-by-week editor, default → Predefinito/Calendario tabs).
-  const [availInstructorMode, setAvailInstructorMode] = React.useState<"default" | "publication">("default");
-  const [availModeSwitching, setAvailModeSwitching] = React.useState(false);
   const [calendarMonth, setCalendarMonth] = React.useState(() => new Date());
   const [calendarSelectedDate, setCalendarSelectedDate] = React.useState<string | null>(null);
   const [calendarDayRanges, setCalendarDayRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
   const [calendarDayEnabled, setCalendarDayEnabled] = React.useState(true);
-  const [recurringOverride, setRecurringOverride] = React.useState(false);
 
   // ── Instructor availability dialog
-  const [availInstructor, setAvailInstructor] = React.useState<InstructorDetail | null>(null);
-  const [instrDays, setInstrDays] = React.useState<number[]>([1, 2, 3, 4, 5]);
-  const [instrStartMinutes, setInstrStartMinutes] = React.useState(9 * 60);
-  const [instrEndMinutes, setInstrEndMinutes] = React.useState(18 * 60);
-  const [instrDefaultRanges, setInstrDefaultRanges] = React.useState<Array<{ startMinutes: number; endMinutes: number }>>([{ startMinutes: 9 * 60, endMinutes: 18 * 60 }]);
-  const [savingInstrAvailability, setSavingInstrAvailability] = React.useState(false);
   // Week override state for instructor dialog
-  const [instrSelectedWeek, setInstrSelectedWeek] = React.useState<string | null>(null); // null = "Predefinito"
-  const [instrOverrides, setInstrOverrides] = React.useState<OverrideInfo[]>([]);
   const weekOptions = React.useMemo(buildWeekOptions, []);
   // Per-day schedule for override weeks: map dayOfWeek → { startMinutes, endMinutes }
-  const [instrDaySchedule, setInstrDaySchedule] = React.useState<DayScheduleEntry[]>([]);
   const [instructorAvailability, setInstructorAvailability] = React.useState<
     Record<string, AvailabilityRange[]>
   >({});
@@ -387,6 +507,8 @@ export function AutoscuoleResourcesPage({
   const [createVehicleOpen, setCreateVehicleOpen] = React.useState(false);
   const [newVehicleName, setNewVehicleName] = React.useState("");
   const [newVehiclePlate, setNewVehiclePlate] = React.useState("");
+  const [newVehicleCategory, setNewVehicleCategory] = React.useState("B");
+  const [newVehicleTransmission, setNewVehicleTransmission] = React.useState("manual");
   const [creatingVehicle, setCreatingVehicle] = React.useState(false);
 
   // ── Edit vehicle dialog
@@ -401,6 +523,15 @@ export function AutoscuoleResourcesPage({
   const [editVehicleCategory, setEditVehicleCategory] = React.useState<string>("B");
   const [editVehicleTransmission, setEditVehicleTransmission] = React.useState<string>("manual");
   const [savingEditVehicle, setSavingEditVehicle] = React.useState(false);
+
+  // ── Dettaglio veicolo inline (proto veic-detail-view): quale veicolo e tab.
+  const [vehicleDetail, setVehicleDetail] = React.useState<
+    { vehicleId: string; tab: "disp" | "dettagli" } | null
+  >(null);
+  // Conferme inline a due step (niente window.confirm).
+  const [confirmDeactivateVehicle, setConfirmDeactivateVehicle] = React.useState(false);
+  const [confirmDeleteAvail, setConfirmDeleteAvail] = React.useState(false);
+  const [confirmResetOverride, setConfirmResetOverride] = React.useState(false);
 
   // ── Availability edit dialog
   const [availVehicle, setAvailVehicle] = React.useState<VehicleDetail | null>(null);
@@ -487,254 +618,34 @@ export function AutoscuoleResourcesPage({
       }
 
       setLoading(false);
+      setHasLoadedOnce(true);
+      // Dal frame successivo monta anche i pannelli non visitati, così le loro
+      // fetch partono in background e il cambio sezione è istantaneo.
+      setTimeout(() => setMountAllPanes(true), 150);
     },
     [toast],
   );
 
-  React.useEffect(() => {
-    loadResources();
-  }, [loadResources]);
-
-  React.useEffect(() => {
-    let active = true;
-    const loadSettings = async () => {
-      const res = await getAutoscuolaSettings();
-      if (!active) return;
-      if (!res.success || !res.data) {
-        toast.error({
-          description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
-        });
-        return;
-      }
-      setAvailabilityWeeks(String(res.data.availabilityWeeks));
-      setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
-      setStudentReminderMinutes(String(res.data.studentReminderMinutes));
-      setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
-      setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
-      setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
-      setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
-      setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
-      setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
-      setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
-      setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
-      const nextConstraints = createDefaultLessonConstraintMap();
-      for (const option of LESSON_TYPE_OPTIONS) {
-        const constraint = res.data.lessonTypeConstraints?.[option.value];
-        if (!constraint) continue;
-        nextConstraints[option.value] = {
-          enabled: true,
-          daysOfWeek: normalizeDays(constraint.daysOfWeek),
-          startMinutes: constraint.startMinutes,
-          endMinutes: constraint.endMinutes,
-        };
-      }
-      setLessonPolicyEnabled(Boolean(res.data.lessonPolicyEnabled));
-      setLessonRequiredTypesEnabled(Boolean(res.data.lessonRequiredTypesEnabled));
-      setLessonRequiredTypes(
-        (res.data.lessonRequiredTypes ?? []).filter((value): value is LessonTypeValue =>
-          LESSON_TYPE_OPTIONS.some((option) => option.value === value),
-        ),
-      );
-      setLessonConstraints(nextConstraints);
-      setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
-      setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
-      setSwapEnabled(res.data.swapEnabled ?? false);
-      setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
-      setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
-      setBookingCutoffEnabled(res.data.bookingCutoffEnabled ?? false);
-      setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
-      setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
-      setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
-      setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
-      setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
-      setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
-      setExamPriorityPausedUntil(res.data.examPriorityPausedUntil ?? null);
-      setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
-      setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
-      setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
-      setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
-      setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
-      setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
-      setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
-      setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
-      setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
-      setVehiclesEnabled(res.data.vehiclesEnabled !== false);
-      setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
-      setDefaultTransmission(res.data.defaultTransmission ?? "manual");
-      setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
-      setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
-
-      setAppBookingActors(
-        APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
-          ? (res.data.appBookingActors as AppBookingActorsValue)
-          : "students",
-      );
-      setInstructorBookingMode(
-        INSTRUCTOR_BOOKING_MODE_OPTIONS.some(
-          (option) => option.value === res.data.instructorBookingMode,
-        )
-          ? (res.data.instructorBookingMode as InstructorBookingModeValue)
-          : "manual_engine",
-      );
-    };
-    loadSettings();
-    return () => {
-      active = false;
-    };
-  }, [toast]);
-
-  React.useEffect(() => {
-    loadAvailability(date);
-  }, [date, loadAvailability]);
-
-  const handleSaveSettings = async () => {
-    const parsedWeeks = Number(availabilityWeeks);
-    const parsedStudentReminder = Number(studentReminderMinutes);
-    const parsedInstructorReminder = Number(instructorReminderMinutes);
-
-    if (Number.isNaN(parsedWeeks) || parsedWeeks < 1 || parsedWeeks > 12) {
-      toast.error({ description: "Settimane disponibilità non valide (1-12)." });
-      return;
-    }
-    if (!REMINDER_OPTIONS.includes(parsedStudentReminder as (typeof REMINDER_OPTIONS)[number])) {
-      toast.error({ description: "Preavviso reminder allievo non valido." });
-      return;
-    }
-    if (
-      !REMINDER_OPTIONS.includes(
-        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
-      )
-    ) {
-      toast.error({ description: "Preavviso reminder istruttore non valido." });
-      return;
-    }
-    if (!slotFillChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per slot-fill." });
-      return;
-    }
-    if (!studentReminderChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per reminder allievo." });
-      return;
-    }
-    if (!instructorReminderChannels.length) {
-      toast.error({ description: "Seleziona almeno un canale per reminder istruttore." });
-      return;
-    }
-    if (!bookingSlotDurations.length) {
-      toast.error({ description: "Seleziona almeno una durata prenotabile per l'allievo." });
-      return;
-    }
-    if (
-      (appBookingActors === "instructors" || appBookingActors === "both") &&
-      !instructorBookingMode
-    ) {
-      toast.error({ description: "Seleziona la modalità prenotazione istruttore." });
-      return;
-    }
-    if (lessonRequiredTypesEnabled && !lessonRequiredTypes.length) {
-      toast.error({ description: "Seleziona almeno un tipo guida obbligatorio." });
-      return;
-    }
-
-    const lessonTypeConstraints = {} as Record<
-      LessonTypeValue,
-      { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null
-    >;
-    for (const option of LESSON_TYPE_OPTIONS) {
-      const state = lessonConstraints[option.value];
-      if (!state?.enabled) {
-        lessonTypeConstraints[option.value] = null;
-        continue;
-      }
-      const daysOfWeek = normalizeDays(state.daysOfWeek);
-      if (!daysOfWeek.length) {
-        toast.error({ description: `Seleziona almeno un giorno per ${option.label}.` });
-        return;
-      }
-      if (
-        !Number.isInteger(state.startMinutes) ||
-        !Number.isInteger(state.endMinutes) ||
-        state.startMinutes < 0 ||
-        state.startMinutes > 1410 ||
-        state.endMinutes < 30 ||
-        state.endMinutes > 1440 ||
-        state.startMinutes % 30 !== 0 ||
-        state.endMinutes % 30 !== 0 ||
-        state.endMinutes <= state.startMinutes
-      ) {
-        toast.error({ description: `Intervallo non valido per ${option.label}.` });
-        return;
-      }
-      lessonTypeConstraints[option.value] = {
-        daysOfWeek,
-        startMinutes: state.startMinutes,
-        endMinutes: state.endMinutes,
-      };
-    }
-
-    setSavingSettings(true);
-    const res = await updateAutoscuolaSettings({
-      availabilityWeeks: parsedWeeks,
-      bookingMinStartDate: bookingMinStartDate || null,
-      studentReminderMinutes:
-        parsedStudentReminder as (typeof REMINDER_OPTIONS)[number],
-      studentReminderMorningEnabled,
-      studentReminderMorningTime,
-      studentReminderDayBeforeEnabled,
-      studentReminderDayBeforeTime,
-      instructorReminderMinutes:
-        parsedInstructorReminder as (typeof REMINDER_OPTIONS)[number],
-      slotFillChannels,
-      studentReminderChannels,
-      instructorReminderChannels,
-      lessonPolicyEnabled,
-      lessonRequiredTypesEnabled,
-      lessonRequiredTypes,
-      lessonTypeConstraints,
-      bookingSlotDurations,
-      roundedHoursOnly,
-      swapEnabled,
-      swapNotifyMode,
-      studentCancellationEnabled,
-      bookingCutoffEnabled,
-      bookingCutoffTime: bookingCutoffTime as "12:00" | "14:00" | "16:00" | "18:00" | "20:00" | "22:00",
-      weeklyBookingLimitEnabled,
-      weeklyBookingLimit,
-      examPriorityEnabled,
-      examPriorityDaysBeforeExam,
-      examPriorityPausedUntil,
-      examPriorityBlockNonExam,
-      restrictedTimeRangeEnabled,
-      restrictedTimeRangeStart,
-      restrictedTimeRangeEnd,
-      emptySlotNotificationEnabled,
-      emptySlotNotificationTarget,
-      emptySlotNotificationTimes: emptySlotNotificationTimes as ("08:00" | "08:30" | "09:00" | "09:30" | "10:00" | "10:30" | "11:00" | "11:30" | "12:00" | "12:30" | "13:00" | "13:30" | "14:00" | "14:30" | "15:00" | "15:30" | "16:00" | "16:30" | "17:00" | "17:30" | "18:00" | "18:30" | "19:00" | "19:30" | "20:00" | "20:30" | "21:00" | "21:30" | "22:00")[],
-      instructorPreferenceEnabled,
-      studentNotesEnabled,
-      autoCheckinEnabled,
-      vehiclesEnabled,
-      defaultLicenseCategory: defaultLicenseCategory as LicenseCategory,
-      defaultTransmission: defaultTransmission as "manual" | "automatic",
-      followCarMotoEnabled,
-      groupLessonsEnabled,
-      appBookingActors,
-      instructorBookingMode,
-    });
-    setSavingSettings(false);
-
+  const loadSettings = React.useCallback(async () => {
+    const res = await getAutoscuolaSettings();
     if (!res.success || !res.data) {
       toast.error({
-        description: res.message ?? "Impossibile aggiornare le impostazioni autoscuola.",
+        description: res.message ?? "Impossibile caricare le impostazioni autoscuola.",
       });
+      // sblocca comunque lo skeleton: meglio i default con il toast d'errore
+      // che uno skeleton infinito
+      setSettingsLoaded(true);
       return;
     }
-
     setAvailabilityWeeks(String(res.data.availabilityWeeks));
+    setBookingMinStartDate(res.data.bookingMinStartDate ?? "");
     setStudentReminderMinutes(String(res.data.studentReminderMinutes));
     setStudentReminderMorningEnabled(res.data.studentReminderMorningEnabled ?? false);
     setStudentReminderMorningTime(res.data.studentReminderMorningTime ?? "08:00");
+    setStudentReminderDayBeforeEnabled(res.data.studentReminderDayBeforeEnabled ?? false);
+    setStudentReminderDayBeforeTime(res.data.studentReminderDayBeforeTime ?? "19:00");
     setInstructorReminderMinutes(String(res.data.instructorReminderMinutes));
+    setInstructorReminderEnabled(res.data.instructorReminderEnabled !== false);
     setSlotFillChannels(res.data.slotFillChannels as ChannelValue[]);
     setStudentReminderChannels(res.data.studentReminderChannels as ChannelValue[]);
     setInstructorReminderChannels(res.data.instructorReminderChannels as ChannelValue[]);
@@ -759,6 +670,8 @@ export function AutoscuoleResourcesPage({
     setLessonConstraints(nextConstraints);
     setBookingSlotDurations((res.data.bookingSlotDurations ?? [30, 60]).slice().sort((a, b) => a - b));
     setRoundedHoursOnly(res.data.roundedHoursOnly ?? false);
+    setNationalHolidaysEnabled(res.data.nationalHolidaysEnabled ?? false);
+    setNationalHolidaysDisabled(res.data.nationalHolidaysDisabled ?? []);
     setSwapEnabled(res.data.swapEnabled ?? false);
     setSwapNotifyMode(res.data.swapNotifyMode ?? "available_only");
     setStudentCancellationEnabled(res.data.studentCancellationEnabled !== false);
@@ -766,10 +679,25 @@ export function AutoscuoleResourcesPage({
     setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
+    setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
+    setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
+    setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
+    setExamPriorityPausedUntil(res.data.examPriorityPausedUntil ?? null);
+    setRestrictedTimeRangeEnabled(res.data.restrictedTimeRangeEnabled ?? false);
+    setRestrictedTimeRangeStart(res.data.restrictedTimeRangeStart ?? "08:00");
+    setRestrictedTimeRangeEnd(res.data.restrictedTimeRangeEnd ?? "13:00");
+    setEmptySlotNotificationEnabled(res.data.emptySlotNotificationEnabled ?? false);
+    setEmptySlotNotificationTarget(res.data.emptySlotNotificationTarget ?? "availability_matching");
+    setEmptySlotNotificationTimes(res.data.emptySlotNotificationTimes ?? ["18:00"]);
     setInstructorPreferenceEnabled(res.data.instructorPreferenceEnabled ?? false);
     setStudentNotesEnabled(res.data.studentNotesEnabled ?? false);
     setAutoCheckinEnabled(res.data.autoCheckinEnabled ?? false);
     setVehiclesEnabled(res.data.vehiclesEnabled !== false);
+    setDefaultLicenseCategory(res.data.defaultLicenseCategory ?? "B");
+    setDefaultTransmission(res.data.defaultTransmission ?? "manual");
+    setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
+    setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
+
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
         ? (res.data.appBookingActors as AppBookingActorsValue)
@@ -782,51 +710,415 @@ export function AutoscuoleResourcesPage({
         ? (res.data.instructorBookingMode as InstructorBookingModeValue)
         : "manual_engine",
     );
-    toast.success({ description: "Impostazioni autoscuola aggiornate." });
+    setSettingsLoaded(true);
+  }, [toast]);
+
+  // ── Orchestrazione caricamento ──
+  // Priorità alla pane aperta: al mount partono solo le fetch dei SUOI dati;
+  // il resto parte in background appena la primaria ha risposto. Se l'utente
+  // cambia pane prima che il background sia partito, la fetch mancante viene
+  // anticipata subito. Le ref memorizzano la promise in-flight (idempotenza).
+  const settingsPromiseRef = React.useRef<Promise<void> | null>(null);
+  const resourcesPromiseRef = React.useRef<Promise<void> | null>(null);
+
+  const ensureSettings = React.useCallback(() => {
+    settingsPromiseRef.current ??= loadSettings();
+    return settingsPromiseRef.current;
+  }, [loadSettings]);
+
+  const ensureResources = React.useCallback(() => {
+    resourcesPromiseRef.current ??= Promise.all([
+      loadResources(),
+      loadAvailability(date),
+    ]).then(() => undefined);
+    return resourcesPromiseRef.current;
+  }, [loadResources, loadAvailability, date]);
+
+  React.useEffect(() => {
+    const primary: Array<Promise<void>> = [];
+    if (PANES_NEEDING_SETTINGS.includes(configTab)) primary.push(ensureSettings());
+    if (PANES_NEEDING_RESOURCES.includes(configTab)) primary.push(ensureResources());
+    Promise.allSettled(primary).then(() => {
+      ensureSettings();
+      ensureResources();
+    });
+    // solo al mount: configTab qui è la pane iniziale
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  React.useEffect(() => {
+    if (PANES_NEEDING_SETTINGS.includes(configTab)) ensureSettings();
+    if (PANES_NEEDING_RESOURCES.includes(configTab)) ensureResources();
+  }, [configTab, ensureSettings, ensureResources]);
+
+  // ── Auto-save Impostazioni (pattern unico di tutte le pane) ────────────────
+  // Applica subito il cambiamento in UI, persiste il SOLO campo toccato via
+  // updateAutoscuolaSettings (schema tutto optional) e ripristina il valore
+  // precedente + toast se il server rifiuta. Nessun bottone "Salva".
+  type SettingsPatch = Parameters<typeof updateAutoscuolaSettings>[0];
+
+  const persistSettings = async (patch: SettingsPatch, rollback: () => void) => {
+    const res = await updateAutoscuolaSettings(patch);
+    if (!res.success) {
+      rollback();
+      toast.error({ description: res.message ?? "Impossibile salvare l'impostazione." });
+    }
   };
 
-  const toggleChannel = (
-    channel: ChannelValue,
-    setter: React.Dispatch<React.SetStateAction<ChannelValue[]>>,
-  ) => {
-    setter((current) =>
-      current.includes(channel)
-        ? current.filter((item) => item !== channel)
-        : [...current, channel],
-    );
+  /** Costruisce un setter auto-save compatibile con Dispatch<SetStateAction<T>>. */
+  function persistField<T>(
+    current: T,
+    apply: (v: T) => void,
+    toPatch: (v: T) => SettingsPatch,
+  ): React.Dispatch<React.SetStateAction<T>> {
+    return (action) => {
+      const next =
+        typeof action === "function" ? (action as (prev: T) => T)(current) : action;
+      if (Object.is(next, current)) return;
+      apply(next);
+      void persistSettings(toPatch(next), () => apply(current));
+    };
+  }
+
+  // Generali
+  const saveAvailabilityWeeks = persistField(availabilityWeeks, setAvailabilityWeeks, (v) => ({
+    availabilityWeeks: Number(v),
+  }));
+  const saveBookingMinStartDate = persistField(bookingMinStartDate, setBookingMinStartDate, (v) => ({
+    bookingMinStartDate: v || null,
+  }));
+  const saveAppBookingActors = persistField(appBookingActors, setAppBookingActors, (v) => ({
+    appBookingActors: v,
+    // Il backend pretende la modalità istruttore insieme all'attivazione degli
+    // istruttori ("Seleziona la modalità prenotazione istruttore."): il patch
+    // singolo campo non basta, alleghiamo il valore corrente della select.
+    ...(v === "instructors" || v === "both" ? { instructorBookingMode } : {}),
+  }));
+  const saveInstructorBookingMode = persistField(
+    instructorBookingMode,
+    setInstructorBookingMode,
+    (v) => ({ instructorBookingMode: v }),
+  );
+  const saveRoundedHoursOnly = persistField(roundedHoursOnly, setRoundedHoursOnly, (v) => ({
+    roundedHoursOnly: v,
+  }));
+  const saveNationalHolidaysEnabled = persistField(
+    nationalHolidaysEnabled,
+    setNationalHolidaysEnabled,
+    (v) => ({ nationalHolidaysEnabled: v }),
+  );
+  const saveNationalHolidaysDisabled = persistField(
+    nationalHolidaysDisabled,
+    setNationalHolidaysDisabled,
+    (v) => ({ nationalHolidaysDisabled: v as SettingsPatch["nationalHolidaysDisabled"] }),
+  );
+
+  // Limiti
+  const saveBookingCutoffEnabled = persistField(bookingCutoffEnabled, setBookingCutoffEnabled, (v) => ({
+    bookingCutoffEnabled: v,
+  }));
+  const saveBookingCutoffTime = persistField(bookingCutoffTime, setBookingCutoffTime, (v) => ({
+    bookingCutoffTime: v as SettingsPatch["bookingCutoffTime"],
+  }));
+  const saveWeeklyBookingLimitEnabled = persistField(
+    weeklyBookingLimitEnabled,
+    setWeeklyBookingLimitEnabled,
+    (v) => ({ weeklyBookingLimitEnabled: v }),
+  );
+  const saveWeeklyBookingLimit = persistField(weeklyBookingLimit, setWeeklyBookingLimit, (v) => ({
+    weeklyBookingLimit: v,
+  }));
+  const saveExamPriorityEnabled = persistField(examPriorityEnabled, setExamPriorityEnabled, (v) => ({
+    examPriorityEnabled: v,
+  }));
+  const saveExamPriorityDaysBeforeExam = persistField(
+    examPriorityDaysBeforeExam,
+    setExamPriorityDaysBeforeExam,
+    (v) => ({ examPriorityDaysBeforeExam: v }),
+  );
+  const saveExamPriorityBlockNonExam = persistField(
+    examPriorityBlockNonExam,
+    setExamPriorityBlockNonExam,
+    (v) => ({ examPriorityBlockNonExam: v }),
+  );
+  const saveExamPriorityPausedUntil = persistField(
+    examPriorityPausedUntil,
+    setExamPriorityPausedUntil,
+    (v) => ({ examPriorityPausedUntil: v }),
+  );
+  const saveRestrictedTimeRangeEnabled = persistField(
+    restrictedTimeRangeEnabled,
+    setRestrictedTimeRangeEnabled,
+    (v) => ({ restrictedTimeRangeEnabled: v }),
+  );
+  const saveRestrictedTimeRangeStart = persistField(
+    restrictedTimeRangeStart,
+    setRestrictedTimeRangeStart,
+    (v) => ({ restrictedTimeRangeStart: v }),
+  );
+  const saveRestrictedTimeRangeEnd = persistField(
+    restrictedTimeRangeEnd,
+    setRestrictedTimeRangeEnd,
+    (v) => ({ restrictedTimeRangeEnd: v }),
+  );
+
+  // Guide
+  const saveSwapEnabled = persistField(swapEnabled, setSwapEnabled, (v) => ({ swapEnabled: v }));
+  const saveSwapNotifyMode = persistField(swapNotifyMode, setSwapNotifyMode, (v) => ({
+    swapNotifyMode: v,
+  }));
+  const saveStudentCancellationEnabled = persistField(
+    studentCancellationEnabled,
+    setStudentCancellationEnabled,
+    (v) => ({ studentCancellationEnabled: v }),
+  );
+  const saveAutoCheckinEnabled = persistField(autoCheckinEnabled, setAutoCheckinEnabled, (v) => ({
+    autoCheckinEnabled: v,
+  }));
+  const saveGroupLessonsEnabled = persistField(groupLessonsEnabled, setGroupLessonsEnabled, (v) => ({
+    groupLessonsEnabled: v,
+  }));
+
+  // App allievi
+  const saveStudentNotesEnabled = persistField(studentNotesEnabled, setStudentNotesEnabled, (v) => ({
+    studentNotesEnabled: v,
+  }));
+  const saveEmptySlotNotificationEnabled = persistField(
+    emptySlotNotificationEnabled,
+    setEmptySlotNotificationEnabled,
+    (v) => ({ emptySlotNotificationEnabled: v }),
+  );
+  const saveEmptySlotNotificationTarget = persistField(
+    emptySlotNotificationTarget,
+    setEmptySlotNotificationTarget,
+    (v) => ({ emptySlotNotificationTarget: v }),
+  );
+  const saveEmptySlotNotificationTimes = persistField(
+    emptySlotNotificationTimes,
+    setEmptySlotNotificationTimes,
+    (v) => ({ emptySlotNotificationTimes: v as SettingsPatch["emptySlotNotificationTimes"] }),
+  );
+  const saveInstructorPreferenceEnabled = persistField(
+    instructorPreferenceEnabled,
+    setInstructorPreferenceEnabled,
+    (v) => ({ instructorPreferenceEnabled: v }),
+  );
+
+  // Policy tipi guida
+  const saveLessonPolicyEnabled = persistField(lessonPolicyEnabled, setLessonPolicyEnabled, (v) => ({
+    lessonPolicyEnabled: v,
+  }));
+  const saveLessonRequiredTypesEnabled = persistField(
+    lessonRequiredTypesEnabled,
+    setLessonRequiredTypesEnabled,
+    (v) => ({ lessonRequiredTypesEnabled: v }),
+  );
+
+
+  // Auto-save della pane Veicoli: applica subito il cambiamento in UI,
+  // persiste il solo campo toccato e ripristina i valori precedenti se il
+  // salvataggio fallisce (la pane non ha più il bottone "Salva configurazione").
+  const updateVehicleSettings = async (patch: {
+    vehiclesEnabled?: boolean;
+    defaultLicenseCategory?: string;
+    defaultTransmission?: string;
+    followCarMotoEnabled?: boolean;
+  }) => {
+    const prev = {
+      vehiclesEnabled,
+      defaultLicenseCategory,
+      defaultTransmission,
+      followCarMotoEnabled,
+    };
+    if (patch.vehiclesEnabled !== undefined) setVehiclesEnabled(patch.vehiclesEnabled);
+    if (patch.defaultLicenseCategory !== undefined)
+      setDefaultLicenseCategory(patch.defaultLicenseCategory);
+    if (patch.defaultTransmission !== undefined)
+      setDefaultTransmission(patch.defaultTransmission);
+    if (patch.followCarMotoEnabled !== undefined)
+      setFollowCarMotoEnabled(patch.followCarMotoEnabled);
+
+    const res = await updateAutoscuolaSettings({
+      ...(patch.vehiclesEnabled !== undefined
+        ? { vehiclesEnabled: patch.vehiclesEnabled }
+        : {}),
+      ...(patch.defaultLicenseCategory !== undefined
+        ? { defaultLicenseCategory: patch.defaultLicenseCategory as LicenseCategory }
+        : {}),
+      ...(patch.defaultTransmission !== undefined
+        ? { defaultTransmission: patch.defaultTransmission as "manual" | "automatic" }
+        : {}),
+      ...(patch.followCarMotoEnabled !== undefined
+        ? { followCarMotoEnabled: patch.followCarMotoEnabled }
+        : {}),
+    });
+    if (!res.success) {
+      setVehiclesEnabled(prev.vehiclesEnabled);
+      setDefaultLicenseCategory(prev.defaultLicenseCategory);
+      setDefaultTransmission(prev.defaultTransmission);
+      setFollowCarMotoEnabled(prev.followCarMotoEnabled);
+      toast.error({
+        description: res.message ?? "Impossibile salvare le impostazioni veicoli.",
+      });
+    }
+  };
+
+  // Auto-save della pane Promemoria e notifiche (stesso pattern della pane
+  // Veicoli): applica subito il cambiamento in UI, persiste il solo campo
+  // toccato e ripristina i valori precedenti se il salvataggio fallisce.
+  const updateReminderSettings = async (patch: {
+    studentReminderMinutes?: number;
+    instructorReminderMinutes?: number;
+    instructorReminderEnabled?: boolean;
+    studentReminderMorningEnabled?: boolean;
+    studentReminderMorningTime?: string;
+    studentReminderDayBeforeEnabled?: boolean;
+    studentReminderDayBeforeTime?: string;
+    slotFillChannels?: ChannelValue[];
+    studentReminderChannels?: ChannelValue[];
+    instructorReminderChannels?: ChannelValue[];
+  }) => {
+    if (
+      (patch.slotFillChannels && !patch.slotFillChannels.length) ||
+      (patch.studentReminderChannels && !patch.studentReminderChannels.length) ||
+      (patch.instructorReminderChannels && !patch.instructorReminderChannels.length)
+    ) {
+      toast.error({ description: "Seleziona almeno un canale di invio." });
+      return;
+    }
+    const prev = {
+      studentReminderMinutes,
+      instructorReminderMinutes,
+      instructorReminderEnabled,
+      studentReminderMorningEnabled,
+      studentReminderMorningTime,
+      studentReminderDayBeforeEnabled,
+      studentReminderDayBeforeTime,
+      slotFillChannels,
+      studentReminderChannels,
+      instructorReminderChannels,
+    };
+    if (patch.studentReminderMinutes !== undefined)
+      setStudentReminderMinutes(String(patch.studentReminderMinutes));
+    if (patch.instructorReminderMinutes !== undefined)
+      setInstructorReminderMinutes(String(patch.instructorReminderMinutes));
+    if (patch.instructorReminderEnabled !== undefined)
+      setInstructorReminderEnabled(patch.instructorReminderEnabled);
+    if (patch.studentReminderMorningEnabled !== undefined)
+      setStudentReminderMorningEnabled(patch.studentReminderMorningEnabled);
+    if (patch.studentReminderMorningTime !== undefined)
+      setStudentReminderMorningTime(patch.studentReminderMorningTime);
+    if (patch.studentReminderDayBeforeEnabled !== undefined)
+      setStudentReminderDayBeforeEnabled(patch.studentReminderDayBeforeEnabled);
+    if (patch.studentReminderDayBeforeTime !== undefined)
+      setStudentReminderDayBeforeTime(patch.studentReminderDayBeforeTime);
+    if (patch.slotFillChannels !== undefined) setSlotFillChannels(patch.slotFillChannels);
+    if (patch.studentReminderChannels !== undefined)
+      setStudentReminderChannels(patch.studentReminderChannels);
+    if (patch.instructorReminderChannels !== undefined)
+      setInstructorReminderChannels(patch.instructorReminderChannels);
+
+    const res = await updateAutoscuolaSettings({
+      ...(patch.studentReminderMinutes !== undefined
+        ? { studentReminderMinutes: patch.studentReminderMinutes as (typeof REMINDER_OPTIONS)[number] }
+        : {}),
+      ...(patch.instructorReminderMinutes !== undefined
+        ? { instructorReminderMinutes: patch.instructorReminderMinutes as (typeof REMINDER_OPTIONS)[number] }
+        : {}),
+      ...(patch.instructorReminderEnabled !== undefined
+        ? { instructorReminderEnabled: patch.instructorReminderEnabled }
+        : {}),
+      ...(patch.studentReminderMorningEnabled !== undefined
+        ? { studentReminderMorningEnabled: patch.studentReminderMorningEnabled }
+        : {}),
+      ...(patch.studentReminderMorningTime !== undefined
+        ? { studentReminderMorningTime: patch.studentReminderMorningTime }
+        : {}),
+      ...(patch.studentReminderDayBeforeEnabled !== undefined
+        ? { studentReminderDayBeforeEnabled: patch.studentReminderDayBeforeEnabled }
+        : {}),
+      ...(patch.studentReminderDayBeforeTime !== undefined
+        ? { studentReminderDayBeforeTime: patch.studentReminderDayBeforeTime }
+        : {}),
+      ...(patch.slotFillChannels !== undefined ? { slotFillChannels: patch.slotFillChannels } : {}),
+      ...(patch.studentReminderChannels !== undefined
+        ? { studentReminderChannels: patch.studentReminderChannels }
+        : {}),
+      ...(patch.instructorReminderChannels !== undefined
+        ? { instructorReminderChannels: patch.instructorReminderChannels }
+        : {}),
+    });
+    if (!res.success) {
+      setStudentReminderMinutes(prev.studentReminderMinutes);
+      setInstructorReminderMinutes(prev.instructorReminderMinutes);
+      setInstructorReminderEnabled(prev.instructorReminderEnabled);
+      setStudentReminderMorningEnabled(prev.studentReminderMorningEnabled);
+      setStudentReminderMorningTime(prev.studentReminderMorningTime);
+      setStudentReminderDayBeforeEnabled(prev.studentReminderDayBeforeEnabled);
+      setStudentReminderDayBeforeTime(prev.studentReminderDayBeforeTime);
+      setSlotFillChannels(prev.slotFillChannels);
+      setStudentReminderChannels(prev.studentReminderChannels);
+      setInstructorReminderChannels(prev.instructorReminderChannels);
+      toast.error({
+        description: res.message ?? "Impossibile salvare le impostazioni promemoria.",
+      });
+    }
   };
 
   const toggleRequiredType = (type: LessonTypeValue) => {
-    setLessonRequiredTypes((current) =>
-      current.includes(type)
-        ? current.filter((item) => item !== type)
-        : [...current, type],
+    const next = lessonRequiredTypes.includes(type)
+      ? lessonRequiredTypes.filter((item) => item !== type)
+      : [...lessonRequiredTypes, type];
+    setLessonRequiredTypes(next);
+    void persistSettings({ lessonRequiredTypes: next }, () =>
+      setLessonRequiredTypes(lessonRequiredTypes),
+    );
+  };
+
+  // I vincoli si salvano come mappa intera (il backend rimpiazza l'oggetto):
+  // le guard sotto tengono lo stato sempre valido, così ogni click persiste.
+  const serializeLessonConstraints = (map: LessonConstraintMap) => {
+    const out = {} as Record<
+      LessonTypeValue,
+      { daysOfWeek: number[]; startMinutes: number; endMinutes: number } | null
+    >;
+    for (const option of LESSON_TYPE_OPTIONS) {
+      const state = map[option.value];
+      out[option.value] = state?.enabled
+        ? {
+            daysOfWeek: normalizeDays(state.daysOfWeek),
+            startMinutes: state.startMinutes,
+            endMinutes: state.endMinutes,
+          }
+        : null;
+    }
+    return out;
+  };
+
+  const applyConstraints = (next: LessonConstraintMap) => {
+    setLessonConstraints(next);
+    void persistSettings({ lessonTypeConstraints: serializeLessonConstraints(next) }, () =>
+      setLessonConstraints(lessonConstraints),
     );
   };
 
   const toggleConstraintEnabled = (type: LessonTypeValue) => {
-    setLessonConstraints((current) => ({
-      ...current,
-      [type]: {
-        ...(current[type] ?? DEFAULT_LESSON_CONSTRAINT),
-        enabled: !(current[type]?.enabled ?? false),
-      },
-    }));
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    applyConstraints({ ...lessonConstraints, [type]: { ...state, enabled: !state.enabled } });
   };
 
   const toggleConstraintDay = (type: LessonTypeValue, day: number) => {
-    setLessonConstraints((current) => {
-      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
-      const nextDays = state.daysOfWeek.includes(day)
-        ? state.daysOfWeek.filter((item) => item !== day)
-        : [...state.daysOfWeek, day];
-      return {
-        ...current,
-        [type]: {
-          ...state,
-          daysOfWeek: normalizeDays(nextDays),
-        },
-      };
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    const nextDays = state.daysOfWeek.includes(day)
+      ? state.daysOfWeek.filter((item) => item !== day)
+      : [...state.daysOfWeek, day];
+    if (state.enabled && !nextDays.length) {
+      toast.error({ description: "Seleziona almeno un giorno per il limite orario." });
+      return;
+    }
+    applyConstraints({
+      ...lessonConstraints,
+      [type]: { ...state, daysOfWeek: normalizeDays(nextDays) },
     });
   };
 
@@ -837,232 +1129,43 @@ export function AutoscuoleResourcesPage({
   ) => {
     const minutes = Number(value);
     if (!Number.isFinite(minutes)) return;
-    setLessonConstraints((current) => {
-      const state = current[type] ?? DEFAULT_LESSON_CONSTRAINT;
-      return {
-        ...current,
-        [type]: {
-          ...state,
-          [field]: minutes,
-        },
-      };
-    });
+    const state = lessonConstraints[type] ?? DEFAULT_LESSON_CONSTRAINT;
+    const nextState = { ...state, [field]: minutes };
+    if (nextState.endMinutes <= nextState.startMinutes) {
+      toast.error({ description: "L'orario di fine deve essere successivo all'inizio." });
+      return;
+    }
+    applyConstraints({ ...lessonConstraints, [type]: nextState });
   };
 
   const toggleBookingDuration = (duration: number) => {
-    setBookingSlotDurations((current) => {
-      const next = current.includes(duration)
-        ? current.filter((value) => value !== duration)
-        : [...current, duration];
-      return next.sort((a, b) => a - b);
-    });
+    const next = (
+      bookingSlotDurations.includes(duration)
+        ? bookingSlotDurations.filter((value) => value !== duration)
+        : [...bookingSlotDurations, duration]
+    ).sort((a, b) => a - b);
+    if (!next.length) {
+      toast.error({ description: "Seleziona almeno una durata prenotabile." });
+      return;
+    }
+    setBookingSlotDurations(next);
+    void persistSettings(
+      { bookingSlotDurations: next as SettingsPatch["bookingSlotDurations"] },
+      () => setBookingSlotDurations(bookingSlotDurations),
+    );
   };
 
   // ── Instructor availability handlers ──────────────────────────────────────
 
-  /** (Re)load the daily overrides of an instructor into `instrOverrides`,
-   * grouped by ISO week. Called on dialog open AND after a recurring save so
-   * the calendar dots reflect the just-saved state immediately. */
-  const loadInstrOverrides = (instructorId: string) => {
-    getWeeklyAvailabilityOverrides({
-      ownerType: "instructor",
-      ownerId: instructorId,
-    }).then((res) => {
-      if (res.success && res.data) {
-        const byWeek = new Map<string, DayScheduleEntry[]>();
-        for (const o of res.data) {
-          const d = new Date(o.date);
-          const ws = getWeekStart(d);
-          const key = ws.toISOString().slice(0, 10);
-          const list = byWeek.get(key) ?? [];
-          const dayOfWeek = d.getUTCDay();
-          const ranges = Array.isArray(o.ranges) ? o.ranges as Array<{ startMinutes: number; endMinutes: number }> : [];
-          const first = ranges[0];
-          const second = ranges[1];
-          list.push({
-            dayOfWeek,
-            startMinutes: first?.startMinutes ?? 0,
-            endMinutes: first?.endMinutes ?? 0,
-            startMinutes2: second?.startMinutes ?? null,
-            endMinutes2: second?.endMinutes ?? null,
-          });
-          byWeek.set(key, list);
-        }
-        setInstrOverrides(
-          Array.from(byWeek.entries()).map(([weekStart, schedule]) => ({ weekStart, schedule })),
-        );
-      }
-    });
-  };
 
-  const openInstructorAvailabilityDialog = (instructor: InstructorDetail) => {
-    const current = instructorWeeklyAvailability[instructor.id];
-    setAvailInstructorMode(readAvailabilityMode(instructor.settings));
-    setAvailDialogTab("default");
-    setCalendarSelectedDate(null);
-    setCalendarMonth(new Date());
-    setRecurringOverride(false);
-    setAvailInstructor(instructor);
-    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-    setInstrDefaultRanges(
-      current?.ranges?.length ? current.ranges : [{ startMinutes: current?.startMinutes ?? 9 * 60, endMinutes: current?.endMinutes ?? 18 * 60 }],
-    );
-    setInstrSelectedWeek(null);
-    setInstrDaySchedule([]);
-    // Load daily overrides for this instructor and group them by week
-    loadInstrOverrides(instructor.id);
-  };
 
-  const toggleInstrDay = (day: number) => {
-    setInstrDays((prev) =>
-      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
-    );
-  };
 
   // Switch the instructor between default ↔ publication availability mode from
   // the dialog (same setting the cluster panel and the mobile app expose).
-  const handleSwitchAvailabilityMode = async () => {
-    if (!availInstructor) return;
-    const next = availInstructorMode === "publication" ? "default" : "publication";
-    const label =
-      next === "publication"
-        ? "PUBBLICAZIONE: l'istruttore compila e pubblica la disponibilità settimana per settimana; gli allievi prenotano solo le settimane pubblicate."
-        : "PREDEFINITA: settimana tipo valida ogni settimana, con eccezioni dal calendario.";
-    if (!window.confirm(`Cambiare la modalità disponibilità di ${availInstructor.name}?\n\n${label}`)) return;
-    setAvailModeSwitching(true);
-    const existingSettings =
-      availInstructor.settings && typeof availInstructor.settings === "object"
-        ? (availInstructor.settings as Record<string, unknown>)
-        : {};
-    const updatedSettings = { ...existingSettings, availabilityMode: next } as Parameters<
-      typeof updateAutoscuolaInstructor
-    >[0]["settings"] & Record<string, unknown>;
-    const res = await updateAutoscuolaInstructor({
-      instructorId: availInstructor.id,
-      settings: updatedSettings,
-    });
-    setAvailModeSwitching(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile cambiare modalità." });
-      return;
-    }
-    setAvailInstructorMode(next);
-    setAvailInstructor((prev) => (prev ? { ...prev, settings: updatedSettings } : prev));
-    setInstructors((prev) =>
-      prev.map((i) => (i.id === availInstructor.id ? { ...i, settings: updatedSettings } : i)),
-    );
-    toast.success({
-      description: `Modalità disponibilità: ${next === "publication" ? "Pubblicazione" : "Predefinita"}.`,
-    });
-  };
 
   /** Build default per-day schedule from the flat base availability */
-  const buildDefaultDaySchedule = (instructorId: string): DayScheduleEntry[] => {
-    const current = instructorWeeklyAvailability[instructorId];
-    if (!current) return WEEKDAY_OPTIONS.map((d) => ({ dayOfWeek: d.value, startMinutes: 9 * 60, endMinutes: 18 * 60 })).filter((d) => [1,2,3,4,5].includes(d.dayOfWeek));
-    return current.daysOfWeek.map((dow) => ({
-      dayOfWeek: dow,
-      startMinutes: current.startMinutes,
-      endMinutes: current.endMinutes,
-    }));
-  };
 
-  const openClusterPanel = async (instructor: InstructorDetail) => {
-    setClusterInstructor(instructor);
-    setClusterAutonomous(instructor.autonomousMode ?? false);
-    setClusterStudentSearch("");
-    const settings = (instructor.settings ?? {}) as Record<string, unknown>;
-    setClusterDurations(
-      Array.isArray(settings.bookingSlotDurations)
-        ? (settings.bookingSlotDurations as number[]).filter((d) => [30, 45, 60, 90, 120].includes(d))
-        : [30, 60],
-    );
-    setClusterRoundedHours(settings.roundedHoursOnly === true);
-    // Load new cluster booking settings
-    setClusterAppBookingActors(settings.appBookingActors as "students" | "instructors" | "both" | undefined);
-    setClusterInstructorBookingMode(settings.instructorBookingMode as "manual_full" | "manual_engine" | undefined);
-    setClusterSwapEnabled(typeof settings.swapEnabled === "boolean" ? settings.swapEnabled : undefined);
-    setClusterStudentCancellationEnabled(typeof settings.studentCancellationEnabled === "boolean" ? settings.studentCancellationEnabled : undefined);
-    setClusterSwapNotifyMode(settings.swapNotifyMode as "all" | "available_only" | undefined);
-    setClusterBookingCutoffEnabled(typeof settings.bookingCutoffEnabled === "boolean" ? settings.bookingCutoffEnabled : undefined);
-    setClusterBookingCutoffTime(settings.bookingCutoffTime as string | undefined);
-    setClusterWeeklyLimitEnabled(typeof settings.weeklyBookingLimitEnabled === "boolean" ? settings.weeklyBookingLimitEnabled : undefined);
-    setClusterWeeklyLimit(typeof settings.weeklyBookingLimit === "number" ? settings.weeklyBookingLimit : undefined);
-    setClusterEmptySlotEnabled(typeof settings.emptySlotNotificationEnabled === "boolean" ? settings.emptySlotNotificationEnabled : undefined);
-    setClusterEmptySlotTarget(settings.emptySlotNotificationTarget as "all" | "availability_matching" | undefined);
-    setClusterEmptySlotTimes(Array.isArray(settings.emptySlotNotificationTimes) ? settings.emptySlotNotificationTimes as string[] : undefined);
-    setClusterRestrictedTimeEnabled(typeof settings.restrictedTimeRangeEnabled === "boolean" ? settings.restrictedTimeRangeEnabled : undefined);
-    setClusterRestrictedTimeStart(settings.restrictedTimeRangeStart as string | undefined);
-    setClusterRestrictedTimeEnd(settings.restrictedTimeRangeEnd as string | undefined);
-    setClusterWeeklyAbsenceEnabled(typeof settings.weeklyAbsenceEnabled === "boolean" ? settings.weeklyAbsenceEnabled : undefined);
-    setClusterWorkingHoursStart(typeof settings.workingHoursStart === "string" ? settings.workingHoursStart : undefined);
-    setClusterWorkingHoursEnd(typeof settings.workingHoursEnd === "string" ? settings.workingHoursEnd : undefined);
-    setClusterAvailabilityMode(settings.availabilityMode === "publication" ? "publication" : "default");
-    const studRes = await getAutoscuolaStudentsWithProgress();
-    if (studRes.success && studRes.data) {
-      setAllStudents(studRes.data.map((s) => ({
-        id: s.id,
-        firstName: s.firstName,
-        lastName: s.lastName,
-        assignedInstructorId: (s as Record<string, unknown>).assignedInstructorId as string | null,
-        licenseCategory: s.licenseCategory ?? null,
-        transmission: s.transmission ?? null,
-      })));
-      setClusterStudentIds(
-        studRes.data
-          .filter((s) => (s as Record<string, unknown>).assignedInstructorId === instructor.id)
-          .map((s) => s.id),
-      );
-    }
-  };
 
-  const saveClusterSettings = async () => {
-    if (!clusterInstructor) return;
-    setClusterSaving(true);
-    const res = await updateAutoscuolaInstructor({
-      instructorId: clusterInstructor.id,
-      autonomousMode: clusterAutonomous,
-      settings: {
-        ...(clusterAutonomous ? {
-          bookingSlotDurations: clusterDurations,
-          roundedHoursOnly: clusterRoundedHours,
-          appBookingActors: clusterAppBookingActors,
-          instructorBookingMode: clusterInstructorBookingMode,
-          swapEnabled: clusterSwapEnabled,
-          studentCancellationEnabled: clusterStudentCancellationEnabled,
-          swapNotifyMode: clusterSwapNotifyMode,
-          bookingCutoffEnabled: clusterBookingCutoffEnabled,
-          bookingCutoffTime: clusterBookingCutoffTime,
-          weeklyBookingLimitEnabled: clusterWeeklyLimitEnabled,
-          weeklyBookingLimit: clusterWeeklyLimit,
-          emptySlotNotificationEnabled: clusterEmptySlotEnabled,
-          emptySlotNotificationTarget: clusterEmptySlotTarget,
-          emptySlotNotificationTimes: clusterEmptySlotTimes,
-          restrictedTimeRangeEnabled: clusterRestrictedTimeEnabled,
-          restrictedTimeRangeStart: clusterRestrictedTimeStart,
-          restrictedTimeRangeEnd: clusterRestrictedTimeEnd,
-          weeklyAbsenceEnabled: clusterWeeklyAbsenceEnabled,
-        } : {}),
-        workingHoursStart: clusterWorkingHoursStart,
-        workingHoursEnd: clusterWorkingHoursEnd,
-        availabilityMode: clusterAvailabilityMode,
-      },
-      assignStudentIds: clusterAutonomous ? clusterStudentIds : [],
-    });
-    setClusterSaving(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Errore salvataggio." });
-      return;
-    }
-    toast.success({ description: "Impostazioni istruttore salvate." });
-    const instrRes = await getAutoscuolaInstructors();
-    if (instrRes.success && instrRes.data) {
-      setInstructors(instrRes.data);
-    }
-    setClusterInstructor(null);
-  };
 
   // Save the instructor display color (null = back to automatic palette).
   // Awaited by ColorSwatchPicker, which spins on the trigger until we resolve.
@@ -1077,109 +1180,17 @@ export function AutoscuoleResourcesPage({
     );
   };
 
-  const handleSelectInstrWeek = (weekStart: string | null) => {
-    setInstrSelectedWeek(weekStart);
-    if (!availInstructor) return;
-    if (weekStart === null) {
-      // "Predefinito" selected — load the flat default
-      const current = instructorWeeklyAvailability[availInstructor.id];
-      setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-      setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-      setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-      setInstrDaySchedule([]);
-    } else {
-      // Specific week selected — load override schedule or build from default
-      const override = instrOverrides.find((o) => o.weekStart === weekStart);
-      if (override) {
-        setInstrDaySchedule(override.schedule);
-      } else {
-        setInstrDaySchedule(buildDefaultDaySchedule(availInstructor.id));
-      }
-    }
-  };
 
-  const handleSaveInstructorAvailability = async () => {
-    if (!availInstructor) return;
-    if (!instrDays.length) {
-      toast.error({ description: "Seleziona almeno un giorno." });
-      return;
-    }
-    const invalidRange = instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes);
-    if (invalidRange) {
-      toast.error({ description: "Una o più fasce orarie non sono valide." });
-      return;
-    }
-    setSavingInstrAvailability(true);
-    const res = await setAutoscuolaInstructorWeeklyAvailability({
-      instructorId: availInstructor.id,
-      daysOfWeek: instrDays,
-      startMinutes: instrDefaultRanges[0]?.startMinutes ?? 9 * 60,
-      endMinutes: instrDefaultRanges[0]?.endMinutes ?? 18 * 60,
-      ranges: instrDefaultRanges,
-    });
-    setSavingInstrAvailability(false);
-    if (!res.success || !res.data) {
-      toast.error({ description: res.message ?? "Impossibile salvare la disponibilità." });
-      return;
-    }
-    setInstructorWeeklyAvailability((prev) => ({
-      ...prev,
-      [availInstructor.id]: res.data!,
-    }));
-    setAvailInstructor(null);
-    toast.success({ description: "Disponibilità salvata." });
-    loadAvailability(date);
-  };
 
-  const handleResetInstrOverride = async () => {
-    if (!availInstructor || !instrSelectedWeek) return;
-    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
-    setSavingInstrAvailability(true);
-    const res = await deleteWeeklyAvailabilityOverride({
-      ownerType: "instructor",
-      ownerId: availInstructor.id,
-      weekStart: instrSelectedWeek,
-    });
-    setSavingInstrAvailability(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile rimuovere l'override." });
-      return;
-    }
-    setInstrOverrides((prev) => prev.filter((o) => o.weekStart !== instrSelectedWeek));
-    // Reset form to default
-    const current = instructorWeeklyAvailability[availInstructor.id];
-    setInstrDays(current?.daysOfWeek ?? [1, 2, 3, 4, 5]);
-    setInstrStartMinutes(current?.startMinutes ?? 9 * 60);
-    setInstrEndMinutes(current?.endMinutes ?? 18 * 60);
-    toast.success({ description: "Override rimosso, settimana tornata al predefinito." });
-    loadAvailability(date);
-  };
 
-  const handleDeleteInstructorAvailability = async () => {
-    if (!availInstructor) return;
-    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo istruttore?")) return;
-    setSavingInstrAvailability(true);
-    const res = await deleteAutoscuolaInstructorWeeklyAvailability(availInstructor.id);
-    setSavingInstrAvailability(false);
-    if (!res.success) {
-      toast.error({ description: res.message ?? "Impossibile rimuovere la disponibilità." });
-      return;
-    }
-    setInstructorWeeklyAvailability((prev) => {
-      const next = { ...prev };
-      delete next[availInstructor.id];
-      return next;
-    });
-    setAvailInstructor(null);
-    toast.success({ description: "Disponibilità rimossa." });
-    loadAvailability(date);
-  };
 
   // ── Vehicle management handlers ───────────────────────────────────────────
 
   const openCreateVehicle = () => {
     setNewVehicleName("");
     setNewVehiclePlate("");
+    setNewVehicleCategory(defaultLicenseCategory || "B");
+    setNewVehicleTransmission(defaultTransmission || "manual");
     setCreateVehicleOpen(true);
   };
 
@@ -1193,6 +1204,8 @@ export function AutoscuoleResourcesPage({
     const res = await createAutoscuolaVehicle({
       name,
       plate: newVehiclePlate.trim() || undefined,
+      licenseCategory: newVehicleCategory as (typeof LICENSE_CATEGORIES)[number],
+      transmission: newVehicleTransmission as (typeof TRANSMISSIONS)[number],
     });
     setCreatingVehicle(false);
     if (!res.success || !res.data) {
@@ -1209,8 +1222,8 @@ export function AutoscuoleResourcesPage({
         assignedInstructorId: res.data!.assignedInstructorId ?? null,
         poolInstructorIds: [],
         followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
-        licenseCategory: res.data!.licenseCategory ?? "B",
-        transmission: res.data!.transmission ?? "manual",
+        licenseCategory: res.data!.licenseCategory ?? newVehicleCategory,
+        transmission: res.data!.transmission ?? newVehicleTransmission,
       },
     ]);
     setCreateVehicleOpen(false);
@@ -1266,25 +1279,21 @@ export function AutoscuoleResourcesPage({
       toast.error({ description: res.message ?? "Impossibile aggiornare il veicolo." });
       return;
     }
+    const nextVehicle = {
+      name: res.data!.name,
+      plate: res.data!.plate ?? null,
+      status: res.data!.status,
+      assignedInstructorId: res.data!.assignedInstructorId ?? null,
+      poolInstructorIds: poolIds,
+      followsInstructorAvailability: res.data!.followsInstructorAvailability ?? true,
+      licenseCategory: res.data!.licenseCategory ?? "B",
+      transmission: res.data!.transmission ?? "manual",
+    };
     setVehicles((prev) =>
-      prev.map((v) =>
-        v.id === editVehicle.id
-          ? {
-              ...v,
-              name: res.data!.name,
-              plate: res.data!.plate ?? null,
-              status: res.data!.status,
-              assignedInstructorId: res.data!.assignedInstructorId ?? null,
-              poolInstructorIds: poolIds,
-              followsInstructorAvailability:
-                res.data!.followsInstructorAvailability ?? true,
-              licenseCategory: res.data!.licenseCategory ?? "B",
-              transmission: res.data!.transmission ?? "manual",
-            }
-          : v,
-      ),
+      prev.map((v) => (v.id === editVehicle.id ? { ...v, ...nextVehicle } : v)),
     );
-    setEditVehicle(null);
+    // Si resta nel dettaglio inline: aggiorna il veicolo in modifica.
+    setEditVehicle((prev) => (prev ? { ...prev, ...nextVehicle } : prev));
     toast.success({ description: "Veicolo aggiornato." });
   };
 
@@ -1309,7 +1318,7 @@ export function AutoscuoleResourcesPage({
 
   const handleDeactivateVehicle = async () => {
     if (!editVehicle) return;
-    if (!window.confirm(`Disattivare "${editVehicle.name}"? Gli appuntamenti futuri verranno riprogrammati.`)) return;
+    setConfirmDeactivateVehicle(false);
     setSavingEditVehicle(true);
     const res = await updateAutoscuolaVehicle({
       vehicleId: editVehicle.id,
@@ -1327,7 +1336,9 @@ export function AutoscuoleResourcesPage({
           : v,
       ),
     );
-    setEditVehicle(null);
+    setEditVehicle((prev) =>
+      prev ? { ...prev, status: "inactive", assignedInstructorId: null } : prev,
+    );
     toast.success({ description: "Veicolo disattivato." });
   };
 
@@ -1348,7 +1359,7 @@ export function AutoscuoleResourcesPage({
         v.id === editVehicle.id ? { ...v, status: "active" } : v,
       ),
     );
-    setEditVehicle(null);
+    setEditVehicle((prev) => (prev ? { ...prev, status: "active" } : prev));
     toast.success({ description: "Veicolo riattivato." });
   };
 
@@ -1461,14 +1472,13 @@ export function AutoscuoleResourcesPage({
       ...prev,
       [availVehicle.id]: res.data!,
     }));
-    setAvailVehicle(null);
     toast.success({ description: "Disponibilità salvata." });
     loadAvailability(date);
   };
 
   const handleResetVehOverride = async () => {
     if (!availVehicle || !vehSelectedWeek) return;
-    if (!window.confirm("Rimuovere l'override per questa settimana e tornare alla disponibilità predefinita?")) return;
+    setConfirmResetOverride(false);
     setSavingAvailability(true);
     const res = await deleteWeeklyAvailabilityOverride({
       ownerType: "vehicle",
@@ -1491,7 +1501,7 @@ export function AutoscuoleResourcesPage({
 
   const handleDeleteAvailability = async () => {
     if (!availVehicle) return;
-    if (!window.confirm("Rimuovere tutta la disponibilità settimanale di questo veicolo?")) return;
+    setConfirmDeleteAvail(false);
     setSavingAvailability(true);
     const res = await deleteAutoscuolaVehicleWeeklyAvailability(availVehicle.id);
     setSavingAvailability(false);
@@ -1504,971 +1514,844 @@ export function AutoscuoleResourcesPage({
       delete next[availVehicle.id];
       return next;
     });
-    setAvailVehicle(null);
     toast.success({ description: "Disponibilità rimossa." });
     loadAvailability(date);
+  };
+
+  /** Salva del pannello disponibilità: default settimanale o override del
+   *  giorno selezionato in calendario (logica invariata dal vecchio dialog). */
+  const handleAvailabilitySaveClick = async () => {
+    if (availDialogTab === "calendar" && calendarSelectedDate && availVehicle) {
+      const dateObj = new Date(calendarSelectedDate);
+      const ws = getWeekStart(dateObj);
+      const weekStartStr = ws.toISOString().slice(0, 10);
+      const dayOfWeek = dateObj.getUTCDay();
+
+      if (!calendarDayEnabled) {
+        setSavingAvailability(true);
+        const res = await setWeeklyAvailabilityOverride({
+          ownerType: "vehicle",
+          ownerId: availVehicle.id,
+          weekStart: weekStartStr,
+          schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
+        });
+        setSavingAvailability(false);
+        if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+      } else {
+        const schedule: DayScheduleEntry[] = [{
+          dayOfWeek,
+          startMinutes: calendarDayRanges[0].startMinutes,
+          endMinutes: calendarDayRanges[0].endMinutes,
+          ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
+        }];
+        setSavingAvailability(true);
+        const res = await setWeeklyAvailabilityOverride({
+          ownerType: "vehicle",
+          ownerId: availVehicle.id,
+          weekStart: weekStartStr,
+          schedule,
+        });
+        setSavingAvailability(false);
+        if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
+        setVehOverrides((prev) => {
+          const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
+          return [...filtered, { weekStart: weekStartStr, schedule }];
+        });
+      }
+      toast.success({ description: "Override salvato." });
+      loadAvailability(date);
+    } else {
+      handleSaveAvailability();
+    }
+  };
+
+  // ── Dettaglio veicolo inline: apre/chiude e semina entrambi gli editor.
+  const openVehicleDetail = (vehicle: VehicleDetail, tab: "disp" | "dettagli") => {
+    openEditVehicle(vehicle);
+    openAvailabilityDialog(vehicle);
+    setConfirmDeactivateVehicle(false);
+    setConfirmDeleteAvail(false);
+    setConfirmResetOverride(false);
+    setVehicleDetail({ vehicleId: vehicle.id, tab });
+  };
+  const closeVehicleDetail = () => {
+    setVehicleDetail(null);
+    setEditVehicle(null);
+    setAvailVehicle(null);
+  };
+  const setVehicleDetailTab = (tab: "disp" | "dettagli") =>
+    setVehicleDetail((prev) => (prev ? { ...prev, tab } : prev));
+
+  // Label uppercase dei campi veicolo (LBL del proto _paintVeicDettagli).
+  const VEIC_LBL = "mb-2 text-[11px] font-bold uppercase tracking-[0.4px] text-[#929292]";
+
+  /** Tab "Dettagli" del dettaglio veicolo inline (ex dialog Modifica veicolo). */
+  const renderVehicleDetailsForm = () => {
+    if (!editVehicle) return null;
+    return (
+      <div>
+        <div className={VEIC_LBL}>Nome veicolo</div>
+        <input
+          placeholder="es. Fiat 500"
+          value={editVehicleName}
+          onChange={(e) => setEditVehicleName(e.target.value)}
+          className={cn(PROTO_INPUT, "mb-[18px]")}
+        />
+        <div className={VEIC_LBL}>Targa (opzionale)</div>
+        <input
+          placeholder="es. AB123CD"
+          value={editVehiclePlate}
+          onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
+          className={cn(PROTO_INPUT, "mb-[18px]")}
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <div className={VEIC_LBL}>Categoria</div>
+            <Select value={editVehicleCategory} onValueChange={setEditVehicleCategory}>
+              <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LICENSE_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <div className={VEIC_LBL}>Cambio</div>
+            <Select value={editVehicleTransmission} onValueChange={setEditVehicleTransmission}>
+              <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSMISSIONS.map((t) => (
+                  <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Modalità di utilizzo: segmented proto + extra per modalità */}
+        <div className={cn(VEIC_LBL, "mt-[22px]")}>Modalità di utilizzo</div>
+        <div className="flex gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+          {(
+            [
+              ["open", "Aperto"],
+              ["pool", "Pool"],
+              ["exclusive", "Esclusivo"],
+            ] as Array<[VehicleUsageMode, string]>
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              data-testid={`vehicle-mode-${mode}`}
+              data-active={editVehicleMode === mode}
+              onClick={() => setEditVehicleMode(mode)}
+              className={cn(
+                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                editVehicleMode === mode
+                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                  : "font-medium text-[#888888] hover:text-[#555555]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-3">
+          {editVehicleMode === "open" && (
+            <p className="text-[12.5px] font-medium leading-normal text-[#929292]">
+              Tutti gli istruttori possono usarlo. È l&apos;impostazione predefinita.
+            </p>
+          )}
+          {editVehicleMode === "pool" && (
+            <>
+              <p className="mb-2.5 text-[12.5px] font-medium leading-normal text-[#929292]">
+                Solo gli istruttori selezionati possono usare questo veicolo.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {instructors
+                  .filter((ins) => ins.status !== "inactive")
+                  .map((ins) => {
+                    const active = editVehiclePoolIds.includes(ins.id);
+                    return (
+                      <button
+                        key={ins.id}
+                        type="button"
+                        onClick={() =>
+                          setEditVehiclePoolIds((prev) =>
+                            active ? prev.filter((id) => id !== ins.id) : [...prev, ins.id],
+                          )
+                        }
+                        className={cn(
+                          "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                          active
+                            ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                            : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                        )}
+                      >
+                        {ins.name}
+                      </button>
+                    );
+                  })}
+              </div>
+            </>
+          )}
+          {editVehicleMode === "exclusive" && (
+            <>
+              <Select
+                value={editVehicleInstructorId || "none"}
+                onValueChange={(v) => setEditVehicleInstructorId(v === "none" ? "" : v)}
+              >
+                <SelectTrigger data-testid="vehicle-exclusive-instructor" className={PROTO_SELECT_TRIGGER}>
+                  <SelectValue placeholder="Scegli istruttore" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Scegli istruttore</SelectItem>
+                  {instructors
+                    .filter((ins) => ins.status !== "inactive")
+                    .map((ins) => (
+                      <SelectItem key={ins.id} value={ins.id}>{ins.name}</SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-[12.5px] font-medium leading-normal text-[#929292]">
+                Riservato a un istruttore, nascosto agli altri. Un istruttore può avere più mezzi
+                esclusivi (es. la sua auto e la sua moto).
+              </p>
+            </>
+          )}
+        </div>
+
+        {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
+          <div
+            role="switch"
+            tabIndex={0}
+            aria-checked={editVehicleFollowsAvailability}
+            onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setEditVehicleFollowsAvailability((prev) => !prev);
+              }
+            }}
+            className="mt-4 flex w-full cursor-pointer select-none items-center justify-between gap-4 rounded-[12px] border-[1.5px] border-[#ededed] px-4 py-[15px]"
+          >
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-foreground">
+                Disponibilità: segue l&apos;istruttore
+              </div>
+              <div className="mt-0.5 text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+                {editVehicleFollowsAvailability
+                  ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
+                  : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
+              </div>
+            </div>
+            <InlineToggle checked={editVehicleFollowsAvailability} size="lg" />
+          </div>
+        ) : null}
+
+        {/* Stato: riga titolo+descrizione a sinistra, select a destra (proto) */}
+        {editVehicle.status !== "inactive" && (
+          <div className="mt-[26px] flex items-start justify-between gap-6">
+            <div className="min-w-0 flex-1">
+              <div className="text-[15px] font-semibold text-foreground">Stato</div>
+              <div className="mt-1 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                {editVehicle.status === "maintenance"
+                  ? "Escluso dalle nuove prenotazioni; gli appuntamenti già fissati restano."
+                  : "Il veicolo è prenotabile normalmente."}
+              </div>
+            </div>
+            <Select
+              value={editVehicle.status === "maintenance" ? "maintenance" : "active"}
+              onValueChange={(v) => void handleSetVehicleMaintenance(v === "maintenance")}
+            >
+              <SelectTrigger className={cn(PROTO_SELECT_TRIGGER, "w-[220px] shrink-0")}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Attivo</SelectItem>
+                <SelectItem value="maintenance">Manutenzione</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Disattiva / Riattiva (conferma inline) */}
+        <div className="mt-6">
+          {editVehicle.status !== "inactive" ? (
+            confirmDeactivateVehicle ? (
+              <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[#fdf3f1] px-4 py-3">
+                <span className="text-[13px] font-medium leading-snug text-[#7a2e1d]">
+                  Disattivare &laquo;{editVehicle.name}&raquo;? Gli appuntamenti futuri verranno riprogrammati.
+                </span>
+                <div className="flex shrink-0 items-center gap-2.5">
+                  <button
+                    type="button"
+                    disabled={savingEditVehicle}
+                    onClick={() => setConfirmDeactivateVehicle(false)}
+                    className="cursor-pointer px-1 text-[13px] font-semibold text-foreground transition-colors hover:text-[#555555]"
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingEditVehicle}
+                    onClick={handleDeactivateVehicle}
+                    className="flex min-w-[110px] cursor-pointer items-center justify-center rounded-full bg-[#c13515] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#a52d12] disabled:opacity-60"
+                  >
+                    {savingEditVehicle ? <LoadingDots className="scale-[0.6]" /> : "Sì, disattiva"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={savingEditVehicle}
+                onClick={() => setConfirmDeactivateVehicle(true)}
+                className="cursor-pointer text-[13.5px] font-semibold text-[#c13515] transition-colors hover:text-[#a52d12] disabled:opacity-50"
+              >
+                Disattiva veicolo
+              </button>
+            )
+          ) : (
+            <button
+              type="button"
+              disabled={savingEditVehicle}
+              onClick={handleReactivateVehicle}
+              className="cursor-pointer text-[13.5px] font-semibold text-[#0f7a4d] transition-colors hover:text-[#0a5c3a] disabled:opacity-50"
+            >
+              Riattiva veicolo
+            </button>
+          )}
+        </div>
+
+        {/* Footer: Salva near-black + Annulla che torna alla lista */}
+        <div className="mt-7 flex items-center gap-2.5 border-t border-[#eeeeee] pt-5">
+          <button
+            type="button"
+            data-testid="vehicle-save"
+            disabled={savingEditVehicle || !editVehicleName.trim()}
+            onClick={handleSaveEditVehicle}
+            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+          >
+            {savingEditVehicle ? <LoadingDots /> : "Salva"}
+          </button>
+          <button
+            type="button"
+            disabled={savingEditVehicle}
+            onClick={closeVehicleDetail}
+            className="cursor-pointer rounded-[8px] px-[18px] py-2.5 text-sm font-semibold text-foreground hover:text-navy-900"
+          >
+            Annulla
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  /** Tab "Disponibilità" del dettaglio veicolo inline (ex dialog disponibilità). */
+  const renderVehicleAvailabilityEditor = () => {
+    if (!availVehicle) return null;
+    const hasWeekly = Boolean(vehicleWeeklyAvailability[availVehicle.id]);
+    return (
+      <div>
+        {availVehicle.assignedInstructorId && availVehicle.followsInstructorAvailability && (
+          <div className="mb-5 rounded-[12px] bg-[#f7f8fa] px-4 py-3 text-[12.5px] font-medium leading-normal text-[#6a6a6a]">
+            Questo veicolo segue la disponibilità dell&apos;istruttore esclusivo: finché
+            l&apos;opzione è attiva (tab Dettagli), gli orari qui sotto vengono ignorati.
+          </div>
+        )}
+
+        {/* Tipo di pianificazione (segmented proto) */}
+        <div className={VEIC_LBL}>Tipo di pianificazione</div>
+        <div className="mb-[22px] flex max-w-[320px] gap-1 rounded-[10px] bg-[#f4f4f6] p-1">
+          {(
+            [
+              ["default", "Predefinito"],
+              ["calendar", "Calendario"],
+            ] as Array<["default" | "calendar", string]>
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => {
+                setAvailDialogTab(key);
+                if (key === "default") setVehSelectedWeek(null);
+              }}
+              className={cn(
+                "flex-1 cursor-pointer rounded-[8px] py-[9px] text-center text-[13.5px] transition-all",
+                availDialogTab === key
+                  ? "bg-white font-semibold text-[#222222] shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
+                  : "font-medium text-[#888888] hover:text-[#555555]",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {availDialogTab === "default" ? (
+          <>
+            <div className={VEIC_LBL}>Giorni attivi</div>
+            <div className="mb-[22px] flex flex-wrap gap-2">
+              {WEEKDAY_OPTIONS.map((day) => {
+                const active = availDays.includes(day.value);
+                return (
+                  <button
+                    key={day.value}
+                    type="button"
+                    onClick={() => toggleAvailDay(day.value)}
+                    className={cn(
+                      "cursor-pointer rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-semibold transition-colors",
+                      active
+                        ? "border-[#b9ccf5] bg-[#dbe4fb] text-[#26324d]"
+                        : "border-[#e0e0e0] bg-white text-[#666666] hover:border-[#c9c9c9]",
+                    )}
+                  >
+                    {day.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className={VEIC_LBL}>Fasce orarie</div>
+            <TimeRangeRows
+              ranges={vehDefaultRanges}
+              onChange={(next) => {
+                setVehDefaultRanges(next);
+                if (next.length) {
+                  setAvailStartMinutes(next[0].startMinutes);
+                  setAvailEndMinutes(next[0].endMinutes);
+                }
+              }}
+            />
+          </>
+        ) : (
+          <AvailabilityCalendar
+            calendarMonth={calendarMonth}
+            setCalendarMonth={setCalendarMonth}
+            selectedDate={calendarSelectedDate}
+            setSelectedDate={setCalendarSelectedDate}
+            overrides={vehOverrides}
+            ranges={calendarDayRanges}
+            setRanges={setCalendarDayRanges}
+            dayEnabled={calendarDayEnabled}
+            setDayEnabled={setCalendarDayEnabled}
+            defaultAvailability={vehicleWeeklyAvailability[availVehicle.id] ?? null}
+          />
+        )}
+
+        {/* Footer flat: azione secondaria a sinistra, Salva a destra */}
+        <div className="mt-7 flex items-center justify-between gap-3 border-t border-[#eeeeee] pt-5">
+          {availDialogTab === "default" ? (
+            confirmDeleteAvail ? (
+              <div className="flex items-center gap-2.5">
+                <span className="text-[13px] font-medium text-[#7a2e1d]">Rimuovere tutta la disponibilità?</span>
+                <button
+                  type="button"
+                  disabled={savingAvailability}
+                  onClick={() => setConfirmDeleteAvail(false)}
+                  className="cursor-pointer px-1 text-[13px] font-semibold text-foreground hover:text-[#555555]"
+                >
+                  No
+                </button>
+                <button
+                  type="button"
+                  disabled={savingAvailability}
+                  onClick={handleDeleteAvailability}
+                  className="cursor-pointer text-[13px] font-semibold text-[#c13515] underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+                >
+                  Sì, rimuovi
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAvail(true)}
+                disabled={savingAvailability || !hasWeekly}
+                className="cursor-pointer text-[13px] font-semibold text-[#c13515] transition-colors hover:text-[#a52d12] disabled:cursor-default disabled:opacity-40"
+              >
+                Rimuovi disponibilità
+              </button>
+            )
+          ) : confirmResetOverride ? (
+            <div className="flex items-center gap-2.5">
+              <span className="text-[13px] font-medium text-[#555555]">Tornare al predefinito per questa settimana?</span>
+              <button
+                type="button"
+                disabled={savingAvailability}
+                onClick={() => setConfirmResetOverride(false)}
+                className="cursor-pointer px-1 text-[13px] font-semibold text-foreground hover:text-[#555555]"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                disabled={savingAvailability}
+                onClick={() => { if (calendarSelectedDate) handleResetVehOverride(); }}
+                className="cursor-pointer text-[13px] font-semibold text-navy-900 underline underline-offset-2 hover:decoration-2 disabled:opacity-50"
+              >
+                Sì, ripristina
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmResetOverride(true)}
+              disabled={savingAvailability || !calendarSelectedDate}
+              className="cursor-pointer text-[13px] font-semibold text-navy-900 transition-colors hover:text-navy-700 disabled:cursor-default disabled:opacity-40"
+            >
+              Ripristina predefinito
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => void handleAvailabilitySaveClick()}
+            disabled={
+              savingAvailability ||
+              (availDialogTab === "default" &&
+                (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) ||
+              (availDialogTab === "calendar" && !calendarSelectedDate)
+            }
+            className="flex min-h-[40px] min-w-[78px] cursor-pointer items-center justify-center rounded-[8px] bg-[#222222] px-[18px] py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black disabled:opacity-60"
+          >
+            {savingAvailability ? <LoadingDots /> : "Salva"}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const toggleSection = (key: string) =>
     setExpandedSection((prev) => (prev === key ? null : key));
 
-  return (
-    <PageWrapper
-      title="Configurazione"
-      subTitle="Gestisci prenotazioni, notifiche e risorse"
-    >
-      <div className="relative w-full space-y-5">
-        <LottieLoadingOverlay visible={loading} />
-        {tabs}
+  // Skeleton per-pane: la pane corrente compare appena arrivano i SUOI dati,
+  // senza aspettare le altre fetch (che continuano in background come prefetch).
+  const paneReady =
+    (!PANES_NEEDING_SETTINGS.includes(configTab) || settingsLoaded) &&
+    (!PANES_NEEDING_RESOURCES.includes(configTab) || hasLoadedOnce);
 
-        {/* Sub-tabs */}
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-white p-1.5 shadow-card">
-          {([
-            { key: "settings" as const, label: "Impostazioni", icon: Settings2 },
-            { key: "instructors" as const, label: "Istruttori", icon: Users },
-            { key: "vehicles" as const, label: "Veicoli", icon: Truck },
-            { key: "students" as const, label: "Gestione allievi", icon: UserRoundCog },
-            { key: "hours" as const, label: "Ore guida", icon: Clock },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setConfigTab(tab.key)}
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-                configTab === tab.key
-                  ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
-                  : "text-muted-foreground hover:text-foreground hover:bg-gray-50",
-              )}
-            >
-              <tab.icon className="size-3.5" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {loading ? (
-          <SettingsSkeleton />
-        ) : configTab === "settings" ? (
+  // Le sezioni impostazioni (Promemoria/Policy/Sede) sono rese una alla
+  // volta come pannello dell'overlay.
+  const renderSettingsSection = (section: SettingsSectionKey) => (
           <SettingsTab
+            section={section}
             expandedSection={expandedSection}
             toggleSection={toggleSection}
-            availabilityWeeks={availabilityWeeks}
-            setAvailabilityWeeks={setAvailabilityWeeks}
-            bookingMinStartDate={bookingMinStartDate}
-            setBookingMinStartDate={setBookingMinStartDate}
-            appBookingActors={appBookingActors}
-            setAppBookingActors={(v) => setAppBookingActors(v as AppBookingActorsValue)}
-            instructorBookingMode={instructorBookingMode}
-            setInstructorBookingMode={(v) => setInstructorBookingMode(v as InstructorBookingModeValue)}
-            bookingSlotDurations={bookingSlotDurations}
-            toggleBookingDuration={toggleBookingDuration}
-            roundedHoursOnly={roundedHoursOnly}
-            setRoundedHoursOnly={setRoundedHoursOnly}
             studentReminderMinutes={studentReminderMinutes}
-            setStudentReminderMinutes={setStudentReminderMinutes}
             studentReminderMorningEnabled={studentReminderMorningEnabled}
-            setStudentReminderMorningEnabled={setStudentReminderMorningEnabled}
             studentReminderMorningTime={studentReminderMorningTime}
-            setStudentReminderMorningTime={setStudentReminderMorningTime}
             studentReminderDayBeforeEnabled={studentReminderDayBeforeEnabled}
-            setStudentReminderDayBeforeEnabled={setStudentReminderDayBeforeEnabled}
             studentReminderDayBeforeTime={studentReminderDayBeforeTime}
-            setStudentReminderDayBeforeTime={setStudentReminderDayBeforeTime}
             instructorReminderMinutes={instructorReminderMinutes}
-            setInstructorReminderMinutes={setInstructorReminderMinutes}
+            instructorReminderEnabled={instructorReminderEnabled}
             slotFillChannels={slotFillChannels}
             studentReminderChannels={studentReminderChannels}
             instructorReminderChannels={instructorReminderChannels}
-            toggleChannel={toggleChannel}
-            setSlotFillChannels={setSlotFillChannels}
-            setStudentReminderChannels={setStudentReminderChannels}
-            setInstructorReminderChannels={setInstructorReminderChannels}
+            updateReminderSettings={updateReminderSettings}
+            emptySlotNotificationEnabled={emptySlotNotificationEnabled}
+            setEmptySlotNotificationEnabled={saveEmptySlotNotificationEnabled}
+            emptySlotNotificationTarget={emptySlotNotificationTarget}
+            setEmptySlotNotificationTarget={(v) => saveEmptySlotNotificationTarget(v as "all" | "availability_matching")}
+            emptySlotNotificationTimes={emptySlotNotificationTimes}
+            setEmptySlotNotificationTimes={saveEmptySlotNotificationTimes}
             lessonPolicyEnabled={lessonPolicyEnabled}
-            setLessonPolicyEnabled={setLessonPolicyEnabled}
+            setLessonPolicyEnabled={saveLessonPolicyEnabled}
             lessonRequiredTypesEnabled={lessonRequiredTypesEnabled}
-            setLessonRequiredTypesEnabled={setLessonRequiredTypesEnabled}
+            setLessonRequiredTypesEnabled={saveLessonRequiredTypesEnabled}
             lessonRequiredTypes={lessonRequiredTypes}
             toggleRequiredType={toggleRequiredType}
             lessonConstraints={lessonConstraints}
             toggleConstraintEnabled={toggleConstraintEnabled}
             toggleConstraintDay={toggleConstraintDay}
             updateConstraintWindow={updateConstraintWindow}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
           />
-        ) : configTab === "instructors" ? (
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex flex-col overflow-hidden bg-white"
+      data-testid="autoscuole-settings-page"
+    >
+      {tabs}
+      {/* ── Header overlay ── */}
+      <div className="h-[72px] shrink-0 border-b border-[#dddddd]">
+        {/* Header full-width: il logo si allinea alla sidebar ancorata a sinistra (Airbnb) */}
+        <div className="flex h-full items-center justify-between px-4 lg:px-10">
+        <Image
+          src="/images/nav/logo-reglo-tight.png"
+          alt="Reglo"
+          width={30}
+          height={30}
+          className="select-none object-contain"
+        />
+        <button
+          type="button"
+          onClick={() => router.push(`${pathname}?tab=agenda`)}
+          className="cursor-pointer select-none rounded-full bg-[#f2f2f2] px-[22px] py-2 text-sm font-medium text-foreground transition-colors hover:bg-[#e8e8e8]"
+        >
+          Fatto
+        </button>
+        </div>
+      </div>
+
+      {/* Layout Airbnb: sidebar ancorata al bordo sinistro (divider full-height),
+          contenuto centrato nello spazio rimanente — regge ogni larghezza schermo. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+          {/* ── Sidebar ── */}
+          <div className="min-h-0 shrink-0 overflow-x-auto border-b border-[#ebebeb] px-4 py-3 lg:w-[400px] lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-10 lg:py-12">
+            <h1 className="mb-8 hidden text-[28px] font-bold tracking-[-0.6px] text-foreground lg:block">
+              Impostazioni dell&apos;account
+            </h1>
+            <nav className="flex gap-1 lg:flex-col lg:gap-0.5">
+              {paneGroups.map((group, groupIndex) => (
+                <React.Fragment key={groupIndex}>
+                  {groupIndex > 0 && <div className="my-1.5 hidden h-px bg-[#ebebeb] lg:mx-1 lg:block" />}
+                  {group.map((pane) => {
+                    const active = configTab === pane.key;
+                    return (
+                      <button
+                        key={pane.key}
+                        type="button"
+                        onClick={() => goToPane(pane.key)}
+                        className={cn(
+                          "flex shrink-0 cursor-pointer select-none items-center gap-3 whitespace-nowrap rounded-[10px] px-4 py-2.5 text-[14px] transition-colors lg:gap-4 lg:px-5 lg:py-4 lg:text-[17px]",
+                          active
+                            ? "bg-[#f2f2f2] font-semibold text-foreground"
+                            : "font-medium text-[#444444] hover:text-foreground",
+                        )}
+                      >
+                        <pane.icon className="size-5 shrink-0 lg:size-6" strokeWidth={1.9} />
+                        {pane.label}
+                      </button>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </nav>
+          </div>
+
+          {/* ── Content ── */}
+          <div ref={contentScrollRef} className="relative min-h-0 min-w-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-[860px] px-6 py-8 lg:px-8 lg:py-12">
+            {!(configTab === "instructors" && instructorsDetailOpen) &&
+              !(configTab === "vehicles" && vehicleDetail !== null) && (
+              <h2 className="mb-9 text-2xl font-bold tracking-[-0.3px] text-foreground">
+                {CONFIG_PANE_TITLES[configTab]}
+              </h2>
+            )}
+            {!paneReady && <SettingsPaneSkeleton />}
+            <div className={paneReady ? undefined : "hidden"}>
+          <FadeIn>
+        <KeepAlivePane active={configTab === "business"} eager={mountAllPanes}>
+          <BusinessInfoPane />
+        </KeepAlivePane>
+        {(["policy", "reminders", "locations"] as const).map((section) => (
+          <KeepAlivePane key={section} active={configTab === section} eager={mountAllPanes}>
+            {renderSettingsSection(section)}
+          </KeepAlivePane>
+        ))}
+        <KeepAlivePane active={configTab === "instructors"} eager={mountAllPanes}>
           <InstructorsTab
             instructors={instructors}
+            setInstructors={setInstructors}
             instructorWeeklyAvailability={instructorWeeklyAvailability}
-            instructorAvailability={instructorAvailability}
-            openClusterPanel={openClusterPanel}
-            openInstructorAvailabilityDialog={openInstructorAvailabilityDialog}
-            changeInstructorColor={changeInstructorColor}
-            setSickLeaveInstructor={setSickLeaveInstructor}
-            setSickLeaveStartDate={setSickLeaveStartDate}
-            setSickLeaveEndDate={setSickLeaveEndDate}
-            setSickLeaveHalfDay={setSickLeaveHalfDay}
-            setSickLeaveStartTime={setSickLeaveStartTime}
+            setInstructorWeeklyAvailability={setInstructorWeeklyAvailability}
             setInviteInstructorOpen={setInviteInstructorOpen}
-            clusterInstructor={clusterInstructor}
-            setClusterInstructor={setClusterInstructor}
-            clusterAutonomous={clusterAutonomous}
-            setClusterAutonomous={setClusterAutonomous}
-            clusterDurations={clusterDurations}
-            setClusterDurations={setClusterDurations}
-            clusterRoundedHours={clusterRoundedHours}
-            setClusterRoundedHours={setClusterRoundedHours}
-            clusterAppBookingActors={clusterAppBookingActors}
-            setClusterAppBookingActors={setClusterAppBookingActors}
-            clusterInstructorBookingMode={clusterInstructorBookingMode}
-            setClusterInstructorBookingMode={setClusterInstructorBookingMode}
-            clusterSwapEnabled={clusterSwapEnabled}
-            setClusterSwapEnabled={setClusterSwapEnabled}
-            clusterStudentCancellationEnabled={clusterStudentCancellationEnabled}
-            setClusterStudentCancellationEnabled={setClusterStudentCancellationEnabled}
-            clusterSwapNotifyMode={clusterSwapNotifyMode}
-            setClusterSwapNotifyMode={setClusterSwapNotifyMode}
-            clusterBookingCutoffEnabled={clusterBookingCutoffEnabled}
-            setClusterBookingCutoffEnabled={setClusterBookingCutoffEnabled}
-            clusterBookingCutoffTime={clusterBookingCutoffTime}
-            setClusterBookingCutoffTime={setClusterBookingCutoffTime}
-            clusterWeeklyLimitEnabled={clusterWeeklyLimitEnabled}
-            setClusterWeeklyLimitEnabled={setClusterWeeklyLimitEnabled}
-            clusterWeeklyLimit={clusterWeeklyLimit}
-            setClusterWeeklyLimit={setClusterWeeklyLimit}
-            clusterEmptySlotEnabled={clusterEmptySlotEnabled}
-            setClusterEmptySlotEnabled={setClusterEmptySlotEnabled}
-            clusterEmptySlotTarget={clusterEmptySlotTarget}
-            setClusterEmptySlotTarget={setClusterEmptySlotTarget}
-            clusterEmptySlotTimes={clusterEmptySlotTimes}
-            setClusterEmptySlotTimes={setClusterEmptySlotTimes}
-            clusterRestrictedTimeEnabled={clusterRestrictedTimeEnabled}
-            setClusterRestrictedTimeEnabled={setClusterRestrictedTimeEnabled}
-            clusterRestrictedTimeStart={clusterRestrictedTimeStart}
-            setClusterRestrictedTimeStart={setClusterRestrictedTimeStart}
-            clusterRestrictedTimeEnd={clusterRestrictedTimeEnd}
-            setClusterRestrictedTimeEnd={setClusterRestrictedTimeEnd}
-            clusterWeeklyAbsenceEnabled={clusterWeeklyAbsenceEnabled}
-            setClusterWeeklyAbsenceEnabled={setClusterWeeklyAbsenceEnabled}
-            clusterWorkingHoursStart={clusterWorkingHoursStart}
-            setClusterWorkingHoursStart={setClusterWorkingHoursStart}
-            clusterWorkingHoursEnd={clusterWorkingHoursEnd}
-            setClusterWorkingHoursEnd={setClusterWorkingHoursEnd}
-            clusterAvailabilityMode={clusterAvailabilityMode}
-            setClusterAvailabilityMode={setClusterAvailabilityMode}
-            allStudents={allStudents}
-            clusterStudentIds={clusterStudentIds}
-            setClusterStudentIds={setClusterStudentIds}
-            clusterStudentSearch={clusterStudentSearch}
-            setClusterStudentSearch={setClusterStudentSearch}
-            saveClusterSettings={saveClusterSettings}
-            clusterSaving={clusterSaving}
+            changeInstructorColor={changeInstructorColor}
+            refreshAgenda={() => loadAvailability(date)}
+            onDetailOpenChange={setInstructorsDetailOpen}
           />
-        ) : configTab === "students" ? (
-          <StudentsTab
-            expandedSection={expandedSection}
-            toggleSection={toggleSection}
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "bookings"} eager={mountAllPanes}>
+          <BookingsTab
+            availabilityWeeks={availabilityWeeks}
+            setAvailabilityWeeks={saveAvailabilityWeeks}
+            bookingMinStartDate={bookingMinStartDate}
+            setBookingMinStartDate={saveBookingMinStartDate}
+            appBookingActors={appBookingActors}
+            setAppBookingActors={(v) => saveAppBookingActors(v as AppBookingActorsValue)}
+            instructorBookingMode={instructorBookingMode}
+            setInstructorBookingMode={(v) => saveInstructorBookingMode(v as InstructorBookingModeValue)}
+            bookingSlotDurations={bookingSlotDurations}
+            toggleBookingDuration={toggleBookingDuration}
+            roundedHoursOnly={roundedHoursOnly}
+            setRoundedHoursOnly={saveRoundedHoursOnly}
+            nationalHolidaysEnabled={nationalHolidaysEnabled}
+            setNationalHolidaysEnabled={saveNationalHolidaysEnabled}
+            nationalHolidaysDisabled={nationalHolidaysDisabled}
+            setNationalHolidaysDisabled={saveNationalHolidaysDisabled}
             bookingCutoffEnabled={bookingCutoffEnabled}
-            setBookingCutoffEnabled={setBookingCutoffEnabled}
+            setBookingCutoffEnabled={saveBookingCutoffEnabled}
             bookingCutoffTime={bookingCutoffTime}
-            setBookingCutoffTime={setBookingCutoffTime}
+            setBookingCutoffTime={saveBookingCutoffTime}
             weeklyBookingLimitEnabled={weeklyBookingLimitEnabled}
-            setWeeklyBookingLimitEnabled={setWeeklyBookingLimitEnabled}
+            setWeeklyBookingLimitEnabled={saveWeeklyBookingLimitEnabled}
             weeklyBookingLimit={weeklyBookingLimit}
-            setWeeklyBookingLimit={setWeeklyBookingLimit}
+            setWeeklyBookingLimit={saveWeeklyBookingLimit}
             examPriorityEnabled={examPriorityEnabled}
-            setExamPriorityEnabled={setExamPriorityEnabled}
+            setExamPriorityEnabled={saveExamPriorityEnabled}
             examPriorityDaysBeforeExam={examPriorityDaysBeforeExam}
-            setExamPriorityDaysBeforeExam={setExamPriorityDaysBeforeExam}
+            setExamPriorityDaysBeforeExam={saveExamPriorityDaysBeforeExam}
             examPriorityBlockNonExam={examPriorityBlockNonExam}
-            setExamPriorityBlockNonExam={setExamPriorityBlockNonExam}
+            setExamPriorityBlockNonExam={saveExamPriorityBlockNonExam}
             examPriorityPausedUntil={examPriorityPausedUntil}
-            setExamPriorityPausedUntil={setExamPriorityPausedUntil}
+            setExamPriorityPausedUntil={saveExamPriorityPausedUntil}
             restrictedTimeRangeEnabled={restrictedTimeRangeEnabled}
-            setRestrictedTimeRangeEnabled={setRestrictedTimeRangeEnabled}
+            setRestrictedTimeRangeEnabled={saveRestrictedTimeRangeEnabled}
             restrictedTimeRangeStart={restrictedTimeRangeStart}
-            setRestrictedTimeRangeStart={setRestrictedTimeRangeStart}
+            setRestrictedTimeRangeStart={saveRestrictedTimeRangeStart}
             restrictedTimeRangeEnd={restrictedTimeRangeEnd}
-            setRestrictedTimeRangeEnd={setRestrictedTimeRangeEnd}
+            setRestrictedTimeRangeEnd={saveRestrictedTimeRangeEnd}
             swapEnabled={swapEnabled}
-            setSwapEnabled={setSwapEnabled}
+            setSwapEnabled={saveSwapEnabled}
             swapNotifyMode={swapNotifyMode}
-            setSwapNotifyMode={(v) => setSwapNotifyMode(v as "all" | "available_only")}
+            setSwapNotifyMode={(v) => saveSwapNotifyMode(v as "all" | "available_only")}
             studentCancellationEnabled={studentCancellationEnabled}
-            setStudentCancellationEnabled={setStudentCancellationEnabled}
+            setStudentCancellationEnabled={saveStudentCancellationEnabled}
             autoCheckinEnabled={autoCheckinEnabled}
-            setAutoCheckinEnabled={setAutoCheckinEnabled}
+            setAutoCheckinEnabled={saveAutoCheckinEnabled}
             studentNotesEnabled={studentNotesEnabled}
-            setStudentNotesEnabled={setStudentNotesEnabled}
+            setStudentNotesEnabled={saveStudentNotesEnabled}
             groupLessonsEnabled={groupLessonsEnabled}
-            setGroupLessonsEnabled={setGroupLessonsEnabled}
-            emptySlotNotificationEnabled={emptySlotNotificationEnabled}
-            setEmptySlotNotificationEnabled={setEmptySlotNotificationEnabled}
-            emptySlotNotificationTarget={emptySlotNotificationTarget}
-            setEmptySlotNotificationTarget={(v) => setEmptySlotNotificationTarget(v as "all" | "availability_matching")}
-            emptySlotNotificationTimes={emptySlotNotificationTimes}
-            setEmptySlotNotificationTimes={setEmptySlotNotificationTimes}
-            triggeringNotification={triggeringNotification}
-            setTriggeringNotification={setTriggeringNotification}
+            setGroupLessonsEnabled={saveGroupLessonsEnabled}
             instructorPreferenceEnabled={instructorPreferenceEnabled}
-            setInstructorPreferenceEnabled={setInstructorPreferenceEnabled}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
+            setInstructorPreferenceEnabled={saveInstructorPreferenceEnabled}
             toast={toast}
           />
-        ) : configTab === "hours" ? (
-          <InstructorHoursDashboard />
-        ) : (
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "vehicles"} eager={mountAllPanes}>
           <VehiclesTab
             vehicles={vehicles}
             vehicleWeeklyAvailability={vehicleWeeklyAvailability}
             vehicleAvailability={vehicleAvailability}
             loading={loading}
             vehiclesEnabled={vehiclesEnabled}
-            setVehiclesEnabled={setVehiclesEnabled}
             defaultLicenseCategory={defaultLicenseCategory}
-            setDefaultLicenseCategory={setDefaultLicenseCategory}
             defaultTransmission={defaultTransmission}
-            setDefaultTransmission={setDefaultTransmission}
             followCarMotoEnabled={followCarMotoEnabled}
-            setFollowCarMotoEnabled={setFollowCarMotoEnabled}
+            updateVehicleSettings={updateVehicleSettings}
             openCreateVehicle={openCreateVehicle}
-            openEditVehicle={openEditVehicle}
-            openAvailabilityDialog={openAvailabilityDialog}
-            handleSaveSettings={handleSaveSettings}
-            savingSettings={savingSettings}
+            detailView={vehicleDetail}
+            openDetail={openVehicleDetail}
+            closeDetail={closeVehicleDetail}
+            setDetailTab={setVehicleDetailTab}
+            detailsForm={renderVehicleDetailsForm()}
+            availabilityEditor={renderVehicleAvailabilityEditor()}
           />
-        )}
-
-        {/* ── Instructor availability dialog */}
-        <Dialog open={Boolean(availInstructor)} onOpenChange={(open) => !open && setAvailInstructor(null)}>
-          <DialogContent className={cn("gap-0 p-0 overflow-y-hidden overflow-x-clip", availInstructorMode === "publication" ? "sm:max-w-[560px]" : "sm:max-w-[480px]")}>
-            <DialogTitle className="sr-only">Disponibilità — {availInstructor?.name}</DialogTitle>
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availInstructor?.name}</h3>
-              {/* Mode badge + switch (mirrors the mobile availability-mode setting) */}
-              <div className="mt-2 flex items-center gap-2">
-                {availInstructorMode === "publication" ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700">
-                    <span className="size-1.5 rounded-full bg-blue-500" />
-                    Modalità pubblicazione
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-gray-50 px-2.5 py-1 text-[11px] font-semibold text-gray-600">
-                    <span className="size-1.5 rounded-full bg-gray-400" />
-                    Modalità predefinita
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleSwitchAvailabilityMode}
-                  disabled={availModeSwitching}
-                  className="text-[11px] text-muted-foreground underline underline-offset-2 transition-colors hover:text-foreground disabled:opacity-50"
-                >
-                  {availModeSwitching ? "Cambio..." : "Cambia modalità"}
-                </button>
-              </div>
-              {/* Tab switcher (default mode only) */}
-              {availInstructorMode === "default" && (
-                <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                  <button type="button" onClick={() => { setAvailDialogTab("default"); setInstrSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                    Predefinito
-                  </button>
-                  <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                    Calendario
-                  </button>
-                </div>
-              )}
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>
+          <VoiceSettingsPane />
+        </KeepAlivePane>
+          </FadeIn>
             </div>
+          </div>
+        </div>
+      </div>
 
-            {/* min-w-0: DialogContent is a grid — without it the week rail's
-                intrinsic width expands the item past the dialog and the whole
-                content bleeds/scrolls horizontally. */}
-            <div className="min-w-0 px-6 py-5 space-y-4">
-              {availInstructorMode === "publication" && availInstructor ? (
-                <InstructorPublicationEditor
-                  instructorId={availInstructor.id}
-                  base={instructorWeeklyAvailability[availInstructor.id] ?? null}
-                  onChanged={() => loadAvailability(date)}
-                />
-              ) : availDialogTab === "default" ? (
-                <>
-                  <FieldGroup label="Giorni attivi">
-                    <div className="flex flex-wrap gap-1.5">
-                      {WEEKDAY_OPTIONS.map((day) => (
-                        <ToggleChip key={day.value} active={instrDays.includes(day.value)} onClick={() => toggleInstrDay(day.value)}>
-                          {day.label}
-                        </ToggleChip>
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="Fasce orarie">
-                    <div className="space-y-2">
-                      {instrDefaultRanges.map((range, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setInstrStartMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`is-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          <span className="text-xs text-muted-foreground">–</span>
-                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setInstrDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setInstrEndMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ie-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          {instrDefaultRanges.length > 1 && (
-                            <button type="button" onClick={() => setInstrDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setInstrDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
-                        <Plus className="size-3" />
-                        Aggiungi fascia
-                      </button>
-                    </div>
-                  </FieldGroup>
-                </>
-              ) : (
-                <>
-                  <AvailabilityCalendar
-                    calendarMonth={calendarMonth}
-                    setCalendarMonth={setCalendarMonth}
-                    selectedDate={calendarSelectedDate}
-                    setSelectedDate={(d) => { setCalendarSelectedDate(d); setRecurringOverride(false); }}
-                    overrides={instrOverrides}
-                    ranges={calendarDayRanges}
-                    setRanges={setCalendarDayRanges}
-                    dayEnabled={calendarDayEnabled}
-                    setDayEnabled={setCalendarDayEnabled}
-                    defaultAvailability={availInstructor ? instructorWeeklyAvailability[availInstructor.id] ?? null : null}
-                  />
-                  {calendarSelectedDate && calendarDayEnabled && (
-                    <div
-                      className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                      onClick={() => setRecurringOverride((prev) => !prev)}
-                    >
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-sm font-medium">Disponibilità ricorrente</span>
-                        <span className="text-xs text-muted-foreground">
-                          Applica a tutti i {WEEKDAY_OPTIONS.find((w) => w.value === new Date(calendarSelectedDate).getUTCDay())?.label ?? ""} dal {new Date(calendarSelectedDate).toLocaleDateString("it-IT", { day: "numeric", month: "short", timeZone: "UTC" })} in poi
-                        </span>
-                      </div>
-                      <InlineToggle checked={recurringOverride} size="sm" />
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
 
-            {availInstructorMode === "publication" ? (
-              <div className="flex items-center justify-end border-t border-border px-6 py-4">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)}>Chiudi</Button>
-              </div>
-            ) : (
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {availDialogTab === "default" ? (
-                <button type="button" onClick={handleDeleteInstructorAvailability} disabled={savingInstrAvailability || !availInstructor || !instructorWeeklyAvailability[availInstructor?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
-                  Rimuovi disponibilità
-                </button>
-              ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availInstructor) { const weekStart = getWeekStart(new Date(calendarSelectedDate)).toISOString().slice(0, 10); handleResetInstrOverride(); } }} disabled={savingInstrAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
-                  Ripristina predefinito
-                </button>
-              )}
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailInstructor(null)} disabled={savingInstrAvailability}>Annulla</Button>
-                <Button type="button" size="sm" onClick={async () => {
-                  if (availDialogTab === "calendar" && calendarSelectedDate && availInstructor) {
-                    const dateObj = new Date(calendarSelectedDate);
-                    const ws = getWeekStart(dateObj);
-                    const weekStartStr = ws.toISOString().slice(0, 10);
-                    const dayOfWeek = dateObj.getUTCDay();
-
-                    if (!calendarDayEnabled) {
-                      // Save empty schedule = day off
-                      setSavingInstrAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        weekStart: weekStartStr,
-                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      loadInstrOverrides(availInstructor.id);
-                    } else if (recurringOverride) {
-                      // Recurring: apply to all future weeks for this day of week
-                      setSavingInstrAvailability(true);
-                      const res = await setRecurringAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        dayOfWeek,
-                        ranges: calendarDayRanges,
-                        // Start from the selected day, not from the nearest
-                        // future occurrence of the weekday.
-                        fromDate: dateObj.toISOString().slice(0, 10),
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      // Refresh the calendar dots with the just-saved weeks —
-                      // without this the dialog showed no trace of the save.
-                      loadInstrOverrides(availInstructor.id);
-                    } else {
-                      const schedule: DayScheduleEntry[] = [{
-                        dayOfWeek,
-                        startMinutes: calendarDayRanges[0].startMinutes,
-                        endMinutes: calendarDayRanges[0].endMinutes,
-                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
-                      }];
-                      setSavingInstrAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "instructor",
-                        ownerId: availInstructor.id,
-                        weekStart: weekStartStr,
-                        schedule,
-                      });
-                      setSavingInstrAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      // Update local overrides
-                      setInstrOverrides((prev) => {
-                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
-                        return [...filtered, { weekStart: weekStartStr, schedule }];
-                      });
-                    }
-                    toast.success({ description: "Override salvato." });
-                    loadAvailability(date);
-                  } else {
-                    handleSaveInstructorAvailability();
-                  }
-                }} disabled={savingInstrAvailability || (availDialogTab === "default" && (!instrDays.length || instrDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
-                  {savingInstrAvailability ? "Salvataggio..." : "Salva"}
-                </Button>
-              </div>
-            </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Invite instructor dialog */}
-        <AdminUsersInviteDialog
+        {/* ── Aggiungi istruttore: crea direttamente l'account (niente invito) */}
+        <AdminUsersCreateDialog
           open={inviteInstructorOpen}
           onOpenChange={setInviteInstructorOpen}
-          initialAutoscuolaRole="INSTRUCTOR"
+          fixedAutoscuolaRole="INSTRUCTOR"
+          title="Aggiungi istruttore"
+          description="Crea l'account dell'istruttore: potrà accedere subito con email e password."
+          onCreated={() => void loadResources()}
         />
 
-        {/* ── Create vehicle dialog */}
+        {/* ── Nuovo veicolo: modale stile proto (veicoloModalOpen, come LocationFormDialog) */}
         <Dialog open={createVehicleOpen} onOpenChange={setCreateVehicleOpen}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Nuovo veicolo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
-                <Input
-                  placeholder="es. Fiat 500"
-                  value={newVehicleName}
-                  onChange={(e) => setNewVehicleName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
-                <Input
-                  placeholder="es. AB123CD"
-                  value={newVehiclePlate}
-                  onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
-                />
+          <DialogContent className="max-w-[480px] gap-0 rounded-[20px] p-7 pb-6">
+            <div className="mb-[22px] flex flex-col items-center px-2 text-center">
+              <Image
+                src="/images/settings/veicolo-nuovo.png"
+                alt=""
+                width={118}
+                height={118}
+                className="mb-1.5 block size-[118px] select-none object-contain"
+              />
+              <DialogTitle className="text-[19px] font-bold tracking-[-0.2px] text-foreground">
+                Nuovo veicolo
+              </DialogTitle>
+              <div className="mt-[3px] text-[12.5px] font-medium leading-[1.4] text-[#929292]">
+                Aggiungi un veicolo alla flotta della tua autoscuola.
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setCreateVehicleOpen(false)} disabled={creatingVehicle}>
-                Annulla
-              </Button>
-              <Button onClick={handleCreateVehicle} disabled={creatingVehicle || !newVehicleName.trim()}>
-                {creatingVehicle ? "Creazione..." : "Crea veicolo"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Edit vehicle dialog */}
-        <Dialog open={Boolean(editVehicle)} onOpenChange={(open) => !open && setEditVehicle(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader>
-              <DialogTitle>Modifica veicolo</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-3 py-2">
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Nome *</label>
-                <Input
-                  placeholder="es. Fiat 500"
-                  value={editVehicleName}
-                  onChange={(e) => setEditVehicleName(e.target.value)}
-                />
+            <div className="mb-2 text-[13px] font-semibold text-foreground">Nome veicolo</div>
+            <input
+              placeholder="Es. Polo, T-cross…"
+              value={newVehicleName}
+              autoFocus
+              onChange={(e) => setNewVehicleName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+            />
+            <div className="mb-2 mt-4 text-[13px] font-semibold text-foreground">Targa (opzionale)</div>
+            <input
+              placeholder="Es. AB123CD"
+              value={newVehiclePlate}
+              onChange={(e) => setNewVehiclePlate(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateVehicle()}
+              className="w-full rounded-[12px] border-[1.5px] border-[#ededed] bg-[#f7f8fa] px-[15px] py-[13px] text-[15px] font-medium text-foreground outline-none transition-colors placeholder:text-[#c1c1c1] focus:border-[#222222] focus:bg-white"
+            />
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-2 text-[13px] font-semibold text-foreground">Categoria</div>
+                <Select value={newVehicleCategory} onValueChange={setNewVehicleCategory}>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LICENSE_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{LICENSE_CATEGORY_LABELS[cat]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Targa (opzionale)</label>
-                <Input
-                  placeholder="es. AB123CD"
-                  value={editVehiclePlate}
-                  onChange={(e) => setEditVehiclePlate(e.target.value.toUpperCase())}
-                />
-              </div>
-
-              {/* ── Categoria patente + cambio ── */}
-              <div className="grid grid-cols-2 gap-3">
-                <FieldGroup label="Categoria patente">
-                  <Select
-                    value={editVehicleCategory}
-                    onValueChange={setEditVehicleCategory}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LICENSE_CATEGORIES.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {LICENSE_CATEGORY_LABELS[cat]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-                <FieldGroup label="Cambio">
-                  <Select
-                    value={editVehicleTransmission}
-                    onValueChange={setEditVehicleTransmission}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TRANSMISSIONS.map((t) => (
-                        <SelectItem key={t} value={t}>
-                          {TRANSMISSION_LABELS[t]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              </div>
-
-              {/* ── Modalità di utilizzo (Aperto / Pool / Esclusivo) ── */}
-              <FieldGroup label="Modalità di utilizzo">
-                <div className="flex gap-1 rounded-xl border border-border bg-muted/60 p-1">
-                  {(
-                    [
-                      ["open", "Aperto"],
-                      ["pool", "Pool"],
-                      ["exclusive", "Esclusivo"],
-                    ] as Array<[VehicleUsageMode, string]>
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      data-testid={`vehicle-mode-${mode}`}
-                      data-active={editVehicleMode === mode}
-                      onClick={() => setEditVehicleMode(mode)}
-                      className={cn(
-                        "flex-1 cursor-pointer rounded-lg py-2 text-[13px] transition-all duration-150",
-                        editVehicleMode === mode
-                          ? "bg-white font-semibold text-foreground shadow-sm"
-                          : "font-medium text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {editVehicleMode === "open" && (
-                  <span className="text-xs text-muted-foreground">
-                    Tutti gli istruttori possono usarlo. È l&apos;impostazione predefinita.
-                  </span>
-                )}
-
-                {editVehicleMode === "pool" && (
-                  <div className="space-y-2">
-                    <span className="text-xs text-muted-foreground">
-                      Solo gli istruttori selezionati possono usare questo veicolo.
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {instructors
-                        .filter((ins) => ins.status !== "inactive")
-                        .map((ins) => {
-                          const active = editVehiclePoolIds.includes(ins.id);
-                          return (
-                            <ToggleChip
-                              key={ins.id}
-                              active={active}
-                              onClick={() =>
-                                setEditVehiclePoolIds((prev) =>
-                                  active
-                                    ? prev.filter((id) => id !== ins.id)
-                                    : [...prev, ins.id],
-                                )
-                              }
-                            >
-                              {ins.name}
-                            </ToggleChip>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-
-                {editVehicleMode === "exclusive" && (
-                  <div className="space-y-2">
-                    <Select
-                      value={editVehicleInstructorId || "none"}
-                      onValueChange={(v) =>
-                        setEditVehicleInstructorId(v === "none" ? "" : v)
-                      }
-                    >
-                      <SelectTrigger data-testid="vehicle-exclusive-instructor">
-                        <SelectValue placeholder="Scegli istruttore" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Scegli istruttore</SelectItem>
-                        {instructors
-                          .filter((ins) => ins.status !== "inactive")
-                          .map((ins) => (
-                            <SelectItem key={ins.id} value={ins.id}>
-                              {ins.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    <span className="text-xs text-muted-foreground">
-                      Riservato a un istruttore, nascosto agli altri. Un istruttore
-                      può avere più mezzi esclusivi (es. la sua auto e la sua moto).
-                    </span>
-                  </div>
-                )}
-              </FieldGroup>
-
-              {editVehicleMode === "exclusive" && editVehicleInstructorId ? (
-                <div
-                  className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                  onClick={() => setEditVehicleFollowsAvailability((prev) => !prev)}
-                >
-                  <div className="flex flex-col gap-0.5 pr-3">
-                    <span className="text-sm font-medium">
-                      Disponibilità: segue l&apos;istruttore
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {editVehicleFollowsAvailability
-                        ? "Disponibile quando lo è l'istruttore (orari del veicolo ignorati)."
-                        : "Usa gli orari propri del veicolo (impostali da Disponibilità)."}
-                    </span>
-                  </div>
-                  <InlineToggle checked={editVehicleFollowsAvailability} size="sm" />
-                </div>
-              ) : null}
-
-              {/* ── Stato: Attivo / Manutenzione ── */}
-              {editVehicle && editVehicle.status !== "inactive" && (
-                <FieldGroup label="Stato">
-                  <div className="flex gap-2">
-                    {(
-                      [
-                        ["active", "Attivo"],
-                        ["maintenance", "Manutenzione"],
-                      ] as Array<[string, string]>
-                    ).map(([value, label]) => {
-                      const active = (editVehicle.status ?? "active") === value;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          disabled={savingEditVehicle}
-                          onClick={() =>
-                            handleSetVehicleMaintenance(value === "maintenance")
-                          }
-                          className={cn(
-                            "cursor-pointer rounded-full border px-4 py-2 text-[13px] font-medium transition-colors duration-150 disabled:opacity-50",
-                            active && value === "active" &&
-                              "border-foreground bg-foreground text-white",
-                            active && value === "maintenance" &&
-                              "border-amber-300 bg-amber-100 text-amber-800",
-                            !active && "border-border bg-white text-muted-foreground hover:text-foreground",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {editVehicle.status === "maintenance" && (
-                    <span className="text-xs text-muted-foreground">
-                      Escluso dalle nuove prenotazioni; gli appuntamenti già fissati restano.
-                    </span>
-                  )}
-                </FieldGroup>
-              )}
-
-              {editVehicle && (
-                <div className="pt-1">
-                  {editVehicle.status !== "inactive" ? (
-                    <button
-                      type="button"
-                      onClick={handleDeactivateVehicle}
-                      disabled={savingEditVehicle}
-                      className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-50"
-                    >
-                      Disattiva veicolo
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleReactivateVehicle}
-                      disabled={savingEditVehicle}
-                      className="text-xs text-emerald-600 hover:text-emerald-700 hover:underline disabled:opacity-50"
-                    >
-                      Riattiva veicolo
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setEditVehicle(null)} disabled={savingEditVehicle}>
-                Annulla
-              </Button>
-              <Button data-testid="vehicle-save" onClick={handleSaveEditVehicle} disabled={savingEditVehicle || !editVehicleName.trim()}>
-                {savingEditVehicle ? "Salvataggio..." : "Salva"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Vehicle availability dialog */}
-        <Dialog open={Boolean(availVehicle)} onOpenChange={(open) => !open && setAvailVehicle(null)}>
-          <DialogContent className="sm:max-w-[480px] gap-0 p-0 overflow-hidden">
-            <DialogTitle className="sr-only">Disponibilità — {availVehicle?.name}</DialogTitle>
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <h3 className="text-base font-semibold text-foreground">Disponibilità — {availVehicle?.name}</h3>
-              <div className="mt-3 flex items-center gap-1 rounded-xl bg-gray-100 p-1 max-w-[240px]">
-                <button type="button" onClick={() => { setAvailDialogTab("default"); setVehSelectedWeek(null); }} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "default" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Predefinito
-                </button>
-                <button type="button" onClick={() => setAvailDialogTab("calendar")} className={cn("flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors", availDialogTab === "calendar" ? "bg-yellow-50 text-yellow-700 border border-yellow-200 shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                  Calendario
-                </button>
+              <div>
+                <div className="mb-2 text-[13px] font-semibold text-foreground">Cambio</div>
+                <Select value={newVehicleTransmission} onValueChange={setNewVehicleTransmission}>
+                  <SelectTrigger className={PROTO_SELECT_TRIGGER}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSMISSIONS.map((t) => (
+                      <SelectItem key={t} value={t}>{TRANSMISSION_LABELS[t]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-
-            <div className="px-6 py-5 space-y-4">
-              {availDialogTab === "default" ? (
-                <>
-                  <FieldGroup label="Giorni attivi">
-                    <div className="flex flex-wrap gap-1.5">
-                      {WEEKDAY_OPTIONS.map((day) => (
-                        <ToggleChip key={day.value} active={availDays.includes(day.value)} onClick={() => toggleAvailDay(day.value)}>
-                          {day.label}
-                        </ToggleChip>
-                      ))}
-                    </div>
-                  </FieldGroup>
-                  <FieldGroup label="Fasce orarie">
-                    <div className="space-y-2">
-                      {vehDefaultRanges.map((range, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <Select value={String(range.startMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: val } : r)); if (idx === 0) setAvailStartMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`vs-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          <span className="text-xs text-muted-foreground">–</span>
-                          <Select value={String(range.endMinutes)} onValueChange={(v) => { const val = Number(v); setVehDefaultRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: val } : r)); if (idx === 0) setAvailEndMinutes(val); }}>
-                            <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`ve-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                          </Select>
-                          {vehDefaultRanges.length > 1 && (
-                            <button type="button" onClick={() => setVehDefaultRanges((prev) => prev.filter((_, i) => i !== idx))} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors" aria-label="Rimuovi fascia">×</button>
-                          )}
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setVehDefaultRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])} className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors">
-                        <Plus className="size-3" />
-                        Aggiungi fascia
-                      </button>
-                    </div>
-                  </FieldGroup>
-                </>
-              ) : (
-                <AvailabilityCalendar
-                  calendarMonth={calendarMonth}
-                  setCalendarMonth={setCalendarMonth}
-                  selectedDate={calendarSelectedDate}
-                  setSelectedDate={setCalendarSelectedDate}
-                  overrides={vehOverrides}
-                  ranges={calendarDayRanges}
-                  setRanges={setCalendarDayRanges}
-                  dayEnabled={calendarDayEnabled}
-                  setDayEnabled={setCalendarDayEnabled}
-                  defaultAvailability={availVehicle ? vehicleWeeklyAvailability[availVehicle.id] ?? null : null}
-                />
-              )}
-            </div>
-
-            <div className="flex items-center justify-between border-t border-border px-6 py-4">
-              {availDialogTab === "default" ? (
-                <button type="button" onClick={handleDeleteAvailability} disabled={savingAvailability || !availVehicle || !vehicleWeeklyAvailability[availVehicle?.id ?? ""]} className="text-xs text-red-500 hover:text-red-600 hover:underline disabled:opacity-40">
-                  Rimuovi disponibilità
-                </button>
-              ) : (
-                <button type="button" onClick={() => { if (calendarSelectedDate && availVehicle) handleResetVehOverride(); }} disabled={savingAvailability || !calendarSelectedDate} className="text-xs text-yellow-600 hover:text-yellow-700 hover:underline disabled:opacity-40">
-                  Ripristina predefinito
-                </button>
-              )}
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => setAvailVehicle(null)} disabled={savingAvailability}>Annulla</Button>
-                <Button type="button" size="sm" onClick={async () => {
-                  if (availDialogTab === "calendar" && calendarSelectedDate && availVehicle) {
-                    const dateObj = new Date(calendarSelectedDate);
-                    const ws = getWeekStart(dateObj);
-                    const weekStartStr = ws.toISOString().slice(0, 10);
-                    const dayOfWeek = dateObj.getUTCDay();
-
-                    if (!calendarDayEnabled) {
-                      setSavingAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "vehicle",
-                        ownerId: availVehicle.id,
-                        weekStart: weekStartStr,
-                        schedule: [{ dayOfWeek, startMinutes: 0, endMinutes: 0 }],
-                      });
-                      setSavingAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                    } else {
-                      const schedule: DayScheduleEntry[] = [{
-                        dayOfWeek,
-                        startMinutes: calendarDayRanges[0].startMinutes,
-                        endMinutes: calendarDayRanges[0].endMinutes,
-                        ...(calendarDayRanges.length > 1 ? { startMinutes2: calendarDayRanges[1].startMinutes, endMinutes2: calendarDayRanges[1].endMinutes } : {}),
-                      }];
-                      setSavingAvailability(true);
-                      const res = await setWeeklyAvailabilityOverride({
-                        ownerType: "vehicle",
-                        ownerId: availVehicle.id,
-                        weekStart: weekStartStr,
-                        schedule,
-                      });
-                      setSavingAvailability(false);
-                      if (!res.success) { toast.error({ description: res.message ?? "Errore salvataggio." }); return; }
-                      setVehOverrides((prev) => {
-                        const filtered = prev.filter((o) => o.weekStart !== weekStartStr);
-                        return [...filtered, { weekStart: weekStartStr, schedule }];
-                      });
-                    }
-                    toast.success({ description: "Override salvato." });
-                    loadAvailability(date);
-                  } else {
-                    handleSaveAvailability();
-                  }
-                }} disabled={savingAvailability || (availDialogTab === "default" && (!availDays.length || vehDefaultRanges.some((r) => r.endMinutes <= r.startMinutes))) || (availDialogTab === "calendar" && !calendarSelectedDate)}>
-                  {savingAvailability ? "Salvataggio..." : "Salva"}
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* ── Sick leave dialog ── */}
-        <Dialog open={Boolean(sickLeaveInstructor)} onOpenChange={(open) => !open && setSickLeaveInstructor(null)}>
-          <DialogContent className="sm:max-w-[420px] gap-0 p-0 overflow-hidden">
-            <div className="px-6 pt-5 pb-4 border-b border-border">
-              <DialogHeader>
-                <DialogTitle>🤒 Malattia — {sickLeaveInstructor?.name}</DialogTitle>
-              </DialogHeader>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FieldGroup label="Data inizio">
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
-                    value={sickLeaveStartDate}
-                    onChange={(e) => setSickLeaveStartDate(e.target.value)}
-                  />
-                </FieldGroup>
-                <FieldGroup label="Data fine">
-                  <input
-                    type="date"
-                    className="h-10 w-full rounded-lg border border-border bg-white px-3 text-sm text-foreground outline-none focus:border-primary/40"
-                    value={sickLeaveEndDate}
-                    onChange={(e) => setSickLeaveEndDate(e.target.value)}
-                  />
-                </FieldGroup>
-              </div>
-              <div
-                className="flex items-center justify-between rounded-xl border border-border/60 bg-white/70 px-4 py-3 cursor-pointer"
-                onClick={() => setSickLeaveHalfDay((prev) => !prev)}
+            <div className="mt-[26px] flex items-center justify-end gap-3.5">
+              <button
+                type="button"
+                onClick={() => setCreateVehicleOpen(false)}
+                disabled={creatingVehicle}
+                className="cursor-pointer select-none px-2 py-[11px] text-sm font-semibold text-foreground transition-colors hover:text-[#555555]"
               >
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium">Mezza giornata</span>
-                  <span className="text-xs text-muted-foreground">
-                    La malattia inizia a un orario specifico del primo giorno.
-                  </span>
-                </div>
-                <InlineToggle checked={sickLeaveHalfDay} size="sm" />
-              </div>
-              {sickLeaveHalfDay && (
-                <FieldGroup label="Orario inizio malattia">
-                  <Select value={sickLeaveStartTime} onValueChange={setSickLeaveStartTime}>
-                    <SelectTrigger><SelectValue placeholder="Orario" /></SelectTrigger>
-                    <SelectContent>
-                      {["08:00","09:00","10:00","11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00"].map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </FieldGroup>
-              )}
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">
-              <Button variant="outline" onClick={() => setSickLeaveInstructor(null)}>
                 Annulla
-              </Button>
-              <Button
-                disabled={sickLeaveSaving || !sickLeaveStartDate || !sickLeaveEndDate}
-                onClick={async () => {
-                  if (!sickLeaveInstructor) return;
-                  setSickLeaveSaving(true);
-                  try {
-                    const res = await fetch("/api/autoscuole/instructor-sick-leave", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        instructorId: sickLeaveInstructor.id,
-                        startDate: sickLeaveStartDate,
-                        endDate: sickLeaveEndDate,
-                        startTime: sickLeaveHalfDay ? sickLeaveStartTime : undefined,
-                      }),
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                      toast.success({ description: `Malattia registrata. ${data.data.appointmentsCancelled} guide cancellate.` });
-                      setSickLeaveInstructor(null);
-                    } else {
-                      toast.error({ description: data.message ?? "Errore." });
-                    }
-                  } catch {
-                    toast.error({ description: "Errore nel salvataggio." });
-                  } finally {
-                    setSickLeaveSaving(false);
-                  }
-                }}
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateVehicle}
+                disabled={creatingVehicle || !newVehicleName.trim()}
+                className={cn(
+                  "flex min-w-[150px] select-none items-center justify-center gap-[7px] rounded-[50px] px-[26px] py-3 text-sm font-semibold text-white transition-colors",
+                  newVehicleName.trim() && !creatingVehicle
+                    ? "cursor-pointer bg-[#1a1a2e] hover:bg-[#2d2d4a]"
+                    : "cursor-not-allowed bg-[#c4c4d4]",
+                )}
               >
-                {sickLeaveSaving ? "Salvataggio..." : "Conferma malattia"}
-              </Button>
+                {creatingVehicle ? <LoadingDots /> : "Aggiungi veicolo"}
+              </button>
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-    </PageWrapper>
+
+    </div>
   );
 }
 
@@ -2524,6 +2407,61 @@ function formatMinutes(totalMinutes: number) {
 const CAL_DAY_NAMES = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"];
 
 type TimeRange = { startMinutes: number; endMinutes: number };
+
+/** Editor fasce orarie (TimePicker inizio–fine, × per rimuovere, + per
+ *  aggiungere): usato dai dialog disponibilità istruttore/veicolo. */
+function TimeRangeRows({
+  ranges,
+  onChange,
+}: {
+  ranges: { startMinutes: number; endMinutes: number }[];
+  onChange: (next: { startMinutes: number; endMinutes: number }[]) => void;
+}) {
+  const toTime = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+  const toMinutes = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
+  };
+  return (
+    <div className="space-y-2">
+      {ranges.map((range, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <TimePickerInput
+            value={toTime(range.startMinutes)}
+            onChange={(t) =>
+              onChange(ranges.map((r, i) => (i === idx ? { ...r, startMinutes: toMinutes(t) } : r)))
+            }
+          />
+          <span className="text-sm font-medium text-[#929292]">–</span>
+          <TimePickerInput
+            value={toTime(range.endMinutes)}
+            onChange={(t) =>
+              onChange(ranges.map((r, i) => (i === idx ? { ...r, endMinutes: toMinutes(t) } : r)))
+            }
+          />
+          {ranges.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onChange(ranges.filter((_, i) => i !== idx))}
+              className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#929292] transition-colors hover:bg-[#f2f2f2] hover:text-[#222222]"
+              aria-label="Rimuovi fascia"
+            >
+              <X className="size-3.5" strokeWidth={2.2} />
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...ranges, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
+        className="flex cursor-pointer items-center gap-1.5 pt-0.5 text-[13px] font-semibold text-[#222222] transition-opacity hover:opacity-70"
+      >
+        <Plus className="size-3.5" strokeWidth={2.2} />
+        Aggiungi fascia
+      </button>
+    </div>
+  );
+}
 
 function AvailabilityCalendar({
   calendarMonth,
@@ -2651,15 +2589,15 @@ function AvailabilityCalendar({
               className={cn(
                 "relative flex h-8 w-8 mx-auto cursor-pointer items-center justify-center rounded-full text-xs font-medium transition-colors",
                 isSelected
-                  ? "bg-yellow-400 text-white"
+                  ? "bg-navy-900 text-white"
                   : isToday
-                    ? "bg-yellow-50 text-yellow-700 border border-yellow-200"
+                    ? "bg-[#eeeef4] text-navy-900 border border-[#cfcfdc]"
                     : "text-foreground hover:bg-gray-100",
               )}
             >
               {cell.day}
               {hasOverride && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-yellow-400" />
+                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 size-1 rounded-full bg-navy-900" />
               )}
             </button>
           );
@@ -2672,7 +2610,7 @@ function AvailabilityCalendar({
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold text-foreground capitalize">{selectedDayLabel}</span>
             {hasOverrideOnSelected && (
-              <span className="rounded-full bg-yellow-100 border border-yellow-200 px-2 py-0.5 text-[10px] font-medium text-yellow-700">Override</span>
+              <span className="rounded-full bg-[#eeeef4] border border-[#cfcfdc] px-2 py-0.5 text-[10px] font-medium text-navy-900">Override</span>
             )}
           </div>
           <div
@@ -2683,46 +2621,14 @@ function AvailabilityCalendar({
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setDayEnabled(!dayEnabled); } }}
             className={cn(
               "flex cursor-pointer items-center justify-between rounded-lg border px-3 py-2 transition-colors",
-              dayEnabled ? "border-yellow-200 bg-yellow-50" : "border-border bg-white",
+              dayEnabled ? "border-[#cfcfdc] bg-[#eeeef4]" : "border-border bg-white",
             )}
           >
             <span className="text-xs font-medium text-foreground">Disponibile</span>
             <InlineToggle checked={dayEnabled} size="sm" />
           </div>
           {dayEnabled && (
-            <div className="space-y-2">
-              {ranges.map((range, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <Select value={String(range.startMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, startMinutes: Number(v) } : r))}>
-                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>{START_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-s-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <span className="text-xs text-muted-foreground">–</span>
-                  <Select value={String(range.endMinutes)} onValueChange={(v) => setRanges((prev) => prev.map((r, i) => i === idx ? { ...r, endMinutes: Number(v) } : r))}>
-                    <SelectTrigger className="h-8 w-[100px] text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={`cd-e-${idx}-${m}`} value={String(m)}>{formatMinutes(m)}</SelectItem>))}</SelectContent>
-                  </Select>
-                  {ranges.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setRanges((prev) => prev.filter((_, i) => i !== idx))}
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-red-50 hover:text-red-500 transition-colors"
-                      aria-label="Rimuovi fascia"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setRanges((prev) => [...prev, { startMinutes: 14 * 60, endMinutes: 18 * 60 }])}
-                className="flex items-center gap-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 transition-colors"
-              >
-                <Plus className="size-3" />
-                Aggiungi fascia
-              </button>
-            </div>
+            <TimeRangeRows ranges={ranges} onChange={(next) => setRanges(() => next)} />
           )}
         </div>
       )}

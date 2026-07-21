@@ -3,14 +3,8 @@
 import React from "react";
 import { Check, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { InlineToggle } from "@/components/ui/inline-toggle";
+import { TimePickerInput } from "@/components/ui/time-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -44,11 +38,13 @@ const WEEK_COUNT = 8;
 const DAY_LABELS = ["Domenica", "Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato"];
 const MONTHS = ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"];
 const DEFAULT_RANGE: TimeRange = { startMinutes: 9 * 60, endMinutes: 18 * 60 };
-const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => i * 30);
-const END_TIME_OPTIONS = [...TIME_OPTIONS.slice(1), 1440];
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtMin = (m: number) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
+const labelToMin = (label: string) => {
+  const [h, m] = label.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 const addDaysUTC = (d: Date, days: number) =>
   new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
@@ -347,15 +343,23 @@ export function InstructorPublicationEditor({
                       <div className="space-y-1.5">
                         {draftRanges.map((r, ri) => (
                           <div key={ri} className="flex items-center gap-2">
-                            <Select value={String(r.startMinutes)} onValueChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, startMinutes: Number(v) } : x)))}>
-                              <SelectTrigger className="h-8 w-[92px] bg-white text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent>{TIME_OPTIONS.map((m) => (<SelectItem key={m} value={String(m)}>{fmtMin(m)}</SelectItem>))}</SelectContent>
-                            </Select>
+                            <TimePickerInput
+                              value={fmtMin(r.startMinutes)}
+                              onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, startMinutes: labelToMin(v) } : x)))}
+                              minTime="00:00"
+                              maxTime="23:30"
+                              minuteStep={30}
+                              className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
+                            />
                             <span className="text-xs text-muted-foreground">–</span>
-                            <Select value={String(r.endMinutes)} onValueChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, endMinutes: Number(v) } : x)))}>
-                              <SelectTrigger className="h-8 w-[92px] bg-white text-xs"><SelectValue /></SelectTrigger>
-                              <SelectContent>{END_TIME_OPTIONS.map((m) => (<SelectItem key={m} value={String(m)}>{m === 1440 ? "24:00" : fmtMin(m)}</SelectItem>))}</SelectContent>
-                            </Select>
+                            <TimePickerInput
+                              value={r.endMinutes === 1440 ? "24:00" : fmtMin(r.endMinutes)}
+                              onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, endMinutes: labelToMin(v) } : x)))}
+                              minTime="00:30"
+                              maxTime="24:00"
+                              minuteStep={30}
+                              className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
+                            />
                             {draftRanges.length > 1 && (
                               <button type="button" aria-label="Rimuovi fascia" onClick={() => setDraftRanges((prev) => prev.filter((_, xi) => xi !== ri))} className="flex size-6 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-500">
                                 ×

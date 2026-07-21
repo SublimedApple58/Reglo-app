@@ -11,7 +11,8 @@ test.describe("Autoscuole smoke", () => {
     "E2E_USER_EMAIL/E2E_USER_PASSWORD non configurati per smoke test.",
   );
 
-  test("login e navigazione dashboard/agenda/pagamenti @smoke", async ({ page }, testInfo) => {
+  test("login e navigazione agenda/allievi/pagamenti @smoke", async ({ page }, testInfo) => {
+    test.setTimeout(180_000);
     const emailInput = page.locator('input[name="email"], input[type="email"]');
     const passwordInput = page.locator('input[name="password"], input[type="password"]');
 
@@ -57,15 +58,308 @@ test.describe("Autoscuole smoke", () => {
     await emailInput.first().fill(userEmail!);
     await passwordInput.first().fill(userPassword!);
     await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
 
+    // Redesign 2026-07: la Dashboard è stata ritirata — la landing è l'Agenda.
     await page.goto("/it/user/autoscuole");
-    await expect(page.getByTestId("app-sidebar")).toBeVisible();
-    await expect(page.getByTestId("autoscuole-dashboard-page")).toBeVisible();
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible({ timeout: 60000 });
 
     await page.goto("/it/user/autoscuole?tab=agenda");
-    await expect(page.getByTestId("autoscuole-agenda-page")).toBeVisible();
+    await expect(page.getByTestId("autoscuole-agenda-page").first()).toBeVisible();
 
     await page.goto("/it/user/autoscuole?tab=payments");
     await expect(page.getByTestId("autoscuole-payments-page")).toBeVisible();
+  });
+
+  test("allievi: lista, dettaglio panel e cancellazioni tardive @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole?tab=students");
+    await expect(page.getByTestId("autoscuole-students-page")).toBeVisible({ timeout: 60000 });
+
+    // Tab a pillola Pratica visibile con conteggio
+    await expect(page.getByRole("tab", { name: /Pratica/ })).toBeVisible({ timeout: 30000 });
+
+    // Apertura detail panel dal primo Dettaglio (se ci sono allievi)
+    const firstDetail = page.getByRole("button", { name: "Dettaglio" }).first();
+    if (await firstDetail.isVisible({ timeout: 10000 }).catch(() => false)) {
+      await firstDetail.click();
+      const panel = page.getByTestId("student-detail-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      // Tab Guide del panel
+      await panel.getByText("Guide", { exact: true }).click();
+      await page.keyboard.press("Escape");
+      await expect(panel).not.toBeVisible();
+    }
+
+    // Sotto-tab Cancellazioni tardive
+    await page.getByRole("button", { name: /Cancellazioni tardive/ }).click();
+    await expect(
+      page
+        .getByText(/Nessuna cancellazione tardiva|Addebita/)
+        .first(),
+    ).toBeVisible({ timeout: 30000 });
+  });
+
+  test("utenti: lista, filtro ruoli e detail panel @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/admin/users");
+    // .first(): in dev, durante la transizione di route, Next monta per un
+    // istante il DOM doppio → lo strict mode vedrebbe 2 nodi e fallirebbe.
+    await expect(page.getByTestId("admin-users-page").first()).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText(/Sono registrati in autoscuola/).first()).toBeVisible({
+      timeout: 30000,
+    });
+    // Lascia esaurire la transizione: il nodo doppio sparisce e i click
+    // successivi colpiscono l'albero definitivo.
+    await expect(page.getByTestId("admin-users-page")).toHaveCount(1, { timeout: 30000 });
+
+    // Filtro ruoli
+    await page.getByRole("button", { name: "Filtri" }).click();
+    await page.getByRole("menuitem", { name: "Allievo" }).click();
+    await page.waitForURL(/role=STUDENT/, { timeout: 30000 });
+
+    // Detail panel dal primo Dettaglio (se ci sono utenti)
+    const firstDetail = page.getByRole("button", { name: "Dettaglio" }).first();
+    if (await firstDetail.isVisible({ timeout: 10000 }).catch(() => false)) {
+      await firstDetail.click();
+      const panel = page.getByTestId("user-detail-panel");
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("Anagrafica")).toBeVisible({ timeout: 20000 });
+      await page.keyboard.press("Escape");
+      await expect(panel).not.toBeVisible();
+    }
+  });
+
+  test("area personale e centro assistenza @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    // Area personale: overlay + navigazione pane
+    await page.goto("/it/user/autoscuole/area-personale");
+    await expect(page.getByTestId("autoscuole-area-personale-page")).toBeVisible({ timeout: 60000 });
+    await page.getByRole("button", { name: "Contratto e fattura" }).click();
+    // Indipendente dai dati: la sezione Fatture c'è sia vuota che popolata.
+    await expect(page.getByRole("heading", { name: "Contratto e fattura" })).toBeVisible();
+    await expect(page.getByText("Fatture", { exact: true })).toBeVisible();
+
+    // Centro assistenza (mock): chat con messaggio di benvenuto
+    await page.goto("/it/user/autoscuole/assistenza");
+    await expect(page.getByTestId("autoscuole-assistenza-page")).toBeVisible({ timeout: 60000 });
+    await expect(page.getByText("Ciao! Qui parli direttamente").first()).toBeVisible();
+  });
+
+  test("segretaria: pagina e pannello impostazioni @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole/voice");
+    await expect(page.getByTestId("autoscuole-voice-page")).toBeVisible({ timeout: 60000 });
+
+    // La feature può essere attiva o meno sull'ambiente target
+    const featureOff = page.getByText("Segretaria AI non attiva");
+    const callbacks = page.getByText("Chiamate in sospeso");
+    await expect(featureOff.or(callbacks).first()).toBeVisible({ timeout: 60000 });
+
+    if (await callbacks.isVisible().catch(() => false)) {
+      // Impostazioni segretaria: pane dedicato nell'overlay Impostazioni
+      await page.getByRole("button", { name: "Impostazioni" }).click();
+      const pane = page.getByTestId("voice-settings-pane");
+      await expect(pane).toBeVisible({ timeout: 60000 });
+
+      // Linea attiva (sub-tabs) o onboarding di attivazione
+      const subTabs = pane.getByRole("button", { name: "Comportamento ed azioni" });
+      const onboarding = pane.getByText("Linea Telefonica");
+      await expect(subTabs.or(onboarding).first()).toBeVisible({ timeout: 60000 });
+
+      if (await subTabs.isVisible().catch(() => false)) {
+        await expect(pane.getByText("Numero della segretaria")).toBeVisible();
+        await subTabs.click();
+        await expect(pane.getByText("Azioni consentite")).toBeVisible({ timeout: 10000 });
+        await pane.getByRole("button", { name: "Orari e registrazioni" }).click();
+        await expect(pane.getByText("Giorni attivi")).toBeVisible({ timeout: 10000 });
+      }
+    }
+  });
+
+  test("impostazioni: prenotazioni e allievi con sub-tab @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    // Il vecchio deep-link pane=students deve atterrare sul pane unificato
+    await page.goto("/it/user/autoscuole?tab=settings&pane=students");
+    const pane = page.getByTestId("bookings-pane");
+    await expect(pane).toBeVisible({ timeout: 60000 });
+
+    // Sub-tab Generali (default): motore prenotazioni
+    await expect(pane.getByText("Chi può prenotare dall'app")).toBeVisible();
+    await expect(pane.getByText("Durata prenotazione allievo")).toBeVisible();
+
+    // Sub-tab Limiti
+    await pane.getByRole("button", { name: "Limiti", exact: true }).click();
+    await expect(pane.getByText("Stop alle prenotazioni last-minute")).toBeVisible();
+    await expect(pane.getByText("Massimo di guide a settimana")).toBeVisible();
+
+    // Sub-tab Guide
+    await pane.getByRole("button", { name: "Guide", exact: true }).click();
+    await expect(pane.getByText("Consenti scambi tra allievi")).toBeVisible();
+    await expect(pane.getByText("Attiva guide di gruppo")).toBeVisible();
+
+    // Sub-tab App allievi ("Notifica slot disponibili domani" è migrata nel
+    // pane Promemoria e notifiche — verificata più sotto)
+    await pane.getByRole("button", { name: "App allievi", exact: true }).click();
+    await expect(pane.getByText("Mostra note nell'app allievi")).toBeVisible();
+    await expect(pane.getByText("Consenti scelta istruttore")).toBeVisible();
+
+    // Sub-tab Crediti e prezzi (ex pane Fatturazione e pagamenti, auto-save)
+    await pane.getByRole("button", { name: "Crediti e prezzi", exact: true }).click();
+    await expect(pane.getByText("Crediti guida", { exact: true })).toBeVisible({ timeout: 20000 });
+    await expect(pane.getByText("Cancellazioni tardive")).toBeVisible();
+
+    // Tutte le impostazioni sono auto-save: la CTA "Salva configurazione" non esiste più
+    await expect(pane.getByRole("button", { name: "Salva configurazione" })).toHaveCount(0);
+
+    // ── Auto-save REALE (regressioni: patch singolo campo rifiutato dal backend) ──
+    const expectNoSaveError = async () => {
+      // le due bocciature note della server action updateAutoscuolaSettings
+      await expect(page.getByText("Nessuna impostazione da aggiornare.")).toHaveCount(0);
+      await expect(page.getByText(/Seleziona la modalità prenotazione istruttore/)).toHaveCount(0);
+      await expect(page.getByText("Impossibile salvare l'impostazione.")).toHaveCount(0);
+    };
+
+    await pane.getByRole("button", { name: "Generali", exact: true }).click();
+
+    // 1) "Chi può prenotare dall'app": il backend pretende instructorBookingMode
+    //    insieme a instructors/both — il patch deve allegarlo da solo.
+    const actorsTrigger = pane.getByRole("combobox").first();
+    const originalActors = ((await actorsTrigger.textContent()) ?? "").trim();
+    const flipTo = originalActors === "Entrambi" ? "Solo allievi" : "Entrambi";
+    await actorsTrigger.click();
+    await page.getByRole("option", { name: flipTo, exact: true }).click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+    await actorsTrigger.click();
+    await page.getByRole("option", { name: originalActors, exact: true }).click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+
+    // 2) "Solo orari tondi" (roundedHoursOnly mancava dal refine dello schema)
+    const roundedSwitch = pane
+      .locator("div")
+      .filter({ hasText: /^Solo orari tondi/ })
+      .filter({ has: page.locator('button[role="switch"]') })
+      .last()
+      .getByRole("switch")
+      .first();
+    await roundedSwitch.click();
+    await page.waitForTimeout(2500);
+    await expectNoSaveError();
+    await roundedSwitch.click();
+    // il gotcha dev: lascia completare la server action prima di chiudere
+    await page.waitForTimeout(4000);
+    await expectNoSaveError();
+
+    // ── "Notifica slot disponibili domani" è migrata in Promemoria e notifiche ──
+    await page.goto("/it/user/autoscuole?tab=settings&pane=reminders");
+    const remindersCard = page.getByText("Notifica slot vuoti").first();
+    await expect(remindersCard).toBeVisible({ timeout: 30000 });
+    await remindersCard.click(); // apre l'accordion
+    await expect(page.getByText("Notifica slot disponibili domani")).toBeVisible();
+    // flip → auto-save senza errori → restore
+    const slotToggle = page
+      .locator("div")
+      .filter({ hasText: /^Notifica slot disponibili domani/ })
+      .filter({ has: page.locator('button[role="switch"]') })
+      .last()
+      .getByRole("switch")
+      .first();
+    await slotToggle.click();
+    await page.waitForTimeout(3000);
+    await expectNoSaveError();
+    await slotToggle.click();
+    await page.waitForTimeout(4000);
+    await expectNoSaveError();
+  });
+
+  test("impostazioni: istruttori lista + hub Gestisci @smoke", async ({ page }) => {
+    test.setTimeout(180_000);
+    const emailInput = page.locator('input[name="email"], input[type="email"]');
+    const passwordInput = page.locator('input[name="password"], input[type="password"]');
+
+    await page.goto("/it/sign-in", { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle").catch(() => undefined);
+    await emailInput.first().fill(userEmail!);
+    await passwordInput.first().fill(userPassword!);
+    await page.getByRole("button", { name: /accedi|sign in|login/i }).first().click();
+    await page.waitForURL(/\/user\//, { timeout: 90_000 });
+
+    await page.goto("/it/user/autoscuole?tab=settings&pane=instructors");
+    const pane = page.getByTestId("instructors-pane");
+    await expect(pane).toBeVisible({ timeout: 60000 });
+
+    // Lista flat: riga istruttore con Gestisci + riga Invita istruttore
+    const gestisci = pane.getByRole("button", { name: "Gestisci" }).first();
+    await expect(gestisci).toBeVisible({ timeout: 30000 });
+    await expect(pane.getByText("Aggiungi istruttore")).toBeVisible();
+
+    // Hub Gestisci: tab Disponibilità (default), Malattia, Gestione autonoma
+    await gestisci.click();
+    await expect(pane.getByText("Modalità disponibilità")).toBeVisible({ timeout: 20000 });
+    await expect(pane.getByText("Tipo di pianificazione")).toBeVisible();
+
+    await pane.getByRole("button", { name: "Malattia", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Aggiungi assenza" })).toBeVisible();
+
+    await pane.getByRole("button", { name: "Gestione autonoma", exact: true }).click();
+    await expect(pane.getByText("Orario di lavoro")).toBeVisible();
+    await expect(pane.getByText("Modalità autonoma")).toBeVisible();
+
+    // Back alla lista
+    await pane.getByRole("button", { name: "Istruttori", exact: true }).click();
+    await expect(pane.getByRole("button", { name: "Gestisci" }).first()).toBeVisible();
   });
 });

@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MapPin, Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import Image from "next/image";
+import { ExternalLink, MapPin, Pencil, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FadeIn } from "@/components/ui/fade-in";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LocationFormDialog, type LocationFormValues } from "./LocationFormDialog";
 
@@ -19,6 +20,8 @@ type Location = {
   placeId: string | null;
   isDefault: boolean;
   isPrecise: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 function toNumber(value: string | number | null | undefined): number | null {
@@ -59,6 +62,17 @@ export function LocationsSection() {
 
   const sede = locations.find((l) => l.isDefault) ?? null;
   const customs = locations.filter((l) => !l.isDefault);
+
+  // La registrazione crea SEMPRE una sede default automatica ("Sede {nome}",
+  // senza indirizzo né posizione): per l'onboarding conta come NON configurata
+  // finché il titolare non la salva dal dialog (qualsiasi salvataggio bumpa
+  // updatedAt; la tolleranza 5s copre lo scarto create client/DB).
+  const sedeConfigured =
+    !!sede &&
+    (sede.address != null ||
+      sede.placeId != null ||
+      sede.isPrecise ||
+      new Date(sede.updatedAt).getTime() - new Date(sede.createdAt).getTime() > 5000);
 
   const handleCreate = async (values: LocationFormValues) => {
     const res = await fetch("/api/autoscuole/locations", {
@@ -115,145 +129,159 @@ export function LocationsSection() {
     await load();
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Sede card */}
-      <div className="rounded-2xl border border-border bg-white p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-pink-50">
-              <MapPin className="h-4 w-4 text-pink-600" />
-            </span>
-            <div>
-              <div className="text-sm font-semibold text-foreground">
-                Sede dell&apos;autoscuola
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Modificabile solo dal titolare. Usata come luogo di default per ogni guida.
-              </div>
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              setEditing({
-                mode: "default",
-                initial: sede
-                  ? {
-                      id: sede.id,
-                      name: sede.name,
-                      isPrecise: sede.isPrecise,
-                      address: sede.address,
-                      latitude: toNumber(sede.latitude),
-                      longitude: toNumber(sede.longitude),
-                      placeId: sede.placeId,
-                    }
-                  : undefined,
-              })
-            }
-          >
-            <Pencil className="mr-1 h-3.5 w-3.5" />
-            Modifica
-          </Button>
+  const startEditSede = () =>
+    setEditing({
+      mode: "default",
+      initial: sede
+        ? {
+            id: sede.id,
+            name: sede.name,
+            isPrecise: sede.isPrecise,
+            address: sede.address,
+            latitude: toNumber(sede.latitude),
+            longitude: toNumber(sede.longitude),
+            placeId: sede.placeId,
+          }
+        : undefined,
+    });
+
+  /** Etichetta secondaria come nel proto: indirizzo se preciso, altrimenti "Posizione generica". */
+  const addressLabel = (loc: Location) =>
+    loc.isPrecise && loc.address ? loc.address : "Posizione generica";
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <div className="rounded-[12px] border border-[#e8e8e8] p-5">
+          <Skeleton className="h-4 w-44" />
+          <Skeleton className="mt-2 h-3 w-72" />
+          <Skeleton className="mt-3.5 h-3.5 w-56" />
         </div>
-        {loading ? (
-          <div className="text-xs text-muted-foreground">Caricamento…</div>
-        ) : !sede ? (
-          <div className="text-sm italic text-muted-foreground">
-            Sede non ancora configurata. Premi &ldquo;Modifica&rdquo; per impostarla.
+        <div className="rounded-[12px] border border-[#e8e8e8] p-5">
+          <Skeleton className="h-4 w-36" />
+          <Skeleton className="mt-2 h-3 w-64" />
+          <Skeleton className="mt-4 h-[62px] w-full rounded-[10px]" />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Onboarding: sede non ancora impostata/configurata (proto #config-tab-sede) ──
+  if (!sede || !sedeConfigured) {
+    return (
+      <>
+        <FadeIn className="flex min-h-[60vh] flex-col items-center justify-center px-5 py-10 text-center">
+          <Image
+            src="/images/settings/sede-autoscuola.png"
+            alt=""
+            width={172}
+            height={172}
+            className="mb-[22px] size-[172px] select-none object-contain"
+          />
+          <div className="mb-2 text-xl font-bold tracking-[-0.2px] text-foreground">
+            Imposta la sede della tua autoscuola
           </div>
-        ) : (
-          <div className="flex items-start gap-2">
-            <span
-              className={cn(
-                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                sede.isPrecise
-                  ? "bg-green-50 text-green-700"
-                  : "bg-gray-100 text-gray-600",
-              )}
-            >
-              {sede.isPrecise ? "Precisa" : "Generica"}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium text-foreground truncate">
-                {sede.name}
-              </div>
-              {sede.isPrecise && sede.address ? (
-                <div className="text-xs text-muted-foreground truncate">
-                  {sede.address}
-                </div>
-              ) : null}
-            </div>
+          <div className="mb-[26px] max-w-[430px] text-[15px] font-medium leading-[1.55] text-[#6a6a6a] [text-wrap:pretty]">
+            La sede è il luogo di partenza predefinito di ogni guida. Aggiungila ora per
+            iniziare a creare le prenotazioni, poi potrai gestire eventuali luoghi extra.
           </div>
-        )}
+          <button
+            type="button"
+            onClick={startEditSede}
+            className="inline-flex cursor-pointer items-center justify-center rounded-[10px] bg-[#1a1a2e] px-[26px] py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2d2d4a]"
+          >
+            Imposta la sede
+          </button>
+        </FadeIn>
+        {editing ? (
+          <LocationFormDialog
+            open
+            mode={editing.mode}
+            initialValue={editing.initial}
+            onClose={() => setEditing(null)}
+            onSubmit={async (values) => {
+              await handleUpdateDefault(values);
+            }}
+          />
+        ) : null}
+      </>
+    );
+  }
+
+  return (
+    <FadeIn className="space-y-3">
+      {/* Sottotitolo del pane: qui e non nel wrapper, così l'onboarding resta pulito */}
+      <p className="mb-6 max-w-[560px] text-sm font-medium text-[#6a6a6a]">
+        Sede dell&apos;autoscuola e luoghi extra per le guide. Mostrati agli allievi nel
+        dettaglio della guida.
+      </p>
+      {/* ── Sede dell'autoscuola ── */}
+      <div className="flex items-start justify-between gap-4 rounded-[12px] border border-[#e8e8e8] p-5">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-foreground">Sede dell&apos;autoscuola</div>
+          <div className="mt-0.5 text-xs font-medium text-[#929292]">
+            Modificabile solo dal titolare. Usata come luogo di default.
+          </div>
+          <div className="mt-2.5 text-[13px] font-medium text-foreground">{sede.name}</div>
+          <div className="mt-0.5 text-xs font-medium text-[#929292]">{addressLabel(sede)}</div>
+        </div>
+        <button
+          type="button"
+          onClick={startEditSede}
+          className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-colors hover:text-black hover:decoration-2"
+        >
+          Modifica
+        </button>
       </div>
 
-      {/* Custom locations */}
-      <div className="rounded-2xl border border-border bg-white">
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border">
+      {/* ── Altri luoghi guida ── */}
+      <div className="rounded-[12px] border border-[#e8e8e8] p-5">
+        <div className="mb-4 flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-semibold text-foreground">Altri luoghi guida</div>
-            <div className="text-xs text-muted-foreground">
-              Luoghi extra dove le guide possono partire. Anche gli istruttori possono aggiungere i propri.
+            <div className="mt-0.5 text-xs font-medium text-[#929292]">
+              Luoghi extra dove le guide possono partire.
             </div>
           </div>
-          <Button
-            size="sm"
+          <button
+            type="button"
             onClick={() => setEditing({ mode: "custom" })}
+            className="shrink-0 cursor-pointer text-sm font-semibold text-foreground underline decoration-1 underline-offset-2 transition-colors hover:text-black hover:decoration-2"
           >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            Aggiungi luogo
-          </Button>
+            Aggiungi
+          </button>
         </div>
 
-        {loading ? (
-          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-            Caricamento…
-          </div>
-        ) : customs.length === 0 ? (
-          <div className="px-4 py-6 text-center text-xs text-muted-foreground">
+        {customs.length === 0 ? (
+          <div className="rounded-[8px] bg-[#fafafa] px-4 py-6 text-center text-[13px] font-medium text-[#c1c1c1]">
             Nessun luogo custom. Aggiungi un parcheggio, un punto di ritrovo o un&apos;area di esercitazione.
           </div>
         ) : (
-          <ul>
+          <div className="flex flex-col gap-2.5">
             {customs.map((loc) => (
-              <li
+              <div
                 key={loc.id}
-                className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-b-0"
+                className="flex items-center justify-between gap-3 rounded-[10px] border border-[#eeeeee] bg-[#fafafa] px-4 py-3.5"
               >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {loc.name}
-                    </span>
-                    <span
-                      className={cn(
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                        loc.isPrecise
-                          ? "bg-green-50 text-green-700"
-                          : "bg-gray-100 text-gray-600",
-                      )}
-                    >
-                      {loc.isPrecise ? "Precisa" : "Generica"}
-                    </span>
-                  </div>
-                  {loc.isPrecise && loc.address ? (
-                    <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {loc.address}
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <MapPin className="mt-0.5 size-4 shrink-0 text-navy-900" strokeWidth={1.6} />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">{loc.name}</div>
+                    <div className="mt-0.5 truncate text-xs font-medium text-[#929292]">
+                      {addressLabel(loc)}
                     </div>
-                  ) : null}
+                  </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex shrink-0 items-center gap-2">
                   {loc.isPrecise && loc.latitude != null && loc.longitude != null ? (
                     <a
                       href={`https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}${loc.placeId ? `&query_place_id=${loc.placeId}` : ""}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-gray-50 hover:text-foreground"
+                      className="flex size-8 items-center justify-center rounded-[8px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
                       aria-label="Apri in Google Maps"
                     >
-                      <ExternalLink className="h-4 w-4" />
+                      <ExternalLink className="size-[13px]" strokeWidth={1.6} />
                     </a>
                   ) : null}
                   <button
@@ -272,23 +300,23 @@ export function LocationsSection() {
                         },
                       })
                     }
-                    className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-gray-50 hover:text-foreground"
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#dddddd] text-[#444444] transition-colors hover:border-[#222222]"
                     aria-label="Modifica"
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="size-[13px]" strokeWidth={1.6} />
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(loc.id, loc.name)}
-                    className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600"
+                    className="flex size-8 cursor-pointer items-center justify-center rounded-[8px] border border-[#dddddd] text-[#c13515] transition-colors hover:border-navy-900"
                     aria-label="Elimina"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="size-[13px]" strokeWidth={1.6} />
                   </button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
 
@@ -309,6 +337,6 @@ export function LocationsSection() {
           }}
         />
       ) : null}
-    </div>
+    </FadeIn>
   );
 }

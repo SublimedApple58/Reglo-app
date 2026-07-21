@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { AlertTriangle, Clock, GraduationCap, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, GraduationCap } from "lucide-react";
 
 import {
   Dialog,
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { LoadingDots } from "@/components/ui/loading-dots";
 import {
   Select,
   SelectContent,
@@ -123,7 +124,7 @@ export function BackofficeResolveTeoriaDeactivationDialog({
               className={cn(
                 "cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
                 bulkAction === "move_to_pratica"
-                  ? "bg-pink-500 text-white shadow-sm"
+                  ? "bg-[#222222] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -135,7 +136,7 @@ export function BackofficeResolveTeoriaDeactivationDialog({
               className={cn(
                 "cursor-pointer rounded-md px-3 py-1.5 font-medium transition-colors",
                 bulkAction === "keep_in_teoria"
-                  ? "bg-pink-500 text-white shadow-sm"
+                  ? "bg-[#222222] text-white shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -223,8 +224,7 @@ export function BackofficeResolveTeoriaDeactivationDialog({
               Annulla
             </Button>
             <Button size="sm" onClick={handleConfirm} disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-              Conferma e disattiva TEORIA
+              {isSubmitting ? <LoadingDots /> : "Conferma e disattiva TEORIA"}
             </Button>
           </div>
         </DialogFooter>

@@ -92,6 +92,8 @@ model User {
   autoscuolaVoiceCallbackTasksAssignee AutoscuolaVoiceCallbackTask[]          @relation("AutoscuolaVoiceCallbackAssignee")
   quizSessions                         QuizSession[]
   autoscuolaLocationsCreated           AutoscuolaLocation[]                   @relation("AutoscuolaLocationCreatedBy")
+  supportMessages                      SupportMessage[]
+  productFeedback                      ProductFeedback[]
 
   @@index([phone])
 }
@@ -235,13 +237,44 @@ model Company {
   pushDevices                          MobilePushDevice[]
   autoscuolaHolidays                   AutoscuolaHoliday[]
   autoscuolaInstructorPublishedWeeks   AutoscuolaInstructorPublishedWeek[]
+  autoscuolaNotifications              AutoscuolaNotification[]
   quizSessions                         QuizSession[]
   autoscuolaLocations                  AutoscuolaLocation[]
+  supportThread                        SupportThread?
+  productFeedback                      ProductFeedback[]
+  documents                            CompanyDocument[]
+  plan                                 CompanyPlan?
+  licensePurchases                     CompanyLicensePurchase[]
   renewalMedici                        RenewalMedico[]
   renewalMedicoAvailabilities          RenewalMedicoAvailability[]
   renewalRequests                      RenewalRequest[]
   renewalVisitBookings                 RenewalVisitBooking[]
   renewalFaqs                          RenewalFaq[]
+}
+
+/// In-app notifications shown to the autoscuola owner in the web bell/inbox.
+/// v1 populated by student lesson cancellations. Read state is per-company
+/// (`readAt`), extensible to other `kind`s. Display fields are snapshotted so a
+/// notification survives even if the source appointment/user is later removed;
+/// `appointmentId`/`studentId` are kept nullable as optional refs.
+model AutoscuolaNotification {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String    @db.Uuid
+  kind           String    @default("student_cancellation")
+  appointmentId  String?   @db.Uuid
+  studentId      String?   @db.Uuid
+  /// Snapshot for stable rendering (names/times as they were at creation).
+  studentName    String?
+  startsAt       DateTime? @db.Timestamp(6)
+  instructorName String?
+  lessonType     String?
+  readAt         DateTime? @db.Timestamp(6)
+  createdAt      DateTime  @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+  @@index([companyId, readAt])
 }
 
 model CompanyService {
@@ -376,7 +409,12 @@ model AutoscuolaCase {
 model AutoscuolaAppointment {
   id                           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId                    String    @db.Uuid
-  studentId                    String    @db.Uuid
+  /// Nullable ONLY for placeholder exam rows: an "esame" can be created before
+  /// its participants are known (autoscuole often don't know upfront who will
+  /// sit the exam). Such a slot is stored as a single row with studentId = null;
+  /// adding the first student converts the placeholder. All other appointment
+  /// types always carry a studentId (enforced at the application layer).
+  studentId                    String?   @db.Uuid
   caseId                       String?   @db.Uuid
   slotId                       String?   @db.Uuid
   type                         String
@@ -423,7 +461,7 @@ model AutoscuolaAppointment {
   updatedAt                    DateTime  @updatedAt
 
   company               Company                               @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  student               User                                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  student               User?                                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
   case                  AutoscuolaCase?                       @relation(fields: [caseId], references: [id], onDelete: SetNull)
   slot                  AutoscuolaAvailabilitySlot?           @relation(fields: [slotId], references: [id], onDelete: SetNull)
   instructor            AutoscuolaInstructor?                 @relation(fields: [instructorId], references: [id], onDelete: SetNull)
@@ -777,6 +815,9 @@ model AutoscuolaHoliday {
   companyId String   @db.Uuid
   date      DateTime @db.Date
   label     String?
+  /// Festivita nazionale materializzata dal preset "Festivita non prenotabili"
+  /// (es. "natale"): gestita dalla sync, distinta dai festivi manuali (null).
+  presetId  String?
   createdBy String?  @db.Uuid
   createdAt DateTime @default(now()) @db.Timestamp(6)
 
@@ -1535,4 +1576,140 @@ model RenewalFaq {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
+}
+
+// ── Centro assistenza + feedback ─────────────────────────────────────────────
+// Chat di supporto tra l'autoscuola (web app) e il team Reglo (backoffice):
+// un thread per company, messaggi bidirezionali con contatori non-letti per
+// lato. ProductFeedback = valutazioni dalla dialog "Lascia un feedback".
+// Vedi docs/features/support-center.md.
+model SupportThread {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId          String   @unique @db.Uuid
+  status             String   @default("open")
+  lastMessageAt      DateTime @default(now()) @db.Timestamp(6)
+  lastMessagePreview String?
+  unreadForAdmin     Int      @default(0)
+  unreadForCompany   Int      @default(0)
+  createdAt          DateTime @default(now()) @db.Timestamp(6)
+  updatedAt          DateTime @updatedAt
+
+  company  Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  messages SupportMessage[]
+
+  @@index([lastMessageAt])
+}
+
+model SupportMessage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadId     String   @db.Uuid
+  /// "company" (autoscuola) | "reglo" (team, dal backoffice)
+  sender       String
+  senderUserId String?  @db.Uuid
+  /// Snapshot del nome al momento dell'invio (sopravvive alla cancellazione utente)
+  senderName   String?
+  body         String
+  createdAt    DateTime @default(now()) @db.Timestamp(6)
+
+  thread     SupportThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  senderUser User?         @relation(fields: [senderUserId], references: [id], onDelete: SetNull)
+
+  @@index([threadId, createdAt])
+}
+
+model ProductFeedback {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String?  @db.Uuid
+  userId    String?  @db.Uuid
+  /// Snapshot del nome al momento dell'invio
+  userName  String?
+  rating    Int
+  tags      String[] @default([])
+  message   String?
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([createdAt])
+}
+
+// Documenti dell'autoscuola caricati dal team Reglo via backoffice (contratto
+// di servizio, fatture, altri documenti) e visibili al titolare in Area
+// personale → "Contratto e fattura". File su R2, download con URL firmati.
+// Vedi docs/features/company-documents.md.
+model CompanyDocument {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @db.Uuid
+  /// "contract" (unico: un nuovo upload sostituisce il precedente) | "invoice" | "other"
+  kind      String
+  title     String
+  fileKey   String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, kind])
+}
+
+// Piano/abbonamento dell'autoscuola, assegnato dal team Reglo via backoffice
+// e mostrato al titolare in Area personale → Abbonamento. Prezzi in centesimi.
+// È la composizione COMMERCIALE del piano (display): l'attivazione operativa
+// di teoria/segretaria resta nei CompanyService limits ("Gestisci" nel
+// backoffice). Vedi docs/features/company-plan.md.
+model CompanyPlan {
+  id                       String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId                String    @unique @db.Uuid
+  /// "monthly" | "annual"
+  billingPeriod            String    @default("annual")
+  renewsAt                 DateTime? @db.Timestamp(6)
+  instructorSeats          Int       @default(1)
+  instructorSeatPriceCents Int       @default(0)
+  voiceEnabled             Boolean   @default(false)
+  voicePriceCents          Int       @default(0)
+  createdAt                DateTime  @default(now()) @db.Timestamp(6)
+  updatedAt                DateTime  @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// Registro degli acquisti UNA TANTUM di licenze formazione (teoria): ogni
+// acquisto è una riga con data, numero licenze e prezzo per licenza. Il team
+// Reglo li registra dal backoffice (dialog Piano); il titolare li vede in
+// Area personale → Abbonamento → "Acquisti una tantum". Fuori dal totale
+// ricorrente del CompanyPlan.
+model CompanyLicensePurchase {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String   @db.Uuid
+  seats          Int
+  /// Prezzo PER LICENZA in centesimi (totale = seats × seatPriceCents)
+  seatPriceCents Int
+  purchasedAt    DateTime @db.Timestamp(6)
+  createdAt      DateTime @default(now()) @db.Timestamp(6)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, purchasedAt])
+}
+
+// Traccia ogni cancellazione/anonimizzazione di un account, per capire CHI la
+// innesca (allievi via self-delete, titolari via Directory, o rilascio email in
+// fase di ri-registrazione). Nessuna FK: l'utente resta (anonimizzato), non viene
+// eliminato. `trigger`: self_delete | directory_removal | orphan_release | unknown.
+model AccountDeletionAudit {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deletedUserId    String   @db.Uuid
+  trigger          String
+  actorUserId      String?  @db.Uuid
+  companyId        String?  @db.Uuid
+  lessonsCancelled Int      @default(0)
+  createdAt        DateTime @default(now()) @db.Timestamp(6)
+
+  @@index([createdAt])
+  @@index([trigger])
+  @@index([deletedUserId])
 }

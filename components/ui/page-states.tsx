@@ -51,7 +51,7 @@ export function PageEmptyState({
       )}
     >
       <div className="max-w-md space-y-3 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-pink-50">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-border bg-[#f7f7f7]">
           <Inbox className="h-5 w-5 text-primary" />
         </div>
         <p className="text-base font-semibold text-foreground">{title}</p>
@@ -90,7 +90,7 @@ export function PageErrorState({
       )}
     >
       <div className="max-w-md space-y-3 text-center">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-pink-200 bg-[#FEF2F2]">
+        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full border border-[#FECACA] bg-[#FEF2F2]">
           <AlertTriangle className="h-5 w-5 text-destructive" />
         </div>
         <p className="text-base font-semibold text-foreground">{title}</p>

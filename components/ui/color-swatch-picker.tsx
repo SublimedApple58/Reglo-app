@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { Check, Loader2 } from "lucide-react";
+import { LoadingDots } from "@/components/ui/loading-dots";
+import { Check } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,7 +59,7 @@ export function ColorSwatchPicker({
           )}
         >
           {saving ? (
-            <Loader2 className="size-3.5 animate-spin" />
+            <LoadingDots className="scale-[0.5]" />
           ) : value ? (
             <span
               className="size-3.5 rounded-full border border-black/10"

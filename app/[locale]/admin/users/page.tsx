@@ -1,19 +1,25 @@
-import ClientPageWrapper from '@/components/Layout/ClientPageWrapper';
-import Pagination from '@/components/shared/pagination';
+import { PageWrapper } from '@/components/Layout/PageWrapper';
 import { getCompanyUsers } from '@/lib/actions/user.actions';
-import { PAGE_SIZE } from '@/lib/constants';
 import { Metadata } from 'next';
-import { AdminUsersToolbar } from '@/components/pages/AdminUsers/AdminUsersToolbar';
-import { AdminUsersTable } from '@/components/pages/AdminUsers/AdminUsersTable';
+import { AdminUsersPage } from '@/components/pages/AdminUsers/AdminUsersPage';
 
 export const metadata: Metadata = {
-  title: 'Admin Users',
+  title: 'Utenti',
 };
 
 type AdminUsersSearchParams = {
   page?: string | string[];
   query?: string | string[];
+  role?: string | string[];
 };
+
+const AUTOSCUOLA_ROLE_VALUES = [
+  'OWNER',
+  'INSTRUCTOR_OWNER',
+  'INSTRUCTOR',
+  'STUDENT',
+] as const;
+type AutoscuolaRole = (typeof AUTOSCUOLA_ROLE_VALUES)[number];
 
 const AdminUserPage = async ({
   searchParams,
@@ -25,41 +31,41 @@ const AdminUserPage = async ({
   await _params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
 
-  const pageParam = Array.isArray(resolvedSearchParams.page)
-    ? resolvedSearchParams.page[0]
-    : resolvedSearchParams.page;
-  const queryParam = Array.isArray(resolvedSearchParams.query)
-    ? resolvedSearchParams.query[0]
-    : resolvedSearchParams.query;
+  const single = (value?: string | string[]) =>
+    Array.isArray(value) ? value[0] : value;
 
-  const currentPage = Number(pageParam) || 1;
-  const searchText = queryParam?.trim();
+  const currentPage = Number(single(resolvedSearchParams.page)) || 1;
+  const searchText = single(resolvedSearchParams.query)?.trim();
+  const roleParam = single(resolvedSearchParams.role);
+  const roleFilter = AUTOSCUOLA_ROLE_VALUES.includes(roleParam as AutoscuolaRole)
+    ? (roleParam as AutoscuolaRole)
+    : null;
 
   const users = await getCompanyUsers({
     page: currentPage,
     query: searchText ?? '',
+    role: roleFilter ?? undefined,
   });
-  const totalRows = users.totalPages * PAGE_SIZE;
-  const tableUsers = users.data.map((user) => ({
+
+  const rows = users.data.map((user) => ({
     id: user.id,
     name: user.name,
     email: user.email,
-    role: user.role,
     autoscuolaRole: user.autoscuolaRole ?? undefined,
     status: user.status,
   }));
 
   return (
-    <ClientPageWrapper
-      title='Users'
-      subTitle='Qui puoi vedere la tua directory completa di utenti'
-    >
-      <AdminUsersToolbar totalRows={totalRows} initialQuery={searchText ?? ''} />
-      <AdminUsersTable users={tableUsers} />
-      {users.totalPages > 1 && (
-        <Pagination page={currentPage} totalPages={users?.totalPages} />
-      )}
-    </ClientPageWrapper>
+    <PageWrapper title='Utenti' hideHero>
+      <AdminUsersPage
+        users={rows}
+        page={currentPage}
+        totalPages={users.totalPages}
+        total={users.total ?? rows.length}
+        initialQuery={searchText ?? ''}
+        roleFilter={roleFilter}
+      />
+    </PageWrapper>
   );
 };
 
