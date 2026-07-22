@@ -474,8 +474,16 @@ export async function getSwapOffers(
         assignedInstructor: { select: { autonomousMode: true } },
         licenseCategory: true,
         transmission: true,
+        bookingBlocked: true,
       },
     });
+
+    // Allievo con prenotazioni bloccate dal titolare: non può accettare scambi
+    // (vedi respondSwapOffer), quindi non gli mostriamo alcuna offerta.
+    if (viewerMember?.bookingBlocked === true) {
+      return { success: true, data: [] };
+    }
+
     const viewerClusterInstructorId =
       viewerMember?.assignedInstructorId && viewerMember.assignedInstructor?.autonomousMode
         ? viewerMember.assignedInstructorId
@@ -651,8 +659,20 @@ export async function respondSwapOffer(
           licenseCategory: true,
           transmission: true,
           weeklyBookingLimitExempt: true,
+          bookingBlocked: true,
         },
       });
+
+      // Blocco prenotazioni (toggle titolare dal dettaglio allievo): accettare uno
+      // scambio riassegna la guida a questo allievo — è a tutti gli effetti una
+      // prenotazione, quindi va rifiutata come nel flusso di booking normale.
+      if (acceptingMember?.bookingBlocked === true) {
+        return {
+          success: false,
+          message: "Le tue prenotazioni sono state bloccate: non puoi accettare scambi. Contatta la tua autoscuola.",
+        };
+      }
+
       if (acceptingMember?.assignedInstructorId && acceptingMember.assignedInstructor?.autonomousMode) {
         const offerCreatorMember = await prisma.companyMember.findFirst({
           where: { companyId: membership.companyId, userId: offer.requestingStudentId, autoscuolaRole: "STUDENT" },
