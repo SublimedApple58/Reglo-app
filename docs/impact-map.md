@@ -94,6 +94,11 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: respects cluster constraints
 - → **Mobile**: `SettingsScreen`, `ClusterSettingsScreen`, `InstructorAvailabilityScreen`, `PublicationModeEditor` (9 screens total)
 
+### Pronto per l'esame (exam-ready)
+- → **Student Phase**: `examReady` esiste solo in PRATICA; `updateStudentPhase` lo azzera all'uscita (→ PATENTATO)
+- → **Exam creation (agenda web + mobile)**: differenzia pronti/non-pronti nel picker (badge + ordine); NON vincola la creazione
+- → **Mobile**: contratto `examReady`/`examReadyAt`/`studentPhase` su `AutoscuolaStudent` + array `students` di `getInstructorSettings`; toggle in `StudentNotesDetailScreen`
+
 ### Users Directory
 - → **Istruttori/Agenda**: `deleteUser` di un istruttore → `AutoscuolaInstructor` inactive + guide future annullate (`operationallyCancelAppointmentsByResource`)
 - → **Registrazione (tutti i canali)**: `releaseEmailIfOrphaned` chiamato in `createCompanyUser`, `signUpUser`, `acceptCompanyInviteAndRegister`, mobile `invites/[token]/accept`, mobile `student-register` — un account orfano (0 membership) non blocca mai il riuso dell'email

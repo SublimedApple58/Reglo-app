@@ -47,6 +47,7 @@ import {
   toggleStudentBookingBlock,
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
+  setStudentExamReady,
   setManualPaymentStatus,
   updateStudentGroupLessonOptIn,
   updateStudentPhone,
@@ -98,6 +99,8 @@ type Student = StudentProfile & {
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   licenseCategory?: string | null;
   transmission?: string | null;
+  examReady?: boolean;
+  examReadyAt?: string | null;
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -157,6 +160,8 @@ type StudentRegister = {
   examPriorityActive?: boolean;
   examDate?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  examReady?: boolean;
+  examReadyAt?: string | null;
   licenseCategory?: string | null;
   transmission?: string | null;
   groupLessonsOptIn?: boolean;
@@ -328,6 +333,17 @@ const PHASE_BADGES: Record<NonNullable<Student["studentPhase"]>, { label: string
   PRATICA: { label: "Foglio rosa", tone: "pink" },
   PATENTATO: { label: "Patentato", tone: "green" },
 };
+
+/** "pronto oggi" / "pronto da N giorni" a partire da examReadyAt (ISO). */
+function daysReadyLabel(examReadyAt?: string | null): string | null {
+  if (!examReadyAt) return null;
+  const then = new Date(examReadyAt);
+  if (Number.isNaN(then.getTime())) return null;
+  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+  if (days <= 0) return "pronto da oggi";
+  if (days === 1) return "pronto da 1 giorno";
+  return `pronto da ${days} giorni`;
+}
 
 /** CTA outline compatta delle liste (stile "Dettaglio" del proto) */
 const listButtonClass =
@@ -524,6 +540,8 @@ export function AutoscuoleStudentsPage({
   // Ordinamento lista allievi: "recent" (ordine server, default) o "name" (A-Z
   // dentro ogni fase). Client-side: la lista è già tutta in memoria.
   const [sortMode, setSortMode] = React.useState<"recent" | "name">("recent");
+  // Filtro "solo pronti all'esame" nella lista pratica (chicca titolare).
+  const [praticaOnlyReady, setPraticaOnlyReady] = React.useState(false);
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searching, setSearching] = React.useState(false);
@@ -537,6 +555,7 @@ export function AutoscuoleStudentsPage({
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
   const [exemptSaving, setExemptSaving] = React.useState(false);
   const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
+  const [examReadySaving, setExamReadySaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -1246,6 +1265,7 @@ export function AutoscuoleStudentsPage({
             <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
           ) : null}
           {student.bookingBlocked && <Pill tone="red">Bloccato</Pill>}
+          {student.examReady && <Pill tone="green">Pronto</Pill>}
         </div>
         {options?.secondLine ? (
           <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{options.secondLine}</p>
@@ -1345,13 +1365,37 @@ export function AutoscuoleStudentsPage({
   };
 
   const renderPraticaRows = () => {
-    const list = studentsByPhase.pratica;
-    if (list.length === 0) {
+    const allPratica = studentsByPhase.pratica;
+    if (allPratica.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
     }
+    const readyCount = allPratica.filter((s) => s.examReady).length;
+    const list = praticaOnlyReady ? allPratica.filter((s) => s.examReady) : allPratica;
     const visible = pageSlice(list, pages.pratica);
     return (
       <div>
+        {readyCount > 0 && (
+          <div className="flex items-center justify-between border-t border-[#ebebeb] bg-[#fbfdfb] px-6 py-2.5">
+            <span className="text-[12px] font-medium text-[#1a7f50]">
+              {readyCount} {readyCount === 1 ? "allievo pronto" : "allievi pronti"} per l&apos;esame
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setPraticaOnlyReady((v) => !v);
+                setPages((prev) => ({ ...prev, pratica: 1 }));
+              }}
+              className={cn(
+                "cursor-pointer select-none rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                praticaOnlyReady
+                  ? "bg-[#1a7f50] text-white"
+                  : "border border-[#c5e8d4] text-[#1a7f50] hover:bg-[#f0faf4]",
+              )}
+            >
+              {praticaOnlyReady ? "Mostra tutti" : "Solo pronti"}
+            </button>
+          </div>
+        )}
         {visible.map((student) => {
           const licenseLabel = student.licenseCategory
             ? `${student.licenseCategory} · ${TRANSMISSION_LABELS[student.transmission as Transmission] ?? student.transmission ?? "—"}`
@@ -1686,6 +1730,65 @@ export function AutoscuoleStudentsPage({
             )}
           </div>
         </section>
+
+        {/* Pronto per l'esame — segnale interno, solo in fase pratica */}
+        {register.studentPhase === "PRATICA" && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={sectionLabelClass}>Esame pratico</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[12px] font-medium text-[#929292]">Pronto per l&apos;esame</p>
+                  {register.examReady && (
+                    <span className="text-[10px] font-medium text-[#c1c1c1]">
+                      {daysReadyLabel(register.examReadyAt)}
+                    </span>
+                  )}
+                </div>
+                <Pill tone={register.examReady ? "green" : "gray"}>
+                  {register.examReady ? "Pronto" : "Non segnato"}
+                </Pill>
+              </div>
+              <button
+                type="button"
+                className={blueLinkClass}
+                disabled={examReadySaving}
+                onClick={async () => {
+                  if (!selectedStudentId || examReadySaving) return;
+                  const next = !register.examReady;
+                  setExamReadySaving(true);
+                  const res = await setStudentExamReady({
+                    studentId: selectedStudentId,
+                    ready: next,
+                  });
+                  setExamReadySaving(false);
+                  if (!res.success) {
+                    toast.error({ description: res.message ?? "Errore aggiornamento." });
+                    return;
+                  }
+                  const nextAt = res.data?.examReadyAt ?? (next ? new Date().toISOString() : null);
+                  setRegister((prev) =>
+                    prev ? { ...prev, examReady: next, examReadyAt: nextAt } : prev,
+                  );
+                  setStudents((prev) =>
+                    prev.map((s) =>
+                      s.id === selectedStudentId
+                        ? { ...s, examReady: next, examReadyAt: nextAt }
+                        : s,
+                    ),
+                  );
+                  toast.success({
+                    description: next
+                      ? "Allievo segnato pronto per l'esame."
+                      : "Rimosso dai pronti.",
+                  });
+                }}
+              >
+                {examReadySaving ? "Salvo…" : register.examReady ? "Rimuovi" : "Segna pronto"}
+              </button>
+            </div>
+          </section>
+        )}
 
         {/* Istruttore assegnato */}
         {autonomousInstructors.length > 0 && (
@@ -2458,7 +2561,9 @@ export function AutoscuoleStudentsPage({
                         : phaseTab === "teoria"
                           ? studentsByPhase.teoria
                           : phaseTab === "pratica"
-                            ? studentsByPhase.pratica
+                            ? (praticaOnlyReady
+                                ? studentsByPhase.pratica.filter((s) => s.examReady)
+                                : studentsByPhase.pratica)
                             : studentsByPhase.patentato;
                     const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
                     const page = Math.min(Math.max(1, pages[phaseTab]), totalPages);

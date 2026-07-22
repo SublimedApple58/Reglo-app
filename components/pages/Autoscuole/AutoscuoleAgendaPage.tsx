@@ -81,7 +81,7 @@ import {
 } from "@/components/pages/Autoscuole/AgendaPrintDialog";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -776,6 +776,15 @@ export function AutoscuoleAgendaPage({
   }, [examDialogOpen]);
   const examStudentInitials = (first?: string | null, last?: string | null) =>
     `${(first ?? "").trim()[0] ?? ""}${(last ?? "").trim()[0] ?? ""}`.toUpperCase() || "?";
+  // Tooltip del badge "Pronto" nel picker esame: "Segnato pronto (da N giorni)".
+  const examReadyTitle = (readyAt?: string | null) => {
+    if (!readyAt) return "Segnato pronto per l'esame";
+    const then = new Date(readyAt);
+    if (Number.isNaN(then.getTime())) return "Segnato pronto per l'esame";
+    const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+    const since = days <= 0 ? "da oggi" : days === 1 ? "da 1 giorno" : `da ${days} giorni`;
+    return `Segnato pronto per l'esame ${since}`;
+  };
   const examAddableCount = React.useMemo(
     () => students.reduce((n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1), 0),
     [students, examForm.studentIds],
@@ -784,7 +793,10 @@ export function AutoscuoleAgendaPage({
     const q = examStudentSearch.trim().toLowerCase();
     return students
       .filter((s) => !examForm.studentIds.includes(s.id))
-      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q));
+      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+      // Chicca: gli allievi segnati "pronti" salgono in cima al picker esame
+      // (ordine stabile per il resto — filtriamo su una copia via sort).
+      .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
   }, [students, examForm.studentIds, examStudentSearch]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
@@ -4500,11 +4512,26 @@ export function AutoscuoleAgendaPage({
                       className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                            st.examReady && "ring-2 ring-[#1a7f50]",
+                          )}
+                        >
                           {examStudentInitials(st.firstName, st.lastName)}
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                            {st.examReady && (
+                              <span
+                                title={examReadyTitle(st.examReadyAt)}
+                                className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                              >
+                                Pronto
+                              </span>
+                            )}
+                          </span>
                           {st.licenseCategory ? (
                             <span className="truncate text-[11.5px] font-medium text-[#929292]">
                               Patente {st.licenseCategory}{st.transmission === "automatic" ? " · autom." : ""}

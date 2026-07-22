@@ -95,6 +95,9 @@ export async function GET() {
           assignedInstructorId: true,
           licenseCategory: true,
           transmission: true,
+          studentPhase: true,
+          examReady: true,
+          examReadyAt: true,
           user: { select: { name: true } },
         },
         orderBy: { user: { name: "asc" } },
@@ -119,6 +122,9 @@ export async function GET() {
         assignedInstructorId: m.assignedInstructorId,
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
+        studentPhase: m.studentPhase,
+        examReady: m.examReady,
+        examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
       };
     });
     const assignedStudentIds = studentMembers

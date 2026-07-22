@@ -772,6 +772,10 @@ const listDirectoryStudents = async (companyId: string) => {
     // and validate vehicle⇄student eligibility (moto hierarchy).
     licenseCategory: member.licenseCategory ?? null,
     transmission: member.transmission ?? null,
+    // Fase + flag "pronto esame": il picker esame differenzia i PRATICA pronti.
+    studentPhase: member.studentPhase,
+    examReady: member.examReady,
+    examReadyAt: member.examReadyAt ? member.examReadyAt.toISOString() : null,
   }));
 };
 
@@ -1484,6 +1488,8 @@ export async function getAutoscuolaStudents(search?: string) {
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,
+        examReady: m.examReady,
+        examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
       })),
     };
   } catch (error) {
@@ -1655,6 +1661,8 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       licenseCategory: m.licenseCategory ?? null,
       transmission: m.transmission ?? null,
       groupLessonsOptIn: m.groupLessonsOptIn ?? false,
+      examReady: m.examReady,
+      examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
     }));
     if (!students.length) return { success: true, data: [] };
 
@@ -1950,6 +1958,10 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         examPriorityActive: examPriorityInfo.active,
         examDate: examPriorityInfo.examDate,
         studentPhase: studentMembership.studentPhase,
+        examReady: studentMembership.examReady,
+        examReadyAt: studentMembership.examReadyAt
+          ? studentMembership.examReadyAt.toISOString()
+          : null,
         licenseCategory: studentMembership.licenseCategory ?? null,
         transmission: studentMembership.transmission ?? null,
         groupLessonsOptIn: studentMembership.groupLessonsOptIn ?? false,
@@ -7634,6 +7646,13 @@ export async function updateStudentPhase(
         ...(payload.phase === "TEORIA" &&
           payload.grantSeat &&
           !studentMember.quizSeatGrantedAt && { quizSeatGrantedAt: now }),
+        // "Pronto per l'esame" ha senso solo in PRATICA: uscendo dalla fase
+        // (tipicamente → PATENTATO quando passa l'esame) lo azzeriamo.
+        ...(payload.phase !== "PRATICA" && {
+          examReady: false,
+          examReadyAt: null,
+          examReadyBy: null,
+        }),
       },
     });
 
@@ -9918,6 +9937,64 @@ export async function setExamPriorityOverride(
     return {
       success: true,
       data: { examPriorityOverride: payload.override },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Exam-ready flag ("Pronto per l'esame")
+//
+// Segnale INTERNO impostato da titolare (web) o istruttore (mobile) sugli allievi
+// in fase PRATICA. NON vincolante: non blocca la prenotazione dell'esame né delle
+// guide; serve solo a differenziare pronti/non-pronti nei picker di creazione
+// esame. Permessi allineati alla POST esame (istruttore + titolare + admin), non
+// solo OWNER come i toggle vicini, perché anche l'istruttore da mobile deve poterlo
+// impostare. Salviamo anche chi/quando (examReadyBy/At) per le chicche in UI.
+// ---------------------------------------------------------------------------
+
+const setStudentExamReadySchema = z.object({
+  studentId: z.string().uuid(),
+  ready: z.boolean(),
+});
+
+export async function setStudentExamReady(
+  input: z.infer<typeof setStudentExamReadySchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
+      membership.role !== "admin"
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = setStudentExamReadySchema.parse(input);
+
+    const examReadyAt = payload.ready ? new Date() : null;
+    const examReadyBy = payload.ready ? membership.userId : null;
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: {
+        examReady: payload.ready,
+        examReadyAt,
+        examReadyBy,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        examReady: payload.ready,
+        examReadyAt: examReadyAt ? examReadyAt.toISOString() : null,
+      },
     };
   } catch (error) {
     return { success: false, message: formatError(error) };

@@ -312,6 +312,15 @@ model CompanyMember {
   /// Whether this student may participate in group driving lessons (Guide di gruppo).
   /// Opt-in, default false. Only meaningful when limits.groupLessonsEnabled is on.
   groupLessonsOptIn        Boolean                @default(false)
+  /// Internal "pronto per l'esame" signal set by titolare (web) or istruttore
+  /// (mobile) on PRATICA students. NON-binding: does not gate exam/lesson booking,
+  /// never exposed to the student app. Only differentiates ready vs not-ready in
+  /// the exam-creation pickers. Auto-cleared when the student leaves PRATICA.
+  examReady                Boolean                @default(false)
+  /// When examReady was last set to true (drives "pronto da N giorni"). Null when not ready.
+  examReadyAt              DateTime?
+  /// User (titolare/istruttore) who marked the student ready. Null when not ready.
+  examReadyBy              String?                @db.Uuid
   createdAt                DateTime               @default(now()) @db.Timestamp(6)
   updatedAt                DateTime               @updatedAt
 
@@ -325,6 +334,7 @@ model CompanyMember {
   @@index([companyId, studentPhase])
   @@index([companyId, quizSeatGrantedAt])
   @@index([companyId, autoscuolaRole])
+  @@index([companyId, examReady])
 }
 
 model CompanyInvite {
