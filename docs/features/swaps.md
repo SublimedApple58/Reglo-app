@@ -43,6 +43,18 @@ offer created by a participant on his seat. Freeing a group seat must go through
 to eligible students only. Mobile mirrors the rule: `AllievoHomeScreen.openLessonDetail`
 sets `canSwap: false` for `groupLessonId`/`group_lesson`/`esame`.
 
+## Blocco prenotazioni (fix 2026-07-22)
+Accettare uno scambio **riassegna la guida all'allievo** (`+1` prenotazione,
+`bookingSource: swap`): è a tutti gli effetti una prenotazione, quindi rispetta il
+toggle `CompanyMember.bookingBlocked` (impostato dal titolare in "Blocca
+prenotazioni" nel dettaglio allievo). Prima non era controllato → un allievo
+bloccato poteva comunque prendere slot via scambio.
+- `respondSwapOffer()` (ramo `accept`): early-return se `acceptingMember.bookingBlocked === true`. **Unico** choke point per web e mobile (API `.../respond`).
+- `getSwapOffers()`: ritorna `[]` agli allievi bloccati (niente offerte accettabili).
+- **Creare** un'offerta resta consentito anche da bloccato: cede uno slot, non lo acquisisce (handoff mono-direzionale, il requester riceve solo il refund credito).
+
+Regola generale: ogni nuovo percorso che fa *acquisire uno slot* a un allievo deve controllare `bookingBlocked` (come il limite settimanale). Vedi anche la nota sul gate sotto.
+
 ## Booking gate note
 `respondSwapOffer()` reassigns the appointment to the accepting student **without**
 checking the `bookingMinStartDate` gate ("Prenotazioni aperte dal"). A student can
