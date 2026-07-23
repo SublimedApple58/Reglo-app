@@ -22,6 +22,10 @@ export type ServiceLimits = {
   instructorBookingMode?: "manual_full" | "manual_engine";
   weeklyBookingLimitEnabled?: boolean;
   weeklyBookingLimit?: number;
+  /** Blocco automatico prenotazioni quando l'allievo supera la soglia di guide
+   * da pagare non saldate. Impostazione a livello di autoscuola. */
+  autoBookingBlockEnabled?: boolean;
+  autoBookingBlockThreshold?: number;
   examPriorityEnabled?: boolean;
   examPriorityDaysBeforeExam?: number;
   examPriorityBlockNonExam?: boolean;

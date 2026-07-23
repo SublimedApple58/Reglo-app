@@ -94,6 +94,15 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Repositioning**: respects cluster constraints
 - → **Mobile**: `SettingsScreen`, `ClusterSettingsScreen`, `InstructorAvailabilityScreen`, `PublicationModeEditor` (9 screens total)
 
+### Auto-block prenotazioni per debito allievo (web-only)
+- **Scrive sullo STESSO campo** `CompanyMember.bookingBlocked` del blocco manuale (unificazione). Distinzione origine via `bookingBlockReason` ("manual" | "unpaid_threshold" | null) + watermark `unpaidBlockClearedAtCount` per l'anti-conflitto sullo sblocco manuale. State machine pura in `lib/autoscuole/unpaid-auto-block.ts`.
+- → **Payments**: il conteggio "guide da pagare" (`isLessonUnpaid`, = `manualUnpaid`) dipende da `manualMode` (`getAutoscuolaPaymentConfig`) e dallo stato pagamento delle guide. `isLessonUnpaid` ora è **definizione unica** nell'helper, importata da `autoscuole.actions.ts`.
+- → **Availability / Booking Engine**: il guard prenotazione da app (`ensureStudentCanBookFromApp`-like) riconcilia il blocco **prima** del check `bookingBlocked` (solo se la feature è attiva) → enforcement al momento della prenotazione.
+- → **Swaps**: le guard swap (`respondToSwapOffer`, offerte) leggono `bookingBlocked` → rispettano il blocco automatico senza codice extra (campo unificato).
+- → **Settings (tab Limiti)**: `autoBookingBlockEnabled` / `autoBookingBlockThreshold` nel JSON `limits` del CompanyService (pattern identico a `weeklyBookingLimit`). Spegnere la feature rilascia solo i blocchi `unpaid_threshold`.
+- → **Students directory / dettaglio allievo**: `getAutoscuolaStudentsWithProgress` + `getAutoscuolaStudentRegister` riconciliano on-read; `toggleStudentBookingBlock` marca `reason`+watermark. La UI mostra "Blocco automatico per guide da pagare".
+- **Volutamente NON connesso a Mobile**: nessun nuovo tipo/endpoint mobile; il mobile subisce solo l'effetto del blocco esistente.
+
 ### Pronto per l'esame (exam-ready)
 - → **Student Phase**: `examReady` esiste solo in PRATICA; `updateStudentPhase` lo azzera all'uscita (→ PATENTATO)
 - → **Exam creation (agenda web + mobile)**: differenzia pronti/non-pronti nel picker (badge + ordine); NON vincola la creazione

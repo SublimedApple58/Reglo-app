@@ -93,6 +93,8 @@ const EMPTY_SLOT_NOTIFICATION_TIME_OPTIONS = [
 ] as const;
 const DEFAULT_WEEKLY_BOOKING_LIMIT_ENABLED = false;
 const DEFAULT_WEEKLY_BOOKING_LIMIT = 3;
+const DEFAULT_AUTO_BOOKING_BLOCK_ENABLED = false;
+const DEFAULT_AUTO_BOOKING_BLOCK_THRESHOLD = 3;
 const DEFAULT_EXAM_PRIORITY_ENABLED = false;
 const DEFAULT_INSTRUCTOR_PREFERENCE_ENABLED = false;
 const DEFAULT_STUDENT_NOTES_ENABLED = false;
@@ -325,6 +327,8 @@ const autoscuolaSettingsPatchSchema = z
       .optional(),
     weeklyBookingLimitEnabled: z.boolean().optional(),
     weeklyBookingLimit: z.number().int().min(1).max(50).optional(),
+    autoBookingBlockEnabled: z.boolean().optional(),
+    autoBookingBlockThreshold: z.number().int().min(1).max(50).optional(),
     examPriorityEnabled: z.boolean().optional(),
     examPriorityDaysBeforeExam: z.number().int().min(1).max(60).optional(),
     examPriorityBlockNonExam: z.boolean().optional(),
@@ -530,6 +534,8 @@ export type AutoscuolaSettingsData = {
   emptySlotNotificationTimes: string[];
   weeklyBookingLimitEnabled: boolean;
   weeklyBookingLimit: number;
+  autoBookingBlockEnabled: boolean;
+  autoBookingBlockThreshold: number;
   examPriorityEnabled: boolean;
   examPriorityDaysBeforeExam: number;
   examPriorityBlockNonExam: boolean;
@@ -723,6 +729,14 @@ const resolveAutoscuolaSettingsData = async (
     typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
       ? limits.weeklyBookingLimit
       : DEFAULT_WEEKLY_BOOKING_LIMIT;
+  const autoBookingBlockEnabled =
+    typeof limits.autoBookingBlockEnabled === "boolean"
+      ? limits.autoBookingBlockEnabled
+      : DEFAULT_AUTO_BOOKING_BLOCK_ENABLED;
+  const autoBookingBlockThreshold =
+    typeof limits.autoBookingBlockThreshold === "number" && limits.autoBookingBlockThreshold >= 1
+      ? limits.autoBookingBlockThreshold
+      : DEFAULT_AUTO_BOOKING_BLOCK_THRESHOLD;
   const examPriorityEnabled =
     typeof limits.examPriorityEnabled === "boolean"
       ? limits.examPriorityEnabled
@@ -879,6 +893,8 @@ const resolveAutoscuolaSettingsData = async (
     emptySlotNotificationTimes,
     weeklyBookingLimitEnabled,
     weeklyBookingLimit,
+    autoBookingBlockEnabled,
+    autoBookingBlockThreshold,
     examPriorityEnabled,
     examPriorityDaysBeforeExam,
     examPriorityBlockNonExam,
@@ -1082,6 +1098,14 @@ export async function updateAutoscuolaSettings(
       typeof limits.weeklyBookingLimit === "number" && limits.weeklyBookingLimit >= 1
         ? limits.weeklyBookingLimit
         : DEFAULT_WEEKLY_BOOKING_LIMIT;
+    const previousAutoBookingBlockEnabled =
+      typeof limits.autoBookingBlockEnabled === "boolean"
+        ? limits.autoBookingBlockEnabled
+        : DEFAULT_AUTO_BOOKING_BLOCK_ENABLED;
+    const previousAutoBookingBlockThreshold =
+      typeof limits.autoBookingBlockThreshold === "number" && limits.autoBookingBlockThreshold >= 1
+        ? limits.autoBookingBlockThreshold
+        : DEFAULT_AUTO_BOOKING_BLOCK_THRESHOLD;
     const previousExamPriorityEnabled =
       typeof limits.examPriorityEnabled === "boolean"
         ? limits.examPriorityEnabled
@@ -1234,6 +1258,10 @@ export async function updateAutoscuolaSettings(
       payload.weeklyBookingLimitEnabled ?? previousWeeklyBookingLimitEnabled;
     const nextWeeklyBookingLimit =
       payload.weeklyBookingLimit ?? previousWeeklyBookingLimit;
+    const nextAutoBookingBlockEnabled =
+      payload.autoBookingBlockEnabled ?? previousAutoBookingBlockEnabled;
+    const nextAutoBookingBlockThreshold =
+      payload.autoBookingBlockThreshold ?? previousAutoBookingBlockThreshold;
     const nextExamPriorityEnabled =
       payload.examPriorityEnabled ?? previousExamPriorityEnabled;
     const nextInstructorPreferenceEnabled =
@@ -1420,6 +1448,8 @@ export async function updateAutoscuolaSettings(
       emptySlotNotificationTimes: nextEmptySlotNotificationTimes,
       weeklyBookingLimitEnabled: nextWeeklyBookingLimitEnabled,
       weeklyBookingLimit: nextWeeklyBookingLimit,
+      autoBookingBlockEnabled: nextAutoBookingBlockEnabled,
+      autoBookingBlockThreshold: nextAutoBookingBlockThreshold,
       examPriorityEnabled: nextExamPriorityEnabled,
       examPriorityDaysBeforeExam:
         payload.examPriorityDaysBeforeExam ?? (typeof limits.examPriorityDaysBeforeExam === "number" ? limits.examPriorityDaysBeforeExam : 14),
@@ -1553,6 +1583,8 @@ export async function updateAutoscuolaSettings(
         emptySlotNotificationTimes: nextLimits.emptySlotNotificationTimes,
         weeklyBookingLimitEnabled: nextLimits.weeklyBookingLimitEnabled,
         weeklyBookingLimit: nextLimits.weeklyBookingLimit,
+        autoBookingBlockEnabled: nextLimits.autoBookingBlockEnabled,
+        autoBookingBlockThreshold: nextLimits.autoBookingBlockThreshold,
         examPriorityEnabled: nextLimits.examPriorityEnabled,
         examPriorityDaysBeforeExam: nextLimits.examPriorityDaysBeforeExam,
         examPriorityBlockNonExam: nextLimits.examPriorityBlockNonExam,

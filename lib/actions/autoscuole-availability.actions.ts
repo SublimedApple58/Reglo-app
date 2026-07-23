@@ -49,6 +49,11 @@ import {
   getCachedHolidays,
 } from "@/lib/autoscuole/cached-service";
 import {
+  readAutoBlockSettings,
+  reconcileUnpaidAutoBlock,
+  getStudentUnpaidLessonCount,
+} from "@/lib/autoscuole/unpaid-auto-block";
+import {
   resolveEffectiveBookingSettings,
   buildCompanyBookingDefaults,
 } from "@/lib/autoscuole/instructor-clusters";
@@ -653,11 +658,44 @@ const ensureStudentCanBookFromApp = async ({
         userId: studentId,
         autoscuolaRole: "STUDENT",
       },
-      select: { bookingBlocked: true, studentPhase: true },
+      select: {
+        bookingBlocked: true,
+        bookingBlockReason: true,
+        unpaidBlockClearedAtCount: true,
+        studentPhase: true,
+      },
     }),
     getCachedCompanyServiceLimits(companyId),
   ]);
-  if (studentMembership?.bookingBlocked) {
+
+  // Blocco automatico per debito: se attivo, riconcilia lo stato dell'allievo con
+  // il suo debito corrente PRIMA di controllare il blocco, così l'enforcement
+  // scatta esattamente al momento della prenotazione (non solo quando il titolare
+  // apre la lista allievi). Query extra solo quando la feature è accesa.
+  let bookingBlocked = studentMembership?.bookingBlocked ?? false;
+  if (studentMembership) {
+    const autoBlockSettings = readAutoBlockSettings(limits);
+    if (autoBlockSettings.enabled) {
+      const unpaidCount = await getStudentUnpaidLessonCount(companyId, studentId);
+      const reconciled = await reconcileUnpaidAutoBlock({
+        companyId,
+        userId: studentId,
+        state: {
+          bookingBlocked: studentMembership.bookingBlocked,
+          bookingBlockReason:
+            (studentMembership.bookingBlockReason as
+              | "manual"
+              | "unpaid_threshold"
+              | null) ?? null,
+          unpaidBlockClearedAtCount: studentMembership.unpaidBlockClearedAtCount ?? null,
+        },
+        unpaidCount,
+        settings: autoBlockSettings,
+      });
+      bookingBlocked = reconciled.bookingBlocked;
+    }
+  }
+  if (bookingBlocked) {
     return {
       allowed: false as const,
       message:

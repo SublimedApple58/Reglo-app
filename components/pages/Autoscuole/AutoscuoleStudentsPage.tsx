@@ -92,6 +92,7 @@ type StudentProfile = {
 
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
+  bookingBlockReason?: "manual" | "unpaid_threshold" | null;
   // Account creato dal titolare ma mai usato (nessun accesso in app) → non
   // riceve promemoria. Guida l'indicatore "cellulare-divieto" nella lista.
   neverAccessed?: boolean;
@@ -155,6 +156,7 @@ type LessonFilter = "all" | "upcoming" | "unpaid" | "completed" | "cancelled";
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
+  bookingBlockReason?: "manual" | "unpaid_threshold" | null;
   weeklyBookingLimitExempt?: boolean;
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
@@ -989,12 +991,18 @@ export function AutoscuoleStudentsPage({
         return;
       }
       toast.success({ description: res.message ?? "Stato aggiornato." });
-      // Update local register
-      setRegister((prev) => prev ? { ...prev, bookingBlocked: blocked } : prev);
+      // Update local register — un blocco manuale ha reason "manual", uno sblocco
+      // manuale azzera la reason (torna gestibile dall'automatismo).
+      const nextReason = blocked ? "manual" : null;
+      setRegister((prev) =>
+        prev ? { ...prev, bookingBlocked: blocked, bookingBlockReason: nextReason } : prev,
+      );
       // Update student in table list
       setStudents((prev) =>
         prev.map((s) =>
-          s.id === selectedStudentId ? { ...s, bookingBlocked: blocked } : s,
+          s.id === selectedStudentId
+            ? { ...s, bookingBlocked: blocked, bookingBlockReason: nextReason }
+            : s,
         ),
       );
     },
@@ -1625,6 +1633,11 @@ export function AutoscuoleStudentsPage({
                 <Pill tone={register.bookingBlocked ? "red" : "green"}>
                   {register.bookingBlocked ? "Bloccate" : "Attive"}
                 </Pill>
+                {register.bookingBlocked && register.bookingBlockReason === "unpaid_threshold" && (
+                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
+                    Blocco automatico per guide da pagare
+                  </p>
+                )}
               </div>
               <button
                 type="button"

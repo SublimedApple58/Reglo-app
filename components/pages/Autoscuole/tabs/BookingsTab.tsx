@@ -53,6 +53,10 @@ export type BookingsTabProps = {
   setWeeklyBookingLimitEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   weeklyBookingLimit: number;
   setWeeklyBookingLimit: (v: number) => void;
+  autoBookingBlockEnabled: boolean;
+  setAutoBookingBlockEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  autoBookingBlockThreshold: number;
+  setAutoBookingBlockThreshold: (v: number) => void;
   examPriorityEnabled: boolean;
   setExamPriorityEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   examPriorityDaysBeforeExam: number;
@@ -430,6 +434,10 @@ export default function BookingsTab({
   setWeeklyBookingLimitEnabled,
   weeklyBookingLimit,
   setWeeklyBookingLimit,
+  autoBookingBlockEnabled,
+  setAutoBookingBlockEnabled,
+  autoBookingBlockThreshold,
+  setAutoBookingBlockThreshold,
   examPriorityEnabled,
   setExamPriorityEnabled,
   examPriorityDaysBeforeExam,
@@ -754,6 +762,28 @@ export default function BookingsTab({
                 />
               </FieldBlock>
             </div>
+          )}
+        </div>
+
+        <div className="py-6">
+          <SettingRow
+            title="Blocca chi ha troppe guide da pagare"
+            titleExtra={
+              <InfoTooltip text="Usa lo stesso blocco del blocco manuale. L'allievo viene sbloccato in automatico quando torna sotto soglia. Se lo sblocchi tu a mano, non verrà ribloccato per lo stesso debito residuo." />
+            }
+            description="Quando un allievo supera il numero di guide da pagare non ancora saldate, le sue prenotazioni vengono bloccate automaticamente finché non salda."
+            checked={autoBookingBlockEnabled}
+            onToggle={() => setAutoBookingBlockEnabled((prev) => !prev)}
+          />
+          {autoBookingBlockEnabled && (
+            <FieldBlock label="Guide da pagare non saldate che fanno scattare il blocco">
+              <NumberField
+                value={autoBookingBlockThreshold}
+                min={1}
+                max={50}
+                onCommit={setAutoBookingBlockThreshold}
+              />
+            </FieldBlock>
           )}
         </div>
       </div>
