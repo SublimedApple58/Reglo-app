@@ -10,6 +10,11 @@ import {
   startAulaExam,
   startAulaExamReview,
 } from "@/lib/actions/aula.actions";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+
+type RevealResult = { name: string; answered: boolean; correct: boolean | null };
 
 type Snapshot = {
   code: string;
@@ -27,7 +32,7 @@ type Snapshot = {
   question: { text: string; imageUrl: string | null; correctAnswer: boolean | null } | null;
   reveal: {
     counts: { correct: number; wrong: number; noAnswer: number };
-    results: { name: string; answered: boolean; correct: boolean | null }[];
+    results: RevealResult[];
   } | null;
   examProgress: { completed: number; answersReceived: number } | null;
   examResults: {
@@ -37,6 +42,50 @@ type Snapshot = {
 };
 
 const POLL_MS = 1500;
+
+/** CTA accent (gialla) del docente — usata per i comandi di "reveal"/"correggi". */
+const ACCENT_BTN =
+  "bg-accent text-foreground border border-transparent hover:bg-accent/90";
+
+/** Riga conteggi giusto / sbagliato / non risposto. */
+function CountsRow({
+  counts,
+}: {
+  counts: { correct: number; wrong: number; noAnswer: number };
+}) {
+  return (
+    <div className="flex justify-center gap-6 text-lg">
+      <span className="font-semibold text-positive">Giusto: {counts.correct}</span>
+      <span className="font-semibold text-destructive">
+        Sbagliato: {counts.wrong}
+      </span>
+      <span className="text-muted-foreground">Non risposto: {counts.noAnswer}</span>
+    </div>
+  );
+}
+
+/** Griglia dei nomi con esito colorato (giusto/sbagliato/non risposto). */
+function ResultChips({ results }: { results: RevealResult[] }) {
+  return (
+    <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {results.map((r, i) => (
+        <li
+          key={i}
+          className={cn(
+            "rounded-pill border px-3 py-1 text-sm",
+            !r.answered
+              ? "border-border text-muted-foreground"
+              : r.correct
+                ? "border-positive/40 bg-positive/5 text-positive"
+                : "border-destructive/40 bg-destructive/5 text-destructive",
+          )}
+        >
+          {r.name}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * Reglo Aula — console docente (vista proiettore + comandi).
@@ -90,20 +139,22 @@ export function AulaLiveConsole({ code }: { code: string }) {
     snap.status === "IN_PROGRESS";
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-8 pb-28">
       {showQrOnly && (
         <div className="flex flex-col items-center gap-4">
-          <p className="text-xl">Inquadra il QR per partecipare</p>
-          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-neutral-200">
+          <p className="ds-subtitle">Inquadra il QR per partecipare</p>
+          <div className="rounded-card-primary border border-border bg-card p-5 shadow-card">
             {joinUrl ? (
               <QRCodeSVG value={joinUrl} size={256} level="M" marginSize={2} />
             ) : (
-              <div className="h-64 w-64 animate-pulse rounded-lg bg-neutral-100" />
+              <Skeleton className="h-64 w-64 rounded-lg" />
             )}
           </div>
-          <p className="font-mono text-lg">{joinUrl}</p>
+          <p className="max-w-full break-all font-mono text-sm text-muted-foreground">
+            {joinUrl}
+          </p>
           {snap && (
-            <p className="text-neutral-500">
+            <p className="text-muted-foreground">
               {snap.participantCount} partecipanti
               {snap.status === "QUESTION_OPEN" && " • risposta in corso"}
               {snap.status === "IN_PROGRESS" &&
@@ -112,7 +163,7 @@ export function AulaLiveConsole({ code }: { code: string }) {
             </p>
           )}
           {snap?.mode === "EXAM" && snap.status === "IN_PROGRESS" && (
-            <p className="text-sm text-neutral-400">
+            <p className="text-sm text-muted-foreground">
               Quiz completo in corso — {snap.totalQuestions} domande sul telefono
             </p>
           )}
@@ -122,46 +173,30 @@ export function AulaLiveConsole({ code }: { code: string }) {
       {/* LIVE — reveal per domanda */}
       {snap?.status === "QUESTION_REVEALED" && snap.reveal && (
         <div className="w-full max-w-3xl space-y-4">
-          <h2 className="text-center text-2xl font-semibold">
+          <h2 className="ds-section-primary text-center">
             Risultati domanda {(snap.currentIndex ?? 0) + 1}/{snap.totalQuestions}
           </h2>
-          <div className="flex justify-center gap-6 text-lg">
-            <span className="text-green-600">Giusto: {snap.reveal.counts.correct}</span>
-            <span className="text-red-600">Sbagliato: {snap.reveal.counts.wrong}</span>
-            <span className="text-neutral-500">Non risposto: {snap.reveal.counts.noAnswer}</span>
-          </div>
-          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {snap.reveal.results.map((r, i) => (
-              <li
-                key={i}
-                className={
-                  "rounded-md border px-3 py-1 text-sm " +
-                  (!r.answered
-                    ? "text-neutral-400"
-                    : r.correct
-                      ? "border-green-300 text-green-700"
-                      : "border-red-300 text-red-700")
-                }
-              >
-                {r.name}
-              </li>
-            ))}
-          </ul>
+          <CountsRow counts={snap.reveal.counts} />
+          <ResultChips results={snap.reveal.results} />
         </div>
       )}
 
       {/* EXAM — correzione a schermo, una domanda alla volta (il docente spiega) */}
       {isExam && snap?.status === "REVIEWING" && snap.question && (
         <div className="w-full max-w-3xl space-y-5">
-          <p className="text-center text-sm text-neutral-500">
+          <p className="text-center ds-caption text-muted-foreground">
             Correzione — domanda {(snap.currentIndex ?? 0) + 1}/{snap.totalQuestions}
           </p>
           {snap.question.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={snap.question.imageUrl} alt="" className="mx-auto max-h-56 rounded-lg" />
+            <img
+              src={snap.question.imageUrl}
+              alt=""
+              className="mx-auto max-h-56 rounded-lg border border-border"
+            />
           )}
           <p className="text-center text-2xl">{snap.question.text}</p>
-          <p className="text-center text-xl font-semibold text-green-600">
+          <p className="text-center text-xl font-semibold text-positive">
             Risposta corretta:{" "}
             {snap.question.correctAnswer === null
               ? "—"
@@ -171,28 +206,8 @@ export function AulaLiveConsole({ code }: { code: string }) {
           </p>
           {snap.reveal && (
             <>
-              <div className="flex justify-center gap-6 text-lg">
-                <span className="text-green-600">Giusto: {snap.reveal.counts.correct}</span>
-                <span className="text-red-600">Sbagliato: {snap.reveal.counts.wrong}</span>
-                <span className="text-neutral-500">Non risposto: {snap.reveal.counts.noAnswer}</span>
-              </div>
-              <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {snap.reveal.results.map((r, i) => (
-                  <li
-                    key={i}
-                    className={
-                      "rounded-md border px-3 py-1 text-sm " +
-                      (!r.answered
-                        ? "text-neutral-400"
-                        : r.correct
-                          ? "border-green-300 text-green-700"
-                          : "border-red-300 text-red-700")
-                    }
-                  >
-                    {r.name}
-                  </li>
-                ))}
-              </ul>
+              <CountsRow counts={snap.reveal.counts} />
+              <ResultChips results={snap.reveal.results} />
             </>
           )}
         </div>
@@ -201,21 +216,23 @@ export function AulaLiveConsole({ code }: { code: string }) {
       {/* EXAM — classifica finale (correzione di massa) */}
       {isExam && snap?.status === "ENDED" && snap.examResults && (
         <div className="w-full max-w-2xl space-y-4">
-          <h2 className="text-center text-3xl font-semibold">Risultati</h2>
+          <h2 className="ds-title text-center">Risultati</h2>
           {snap.examResults.rows.length === 0 ? (
-            <p className="text-center text-neutral-500">Nessun partecipante.</p>
+            <p className="text-center text-muted-foreground">Nessun partecipante.</p>
           ) : (
             <ol className="space-y-2">
               {snap.examResults.rows.map((r, i) => (
                 <li
                   key={i}
-                  className="flex items-center justify-between rounded-lg border px-4 py-3 text-lg"
+                  className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3 text-lg shadow-card"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="w-6 text-right text-neutral-400">{i + 1}.</span>
+                    <span className="w-6 text-right tabular-nums text-muted-foreground">
+                      {i + 1}.
+                    </span>
                     {r.name}
                   </span>
-                  <span className="font-semibold">
+                  <span className="font-semibold tabular-nums">
                     {r.score}/{snap.examResults!.total}
                   </span>
                 </li>
@@ -227,70 +244,64 @@ export function AulaLiveConsole({ code }: { code: string }) {
 
       {/* LIVE — fine senza reveal in corso */}
       {!isExam && snap?.status === "ENDED" && (
-        <p className="text-2xl font-semibold">Quiz terminato</p>
+        <p className="ds-title">Quiz terminato</p>
       )}
 
       {/* Barra comandi docente */}
       {snap && snap.status !== "ENDED" && (
-        <div className="fixed inset-x-0 bottom-0 flex justify-center gap-3 border-t bg-white/90 p-4">
+        <div className="fixed inset-x-0 bottom-0 flex justify-center gap-3 border-t border-border bg-card/95 p-4 shadow-drawer backdrop-blur">
           {/* EXAM */}
           {isExam && snap.status === "LOBBY" && (
-            <button
-              className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
-              disabled={pending}
-              onClick={() => act(() => startAulaExam(code))}
-            >
+            <Button disabled={pending} onClick={() => act(() => startAulaExam(code))}>
               Avvia quiz
-            </button>
+            </Button>
           )}
           {isExam && snap.status === "IN_PROGRESS" && (
-            <button
-              className="rounded-md bg-yellow-400 px-4 py-2 disabled:opacity-50"
+            <Button
+              className={ACCENT_BTN}
               disabled={pending}
               onClick={() => act(() => startAulaExamReview(code))}
             >
               Termina &amp; correggi
-            </button>
+            </Button>
           )}
           {isExam && snap.status === "REVIEWING" && (
-            <button
-              className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
+            <Button
               disabled={pending}
               onClick={() => act(() => nextAulaExamReview(code))}
             >
               {(snap.currentIndex ?? 0) < snap.totalQuestions - 1
                 ? "Prossima domanda"
                 : "Mostra classifica"}
-            </button>
+            </Button>
           )}
 
           {/* LIVE */}
           {!isExam && snap.status !== "QUESTION_OPEN" && (
-            <button
-              className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
+            <Button
               disabled={pending}
               onClick={() => act(() => openNextAulaQuestion(code))}
             >
               {snap.status === "LOBBY" ? "Apri domanda" : "Prossima domanda"}
-            </button>
+            </Button>
           )}
           {!isExam && snap.status === "QUESTION_OPEN" && (
-            <button
-              className="rounded-md bg-yellow-400 px-4 py-2 disabled:opacity-50"
+            <Button
+              className={ACCENT_BTN}
               disabled={pending}
               onClick={() => act(() => revealAulaQuestion(code))}
             >
               Stop &amp; mostra risposta
-            </button>
+            </Button>
           )}
 
-          <button
-            className="rounded-md border px-4 py-2 disabled:opacity-50"
+          <Button
+            variant="outline"
             disabled={pending}
             onClick={() => act(() => endAulaLiveSession(code))}
           >
             Termina
-          </button>
+          </Button>
         </div>
       )}
     </div>
