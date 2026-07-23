@@ -6,6 +6,9 @@ import {
   createAulaLesson,
   forkAulaLessonTemplate,
 } from "@/lib/actions/aula.actions";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { PageHeader } from "@/components/ui/page-header";
 
 type Lesson = {
   id: string;
@@ -18,7 +21,6 @@ type Lesson = {
 
 /**
  * Reglo Aula — lista lezioni (template Reglo + fork/proprie della scuola).
- * Skeleton: stile da rifinire con design-system in una passata dedicata.
  */
 export function AulaLessonsPage({
   lessons,
@@ -50,67 +52,84 @@ export function AulaLessonsPage({
     });
   };
 
+  const feedback = error ?? message;
+
   return (
-    <div className="p-6 space-y-8">
-      <h1 className="text-2xl font-semibold">Reglo Aula — Lezioni</h1>
-      {error && <p className="text-red-600">{error}</p>}
-      {message && <p className="text-red-600">{message}</p>}
+    <div className="space-y-8 p-6">
+      <PageHeader
+        title="Reglo Aula"
+        subtitle="Lezioni di teoria in aula"
+        actions={
+          <Button size="sm" disabled={pending} onClick={handleCreate}>
+            Nuova lezione
+          </Button>
+        }
+      />
+
+      {feedback && <p className="text-sm text-destructive">{feedback}</p>}
 
       <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-medium">Le tue lezioni</h2>
-          <button
-            className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
-            disabled={pending}
-            onClick={handleCreate}
-          >
-            Nuova lezione
-          </button>
-        </div>
-        {mine.length === 0 && (
-          <p className="text-neutral-500">
-            Nessuna lezione personalizzata. Personalizza una lezione standard qui sotto.
+        <h2 className="ds-section-secondary">Le tue lezioni</h2>
+        {mine.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nessuna lezione personalizzata. Personalizza una lezione standard qui
+            sotto.
           </p>
-        )}
-        <ul className="space-y-2">
-          {mine.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <span>{l.title}</span>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-md border px-3 py-1 text-sm"
-                  onClick={() => router.push(`aula/${l.id}`)}
+        ) : (
+          <ul className="space-y-2">
+            {mine.map((l) => (
+              <li key={l.id}>
+                <Card
+                  hierarchy="tertiary"
+                  className="flex-row items-center justify-between gap-3"
                 >
-                  Modifica
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
+                  <span className="ds-card-title-tertiary truncate">
+                    {l.title}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`aula/${l.id}`)}
+                  >
+                    Modifica
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg font-medium">Lezioni standard (Reglo)</h2>
-        <ul className="space-y-2">
-          {templates.map((l) => (
-            <li
-              key={l.id}
-              className="flex items-center justify-between rounded-lg border p-3"
-            >
-              <span>{l.title}</span>
-              <button
-                className="rounded-md border px-3 py-1 text-sm disabled:opacity-50"
-                disabled={pending}
-                onClick={() => handleFork(l.id)}
-              >
-                Personalizza
-              </button>
-            </li>
-          ))}
-        </ul>
+        <h2 className="ds-section-secondary">Lezioni standard (Reglo)</h2>
+        {templates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nessuna lezione standard disponibile.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {templates.map((l) => (
+              <li key={l.id}>
+                <Card
+                  hierarchy="tertiary"
+                  className="flex-row items-center justify-between gap-3"
+                >
+                  <span className="ds-card-title-tertiary truncate">
+                    {l.title}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => handleFork(l.id)}
+                  >
+                    Personalizza
+                  </Button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
