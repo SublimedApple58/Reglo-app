@@ -2728,7 +2728,7 @@ export function AutoscuoleAgendaPage({
             <div className={cn("flex flex-col overflow-hidden bg-white", agendaFrameClass)} style={{ height: "100%", ...agendaFrameStyle }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
-                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                <div className="min-w-max bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
                 {/* Angolo in alto a sinistra: sticky left così resta ancorato sopra il time gutter durante lo scroll orizzontale */}
                 <div className="sticky left-0 z-40 bg-white row-span-2" />
@@ -2791,7 +2791,7 @@ export function AutoscuoleAgendaPage({
               {/* Exam banners row — sticky between header and body */}
               {examGroups.length > 0 && (
                 <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
-                  <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                  <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                     {/* Cella gutter esami: sticky left, allineata al time gutter del corpo */}
                     <div className="sticky left-0 z-40 bg-white" />
                     {days.map((day, dayIdx) => {
@@ -2841,7 +2841,7 @@ export function AutoscuoleAgendaPage({
               }}>
 
               {/* Calendar body */}
-              <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+              <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Time gutter — sticky left (sticky basta come containing block per gli hour-mark assoluti; niente `relative` che sovrascriverebbe lo sticky) */}
                 <div className="sticky left-0 z-40 border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
