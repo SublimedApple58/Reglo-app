@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
+import {
+  ChevronDown,
+  ChevronUp,
+  Play,
+  Plus,
+  Presentation,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   createAulaLiveSession,
   listAulaChapterQuestions,
@@ -13,6 +22,19 @@ import {
 } from "@/lib/actions/aula.actions";
 import type { SlideBlock, SlidePackage } from "@/lib/aula/slides";
 import { AulaSlideShow } from "@/components/pages/Aula/AulaSlideShow";
+import { aulaErrorMessage } from "@/components/pages/Aula/aula-errors";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { PageHeader } from "@/components/ui/page-header";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type Lesson = {
   id: string;
@@ -200,6 +222,17 @@ export function AulaLessonEditor({
     setMessage(null);
   }, []);
 
+  // Avvisa se si chiude/ricarica la scheda con modifiche non salvate.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   const updateSlide = useCallback(
     (index: number, blocks: SlideBlock[]) => {
       updatePackage({
@@ -269,7 +302,7 @@ export function AulaLessonEditor({
           if (url) setImageUrls((prev) => ({ ...prev, [r2Key]: url }));
           updateBlock(bi, { type: "image", r2Key });
         } else {
-          setMessage(res.message ?? "Upload immagine fallito");
+          setMessage(aulaErrorMessage(res.message, "Upload immagine fallito"));
         }
       } catch (err) {
         // Qualsiasi errore (file non valido, rigetto del server action, ecc.)
@@ -286,18 +319,39 @@ export function AulaLessonEditor({
         setDirty(false);
         setMessage("Salvato.");
       } else {
-        setMessage(res.message ?? "Errore nel salvataggio");
+        setMessage(aulaErrorMessage(res.message, "Errore nel salvataggio"));
       }
     });
   };
 
   const handleStartQuiz = (mode: "LIVE" | "EXAM") => {
     startTransition(async () => {
-      const res = await createAulaLiveSession({ lessonId: lesson.id, count: 5, mode });
+      // Usa le domande scelte dal docente nei blocchi quizRef della lezione;
+      // se non ce ne sono, ripiega su N domande casuali dal capitolo.
+      const questionIds = Array.from(
+        new Set(
+          pkg.slides.flatMap((s) =>
+            s
+              .filter(
+                (b): b is Extract<SlideBlock, { type: "quizRef" }> =>
+                  b.type === "quizRef" && !!b.questionId,
+              )
+              .map((b) => b.questionId),
+          ),
+        ),
+      );
+      const res = await createAulaLiveSession({
+        lessonId: lesson.id,
+        mode,
+        // count è richiesto dal tipo; viene ignorato quando passiamo questionIds
+        // espliciti (resolveQuestionIds dà priorità a quelli).
+        count: 5,
+        ...(questionIds.length > 0 ? { questionIds } : {}),
+      });
       if (res.success && res.data) {
-        router.push(`live/${res.data.code}`);
+        router.push(`/aula/live/${res.data.code}`);
       } else {
-        setMessage(res.message ?? "Impossibile avviare il quiz");
+        setMessage(aulaErrorMessage(res.message, "Impossibile avviare il quiz"));
       }
     });
   };
@@ -305,44 +359,55 @@ export function AulaLessonEditor({
   const slideCount = useMemo(() => slides.length, [slides]);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">{lesson.title}</h1>
-        <div className="flex items-center gap-2">
-          {editable && (
-            <button
-              className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-              disabled={pending || !dirty}
-              onClick={handleSave}
+    <div className="space-y-6 p-6">
+      <PageHeader
+        title={lesson.title}
+        subtitle={[
+          `${slideCount} slide`,
+          ...(editable ? [] : ["Sola lettura"]),
+        ]}
+        actions={
+          <>
+            {editable && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending || !dirty}
+                onClick={handleSave}
+              >
+                {dirty ? "Salva" : "Salvato"}
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={slideCount === 0}
+              onClick={() => setPresenting(true)}
             >
-              {dirty ? "Salva" : "Salvato"}
-            </button>
-          )}
-          <button
-            className="rounded-md border px-4 py-2 text-sm disabled:opacity-50"
-            disabled={slideCount === 0}
-            onClick={() => setPresenting(true)}
-          >
-            Presenta
-          </button>
-          <button
-            className="rounded-md bg-pink-500 px-4 py-2 text-white disabled:opacity-50"
-            disabled={pending}
-            onClick={() => handleStartQuiz("LIVE")}
-            title="Una domanda alla volta, a ritmo del docente"
-          >
-            Quiz live
-          </button>
-          <button
-            className="rounded-md border border-pink-500 px-4 py-2 text-pink-600 disabled:opacity-50"
-            disabled={pending}
-            onClick={() => handleStartQuiz("EXAM")}
-            title="Tutte le domande insieme, correzione finale a schermo"
-          >
-            Quiz completo
-          </button>
-        </div>
-      </div>
+              <Presentation />
+              Presenta
+            </Button>
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() => handleStartQuiz("LIVE")}
+              title="Una domanda alla volta, a ritmo del docente"
+            >
+              <Play />
+              Quiz live
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => handleStartQuiz("EXAM")}
+              title="Tutte le domande insieme, correzione finale a schermo"
+            >
+              Quiz completo
+            </Button>
+          </>
+        }
+      />
 
       {presenting && (
         <AulaSlideShow
@@ -354,35 +419,52 @@ export function AulaLessonEditor({
       )}
 
       {!editable && (
-        <p className="text-amber-600">
+        <div className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-700">
           Questa è una lezione standard (sola lettura). Personalizzala dalla lista
           per poterla modificare.
+        </div>
+      )}
+      {message && (
+        <p
+          className={cn(
+            "text-sm font-medium",
+            message === "Salvato." ? "text-positive" : "text-destructive",
+          )}
+        >
+          {message}
         </p>
       )}
-      {message && <p className="text-neutral-600">{message}</p>}
 
-      <div className="grid gap-6 md:grid-cols-[200px_1fr]">
+      <div className="grid gap-6 md:grid-cols-[220px_1fr]">
         {/* Rail slide */}
         <aside className="space-y-2">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-neutral-500">
+            <h2 className="ds-caption text-muted-foreground">
               Slide ({slideCount})
             </h2>
             {editable && (
-              <button className="rounded-md border px-2 py-0.5 text-sm" onClick={addSlide}>
-                +
-              </button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-8"
+                onClick={addSlide}
+                title="Aggiungi slide"
+              >
+                <Plus />
+              </Button>
             )}
           </div>
-          <ol className="space-y-1">
+          <ol className="space-y-1.5">
             {slides.map((slide, i) => (
               <li key={i}>
                 <button
                   onClick={() => setActive(i)}
-                  className={
-                    "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-sm " +
-                    (i === active ? "border-pink-500 bg-pink-50" : "hover:bg-neutral-50")
-                  }
+                  className={cn(
+                    "reglo-focus-ring flex w-full items-center justify-between rounded-lg border px-3 py-2.5 text-left text-sm transition-colors duration-[var(--motion-fast)]",
+                    i === active
+                      ? "border-primary bg-primary/5 font-medium text-foreground"
+                      : "border-border hover:bg-secondary",
+                  )}
                 >
                   <span className="truncate">
                     {i + 1}.{" "}
@@ -391,7 +473,9 @@ export function AulaLessonEditor({
                       return h && h.type === "heading" ? h.text : `Slide ${i + 1}`;
                     })()}
                   </span>
-                  <span className="ml-2 text-xs text-neutral-400">{slide.length}</span>
+                  <span className="ml-2 shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {slide.length}
+                  </span>
                 </button>
               </li>
             ))}
@@ -401,33 +485,92 @@ export function AulaLessonEditor({
         {/* Editor slide attiva */}
         <section className="space-y-4">
           {!activeSlide && (
-            <p className="text-neutral-500">Nessuna slide. Aggiungine una per iniziare.</p>
+            <p className="text-sm text-muted-foreground">
+              Nessuna slide. Aggiungine una per iniziare.
+            </p>
           )}
           {activeSlide && (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b pb-3">
-                <span className="text-sm font-medium">Slide {active + 1}</span>
+              <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+                <span className="ds-section-tertiary mr-auto">
+                  Slide {active + 1}
+                </span>
                 {editable && (
                   <>
-                    <button className="rounded border px-2 py-1 text-xs disabled:opacity-30" disabled={active === 0} onClick={() => moveSlide(active, -1)}>↑</button>
-                    <button className="rounded border px-2 py-1 text-xs disabled:opacity-30" disabled={active === slideCount - 1} onClick={() => moveSlide(active, 1)}>↓</button>
-                    <button className="rounded border border-red-300 px-2 py-1 text-xs text-red-600" onClick={() => deleteSlide(active)}>Elimina slide</button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      disabled={active === 0}
+                      onClick={() => moveSlide(active, -1)}
+                      title="Sposta su"
+                    >
+                      <ChevronUp />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      disabled={active === slideCount - 1}
+                      onClick={() => moveSlide(active, 1)}
+                      title="Sposta giù"
+                    >
+                      <ChevronDown />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:bg-destructive/5"
+                      onClick={() => deleteSlide(active)}
+                    >
+                      <Trash2 />
+                      Elimina slide
+                    </Button>
                   </>
                 )}
               </div>
 
               <ol className="space-y-3">
                 {activeSlide.map((block, bi) => (
-                  <li key={bi} className="rounded-lg border p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+                  <li
+                    key={bi}
+                    className="rounded-lg border border-border bg-card p-4 shadow-card"
+                  >
+                    <div className="mb-2.5 flex items-center justify-between">
+                      <span className="ds-caption text-muted-foreground">
                         {BLOCK_LABELS[block.type]}
                       </span>
                       {editable && (
-                        <div className="flex gap-1">
-                          <button className="rounded border px-2 py-0.5 text-xs disabled:opacity-30" disabled={bi === 0} onClick={() => moveBlock(bi, -1)}>↑</button>
-                          <button className="rounded border px-2 py-0.5 text-xs disabled:opacity-30" disabled={bi === activeSlide.length - 1} onClick={() => moveBlock(bi, 1)}>↓</button>
-                          <button className="rounded border border-red-300 px-2 py-0.5 text-xs text-red-600" onClick={() => deleteBlock(bi)}>✕</button>
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            disabled={bi === 0}
+                            onClick={() => moveBlock(bi, -1)}
+                            title="Sposta su"
+                          >
+                            <ChevronUp />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            disabled={bi === activeSlide.length - 1}
+                            onClick={() => moveBlock(bi, 1)}
+                            title="Sposta giù"
+                          >
+                            <ChevronDown />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-destructive hover:bg-destructive/5"
+                            onClick={() => deleteBlock(bi)}
+                            title="Elimina blocco"
+                          >
+                            <X />
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -448,11 +591,17 @@ export function AulaLessonEditor({
               </ol>
 
               {editable && (
-                <div className="flex flex-wrap gap-2 border-t pt-3">
+                <div className="flex flex-wrap gap-2 border-t border-border pt-3">
                   {(Object.keys(BLOCK_LABELS) as SlideBlock["type"][]).map((t) => (
-                    <button key={t} className="rounded-md border px-3 py-1 text-sm hover:bg-neutral-50" onClick={() => addBlock(t)}>
-                      + {BLOCK_LABELS[t]}
-                    </button>
+                    <Button
+                      key={t}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => addBlock(t)}
+                    >
+                      <Plus />
+                      {BLOCK_LABELS[t]}
+                    </Button>
                   ))}
                 </div>
               )}
@@ -493,8 +642,8 @@ function BlockEditor({
 }) {
   if (block.type === "heading") {
     return (
-      <input
-        className="w-full rounded-md border px-3 py-2 text-lg font-semibold disabled:bg-neutral-50"
+      <Input
+        className="h-12 text-lg font-semibold"
         value={block.text}
         readOnly={readOnly}
         placeholder="Titolo della slide"
@@ -504,8 +653,7 @@ function BlockEditor({
   }
   if (block.type === "text") {
     return (
-      <textarea
-        className="min-h-24 w-full rounded-md border px-3 py-2 disabled:bg-neutral-50"
+      <Textarea
         value={block.text}
         readOnly={readOnly}
         placeholder="Testo…"
@@ -517,10 +665,10 @@ function BlockEditor({
     return (
       <div className="space-y-2">
         {block.items.map((item, i) => (
-          <div key={i} className="flex gap-2">
-            <span className="pt-2 text-neutral-400">•</span>
-            <input
-              className="flex-1 rounded-md border px-3 py-1.5 disabled:bg-neutral-50"
+          <div key={i} className="flex items-center gap-2">
+            <span className="text-muted-foreground">•</span>
+            <Input
+              className="h-10 flex-1"
               value={item}
               readOnly={readOnly}
               onChange={(e) =>
@@ -531,24 +679,29 @@ function BlockEditor({
               }
             />
             {!readOnly && (
-              <button
-                className="rounded border border-red-300 px-2 text-xs text-red-600"
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8 shrink-0 text-destructive hover:bg-destructive/5"
                 onClick={() =>
                   onChange({ type: "bullets", items: block.items.filter((_, j) => j !== i) })
                 }
+                title="Rimuovi voce"
               >
-                ✕
-              </button>
+                <X />
+              </Button>
             )}
           </div>
         ))}
         {!readOnly && (
-          <button
-            className="rounded-md border px-3 py-1 text-sm"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => onChange({ type: "bullets", items: [...block.items, ""] })}
           >
-            + Voce
-          </button>
+            <Plus />
+            Voce
+          </Button>
         )}
       </div>
     );
@@ -558,29 +711,33 @@ function BlockEditor({
       <div className="space-y-2">
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={imageUrl} alt={block.caption ?? ""} className="max-h-64 max-w-full rounded-md border" />
+          <img
+            src={imageUrl}
+            alt={block.caption ?? ""}
+            className="max-h-64 max-w-full rounded-lg border border-border"
+          />
         ) : block.r2Key ? (
-          <div className="flex h-32 items-center justify-center rounded-md border bg-neutral-50 text-sm text-neutral-400">
+          <div className="flex h-32 items-center justify-center rounded-lg border border-border bg-secondary text-sm text-muted-foreground">
             Caricamento anteprima…
           </div>
         ) : (
-          <div className="flex h-32 items-center justify-center rounded-md border border-dashed text-sm text-neutral-400">
+          <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
             Nessuna immagine
           </div>
         )}
         {!readOnly && (
-          <input
+          <Input
             type="file"
             accept="image/*"
-            className="text-sm"
+            className="h-auto py-2.5"
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) onUpload(file);
             }}
           />
         )}
-        <input
-          className="w-full rounded-md border px-3 py-1.5 text-sm disabled:bg-neutral-50"
+        <Input
+          className="h-10 text-sm"
           value={block.caption ?? ""}
           readOnly={readOnly}
           placeholder="Didascalia (opzionale)"
@@ -607,7 +764,7 @@ function BlockEditor({
 }
 
 /**
- * Selettore di una domanda del quiz: capitolo → domanda (dropdown).
+ * Selettore di una domanda del quiz: capitolo → domanda.
  * Evita di incollare l'UUID a mano. Mostra la domanda attualmente scelta.
  */
 function QuizRefPicker({
@@ -648,7 +805,7 @@ function QuizRefPicker({
 
   if (readOnly) {
     return (
-      <p className="rounded-md border bg-neutral-50 px-3 py-2 text-sm text-neutral-600">
+      <p className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-muted-foreground">
         {quizText ?? "Domanda quiz"}
       </p>
     );
@@ -657,54 +814,67 @@ function QuizRefPicker({
   return (
     <div className="space-y-2">
       {questionId && (
-        <p className="rounded-md bg-pink-50 px-3 py-2 text-sm text-neutral-700">
-          <span className="font-medium">Selezionata:</span>{" "}
+        <p className="rounded-lg bg-primary/5 px-3 py-2 text-sm text-foreground">
+          <span className="font-semibold text-primary">Selezionata:</span>{" "}
           {quizText ?? "caricamento…"}
         </p>
       )}
-      <select
-        className="w-full rounded-md border px-3 py-2 text-sm"
-        value={chapterId}
-        onChange={(e) => {
-          setChapterId(e.target.value);
+      <Select
+        value={chapterId || undefined}
+        onValueChange={(v) => {
+          setChapterId(v);
           setFilter("");
         }}
       >
-        <option value="">— Scegli un capitolo —</option>
-        {chapters.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.chapterNumber}. {c.description}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger>
+          <SelectValue placeholder="— Scegli un capitolo —" />
+        </SelectTrigger>
+        <SelectContent>
+          {chapters.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.chapterNumber}. {c.description}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       {chapterId && (
         <>
-          <input
-            className="w-full rounded-md border px-3 py-1.5 text-sm"
+          <Input
+            className="h-10"
             placeholder="Filtra domande…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
           {!questions ? (
-            <p className="text-sm text-neutral-400">Caricamento domande…</p>
+            <p className="text-sm text-muted-foreground">Caricamento domande…</p>
           ) : (
-            <select
-              className="w-full rounded-md border px-3 py-2 text-sm"
-              value={questionId}
-              onChange={(e) => onChange(e.target.value)}
-              size={6}
-            >
-              <option value="">— Scegli una domanda —</option>
+            <ul className="max-h-64 space-y-1 overflow-y-auto rounded-lg border border-border p-1">
+              {filtered.length === 0 && (
+                <li className="px-3 py-2 text-sm text-muted-foreground">
+                  Nessuna domanda trovata.
+                </li>
+              )}
               {filtered.map((q) => (
-                <option key={q.id} value={q.id}>
-                  {q.text}
-                </option>
+                <li key={q.id}>
+                  <button
+                    type="button"
+                    onClick={() => onChange(q.id)}
+                    className={cn(
+                      "reglo-focus-ring w-full rounded-md px-3 py-2 text-left text-sm transition-colors duration-[var(--motion-fast)]",
+                      q.id === questionId
+                        ? "bg-primary/10 font-medium text-foreground"
+                        : "hover:bg-secondary",
+                    )}
+                  >
+                    {q.text}
+                  </button>
+                </li>
               ))}
-            </select>
+            </ul>
           )}
           {questions && filtered.length === 200 && (
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               Mostrate le prime 200 — affina il filtro per trovarne altre.
             </p>
           )}

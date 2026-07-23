@@ -17,6 +17,7 @@ import { getSignedAssetUrl } from "@/lib/storage/r2";
 import {
   companyPackageKey,
   copyPackage,
+  deletePackage,
   loadPackage,
   putAsset,
   savePackage,
@@ -164,6 +165,30 @@ export async function createAulaLesson(
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.AULA],
     });
     return { success: true, data: updated };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** Elimina una lezione della company (non i template). Rimuove riga + pacchetto R2. */
+export async function deleteAulaLesson(lessonId: string) {
+  try {
+    const { membership } = await requireAulaTeacher();
+    // Solo lezioni della propria company e non template: i template globali
+    // (companyId null) non si eliminano dalla console autoscuola.
+    const lesson = await prisma.aulaLesson.findFirst({
+      where: { id: lessonId, companyId: membership.companyId, isTemplate: false },
+    });
+    if (!lesson) throw new Error("LESSON_NOT_EDITABLE");
+
+    await deletePackage(lesson.packageR2Key);
+    await prisma.aulaLesson.delete({ where: { id: lesson.id } });
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AULA],
+    });
+    return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
