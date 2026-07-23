@@ -1,14 +1,28 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import {
   createAulaLesson,
+  deleteAulaLesson,
   forkAulaLessonTemplate,
 } from "@/lib/actions/aula.actions";
+import { aulaErrorMessage } from "@/components/pages/Aula/aula-errors";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 type Lesson = {
   id: string;
@@ -40,19 +54,28 @@ export function AulaLessonsPage({
     startTransition(async () => {
       const res = await forkAulaLessonTemplate(id);
       if (res.success) router.refresh();
-      else setMessage(res.message ?? "Errore");
+      else setMessage(aulaErrorMessage(res.message));
     });
   };
 
   const handleCreate = () => {
     startTransition(async () => {
       const res = await createAulaLesson();
-      if (res.success && res.data) router.push(`aula/${res.data.id}`);
-      else setMessage(res.message ?? "Errore");
+      if (res.success && res.data) router.push(`/aula/${res.data.id}`);
+      else setMessage(aulaErrorMessage(res.message));
     });
   };
 
-  const feedback = error ?? message;
+  const handleDelete = (id: string) => {
+    startTransition(async () => {
+      const res = await deleteAulaLesson(id);
+      if (res.success) router.refresh();
+      else setMessage(aulaErrorMessage(res.message));
+    });
+  };
+
+  // `error` arriva dalla server action (può essere un codice tecnico) → traduco.
+  const feedback = error ? aulaErrorMessage(error) : message;
 
   return (
     <div className="space-y-8 p-6">
@@ -86,13 +109,46 @@ export function AulaLessonsPage({
                   <span className="ds-card-title-tertiary truncate">
                     {l.title}
                   </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push(`aula/${l.id}`)}
-                  >
-                    Modifica
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => router.push(`/aula/${l.id}`)}
+                    >
+                      Modifica
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:bg-destructive/5"
+                          title="Elimina lezione"
+                          disabled={pending}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Eliminare la lezione?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            «{l.title}» verrà eliminata definitivamente, insieme
+                            alle sue slide. L&apos;azione non è reversibile.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Annulla</AlertDialogCancel>
+                          <AlertDialogAction
+                            className="bg-destructive text-white hover:bg-destructive/90"
+                            onClick={() => handleDelete(l.id)}
+                          >
+                            Elimina
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </Card>
               </li>
             ))}

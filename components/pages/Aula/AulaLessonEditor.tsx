@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@/i18n/navigation";
 import {
   ChevronDown,
   ChevronUp,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/aula.actions";
 import type { SlideBlock, SlidePackage } from "@/lib/aula/slides";
 import { AulaSlideShow } from "@/components/pages/Aula/AulaSlideShow";
+import { aulaErrorMessage } from "@/components/pages/Aula/aula-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -221,6 +222,17 @@ export function AulaLessonEditor({
     setMessage(null);
   }, []);
 
+  // Avvisa se si chiude/ricarica la scheda con modifiche non salvate.
+  useEffect(() => {
+    if (!dirty) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
   const updateSlide = useCallback(
     (index: number, blocks: SlideBlock[]) => {
       updatePackage({
@@ -290,7 +302,7 @@ export function AulaLessonEditor({
           if (url) setImageUrls((prev) => ({ ...prev, [r2Key]: url }));
           updateBlock(bi, { type: "image", r2Key });
         } else {
-          setMessage(res.message ?? "Upload immagine fallito");
+          setMessage(aulaErrorMessage(res.message, "Upload immagine fallito"));
         }
       } catch (err) {
         // Qualsiasi errore (file non valido, rigetto del server action, ecc.)
@@ -307,18 +319,39 @@ export function AulaLessonEditor({
         setDirty(false);
         setMessage("Salvato.");
       } else {
-        setMessage(res.message ?? "Errore nel salvataggio");
+        setMessage(aulaErrorMessage(res.message, "Errore nel salvataggio"));
       }
     });
   };
 
   const handleStartQuiz = (mode: "LIVE" | "EXAM") => {
     startTransition(async () => {
-      const res = await createAulaLiveSession({ lessonId: lesson.id, count: 5, mode });
+      // Usa le domande scelte dal docente nei blocchi quizRef della lezione;
+      // se non ce ne sono, ripiega su N domande casuali dal capitolo.
+      const questionIds = Array.from(
+        new Set(
+          pkg.slides.flatMap((s) =>
+            s
+              .filter(
+                (b): b is Extract<SlideBlock, { type: "quizRef" }> =>
+                  b.type === "quizRef" && !!b.questionId,
+              )
+              .map((b) => b.questionId),
+          ),
+        ),
+      );
+      const res = await createAulaLiveSession({
+        lessonId: lesson.id,
+        mode,
+        // count è richiesto dal tipo; viene ignorato quando passiamo questionIds
+        // espliciti (resolveQuestionIds dà priorità a quelli).
+        count: 5,
+        ...(questionIds.length > 0 ? { questionIds } : {}),
+      });
       if (res.success && res.data) {
-        router.push(`live/${res.data.code}`);
+        router.push(`/aula/live/${res.data.code}`);
       } else {
-        setMessage(res.message ?? "Impossibile avviare il quiz");
+        setMessage(aulaErrorMessage(res.message, "Impossibile avviare il quiz"));
       }
     });
   };
