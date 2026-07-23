@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type Question = {
   id: string;
@@ -38,6 +42,42 @@ type Snapshot = {
 
 const POLL_MS = 1500;
 const STORAGE_KEY = (code: string) => `aula:rejoin:${code}`;
+
+/** Bottone Vero/Falso grande — filled sui token semantici positive/destructive. */
+function ChoiceButton({
+  tone,
+  selected,
+  onClick,
+  children,
+  className,
+}: {
+  tone: "positive" | "destructive";
+  selected?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const filled =
+    tone === "positive"
+      ? "bg-positive text-white"
+      : "bg-destructive text-white";
+  const soft =
+    tone === "positive"
+      ? "border border-positive/30 bg-positive/5 text-positive"
+      : "border border-destructive/30 bg-destructive/5 text-destructive";
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "reglo-focus-ring reglo-interactive flex-1 rounded-lg py-3 text-base font-semibold active:scale-[0.97]",
+        selected === undefined || selected ? filled : soft,
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
 /**
  * Reglo Aula — player studente (anonimo, da QR).
@@ -146,22 +186,33 @@ export function AulaStudentPlayer({ code }: { code: string }) {
   // ── Schermata nome ──
   if (!participantId) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6">
-        <h1 className="text-xl font-semibold">Entra nel quiz</h1>
-        <input
-          className="w-64 rounded-md border px-3 py-2"
-          placeholder="Il tuo nome"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        {error && <p className="text-red-600">{error}</p>}
-        <button
-          className="rounded-md bg-pink-500 px-6 py-2 text-white disabled:opacity-50"
-          disabled={joining || name.trim().length === 0}
-          onClick={() => doJoin(name.trim())}
-        >
-          Entra
-        </button>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-5 p-6">
+        <div className="w-full max-w-xs space-y-5 text-center">
+          <div className="space-y-1">
+            <h1 className="ds-title">Entra nel quiz</h1>
+            <p className="text-sm text-muted-foreground">
+              Inserisci un nome per partecipare.
+            </p>
+          </div>
+          <Input
+            className="text-center"
+            placeholder="Il tuo nome"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && name.trim()) doJoin(name.trim());
+            }}
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={joining || name.trim().length === 0}
+            onClick={() => doJoin(name.trim())}
+          >
+            Entra
+          </Button>
+        </div>
       </div>
     );
   }
@@ -171,7 +222,7 @@ export function AulaStudentPlayer({ code }: { code: string }) {
     if (snap.status === "LOBBY" || !snap.questions) {
       return (
         <div className="flex min-h-screen items-center justify-center p-6">
-          <p className="text-lg text-neutral-600">In attesa del docente…</p>
+          <p className="text-lg text-muted-foreground">In attesa del docente…</p>
         </div>
       );
     }
@@ -183,9 +234,11 @@ export function AulaStudentPlayer({ code }: { code: string }) {
       const total = snap.you?.total ?? snap.totalQuestions;
       return (
         <div className="mx-auto max-w-md space-y-6 p-6">
-          <div className="text-center">
-            <p className="text-sm text-neutral-500">Il tuo punteggio</p>
-            <p className="text-5xl font-bold text-pink-600">
+          <div className="rounded-card-primary border border-border bg-card py-8 text-center shadow-card">
+            <p className="text-sm font-medium text-muted-foreground">
+              Il tuo punteggio
+            </p>
+            <p className="mt-1 text-5xl font-bold text-primary">
               {score}/{total}
             </p>
           </div>
@@ -194,26 +247,30 @@ export function AulaStudentPlayer({ code }: { code: string }) {
               const given = examAnswers[q.id];
               const correct = snap.you?.perQuestion?.[q.id];
               return (
-                <li key={q.id} className="rounded-lg border p-3">
-                  <p className="mb-1 text-sm text-neutral-500">Domanda {i + 1}</p>
-                  <p className="mb-2">{q.text}</p>
-                  <div className="flex items-center gap-2 text-sm">
-                    <span
-                      className={
-                        "rounded px-2 py-0.5 " +
-                        (given === undefined
-                          ? "bg-neutral-100 text-neutral-500"
+                <li
+                  key={q.id}
+                  className="rounded-lg border border-border bg-card p-4 shadow-card"
+                >
+                  <p className="mb-1 ds-caption text-muted-foreground">
+                    Domanda {i + 1}
+                  </p>
+                  <p className="mb-2.5 text-[15px]">{q.text}</p>
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge
+                      variant={
+                        given === undefined
+                          ? "secondary"
                           : correct
-                            ? "bg-green-100 text-green-700"
-                            : "bg-red-100 text-red-700")
+                            ? "success"
+                            : "destructive"
                       }
                     >
                       {given === undefined
                         ? "Non risposto"
                         : `Tua: ${given ? "Vero" : "Falso"}`}
-                    </span>
+                    </Badge>
                     {q.correctAnswer != null && (
-                      <span className="text-neutral-500">
+                      <span className="text-muted-foreground">
                         Corretta: {q.correctAnswer ? "Vero" : "Falso"}
                       </span>
                     )}
@@ -232,39 +289,42 @@ export function AulaStudentPlayer({ code }: { code: string }) {
     ).length;
     return (
       <div className="mx-auto max-w-md space-y-5 p-6">
-        <div className="sticky top-0 -mx-6 border-b bg-white/90 px-6 py-3 text-center text-sm text-neutral-600 backdrop-blur">
+        <div className="sticky top-0 -mx-6 border-b border-border bg-card/95 px-6 py-3 text-center text-sm font-medium text-muted-foreground backdrop-blur">
           {answeredCount}/{snap.questions.length} risposte • attendi il docente per la correzione
         </div>
         <ol className="space-y-4">
           {snap.questions.map((q, i) => {
             const given = examAnswers[q.id];
             return (
-              <li key={q.id} className="space-y-3 rounded-lg border p-4">
-                <p className="text-sm text-neutral-500">Domanda {i + 1}</p>
+              <li
+                key={q.id}
+                className="space-y-3 rounded-lg border border-border bg-card p-4 shadow-card"
+              >
+                <p className="ds-caption text-muted-foreground">Domanda {i + 1}</p>
                 {q.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={q.imageUrl} alt="" className="max-h-40" />
+                  <img
+                    src={q.imageUrl}
+                    alt=""
+                    className="max-h-40 rounded-md border border-border"
+                  />
                 )}
-                <p>{q.text}</p>
+                <p className="text-[15px]">{q.text}</p>
                 <div className="flex gap-3">
-                  <button
-                    className={
-                      "flex-1 rounded-md px-4 py-2 text-white " +
-                      (given === true ? "bg-green-600" : "bg-green-500/70")
-                    }
+                  <ChoiceButton
+                    tone="positive"
+                    selected={given === true}
                     onClick={() => answerExam(q.id, true)}
                   >
                     Vero
-                  </button>
-                  <button
-                    className={
-                      "flex-1 rounded-md px-4 py-2 text-white " +
-                      (given === false ? "bg-red-600" : "bg-red-500/70")
-                    }
+                  </ChoiceButton>
+                  <ChoiceButton
+                    tone="destructive"
+                    selected={given === false}
                     onClick={() => answerExam(q.id, false)}
                   >
                     Falso
-                  </button>
+                  </ChoiceButton>
                 </div>
               </li>
             );
@@ -280,35 +340,41 @@ export function AulaStudentPlayer({ code }: { code: string }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 p-6">
       {(!snap || snap.status === "LOBBY") && (
-        <p className="text-lg text-neutral-600">In attesa del docente…</p>
+        <p className="text-lg text-muted-foreground">In attesa del docente…</p>
       )}
 
       {snap?.status === "QUESTION_OPEN" && snap.question && (
         <div className="flex w-full max-w-md flex-col items-center gap-5">
-          <p className="text-sm text-neutral-500">
+          <Badge variant="secondary">
             Domanda {(snap.currentIndex ?? 0) + 1}/{snap.totalQuestions}
-          </p>
+          </Badge>
           {snap.question.imageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={snap.question.imageUrl} alt="" className="max-h-48" />
+            <img
+              src={snap.question.imageUrl}
+              alt=""
+              className="max-h-48 rounded-lg border border-border"
+            />
           )}
-          <p className="text-center text-lg">{snap.question.text}</p>
+          <p className="text-center text-lg font-medium">{snap.question.text}</p>
           {alreadyAnswered ? (
-            <p className="text-neutral-500">Risposta inviata ✓</p>
+            <p className="text-muted-foreground">Risposta inviata ✓</p>
           ) : (
-            <div className="flex gap-4">
-              <button
-                className="rounded-md bg-green-500 px-8 py-3 text-white"
+            <div className="flex w-full gap-4">
+              <ChoiceButton
+                tone="positive"
                 onClick={() => answer(true)}
+                className="py-4 text-lg"
               >
                 Vero
-              </button>
-              <button
-                className="rounded-md bg-red-500 px-8 py-3 text-white"
+              </ChoiceButton>
+              <ChoiceButton
+                tone="destructive"
                 onClick={() => answer(false)}
+                className="py-4 text-lg"
               >
                 Falso
-              </button>
+              </ChoiceButton>
             </div>
           )}
         </div>
@@ -318,21 +384,21 @@ export function AulaStudentPlayer({ code }: { code: string }) {
         <div className="text-center">
           {snap.you?.answered ? (
             <p
-              className={
-                "text-3xl font-bold " +
-                (snap.you.correct ? "text-green-600" : "text-red-600")
-              }
+              className={cn(
+                "text-4xl font-bold",
+                snap.you.correct ? "text-positive" : "text-destructive",
+              )}
             >
               {snap.you.correct ? "Giusto!" : "Sbagliato"}
             </p>
           ) : (
-            <p className="text-2xl text-neutral-500">Non hai risposto</p>
+            <p className="text-2xl text-muted-foreground">Non hai risposto</p>
           )}
         </div>
       )}
 
       {snap?.status === "ENDED" && (
-        <p className="text-2xl font-semibold">Quiz terminato. Grazie!</p>
+        <p className="ds-title">Quiz terminato. Grazie!</p>
       )}
     </div>
   );
