@@ -2,10 +2,26 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ChevronLeft,
+  ChevronRight,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
+import {
   resolveAulaImageUrl,
   resolveAulaQuizRefs,
 } from "@/lib/actions/aula.actions";
 import type { Slide, SlidePackage } from "@/lib/aula/slides";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+/**
+ * Overlay proiettore = tema scuro deliberato: il fondo near-black e la chrome a
+ * white/alpha sono funzionali alla proiezione, NON i token light del DS. Qui
+ * tokenizziamo solo i brand accent (primary/positive) e usiamo i Button DS.
+ */
+const DARK_BTN =
+  "border border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white";
 
 type QuizRefView = {
   text: string;
@@ -185,7 +201,7 @@ export function AulaSlideShow({
         <div className="flex min-h-full items-center justify-center p-12">
           <div className="mx-auto w-full max-w-5xl space-y-8 text-center">
             {!slide || slide.length === 0 ? (
-              <p className="text-3xl text-neutral-500">Slide vuota</p>
+              <p className="text-3xl text-white/40">Slide vuota</p>
             ) : (
               groupConsecutiveImages(slide).map((group, gi) =>
                 group.kind === "images" ? (
@@ -220,37 +236,42 @@ export function AulaSlideShow({
 
       {/* Barra comandi */}
       <div className="flex items-center justify-between gap-4 border-t border-white/10 bg-black/40 px-6 py-3">
-        <button
-          className="rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-30"
+        <Button
+          variant="ghost"
+          size="sm"
+          className={DARK_BTN}
           disabled={index === 0}
           onClick={() => go(-1)}
         >
-          ← Precedente
-        </button>
-        <span className="text-sm text-neutral-400">
+          <ChevronLeft />
+          Precedente
+        </Button>
+        <span className="text-sm tabular-nums text-white/60">
           {slides.length === 0 ? "0 / 0" : `${index + 1} / ${slides.length}`}
         </span>
         <div className="flex items-center gap-2">
-          <button
-            className="rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-30"
+          <Button
+            variant="ghost"
+            size="sm"
+            className={DARK_BTN}
             disabled={index >= slides.length - 1}
             onClick={() => go(1)}
           >
-            Successiva →
-          </button>
-          <button
-            className="rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10"
+            Successiva
+            <ChevronRight />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(DARK_BTN, "size-9")}
             onClick={toggleFullscreen}
             title={isFullscreen ? "Esci da schermo intero" : "Schermo intero"}
           >
-            {isFullscreen ? "⤢" : "⛶"}
-          </button>
-          <button
-            className="rounded-md bg-pink-500 px-3 py-1.5 text-sm font-medium hover:bg-pink-600"
-            onClick={onClose}
-          >
+            {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+          </Button>
+          <Button size="sm" onClick={onClose}>
             Esci
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -306,12 +327,12 @@ function PresImage({
           className={`${imgH} max-w-full rounded-lg object-contain`}
         />
       ) : (
-        <div className="flex h-56 w-full items-center justify-center rounded-lg bg-white/5 text-lg text-neutral-500">
+        <div className="flex h-56 w-full items-center justify-center rounded-lg bg-white/5 text-lg text-white/50">
           Caricamento immagine…
         </div>
       )}
       {block.caption && (
-        <figcaption className="text-lg text-neutral-400">{block.caption}</figcaption>
+        <figcaption className="text-lg text-white/60">{block.caption}</figcaption>
       )}
     </figure>
   );
@@ -330,17 +351,17 @@ function SlideBlockView({
   }
   if (block.type === "text") {
     return (
-      <p className="whitespace-pre-wrap text-3xl leading-relaxed text-neutral-100">
+      <p className="whitespace-pre-wrap text-3xl leading-relaxed text-white/90">
         {block.text}
       </p>
     );
   }
   if (block.type === "bullets") {
     return (
-      <ul className="mx-auto max-w-3xl space-y-4 text-left text-3xl text-neutral-100">
+      <ul className="mx-auto max-w-3xl space-y-4 text-left text-3xl text-white/90">
         {block.items.map((item, i) => (
           <li key={i} className="flex gap-3">
-            <span className="text-pink-400">•</span>
+            <span className="text-primary">•</span>
             <span>{item}</span>
           </li>
         ))}
@@ -352,7 +373,7 @@ function SlideBlockView({
   // quizRef
   const q = quizRefs[block.questionId];
   if (!q) {
-    return <p className="text-2xl text-neutral-500">Caricamento domanda…</p>;
+    return <p className="text-2xl text-white/50">Caricamento domanda…</p>;
   }
   return <PresQuizRef q={q} />;
 }
@@ -365,10 +386,12 @@ function SlideBlockView({
 function PresQuizRef({ q }: { q: QuizRefView }) {
   const [revealed, setRevealed] = useState(false);
   const optionClass = (isThisOne: boolean) =>
-    "rounded-md px-6 py-2 " +
-    (revealed && isThisOne
-      ? "bg-green-500/20 text-green-300 ring-1 ring-green-400"
-      : "bg-white/5 text-neutral-300");
+    cn(
+      "rounded-lg px-6 py-2",
+      revealed && isThisOne
+        ? "bg-positive/20 text-positive ring-1 ring-positive"
+        : "bg-white/5 text-white/70",
+    );
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {q.imageUrl && (
@@ -385,16 +408,11 @@ function PresQuizRef({ q }: { q: QuizRefView }) {
         <span className={optionClass(!q.correctAnswer)}>Falso</span>
       </div>
       {revealed ? (
-        <p className="text-xl text-neutral-400">
+        <p className="text-xl text-white/60">
           Risposta corretta: {q.correctAnswer ? "Vero" : "Falso"}
         </p>
       ) : (
-        <button
-          className="rounded-md bg-pink-500 px-6 py-2 text-lg font-medium text-white hover:bg-pink-600"
-          onClick={() => setRevealed(true)}
-        >
-          Vedi soluzione
-        </button>
+        <Button onClick={() => setRevealed(true)}>Vedi soluzione</Button>
       )}
     </div>
   );
