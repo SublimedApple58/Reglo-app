@@ -21,11 +21,11 @@ Auto-clear: `updateStudentPhase` azzera `examReady/At/By` quando l'allievo esce 
 | `app/api/autoscuole/students/[id]/exam-ready/route.ts` | `PATCH { ready }` → `setStudentExamReady` (usato da mobile). |
 | `app/api/autoscuole/instructor-settings/route.ts` | Aggiunge `studentPhase`+`examReady`+`examReadyAt` all'array `students` (fonte primaria del picker esame mobile). |
 | `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Toggle "Pronto per l'esame" nel dettaglio (sezione "Esame pratico", solo PRATICA) + pill verde "Pronto" nelle righe + contatore/filtro "Solo pronti" nella lista pratica. |
-| `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` | Picker "Nuovo esame": badge "Pronto" + anello verde sull'avatar + ordinamento pronti-in-cima + tooltip "pronto da N giorni". |
+| `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` | **Creazione** ("Nuovo esame") **e modifica** esame: badge "Pronto" + anello verde sull'avatar + ordinamento pronti-in-cima + tooltip "pronto da N giorni". Nel pannello **modifica** il trattamento è sia sul browse "Aggiungi allievi" (badge/anello/sort) sia sulla lista "Allievi iscritti" (badge/anello). |
 
 ## Comportamento / chicche
 
-- **Cuore**: nei picker esame (web + mobile) i pronti hanno badge "Pronto" + anello verde e **salgono in cima**. Selezionare un non-pronto è comunque permesso (nessun blocco).
+- **Cuore**: nei picker esame (web + mobile) i pronti hanno badge "Pronto" + anello verde e **salgono in cima**. Selezionare un non-pronto è comunque permesso (nessun blocco). Copre **sia creazione sia modifica** esame (fase 2, 2026-07-24): web = pannello modifica (browse + lista iscritti); mobile = `exam-manage` "aggiungi allievi".
 - **A (audit)**: tooltip badge web = "Segnato pronto per l'esame da N giorni" (da `examReadyAt`).
 - **B (contatore/filtro)**: lista pratica web mostra "N allievi pronti" + toggle "Solo pronti".
 - **C (anello)**: avatar dei pronti con ring verde nel picker.

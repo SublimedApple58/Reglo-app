@@ -4137,7 +4137,10 @@ export function AutoscuoleAgendaPage({
               .filter((s): s is (typeof students)[number] => Boolean(s));
             const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
             const examQuery = examPanelStudentSearch.trim().toLowerCase();
-            const examBrowse = examAddable.filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery));
+            const examBrowse = examAddable
+              .filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery))
+              // Come nel picker di creazione: i "pronti" salgono in cima anche qui.
+              .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
@@ -4298,11 +4301,26 @@ export function AutoscuoleAgendaPage({
                       {draftStudents.map((s, idx) => (
                         <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                           <span className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                            <span
+                              className={cn(
+                                "flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]",
+                                s.examReady && "ring-2 ring-[#1a7f50]",
+                              )}
+                            >
                               {examStudentInitials(s.firstName, s.lastName)}
                             </span>
                             <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                                {s.examReady && (
+                                  <span
+                                    title={examReadyTitle(s.examReadyAt)}
+                                    className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                  >
+                                    Pronto
+                                  </span>
+                                )}
+                              </span>
                               {s.licenseCategory ? (
                                 <span className="truncate text-[12px] font-medium text-[#929292]">
                                   Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
@@ -4434,11 +4452,26 @@ export function AutoscuoleAgendaPage({
                           examBrowse.map((s, idx) => (
                             <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
                               <span className="flex min-w-0 items-center gap-2.5">
-                                <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                <span
+                                  className={cn(
+                                    "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                                    s.examReady && "ring-2 ring-[#1a7f50]",
+                                  )}
+                                >
                                   {examStudentInitials(s.firstName, s.lastName)}
                                 </span>
                                 <span className="flex min-w-0 flex-col">
-                                  <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                  <span className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                    {s.examReady && (
+                                      <span
+                                        title={examReadyTitle(s.examReadyAt)}
+                                        className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                      >
+                                        Pronto
+                                      </span>
+                                    )}
+                                  </span>
                                   {s.licenseCategory ? (
                                     <span className="truncate text-[11.5px] font-medium text-[#929292]">
                                       Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
