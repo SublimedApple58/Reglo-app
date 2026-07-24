@@ -16,6 +16,7 @@ import {
 } from "@/lib/autoscuole/communications";
 import { cleanupAutoscuolaVoiceRetention } from "@/lib/autoscuole/voice";
 import { processAutoscuolaTheoryReminders } from "@/lib/autoscuole/theory-reminders";
+import { processExamReadyNudge } from "@/lib/autoscuole/exam-ready-nudge";
 
 export const autoscuoleReminders = schedules.task({
   id: "autoscuole-reminders",
@@ -46,6 +47,7 @@ export const autoscuoleReminders = schedules.task({
     await safe("appointmentReminders", () => processAutoscuolaAppointmentReminders({ prisma }));
     await safe("caseDeadlines", () => processAutoscuolaCaseDeadlines({ prisma }));
     await safe("theoryReminders", () => processAutoscuolaTheoryReminders({ prisma, now }));
+    await safe("examReadyNudge", () => processExamReadyNudge({ prisma, now }));
     if (now.getUTCMinutes() === 0) {
       await safe("voiceRetention", () => cleanupAutoscuolaVoiceRetention({ prisma, now }));
     }
