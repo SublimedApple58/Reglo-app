@@ -143,17 +143,12 @@ export function AutoscuoleNotifichePage() {
           <LoadingDots className="min-h-[1.5em]" />
         </div>
       ) : items.length === 0 ? (
-        <div className="px-5 pb-10 pt-8 text-center">
-          <Image
-            src="/images/menu/bell-3d.png"
-            alt=""
-            width={56}
-            height={56}
-            className="mx-auto mb-3.5 block h-[56px] w-[56px] object-contain opacity-45 grayscale"
-          />
-          <p className="text-[16px] font-semibold text-foreground">Nessuna notifica</p>
-          <p className="mt-1 text-[14px] font-medium text-[#717171]">
-            Ti avvisiamo qui quando un allievo annulla una guida.
+        <div className="flex flex-col items-center justify-center px-5 py-24 text-center">
+          <p className="text-[18px] font-semibold text-foreground">
+            Ancora nessuna notifica
+          </p>
+          <p className="mt-2 max-w-[420px] text-[15px] font-medium leading-relaxed text-[#717171]">
+            Al momento non hai nessuna notifica. Ti avviseremo non appena ne riceverai una.
           </p>
         </div>
       ) : (
