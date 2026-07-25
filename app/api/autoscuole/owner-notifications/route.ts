@@ -6,6 +6,7 @@ import {
   listAutoscuolaNotifications,
   markAutoscuolaNotificationsRead,
   deleteAutoscuolaNotifications,
+  deleteAutoscuolaNotification,
 } from "@/lib/autoscuole/notifications";
 
 /**
@@ -54,8 +55,8 @@ export async function POST() {
   }
 }
 
-// Delete all notifications ("cestino").
-export async function DELETE() {
+// Delete notifications: a single one with `?id=...` (per-row ✕), or all of them.
+export async function DELETE(req: Request) {
   try {
     const { membership } = await requireServiceAccess("AUTOSCUOLE");
     if (membership.role !== "admin" && !isOwner(membership.autoscuolaRole)) {
@@ -64,7 +65,12 @@ export async function DELETE() {
         { status: 403 },
       );
     }
-    await deleteAutoscuolaNotifications(membership.companyId);
+    const id = new URL(req.url).searchParams.get("id");
+    if (id) {
+      await deleteAutoscuolaNotification(membership.companyId, id);
+    } else {
+      await deleteAutoscuolaNotifications(membership.companyId);
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

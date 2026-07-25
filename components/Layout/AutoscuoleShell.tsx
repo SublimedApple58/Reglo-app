@@ -38,8 +38,6 @@ import {
   NovitaDialog,
   type NovitaEntryKey,
 } from "@/components/Layout/NovitaDialog";
-import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
-import { OwnerNotificationsBell } from "@/components/Layout/OwnerNotificationsBell";
 import { FeedbackDialog } from "@/components/Layout/FeedbackDialog";
 import { isSecretaryOnly, isServiceActive } from "@/lib/services";
 import { cn } from "@/lib/utils";
@@ -80,8 +78,10 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
   }, [isAgenda]);
   const isWideLayout = isAgenda && agendaStoredMode !== "classic";
   const [novitaEntry, setNovitaEntry] = React.useState<NovitaEntryKey | null>(null);
-  const [comunicatoOpen, setComunicatoOpen] = React.useState(false);
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  // Avvisi non letti (annullamenti allievi): pallino rosso sulla voce "Notifiche"
+  // del menu. Si azzera aprendo la pagina /notifiche (mark-read lato server).
+  const [notifUnread, setNotifUnread] = React.useState(0);
   // Risposte del team Reglo non ancora lette: pallino sull'hamburger + conteggio
   // sulla voce "Centro assistenza". Si azzera aprendo la chat (mark-read server).
   const [supportUnread, setSupportUnread] = React.useState(0);
@@ -99,6 +99,32 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
       clearInterval(interval);
     };
     // pathname: rientrando dalla chat il badge si aggiorna subito.
+  }, [session, pathname]);
+
+  React.useEffect(() => {
+    if (!session) return;
+    let active = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/autoscuole/owner-notifications", {
+          cache: "no-store",
+        });
+        if (!res.ok) return; // 403 per chi non è titolare → nessun pallino
+        const payload = await res.json().catch(() => null);
+        if (active && payload?.success && payload.data) {
+          setNotifUnread(payload.data.unreadCount ?? 0);
+        }
+      } catch {
+        // silent — non bloccante
+      }
+    };
+    void load();
+    const interval = setInterval(() => void load(), 60_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+    // pathname: uscendo dalla pagina notifiche il pallino si aggiorna subito.
   }, [session, pathname]);
 
   const handleCompanySwitch = React.useCallback(
@@ -154,8 +180,6 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
           {/* Avatar sede + hamburger */}
           <div className="flex items-center justify-end gap-2.5">
-            {/* Campanella notifiche titolare (annullamenti allievi) */}
-            {serviceActive && <OwnerNotificationsBell />}
             {/* Avatar → switcher autoscuola */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -254,7 +278,7 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     aria-label="Menu"
                   >
                     <Menu className="h-[17px] w-[17px] text-foreground" strokeWidth={1.9} />
-                    {supportUnread > 0 && (
+                    {(supportUnread > 0 || notifUnread > 0) && (
                       <span className="absolute -right-px -top-px h-2.5 w-2.5 rounded-full border-2 border-white bg-[#c13515]" />
                     )}
                   </button>
@@ -296,11 +320,14 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                   )}
                   {!secretaryOnly && (
                     <DropdownMenuItem
-                      onClick={() => setComunicatoOpen(true)}
+                      onClick={() => router.push("/user/autoscuole/notifiche")}
                       className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
                     >
                       <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                      <span className="text-[15px] font-medium">Invia comunicato</span>
+                      <span className="text-[15px] font-medium">Notifiche</span>
+                      {notifUnread > 0 && (
+                        <span className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-[#c13515]" />
+                      )}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem
@@ -397,7 +424,6 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
 
       {/* Dialog dal menu hamburger */}
       <NovitaDialog entry={novitaEntry} onClose={() => setNovitaEntry(null)} />
-      <ComunicatoDialog open={comunicatoOpen} onOpenChange={setComunicatoOpen} />
       <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </div>
   );

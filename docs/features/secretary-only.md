@@ -34,7 +34,7 @@ flag). Letto con `isSecretaryOnly(company?.services)`:
   default `voice`; effetto che forza `configTab="voice"` quando l'atom company
   si carica dopo il primo render).
 - `components/Layout/AutoscuoleShell.tsx` — il menu hamburger nasconde le voci
-  operative "guida" (Ore guida, Invia comunicato).
+  operative "guida" (Ore guida, Notifiche).
 
 ## Seed di test (dev)
 `scripts/seed-secretary-only-company.mjs` — crea (idempotente) "Autoscuola

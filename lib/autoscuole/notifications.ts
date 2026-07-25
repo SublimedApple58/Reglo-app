@@ -62,9 +62,18 @@ export async function markAutoscuolaNotificationsRead(
   });
 }
 
-/** Delete all of a company's notifications (the bell "trash" action). */
+/** Delete all of a company's notifications (the "clear all" action). */
 export async function deleteAutoscuolaNotifications(
   companyId: string,
 ): Promise<void> {
   await prisma.autoscuolaNotification.deleteMany({ where: { companyId } });
+}
+
+/** Delete a single notification (per-row dismiss ✕). Company-scoped so a
+ *  stray id can never touch another autoscuola's rows; no-op if not found. */
+export async function deleteAutoscuolaNotification(
+  companyId: string,
+  id: string,
+): Promise<void> {
+  await prisma.autoscuolaNotification.deleteMany({ where: { companyId, id } });
 }
