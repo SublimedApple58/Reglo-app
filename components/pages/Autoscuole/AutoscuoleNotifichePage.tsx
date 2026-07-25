@@ -7,7 +7,6 @@ import { X } from "lucide-react";
 import { ComunicatoDialog } from "@/components/Layout/ComunicatoDialog";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
-import { cn } from "@/lib/utils";
 
 type NotificationItem = {
   id: string;
@@ -105,23 +104,23 @@ export function AutoscuoleNotifichePage() {
   }, [loadAndMarkRead]);
 
   return (
-    <FadeIn className="mx-auto w-full max-w-[680px]">
-      {/* Titolo pagina */}
-      <h1 className="mb-6 text-[30px] font-bold tracking-[-0.5px] text-foreground">
+    <FadeIn className="mx-auto w-full max-w-[820px] pt-1">
+      {/* Titolo pagina (misure da inspo Airbnb: ~32px, respiro ampio sotto) */}
+      <h1 className="mb-9 text-[32px] font-bold leading-none tracking-[-0.6px] text-foreground">
         Notifiche
       </h1>
 
       {/* Card "Comunica a tutti" — apre il form esistente */}
-      <div className="mb-8 flex items-center gap-4 rounded-[18px] border border-border bg-[#f7f7f7] px-5 py-4">
+      <div className="mb-10 flex items-center gap-4 rounded-[16px] border border-border bg-[#f7f7f7] px-5 py-4">
         <Image
           src="/images/menu/bell-gold.png"
           alt=""
-          width={52}
-          height={52}
-          className="h-[52px] w-[52px] shrink-0 object-contain"
+          width={48}
+          height={48}
+          className="h-12 w-12 shrink-0 object-contain"
         />
         <div className="min-w-0 flex-1">
-          <div className="text-[16px] font-bold tracking-[-0.2px] text-foreground">
+          <div className="text-[15.5px] font-bold tracking-[-0.2px] text-foreground">
             Comunica a tutti
           </div>
           <p className="mt-0.5 text-[13.5px] font-medium leading-snug text-[#6a6a6a]">
@@ -139,37 +138,31 @@ export function AutoscuoleNotifichePage() {
 
       {/* Elenco avvisi ricevuti */}
       {loading ? (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-24">
           <LoadingDots className="min-h-[1.5em]" />
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center px-5 py-24 text-center">
-          <p className="text-[18px] font-semibold text-foreground">
+        <div className="flex min-h-[420px] flex-col items-center justify-center px-5 text-center">
+          <p className="text-[17px] font-semibold text-foreground">
             Ancora nessuna notifica
           </p>
-          <p className="mt-2 max-w-[420px] text-[15px] font-medium leading-relaxed text-[#717171]">
+          <p className="mt-1.5 max-w-[460px] text-[15px] leading-relaxed text-[#717171]">
             Al momento non hai nessuna notifica. Ti avviseremo non appena ne riceverai una.
           </p>
         </div>
       ) : (
         <div className="flex flex-col">
           {items.map((n) => (
-            <div
-              key={n.id}
-              className={cn(
-                "group relative flex items-center gap-4 rounded-[14px] px-3 py-4 transition-colors hover:bg-[#f7f7f7]",
-                !n.read && "bg-[#fbf8f6]",
-              )}
-            >
-              <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[14px] font-semibold text-[#484848]">
+            <div key={n.id} className="group flex items-start gap-4 py-5">
+              <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full bg-[#f0f0f0] text-[15px] font-semibold text-[#484848]">
                 {initialsOf(n.studentName)}
               </span>
-              <div className="min-w-0 flex-1 pr-2">
-                <p className="text-[15px] leading-[1.45] text-foreground">
+              <div className="min-w-0 flex-1 pt-0.5 pr-2">
+                <p className="text-[15px] leading-[1.5] text-foreground">
                   <span className="font-semibold">{n.studentName ?? "Un allievo"}</span>{" "}
                   ha annullato la guida di {formatGuida(n.startsAt)}.
                 </p>
-                <p className="mt-0.5 text-[13px] font-medium text-[#717171]">
+                <p className="mt-1 text-[13px] font-medium text-[#717171]">
                   {relativeTime(n.createdAt)}
                 </p>
               </div>
@@ -178,7 +171,7 @@ export function AutoscuoleNotifichePage() {
                 onClick={() => dismiss(n.id)}
                 aria-label="Elimina notifica"
                 title="Elimina notifica"
-                className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#717171] transition-colors hover:bg-[#ededed] hover:text-foreground"
+                className="-mt-1 flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-[#717171] transition-colors hover:bg-[#ededed] hover:text-foreground"
               >
                 <X className="h-[18px] w-[18px]" strokeWidth={2} />
               </button>
