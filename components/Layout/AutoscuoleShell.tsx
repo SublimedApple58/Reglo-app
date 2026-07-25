@@ -295,6 +295,18 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     <UserProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                     <span className="text-[15px] font-medium">Area personale</span>
                   </DropdownMenuItem>
+                  {!secretaryOnly && (
+                    <DropdownMenuItem
+                      onClick={() => router.push("/user/autoscuole/notifiche")}
+                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
+                    >
+                      <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                      <span className="text-[15px] font-medium">Notifiche</span>
+                      {notifUnread > 0 && (
+                        <span className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-[#c13515]" />
+                      )}
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem
                     onClick={() => router.push("/user/autoscuole?tab=settings")}
                     className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
@@ -316,18 +328,6 @@ export function AutoscuoleShell({ children }: { children: React.ReactNode }) {
                     >
                       <ClockProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
                       <span className="text-[15px] font-medium">Ore guida</span>
-                    </DropdownMenuItem>
-                  )}
-                  {!secretaryOnly && (
-                    <DropdownMenuItem
-                      onClick={() => router.push("/user/autoscuole/notifiche")}
-                      className="cursor-pointer gap-3 rounded-xl px-3 py-2.5"
-                    >
-                      <BellProtoIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
-                      <span className="text-[15px] font-medium">Notifiche</span>
-                      {notifUnread > 0 && (
-                        <span className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-[#c13515]" />
-                      )}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem
