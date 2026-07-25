@@ -1,0 +1,15 @@
+# Approvazione build script. pnpm 11.15+ legge `allowBuilds` da questo file;
+# le versioni più vecchie usano `pnpm.onlyBuiltDependencies` in package.json.
+# Teniamo entrambi così l'ambiente funziona a prescindere dalla versione di pnpm.
+allowBuilds:
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@swc/core': true
+  bufferutil: true
+  canvas: true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true
