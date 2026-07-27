@@ -43,9 +43,11 @@ type Snapshot = {
 
 const POLL_MS = 1500;
 
-/** CTA accent (gialla) del docente — usata per i comandi di "reveal"/"correggi". */
+/** CTA accent (gialla) del docente — usata per i comandi di "reveal"/"correggi".
+ * Giallo brand esplicito: il token `accent` del DS è un grigio neutro di
+ * superficie, NON il giallo — su una barra chiara la CTA sparirebbe. */
 const ACCENT_BTN =
-  "bg-accent text-foreground border border-transparent hover:bg-accent/90";
+  "bg-[#FACC15] text-[#1a1a2e] border border-transparent hover:bg-[#FACC15]/85";
 
 /** Riga conteggi giusto / sbagliato / non risposto. */
 function CountsRow({

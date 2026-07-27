@@ -17,8 +17,11 @@ import { cn } from "@/lib/utils";
 
 /**
  * Overlay proiettore = tema scuro deliberato: il fondo near-black e la chrome a
- * white/alpha sono funzionali alla proiezione, NON i token light del DS. Qui
- * tokenizziamo solo i brand accent (primary/positive) e usiamo i Button DS.
+ * white/alpha sono funzionali alla proiezione, NON i token light del DS.
+ * REGOLA: qui niente token light-mode (primary = navy → invisibile su nero);
+ * colori hardcoded light-on-dark (bianco, giallo #FACC15, positive che è
+ * verde e resta leggibile). Button DS solo con override espliciti (DARK_BTN
+ * o bianco pieno per l'azione primaria).
  */
 const DARK_BTN =
   "border border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white";
@@ -269,7 +272,13 @@ export function AulaSlideShow({
           >
             {isFullscreen ? <Minimize2 /> : <Maximize2 />}
           </Button>
-          <Button size="sm" onClick={onClose}>
+          {/* Azione primaria su fondo dark: bianco pieno (il Button default
+              navy sparirebbe sul nero del proiettore). */}
+          <Button
+            size="sm"
+            className="bg-white text-neutral-950 hover:bg-white/90"
+            onClick={onClose}
+          >
             Esci
           </Button>
         </div>
@@ -361,7 +370,9 @@ function SlideBlockView({
       <ul className="mx-auto max-w-3xl space-y-4 text-left text-3xl text-white/90">
         {block.items.map((item, i) => (
           <li key={i} className="flex gap-3">
-            <span className="text-primary">•</span>
+            {/* Superficie dark del proiettore: niente token light (primary =
+                navy → invisibile su nero). Accent giallo brand hardcoded. */}
+            <span className="text-[#FACC15]">•</span>
             <span>{item}</span>
           </li>
         ))}
@@ -412,7 +423,9 @@ function PresQuizRef({ q }: { q: QuizRefView }) {
           Risposta corretta: {q.correctAnswer ? "Vero" : "Falso"}
         </p>
       ) : (
-        <Button onClick={() => setRevealed(true)}>Vedi soluzione</Button>
+        <Button variant="ghost" className={DARK_BTN} onClick={() => setRevealed(true)}>
+          Vedi soluzione
+        </Button>
       )}
     </div>
   );

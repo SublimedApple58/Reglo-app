@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { aulaErrorMessage } from "./aula-errors";
 
 type Question = {
   id: string;
@@ -116,11 +117,7 @@ export function AulaStudentPlayer({ code }: { code: string }) {
       });
       const json = await res.json();
       if (!json.success) {
-        setError(
-          json.message === "NAME_TAKEN"
-            ? "Nome già in uso, scegline un altro."
-            : "Impossibile entrare.",
-        );
+        setError(aulaErrorMessage(json.message, "Impossibile entrare."));
         return;
       }
       setParticipantId(json.data.participantId);
@@ -238,7 +235,7 @@ export function AulaStudentPlayer({ code }: { code: string }) {
             <p className="text-sm font-medium text-muted-foreground">
               Il tuo punteggio
             </p>
-            <p className="mt-1 text-5xl font-bold text-primary">
+            <p className="mt-1 text-5xl font-semibold text-primary">
               {score}/{total}
             </p>
           </div>
@@ -385,7 +382,7 @@ export function AulaStudentPlayer({ code }: { code: string }) {
           {snap.you?.answered ? (
             <p
               className={cn(
-                "text-4xl font-bold",
+                "text-4xl font-semibold",
                 snap.you.correct ? "text-positive" : "text-destructive",
               )}
             >

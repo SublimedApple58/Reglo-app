@@ -123,7 +123,8 @@ export function AulaLessonEditor({
   const [active, setActive] = useState(0);
   const [pending, startTransition] = useTransition();
   const [dirty, setDirty] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  // Tone esplicito: niente confronti sulla stringa per decidere il colore.
+  const [message, setMessage] = useState<{ text: string; tone: "ok" | "error" } | null>(null);
   const [presenting, setPresenting] = useState(false);
   // Cache r2Key → URL firmato per l'anteprima immagini.
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
@@ -233,6 +234,31 @@ export function AulaLessonEditor({
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [dirty]);
 
+  // beforeunload NON copre la navigazione SPA (sidebar, back, link interni):
+  // App Router non offre un blocco di route-change, quindi intercettiamo in
+  // capture i click sui link quando ci sono modifiche non salvate e chiediamo
+  // conferma. L'avvio quiz è coperto a parte (autosave in handleStartQuiz).
+  useEffect(() => {
+    if (!dirty) return;
+    const onClickCapture = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement | null)?.closest?.("a[href]");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href") ?? "";
+      // Solo navigazioni reali (niente ancore interne / nuova scheda).
+      if (href.startsWith("#") || anchor.getAttribute("target") === "_blank") return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const ok = window.confirm(
+        "Hai modifiche non salvate: se esci le perdi. Continuare?",
+      );
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onClickCapture, true);
+    return () => document.removeEventListener("click", onClickCapture, true);
+  }, [dirty]);
+
   const updateSlide = useCallback(
     (index: number, blocks: SlideBlock[]) => {
       updatePackage({
@@ -292,7 +318,7 @@ export function AulaLessonEditor({
         // Guardia: resta ben sotto il bodySizeLimit del server action.
         const approxBytes = Math.ceil((base64.length * 3) / 4);
         if (approxBytes > 3.5 * 1024 * 1024) {
-          setMessage("Immagine troppo grande anche dopo la compressione. Usane una più leggera.");
+          setMessage({ text: "Immagine troppo grande anche dopo la compressione. Usane una più leggera.", tone: "error" });
           return;
         }
         const res = await uploadAulaImage({ base64, ext, contentType });
@@ -302,30 +328,44 @@ export function AulaLessonEditor({
           if (url) setImageUrls((prev) => ({ ...prev, [r2Key]: url }));
           updateBlock(bi, { type: "image", r2Key });
         } else {
-          setMessage(aulaErrorMessage(res.message, "Upload immagine fallito"));
+          setMessage({ text: aulaErrorMessage(res.message, "Upload immagine fallito"), tone: "error" });
         }
       } catch (err) {
         // Qualsiasi errore (file non valido, rigetto del server action, ecc.)
         // viene mostrato invece di fallire in silenzio.
-        setMessage(err instanceof Error ? err.message : "Upload immagine fallito");
+        setMessage({ text: err instanceof Error ? err.message : "Upload immagine fallito", tone: "error" });
       }
     });
   };
 
+  // Salvataggio riusabile: ritorna true se andato a buon fine (serve anche
+  // all'autosave pre-quiz). Il messaggio d'errore lo imposta lei.
+  const doSave = async (): Promise<boolean> => {
+    const res = await saveAulaPackage(lesson.id, pkg);
+    if (res.success) {
+      setDirty(false);
+      setMessage({ text: "Salvato.", tone: "ok" });
+      return true;
+    }
+    setMessage({ text: aulaErrorMessage(res.message, "Errore nel salvataggio"), tone: "error" });
+    return false;
+  };
+
   const handleSave = () => {
     startTransition(async () => {
-      const res = await saveAulaPackage(lesson.id, pkg);
-      if (res.success) {
-        setDirty(false);
-        setMessage("Salvato.");
-      } else {
-        setMessage(aulaErrorMessage(res.message, "Errore nel salvataggio"));
-      }
+      await doSave();
     });
   };
 
   const handleStartQuiz = (mode: "LIVE" | "EXAM") => {
     startTransition(async () => {
+      // Avviare il quiz naviga via dall'editor: con modifiche pendenti prima
+      // salviamo (altrimenti andrebbero perse in silenzio). Se il salvataggio
+      // fallisce non si parte: l'errore resta a schermo.
+      if (dirty && editable) {
+        const saved = await doSave();
+        if (!saved) return;
+      }
       // Usa le domande scelte dal docente nei blocchi quizRef della lezione;
       // se non ce ne sono, ripiega su N domande casuali dal capitolo.
       const questionIds = Array.from(
@@ -351,7 +391,7 @@ export function AulaLessonEditor({
       if (res.success && res.data) {
         router.push(`/aula/live/${res.data.code}`);
       } else {
-        setMessage(aulaErrorMessage(res.message, "Impossibile avviare il quiz"));
+        setMessage({ text: aulaErrorMessage(res.message, "Impossibile avviare il quiz"), tone: "error" });
       }
     });
   };
@@ -428,10 +468,10 @@ export function AulaLessonEditor({
         <p
           className={cn(
             "text-sm font-medium",
-            message === "Salvato." ? "text-positive" : "text-destructive",
+            message.tone === "ok" ? "text-positive" : "text-destructive",
           )}
         >
-          {message}
+          {message.text}
         </p>
       )}
 
