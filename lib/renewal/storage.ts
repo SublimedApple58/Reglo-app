@@ -1,7 +1,8 @@
 import "server-only";
 
 import { randomUUID } from "crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client, getR2Bucket } from "@/lib/storage/r2";
 
 /**
@@ -42,4 +43,25 @@ export async function putRenewalDocument(input: {
     }),
   );
   return key;
+}
+
+// TTL breve: i documenti d'identità sono riservati, l'URL serve solo per la
+// visualizzazione immediata nella console titolare.
+const VIEW_URL_TTL_SECONDS = 300;
+
+/**
+ * URL di visualizzazione SEMPRE firmato e a scadenza per i documenti dei
+ * cittadini. NON usare `getSignedAssetUrl`: con `R2_PUBLIC_BASE_URL` impostata
+ * ritornerebbe un URL pubblico permanente (vietato per file riservati — vedi
+ * docs/features/company-documents.md).
+ */
+export async function signedRenewalDocumentUrl(fileKey: string): Promise<string> {
+  return getSignedUrl(
+    getR2Client(),
+    new GetObjectCommand({
+      Bucket: getR2Bucket(),
+      Key: fileKey,
+    }),
+    { expiresIn: VIEW_URL_TTL_SECONDS },
+  );
 }

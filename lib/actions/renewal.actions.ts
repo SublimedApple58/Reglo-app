@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/db/prisma";
 import { formatError } from "@/lib/utils";
 import { requireRenewalOwner } from "@/lib/renewal/access";
-import { getSignedAssetUrl } from "@/lib/storage/r2";
+import { signedRenewalDocumentUrl } from "@/lib/renewal/storage";
 import { SERVER_URL } from "@/lib/constants";
 import {
   RENEWAL_REQUEST_STATUSES,
@@ -408,11 +408,12 @@ export async function getRenewalRequest(input: { id: string }) {
     });
     if (!request) return { success: false, message: "Richiesta non trovata." };
 
-    // Sign document URLs for viewing.
+    // URL SEMPRE firmati a scadenza breve: sono documenti d'identità riservati
+    // (getSignedAssetUrl con R2_PUBLIC_BASE_URL darebbe URL pubblici permanenti).
     const documents = await Promise.all(
       request.documents.map(async (doc) => ({
         ...doc,
-        url: await getSignedAssetUrl(doc.fileKey),
+        url: await signedRenewalDocumentUrl(doc.fileKey),
       })),
     );
     return { success: true, data: { ...request, documents } };
@@ -447,11 +448,16 @@ export async function updateRenewalRequestStatus(
           ...(payload.reviewNotes !== undefined ? { reviewNotes: payload.reviewNotes } : {}),
         },
       });
-      // When the request is cancelled/rejected, cancel its visit too.
+      // When the request is cancelled/rejected, FREE its visit slot by deleting
+      // the booking row. Marking it "cancelled" would poison the slot forever:
+      // availability filters on status="confirmed" (slot shown as free) but the
+      // row would still hit @@unique([medicoId, startAt]) on every new insert
+      // (P2002 → "slot_taken"), and @unique(requestId) would block rebooking.
+      // Nothing reads cancelled bookings (availability + delete-medico guard
+      // both filter confirmed), so no history is lost beyond the request status.
       if (payload.status === "cancelled" || payload.status === "rejected") {
-        await tx.renewalVisitBooking.updateMany({
-          where: { requestId: payload.id, status: "confirmed" },
-          data: { status: "cancelled" },
+        await tx.renewalVisitBooking.deleteMany({
+          where: { requestId: payload.id },
         });
       }
     });
