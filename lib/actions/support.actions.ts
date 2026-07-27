@@ -269,6 +269,70 @@ export async function submitProductFeedback(input: z.infer<typeof feedbackSchema
   }
 }
 
+const NEWS_MODULE_LABELS: Record<string, string> = {
+  road: "Reglo Road",
+  rinnovi: "Reglo Rinnovi",
+  guide: "Guide certificate",
+};
+
+const newsFeedbackSchema = z.object({
+  type: z.enum(["request", "suggestion"]),
+  modules: z.array(z.enum(["road", "rinnovi", "guide"])).max(3).default([]),
+  message: z.string().trim().min(1, "Il messaggio è vuoto.").max(MESSAGE_MAX_LENGTH),
+});
+
+/**
+ * Richieste/consigli inviati dal dialog "Novità" (annuncio pausa richieste
+ * agenda). Salva su NewsFeedback e notifica il team via email (no-op su staging
+ * come gli altri invii). Vedi docs/features/news-announcement.md.
+ */
+export async function submitNewsFeedback(input: z.infer<typeof newsFeedbackSchema>) {
+  try {
+    const { session, membership, company } = await requireSupportAccess();
+    const parsed = newsFeedbackSchema.parse(input);
+    const userName = await resolveSenderName(session?.user?.name, membership.userId);
+
+    await prisma.newsFeedback.create({
+      data: {
+        companyId: membership.companyId,
+        userId: membership.userId,
+        userName,
+        type: parsed.type,
+        modules: parsed.modules,
+        message: parsed.message,
+      },
+    });
+
+    const companyName = company.name;
+    const isRequest = parsed.type === "request";
+    const kindLabel = isRequest ? "Richiesta agenda" : "Consiglio moduli";
+    after(async () => {
+      try {
+        await sendDynamicEmail({
+          to: GLOBAL_ADMIN_EMAIL,
+          subject: `${kindLabel} da ${companyName}`,
+          body: [
+            `Nuovo${isRequest ? "a richiesta" : " consiglio"} dal dialog Novità di ${companyName}${userName ? ` (${userName})` : ""}:`,
+            "",
+            parsed.modules.length
+              ? `Moduli: ${parsed.modules.map((m) => NEWS_MODULE_LABELS[m] ?? m).join(", ")}`
+              : null,
+            `Messaggio: ${parsed.message}`,
+          ]
+            .filter((line): line is string => line !== null)
+            .join("\n"),
+        });
+      } catch (err) {
+        console.error("[support] news feedback notify email failed", err);
+      }
+    });
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 // ── Lato backoffice (team Reglo) ─────────────────────────────────────────────
 
 export async function getBackofficeSupportThreads() {

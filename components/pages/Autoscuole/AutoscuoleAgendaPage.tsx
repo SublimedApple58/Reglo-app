@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2 } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { CancelAppointmentDialog, type CancelDialogTarget, type LateOutcome } from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import {
   Select,
@@ -24,11 +25,12 @@ import {
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import {
   createAutoscuolaAppointment,
-  deleteAutoscuolaAppointment,
-  cancelAutoscuolaAppointment,
+  annulAutoscuolaAppointment,
+  hardCleanupAutoscuolaAppointment,
   updateAutoscuolaAppointmentStatus,
   getInstructorAvailabilityForAgenda,
   createInstructorBlock,
+  updateInstructorBlock,
   deleteInstructorBlock,
   deleteInstructorBlockRecurrence,
   createExamEvent,
@@ -51,6 +53,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -70,9 +73,15 @@ import {
 } from "@/components/pages/Autoscuole/EditAppointmentDialog";
 import { GroupLessonManageDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonManageDialog";
 import { GroupLessonCreateDialog } from "@/components/pages/Autoscuole/dialogs/GroupLessonCreateDialog";
+import {
+  AgendaPrintDialog,
+  type AgendaPrintData,
+  type AgendaPrintBlock,
+  type AgendaPrintColumn,
+} from "@/components/pages/Autoscuole/AgendaPrintDialog";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
 
-type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean };
+type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null };
 type ResourceOption = {
   id: string;
   name: string;
@@ -98,6 +107,11 @@ type AppointmentRow = {
   extraMotoVehicles?: ResourceOption[] | null;
   location?: { id: string; name: string; isDefault: boolean } | null;
   replacedByAppointmentId?: string | null;
+  cancellationKind?: string | null;
+  creditApplied?: boolean | null;
+  paymentRequired?: boolean | null;
+  penaltyCutoffAt?: string | Date | null;
+  penaltyAmount?: number | null;
   groupLessonId?: string | null;
   groupLessonCapacity?: number | null;
   groupLessonKind?: string | null;
@@ -266,9 +280,13 @@ const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE;
 // `totalMinutes` è ridefinito nel componente (dipende dalla fascia oraria scelta);
 // DAY_START_HOUR/DAY_END_HOUR restano 0/24 qui per gli orari prenotabili completi.
 const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
-type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number };
+// weekMode: "classic" = settimana lun–dom; "rolling" = 7 giorni a partire da
+// oggi (es. mercoledì → mer…mar). In entrambi i casi si rispettano i giorni
+// visibili scelti.
+type WeekMode = "classic" | "rolling";
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode };
 // days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
-const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24 };
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic" };
 const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
   { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
   { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
@@ -293,10 +311,22 @@ function readAgendaViewPrefs(): AgendaViewPrefs {
         ? (p.endHour as number)
         : DEFAULT_VIEW_PREFS.endHour;
     if (endHour <= startHour) endHour = DEFAULT_VIEW_PREFS.endHour;
-    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour };
+    const weekMode: WeekMode = p.weekMode === "rolling" ? "rolling" : "classic";
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode };
   } catch {
     return DEFAULT_VIEW_PREFS;
   }
+}
+
+// Ancora della settimana visibile: "classic" → lunedì della settimana;
+// "rolling" → mezzanotte del giorno stesso (finestra di 7 giorni da oggi).
+function weekAnchor(date: Date, mode: WeekMode) {
+  if (mode === "rolling") {
+    const copy = new Date(date);
+    copy.setHours(0, 0, 0, 0);
+    return copy;
+  }
+  return startOfWeek(date);
 }
 
 // Persistenza dei filtri agenda in localStorage: restano applicati tra refresh e
@@ -623,6 +653,8 @@ export function AutoscuoleAgendaPage({
   }, [loading, instructors, vehicles]);
   const [filterEditor, setFilterEditor] = React.useState<FilterEditorState | null>(null);
   const [viewMode, setViewMode] = React.useState<"week" | "day">("week");
+  // Anteprima di stampa dell'agenda (foglio PDF della vista corrente).
+  const [printOpen, setPrintOpen] = React.useState(false);
   // Schermo intero: overlay `fixed inset-0` (NON la Fullscreen API del browser,
   // che metterebbe i popup Radix — portati su document.body — sotto al top-layer
   // rendendoli invisibili). z-40 copre header (z-30) e sidebar (z-10) dell'app ma
@@ -686,7 +718,9 @@ export function AutoscuoleAgendaPage({
   // scelto per mostrarlo nell'alert prima di procedere con allowPast.
   const [pastConfirmOpen, setPastConfirmOpen] = React.useState(false);
   const [pendingPastStart, setPendingPastStart] = React.useState<Date | null>(null);
-  const [weekStart, setWeekStart] = React.useState(() => startOfWeek(new Date()));
+  const [weekStart, setWeekStart] = React.useState(() =>
+    weekAnchor(new Date(), readAgendaViewPrefs().weekMode),
+  );
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
   const [editAppointmentTarget, setEditAppointmentTarget] =
@@ -723,10 +757,13 @@ export function AutoscuoleAgendaPage({
   const [outOfAvailSheetOpen, setOutOfAvailSheetOpen] = React.useState(false);
   const [holidays, setHolidays] = React.useState<Array<{ date: string; label: string | null }>>([]);
   const [instructorBlocks, setInstructorBlocks] = React.useState<Array<{
-    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; recurrenceGroupId: string | null;
+    id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; description: string | null; recurrenceGroupId: string | null;
   }>>([]);
   const [blockDialogOpen, setBlockDialogOpen] = React.useState(false);
-  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+  // Se valorizzato, il dialog blocco è in modalità MODIFICA (aggiorna quel blocco
+  // invece di crearne di nuovi). null = creazione.
+  const [blockEditId, setBlockEditId] = React.useState<string | null>(null);
+  const [blockForm, setBlockForm] = React.useState({ instructorId: "", date: "", startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
   const [blockDeleteConfirm, setBlockDeleteConfirm] = React.useState<{ id: string; recurrenceGroupId: string | null } | null>(null);
   const [examDialogOpen, setExamDialogOpen] = React.useState(false);
   const [examForm, setExamForm] = React.useState({ date: "", time: "09:00", duration: "60", timeSet: true, instructorId: "", studentIds: [] as string[], note: "" });
@@ -739,6 +776,15 @@ export function AutoscuoleAgendaPage({
   }, [examDialogOpen]);
   const examStudentInitials = (first?: string | null, last?: string | null) =>
     `${(first ?? "").trim()[0] ?? ""}${(last ?? "").trim()[0] ?? ""}`.toUpperCase() || "?";
+  // Tooltip del badge "Pronto" nel picker esame: "Segnato pronto (da N giorni)".
+  const examReadyTitle = (readyAt?: string | null) => {
+    if (!readyAt) return "Segnato pronto per l'esame";
+    const then = new Date(readyAt);
+    if (Number.isNaN(then.getTime())) return "Segnato pronto per l'esame";
+    const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+    const since = days <= 0 ? "da oggi" : days === 1 ? "da 1 giorno" : `da ${days} giorni`;
+    return `Segnato pronto per l'esame ${since}`;
+  };
   const examAddableCount = React.useMemo(
     () => students.reduce((n, st) => (examForm.studentIds.includes(st.id) ? n : n + 1), 0),
     [students, examForm.studentIds],
@@ -747,7 +793,10 @@ export function AutoscuoleAgendaPage({
     const q = examStudentSearch.trim().toLowerCase();
     return students
       .filter((s) => !examForm.studentIds.includes(s.id))
-      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q));
+      .filter((s) => !q || `${s.firstName} ${s.lastName}`.toLowerCase().includes(q))
+      // Chicca: gli allievi segnati "pronti" salgono in cima al picker esame
+      // (ordine stabile per il resto — filtriamo su una copia via sort).
+      .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
   }, [students, examForm.studentIds, examStudentSearch]);
   const [examPanelGroup, setExamPanelGroup] = React.useState<ExamGroup | null>(null);
   const [examPanelStudentSearch, setExamPanelStudentSearch] = React.useState("");
@@ -815,7 +864,34 @@ export function AutoscuoleAgendaPage({
     setPopoverAnchor(rect ? { x: rect.right, y: rect.bottom + 10 } : null);
   }, []);
   const [blockCreating, setBlockCreating] = React.useState(false);
+  // Lo stesso dialog "blocco istruttore" serve due eventi: "generic" = Evento
+  // bloccante (titolo libero) e "theory" = Lezione teorica (reason forzato
+  // "theory_lesson", niente titolo, avviso "bloccante"). Vedi createInstructorBlock.
+  const [blockKind, setBlockKind] = React.useState<"generic" | "theory">("generic");
   const [blockDeleting, setBlockDeleting] = React.useState<string | null>(null);
+
+  // Apre il dialog blocco in modalità MODIFICA, pre-riempiendo dal blocco.
+  const openBlockEdit = React.useCallback(
+    (b: { id: string; instructorId: string; startsAt: string; endsAt: string; reason: string | null; description: string | null }) => {
+      const start = toDate(b.startsAt);
+      const end = toDate(b.endsAt);
+      const durMin = Math.max(15, Math.round((end.getTime() - start.getTime()) / 60000));
+      setBlockKind(b.reason === "theory_lesson" ? "theory" : "generic");
+      setBlockForm({
+        instructorId: b.instructorId,
+        date: formatYmd(start),
+        startTime: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+        duration: String(durMin),
+        reason: b.reason === "theory_lesson" ? "" : (b.reason ?? ""),
+        description: b.description ?? "",
+        recurring: false,
+        recurringWeeks: 12,
+      });
+      setBlockEditId(b.id);
+      setBlockDialogOpen(true);
+    },
+    [],
+  );
   const [holidayModalOpen, setHolidayModalOpen] = React.useState(false);
   const [holidayModalInitialDate, setHolidayModalInitialDate] = React.useState<Date | null>(null);
   const [removeHolidayDialogOpen, setRemoveHolidayDialogOpen] = React.useState(false);
@@ -962,6 +1038,7 @@ export function AutoscuoleAgendaPage({
           startsAt: typeof b.startsAt === "string" ? b.startsAt : (b.startsAt as Date).toISOString(),
           endsAt: typeof b.endsAt === "string" ? b.endsAt : (b.endsAt as Date).toISOString(),
           reason: (b.reason as string | null) ?? null,
+          description: (b.description as string | null) ?? null,
           recurrenceGroupId: (b.recurrenceGroupId as string | null) ?? null,
         })));
       }
@@ -1289,9 +1366,11 @@ export function AutoscuoleAgendaPage({
         startMin: parseStart(blockForm.startTime),
         durMin: parseInt(blockForm.duration, 10) || 60,
         instructorId: blockForm.instructorId || null,
-        title: blockForm.reason.trim() || "Evento bloccante",
-        cardClass: "bg-[#F3F4F8]/85 border-[#b8bcc8]",
-        dotClass: "bg-[#9ca3af]",
+        title: blockKind === "theory" ? "Lezione teorica" : (blockForm.reason.trim() || "Evento bloccante"),
+        cardClass: blockKind === "theory"
+          ? "bg-[#E6E9FF]/85 border-[#a5abf0]"
+          : "bg-[#F3F4F8]/85 border-[#b8bcc8]",
+        dotClass: blockKind === "theory" ? "bg-[#4f46e5]" : "bg-[#9ca3af]",
       };
     }
     if (createGroupLessonOpen && groupDraft?.date && groupDraft.time) {
@@ -1307,7 +1386,7 @@ export function AutoscuoleAgendaPage({
       };
     }
     return null;
-  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
+  }, [createOpen, form.day, form.time, form.duration, form.studentId, form.instructorId, students, examDialogOpen, examForm, blockDialogOpen, blockForm, blockKind, createGroupLessonOpen, groupDraft, editAppointmentTarget, editDraft, DAY_START_HOUR]);
 
   // Annullamento pregresso dell'allievo su QUESTO orario. Se l'allievo aveva
   // annullato lui una guida che iniziava a questo istante, mostriamo un banner
@@ -1353,7 +1432,7 @@ export function AutoscuoleAgendaPage({
     const target = toDate(`${draftGhost.ymd}T00:00:00`);
     const normalized = normalizeDay(target);
     if (viewMode === "week") {
-      const ws = startOfWeek(normalized);
+      const ws = weekAnchor(normalized, viewPrefs.weekMode);
       if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
     } else if (normalized.getTime() !== dayFocus.getTime()) {
       setDayFocus(normalized);
@@ -1447,6 +1526,9 @@ export function AutoscuoleAgendaPage({
       // Always hide cancelled appointments from the agenda — the cancellation
       // is recorded server-side, but the slot should free up visually.
       if ((item.status ?? "").toLowerCase() === "cancelled") return false;
+      // "Rimossa dallo storico" (record_cleanup): nascosta anche quando lo stato
+      // resta invariato (opzione "mantieni nelle ore" → status "completed").
+      if (item.cancellationKind === "record_cleanup") return false;
 
       // Filtri multi-selezione (vuoto = tutto passa).
       if (instructorFilter.length > 0 && !instructorFilter.includes(item.instructor?.id ?? "")) {
@@ -1615,40 +1697,67 @@ export function AutoscuoleAgendaPage({
     load({ silent: true });
   };
 
-  const handleCancel = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler annullare questa guida?");
-    if (!confirmed) return;
-    setPendingEventActionId(appointmentId);
-    const res = await cancelAutoscuolaAppointment({ appointmentId });
-    if (!res.success) {
-      toast.error({
-        description: res.message ?? "Impossibile annullare l'appuntamento.",
-      });
-      setPendingEventActionId(null);
-      return;
-    }
-    toast.success({
-      description: "Guida annullata.",
-    });
-    await load({ silent: true });
-    setPendingEventActionId(null);
+  // Dialogo unico "Annulla guida" (future) / "Rimuovi dallo storico" (passate).
+  const [cancelDialogTarget, setCancelDialogTarget] = React.useState<CancelDialogTarget | null>(null);
+  const [cancelDialogBusy, setCancelDialogBusy] = React.useState(false);
+
+  const isFutureActiveItem = (item: AppointmentRow) => {
+    const status = (item.status ?? "").toLowerCase();
+    return ["scheduled", "confirmed"].includes(status) && toDate(item.startsAt).getTime() > Date.now();
   };
 
-  const handleDelete = async (appointmentId: string) => {
-    const confirmed = window.confirm("Sei sicuro di voler cancellare questa guida?");
-    if (!confirmed) return;
-    setPendingEventActionId(appointmentId);
-    const res = await deleteAutoscuolaAppointment({ appointmentId });
+  const openCancelDialog = (item: AppointmentRow) => {
+    const start = toDate(item.startsAt);
+    const status = (item.status ?? "").toLowerCase();
+    const isFutureActive =
+      ["scheduled", "confirmed"].includes(status) && start.getTime() > Date.now();
+    setCancelDialogTarget({
+      appointmentId: item.id,
+      studentName: item.student?.firstName ?? null,
+      startsAt: start,
+      endsAt: item.endsAt ? toDate(item.endsAt) : null,
+      isPast: !isFutureActive,
+      creditApplied: !!item.creditApplied,
+      paymentRequired: !!item.paymentRequired,
+      penaltyCutoffAt: item.penaltyCutoffAt ? toDate(item.penaltyCutoffAt) : null,
+      penaltyAmount: item.penaltyAmount ?? null,
+      countsInHours: ["completed", "checked_in", "no_show"].includes(status),
+    });
+  };
+
+  const handleAnnulConfirm = async (lateOutcome?: LateOutcome) => {
+    if (!cancelDialogTarget || cancelDialogBusy) return;
+    setCancelDialogBusy(true);
+    const res = await annulAutoscuolaAppointment({
+      appointmentId: cancelDialogTarget.appointmentId,
+      lateOutcome,
+    });
+    setCancelDialogBusy(false);
     if (!res.success) {
-      toast.error({
-        description: res.message ?? "Impossibile cancellare l'evento.",
-      });
-      setPendingEventActionId(null);
+      toast.error({ description: res.message ?? "Impossibile annullare la guida." });
       return;
     }
-    toast.success({ description: res.message ?? "Guida cancellata." });
+    setCancelDialogTarget(null);
+    toast.success({ description: res.message ?? "Guida annullata." });
     await load({ silent: true });
-    setPendingEventActionId(null);
+  };
+
+  const handleRemoveConfirm = async (opts: { keepInHours: boolean; refundCredit: boolean }) => {
+    if (!cancelDialogTarget || cancelDialogBusy) return;
+    setCancelDialogBusy(true);
+    const res = await hardCleanupAutoscuolaAppointment({
+      appointmentId: cancelDialogTarget.appointmentId,
+      keepInHours: opts.keepInHours,
+      refundCredit: opts.refundCredit,
+    });
+    setCancelDialogBusy(false);
+    if (!res.success) {
+      toast.error({ description: res.message ?? "Impossibile rimuovere la guida." });
+      return;
+    }
+    setCancelDialogTarget(null);
+    toast.success({ description: res.message ?? "Guida rimossa dallo storico." });
+    await load({ silent: true });
   };
 
   const handleStatusUpdate = async (appointmentId: string, status: "scheduled" | "confirmed" | "proposal" | "checked_in" | "no_show" | "completed" | "cancelled") => {
@@ -1811,6 +1920,197 @@ export function AutoscuoleAgendaPage({
       .sort((a, b) => toDate(a.startsAt).getTime() - toDate(b.startsAt).getTime());
   });
 
+  // ── Dati per l'anteprima di stampa ──────────────────────────────────────────
+  // "Fotografia" della vista corrente: stesso intervallo di date, stessi filtri
+  // e stessa modalità (settimana → colonne per giorno; giorno → colonne per
+  // istruttore). Calcolata solo quando l'anteprima è aperta.
+  const agendaPrintData: AgendaPrintData | null = React.useMemo(() => {
+    if (!printOpen) return null;
+
+    const startHour = viewPrefs.startHour;
+    const endHour = viewPrefs.endHour;
+    const dayStartMin = startHour * 60;
+    const dayEndMin = endHour * 60;
+
+    // Hex per gli istruttori: colore scelto dal titolare oppure palette
+    // posizionale (stessi hue dei tint legaci in agenda).
+    const PRINT_LEGACY_HEX = [
+      "#64748B", "#0EA5E9", "#10B981", "#F59E0B",
+      "#8B5CF6", "#14B8A6", "#F97316", "#F43F5E",
+    ];
+    const sortedInstructors = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
+    const instructorHex = (id?: string | null): string => {
+      if (!id) return "#64748B";
+      const instr = instructors.find((i) => i.id === id);
+      if (instr?.color) return instr.color;
+      const idx = sortedInstructors.findIndex((i) => i.id === id);
+      return PRINT_LEGACY_HEX[(idx < 0 ? 0 : idx) % PRINT_LEGACY_HEX.length];
+    };
+
+    // Minuti dall'inizio giornata, ritagliati alla fascia oraria visibile.
+    const clampSpan = (start: Date, end: Date): { startMin: number; endMin: number } | null => {
+      if (Number.isNaN(start.getTime())) return null;
+      const s = start.getHours() * 60 + start.getMinutes();
+      let e = end.getHours() * 60 + end.getMinutes();
+      if (Number.isNaN(end.getTime()) || e <= s) e = s + 30;
+      const cs = Math.max(s, dayStartMin);
+      const ce = Math.min(e, dayEndMin);
+      if (ce <= cs) return null;
+      return { startMin: cs, endMin: ce };
+    };
+
+    const toBlock = (item: AppointmentRow): AgendaPrintBlock | null => {
+      const start = toDate(item.startsAt);
+      const end = getAppointmentEnd(item);
+      const span = clampSpan(start, end);
+      if (!span) return null;
+      const isGroup =
+        item.type === "group_lesson" ||
+        String(item.student.firstName).startsWith("Guida di gruppo");
+      const colorHex = isGroup
+        ? item.groupLessonKind === "moto" ? "#F97316" : "#14B8A6"
+        : instructorHex(item.instructor?.id);
+      const title = isGroup
+        ? item.student.firstName
+        : `${item.student.firstName} ${item.student.lastName}`.trim();
+      const subtitle = isGroup
+        ? item.groupLessonKind === "moto" ? "Gruppo moto" : "Gruppo"
+        : [formatEventType(item.type), item.instructor?.name].filter(Boolean).join(" · ");
+      return {
+        id: item.id,
+        startMin: span.startMin,
+        endMin: span.endMin,
+        timeLabel: formatTimeRange(start, end),
+        title,
+        subtitle,
+        colorHex,
+      };
+    };
+
+    const examToBlock = (eg: ExamGroup): AgendaPrintBlock | null => {
+      const start = toDate(eg.startsAt);
+      const end = eg.endsAt ? toDate(eg.endsAt) : new Date(start.getTime() + 60 * 60000);
+      const span = clampSpan(start, end);
+      if (!span) return null;
+      const studentsInExam = eg.appointments.filter((a) => !isExamPlaceholder(a));
+      const title =
+        studentsInExam.length === 0
+          ? "Esame"
+          : studentsInExam.length === 1
+            ? `${studentsInExam[0].student.firstName} ${studentsInExam[0].student.lastName}`.trim()
+            : `Esame · ${studentsInExam.length} allievi`;
+      const subtitle = ["Esame", eg.instructor?.name].filter(Boolean).join(" · ");
+      return {
+        id: `exam-${eg.key}`,
+        startMin: span.startMin,
+        endMin: span.endMin,
+        timeLabel: formatTimeRange(start, end),
+        title,
+        subtitle,
+        colorHex: "#8B5CF6",
+      };
+    };
+
+    // Gli esami rispettano gli stessi filtri istruttore/tipo della vista.
+    const visibleExams = examGroups.filter((eg) => {
+      if (instructorFilter.length > 0 && !instructorFilter.includes(eg.instructorId ?? "")) return false;
+      if (typeFilter.length > 0 && !typeFilter.includes("esame")) return false;
+      const start = toDate(eg.startsAt);
+      return start >= rangeStart && start < rangeEnd;
+    });
+
+    // Giorni visibili ricalcolati da valori primitivi (evita di dipendere
+    // dall'array `visibleDays` ricreato a ogni render).
+    const printDays =
+      viewMode === "week"
+        ? (() => {
+            const all = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+            const vis = all.filter((d) => viewPrefs.days.includes(d.getDay()));
+            return vis.length ? vis : all;
+          })()
+        : [dayFocus];
+
+    let columns: AgendaPrintColumn[] = [];
+    if (viewMode === "week") {
+      columns = printDays.map((day) => {
+        const key = formatYmd(day);
+        const blocks: AgendaPrintBlock[] = [];
+        for (const item of filtered) {
+          if (formatYmd(toDate(item.startsAt)) !== key) continue;
+          const b = toBlock(item);
+          if (b) blocks.push(b);
+        }
+        for (const eg of visibleExams) {
+          if (formatYmd(toDate(eg.startsAt)) !== key) continue;
+          const b = examToBlock(eg);
+          if (b) blocks.push(b);
+        }
+        return {
+          key,
+          label: day.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "short" }),
+          highlight: day.getTime() === todayNormalized.getTime(),
+          blocks,
+        };
+      });
+    } else {
+      const key = formatYmd(dayFocus);
+      const cols = dayViewInstructors.map((instr) => ({ id: instr.id, name: instr.name, blocks: [] as AgendaPrintBlock[] }));
+      const byId = new Map(cols.map((c) => [c.id, c]));
+      const extra: AgendaPrintBlock[] = [];
+      for (const item of filtered) {
+        if (formatYmd(toDate(item.startsAt)) !== key) continue;
+        const b = toBlock(item);
+        if (!b) continue;
+        const c = item.instructor?.id ? byId.get(item.instructor.id) : undefined;
+        (c ? c.blocks : extra).push(b);
+      }
+      for (const eg of visibleExams) {
+        if (formatYmd(toDate(eg.startsAt)) !== key) continue;
+        const b = examToBlock(eg);
+        if (!b) continue;
+        const c = eg.instructorId ? byId.get(eg.instructorId) : undefined;
+        (c ? c.blocks : extra).push(b);
+      }
+      columns = cols.map((c) => ({ key: c.id, label: c.name, blocks: c.blocks }));
+      if (extra.length > 0) columns.push({ key: "__extra", label: "Senza istruttore", blocks: extra });
+    }
+
+    const totalCount = columns.reduce((sum, c) => sum + c.blocks.length, 0);
+
+    const optionLabels = (kind: FilterKind, ids: string[]) =>
+      ids.map((id) => getFilterOptions(kind, instructors, vehicles).find((o) => o.value === id)?.label ?? id);
+    const filtersSummary: string[] = [];
+    if (instructorFilter.length > 0) filtersSummary.push(`Istruttore: ${optionLabels("instructor", instructorFilter).join(", ")}`);
+    if (vehiclesEnabled && vehicleFilter.length > 0) filtersSummary.push(`Veicolo: ${optionLabels("vehicle", vehicleFilter).join(", ")}`);
+    if (typeFilter.length > 0) filtersSummary.push(`Tipo: ${optionLabels("type", typeFilter).join(", ")}`);
+    if (statusFilter.length > 0) filtersSummary.push(`Stato: ${optionLabels("status", statusFilter).join(", ")}`);
+    if (search.trim()) filtersSummary.push(`Ricerca: "${search.trim()}"`);
+
+    const rangeLabel =
+      viewMode === "week"
+        ? `${formatRangeLabel(weekStart)} ${addDays(weekStart, 6).getFullYear()}`
+        : dayFocus.toLocaleDateString("it-IT", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+
+    const orientation: "portrait" | "landscape" =
+      viewMode === "week" ? "landscape" : dayViewInstructors.length > 4 ? "landscape" : "portrait";
+
+    const generatedAt = new Date(nowTick).toLocaleString("it-IT", {
+      day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+
+    return {
+      rangeLabel,
+      viewModeLabel: viewMode === "week" ? "Vista settimana" : "Vista giorno",
+      filtersSummary,
+      generatedAt,
+      startHour,
+      endHour,
+      orientation,
+      columns,
+      totalCount,
+    };
+  }, [printOpen, viewMode, viewPrefs.startHour, viewPrefs.endHour, viewPrefs.days, filtered, examGroups, instructors, vehicles, instructorFilter, vehicleFilter, typeFilter, statusFilter, search, dayFocus, weekStart, dayViewInstructors, rangeStart, rangeEnd, todayNormalized, vehiclesEnabled, nowTick]);
+
   return (
     <PageWrapper
       title="Agenda"
@@ -1895,7 +2195,7 @@ export function AutoscuoleAgendaPage({
                 className="relative flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
               >
                 <LayoutGrid className="size-4" strokeWidth={1.6} />
-                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24) && (
+                {(viewPrefs.days.length < 7 || viewPrefs.startHour !== 0 || viewPrefs.endHour !== 24 || viewPrefs.weekMode !== "classic") && (
                   <span className="absolute right-1 top-1 size-[7px] rounded-full bg-[#1a1a2e]" />
                 )}
               </button>
@@ -1909,6 +2209,36 @@ export function AutoscuoleAgendaPage({
               >
                 <div className="space-y-4">
                   <div className="text-[15px] font-semibold text-foreground">Visualizzazione</div>
+                  <div className="space-y-2">
+                    <div className="text-[12.5px] font-semibold text-foreground">Settimana</div>
+                    <div className="flex gap-1.5">
+                      {([
+                        { key: "classic", label: "Classica (lun–dom)" },
+                        { key: "rolling", label: "7 giorni da oggi" },
+                      ] as const).map((opt) => {
+                        const on = viewPrefs.weekMode === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => {
+                              setViewPrefs((p) => ({ ...p, weekMode: opt.key }));
+                              setWeekStart(weekAnchor(new Date(), opt.key));
+                            }}
+                            className={cn(
+                              "h-8 flex-1 cursor-pointer rounded-lg px-2 text-[12px] font-semibold transition-colors",
+                              on ? "bg-[#1a1a2e] text-white" : "bg-[#f2f2f2] text-[#888888] hover:bg-[#eaeaea]",
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[11.5px] text-muted-foreground">
+                      &quot;7 giorni da oggi&quot; parte dal giorno corrente invece che da lunedì.
+                    </p>
+                  </div>
                   <div className="space-y-2">
                     <div className="text-[12.5px] font-semibold text-foreground">Giorni visibili</div>
                     <div className="flex flex-wrap gap-1.5">
@@ -1963,7 +2293,10 @@ export function AutoscuoleAgendaPage({
                     <button
                       type="button"
                       className="cursor-pointer text-[13px] font-semibold text-[#1a1a2e] underline underline-offset-2 hover:opacity-70"
-                      onClick={() => setViewPrefs(DEFAULT_VIEW_PREFS)}
+                      onClick={() => {
+                        setViewPrefs(DEFAULT_VIEW_PREFS);
+                        setWeekStart(weekAnchor(new Date(), DEFAULT_VIEW_PREFS.weekMode));
+                      }}
                     >
                       Ripristina
                     </button>
@@ -2006,6 +2339,16 @@ export function AutoscuoleAgendaPage({
             className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
           >
             {isAgendaFullscreen ? <Minimize2 className="size-4" strokeWidth={1.6} /> : <Maximize2 className="size-4" strokeWidth={1.6} />}
+          </button>
+
+          {/* Stampa agenda — anteprima PDF della vista corrente */}
+          <button
+            type="button"
+            title="Stampa agenda"
+            onClick={() => setPrintOpen(true)}
+            className="flex h-[34px] shrink-0 cursor-pointer items-center justify-center rounded-lg px-1.5 text-[#888888] transition-colors hover:bg-[#f0f0f0] hover:text-[#222222]"
+          >
+            <Printer className="size-4" strokeWidth={1.6} />
           </button>
 
           {/* Filtri (menu unico, proto) */}
@@ -2105,10 +2448,18 @@ export function AutoscuoleAgendaPage({
                 <button
                   type="button"
                   className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
-                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", recurring: false, recurringWeeks: 12 }); setBlockDialogOpen(true); }}
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("generic"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
                 >
                   <Ban className="size-4 text-foreground" strokeWidth={1.7} />
                   Evento bloccante
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2.5 rounded-[8px] px-3.5 py-2.5 text-sm font-medium text-foreground hover:bg-[#f7f7f7] transition-colors cursor-pointer"
+                  onClick={() => { setPlusMenuOpen(false); anchorFromPlus(); setBlockKind("theory"); setBlockForm({ instructorId: instructors[0]?.id ?? "", date: normalizeDay(dayFocus).toISOString().slice(0, 10), startTime: "09:00", duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 }); setBlockEditId(null); setBlockDialogOpen(true); }}
+                >
+                  <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />
+                  Lezione teorica
                 </button>
                 {groupLessonsEnabled && (
                   <button
@@ -2213,6 +2564,13 @@ export function AutoscuoleAgendaPage({
           vehiclesEnabled={vehiclesEnabled}
           onChanged={() => { load({ silent: true }); }}
         />
+        <CancelAppointmentDialog
+          target={cancelDialogTarget}
+          busy={cancelDialogBusy}
+          onClose={() => { if (!cancelDialogBusy) setCancelDialogTarget(null); }}
+          onAnnul={(lateOutcome) => void handleAnnulConfirm(lateOutcome)}
+          onRemove={(opts) => void handleRemoveConfirm(opts)}
+        />
         <GroupLessonCreateDialog
           open={createGroupLessonOpen}
           onOpenChange={(open) => { setCreateGroupLessonOpen(open); if (!open) { setGroupLessonPrefill(null); setGroupDraft(null); setGroupSlotPatch(null); } }}
@@ -2226,6 +2584,12 @@ export function AutoscuoleAgendaPage({
           defaultTime={groupLessonPrefill?.time ?? null}
           defaultInstructorId={groupLessonPrefill?.instructorId ?? null}
           onCreated={() => { load({ silent: true }); }}
+        />
+
+        <AgendaPrintDialog
+          open={printOpen}
+          data={agendaPrintData}
+          onClose={() => setPrintOpen(false)}
         />
 
         {/* Slot menu — click on an empty agenda slot (Google Calendar style) */}
@@ -2274,7 +2638,20 @@ export function AutoscuoleAgendaPage({
                 label: "Evento bloccante",
                 icon: <Ban className="size-4 text-foreground" strokeWidth={1.7} />,
                 onSelect: () => closeAnd(() => {
-                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", recurring: false, recurringWeeks: 12 });
+                  setBlockKind("generic");
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "60", reason: "", description: "", recurring: false, recurringWeeks: 12 });
+                  setBlockEditId(null);
+                  setBlockDialogOpen(true);
+                }),
+              },
+              {
+                key: "theory",
+                label: "Lezione teorica",
+                icon: <BookOpen className="size-4 text-foreground" strokeWidth={1.7} />,
+                onSelect: () => closeAnd(() => {
+                  setBlockKind("theory");
+                  setBlockForm({ instructorId: slotMenu.instructorId ?? instructors[0]?.id ?? "", date: slotMenu.ymd, startTime: slotMenu.time, duration: "120", reason: "", description: "", recurring: false, recurringWeeks: 12 });
+                  setBlockEditId(null);
                   setBlockDialogOpen(true);
                 }),
               },
@@ -2351,9 +2728,10 @@ export function AutoscuoleAgendaPage({
             <div className={cn("flex flex-col overflow-hidden bg-white", agendaFrameClass)} style={{ height: "100%", ...agendaFrameStyle }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
-                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                <div className="min-w-max bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
-                <div className="row-span-2" />
+                {/* Angolo in alto a sinistra: sticky left così resta ancorato sopra il time gutter durante lo scroll orizzontale */}
+                <div className="sticky left-0 z-40 bg-white row-span-2" />
                 {days.map((day) => {
                   const isDayToday = day.getTime() === todayNormalized.getTime();
                   const dayHolidayLabel = holidaySet.get(formatYmd(day));
@@ -2413,8 +2791,9 @@ export function AutoscuoleAgendaPage({
               {/* Exam banners row — sticky between header and body */}
               {examGroups.length > 0 && (
                 <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
-                  <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
-                    <div />
+                  <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                    {/* Cella gutter esami: sticky left, allineata al time gutter del corpo */}
+                    <div className="sticky left-0 z-40 bg-white" />
                     {days.map((day, dayIdx) => {
                       const dateKey = formatYmd(day);
                       const dayExams = examGroups.filter((eg) => formatYmd(toDate(eg.startsAt)) === dateKey);
@@ -2462,9 +2841,9 @@ export function AutoscuoleAgendaPage({
               }}>
 
               {/* Calendar body */}
-              <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
-                {/* Time gutter — sticky left */}
-                <div className="sticky left-0 z-40 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
+              <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                {/* Time gutter — sticky left (sticky basta come containing block per gli hour-mark assoluti; niente `relative` che sovrascriverebbe lo sticky) */}
+                <div className="sticky left-0 z-40 border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
                       <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">{`${pad(hour)}:00`}</span>
@@ -2620,14 +2999,13 @@ export function AutoscuoleAgendaPage({
                                     {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
                                     {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
                                     <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                    <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                                   </div>
                                 )}
                                 {canRescheduleAppointment(item) && !isGroupLessonInstr ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonInstr ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
                               ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => openCancelDialog(item)}>{isFutureActiveItem(item) ? "Annulla guida" : "Rimuovi dallo storico"}</Button>
                               )}
                               </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
@@ -2743,21 +3121,27 @@ export function AutoscuoleAgendaPage({
                                     <div className={cn("text-xs font-semibold", blockStyle.text)}>{formatBlockReason(b.reason)}</div>
                                     <div className="text-xs text-muted-foreground">{instr.instructorName}</div>
                                     <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                    {b.description && (
+                                      <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
+                                    )}
                                   </div>
-                                  <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                    onClick={async () => {
+                                  <DropdownMenuItem className="mt-2 cursor-pointer text-sm font-medium" onSelect={() => openBlockEdit(b)}>Modifica</DropdownMenuItem>
+                                  <DropdownMenuItem className="mt-1 cursor-pointer text-sm font-medium text-red-600 focus:bg-red-50 focus:text-red-700" disabled={blockDeleting === b.id}
+                                    onSelect={() => {
                                       if (b.recurrenceGroupId) {
                                         setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                      } else {
-                                        setBlockDeleting(b.id);
+                                        return;
+                                      }
+                                      setBlockDeleting(b.id);
+                                      void (async () => {
                                         const res = await deleteInstructorBlock(b.id);
                                         setBlockDeleting(null);
                                         if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
                                         setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
                                         toast.success({ description: "Evento eliminato." });
-                                      }
+                                      })();
                                     }}
-                                  >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                                  >Elimina evento</DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             );
@@ -2797,6 +3181,53 @@ export function AutoscuoleAgendaPage({
               </Button>
             </div>
           )}
+          {/* Riga esami del giorno (con o senza orario). La vista giorno prima
+              non renderizzava gli examGroups da nessuna parte → gli esami erano
+              invisibili. Come nella vista settimana, li mostriamo come banner
+              che aprono il pannello di gestione esame. */}
+          {(() => {
+            const dayExams = examGroups.filter(
+              (eg) => formatYmd(toDate(eg.startsAt)) === formatYmd(dayFocus),
+            );
+            if (dayExams.length === 0) return null;
+            return (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-violet-100 bg-[#faf8ff] px-3 py-2">
+                <span className="mr-0.5 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-violet-400">
+                  <GraduationCap className="size-3.5" /> Esami
+                </span>
+                {dayExams.map((eg) => {
+                  const egStart = toDate(eg.startsAt);
+                  const examHasTime = Boolean(eg.endsAt);
+                  const egEnd = eg.endsAt
+                    ? toDate(eg.endsAt)
+                    : new Date(egStart.getTime() + 3600000);
+                  const n = eg.appointments.filter(
+                    (a) => !isExamPlaceholder(a),
+                  ).length;
+                  return (
+                    <button
+                      key={`exam-day-${eg.key}`}
+                      type="button"
+                      onClick={() => {
+                        setExamPanelGroup(eg);
+                        setExamPanelStudentSearch("");
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100 cursor-pointer"
+                    >
+                      <span>
+                        {examHasTime
+                          ? formatTimeRange(egStart, egEnd)
+                          : "orario da definire"}
+                      </span>
+                      <span className="text-violet-500">
+                        {n === 0 ? "· vuoto" : `· ${n} all.`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
           <div
             ref={calendarScrollRef}
             className={cn("bg-white", isAgendaFullscreen ? "overflow-auto" : "overflow-y-auto", agendaFrameClass)}
@@ -2808,7 +3239,8 @@ export function AutoscuoleAgendaPage({
               className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
               style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
             >
-              <div />
+              {/* Angolo sticky left, allineato al time gutter */}
+              <div className="sticky left-0 bg-white" />
               {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
                 const tint = tintFor(instr.id, idx);
                 const initials = instr.name
@@ -2843,8 +3275,8 @@ export function AutoscuoleAgendaPage({
               gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
             }}
           >
-            {/* Time gutter */}
-            <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
+            {/* Time gutter — sticky left (resta ancorato anche con scroll orizzontale in fullscreen; sticky fa da containing block per gli hour-mark assoluti) */}
+            <div className="sticky left-0 z-20 border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
               {hourMarks.map((hour) => (
                 <div
                   key={hour}
@@ -3052,14 +3484,13 @@ export function AutoscuoleAgendaPage({
                                 {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "checked_in")}>Presente</Button>}
                                 {!isProposalStatus(item) && <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "no_show")}>Assente</Button>}
                                 <Button type="button" variant="outline" size="sm" disabled={!canCompleteStatus(item) || isPendingAction} onClick={() => handleStatusUpdate(item.id, "completed")}>Completa</Button>
-                                <Button type="button" variant="outline" size="sm" disabled={!canUpdateStatus(item) || isPendingAction} onClick={() => handleCancel(item.id)}>Annulla</Button>
                               </div>
                             )}
                             {canRescheduleAppointment(item) && !isGroupLessonDay ? <Button type="button" variant="outline" size="sm" className="mt-2 w-full" disabled={isPendingAction} onClick={() => handleOpenEdit(item)}>Modifica</Button> : null}
                               {isGroupLessonDay ? (
                                 <Button type="button" size="sm" className="mt-1 w-full" disabled={isPendingAction} onClick={() => item.groupLessonId && setManageGroupLessonId(item.groupLessonId)}>Gestisci guida di gruppo</Button>
                               ) : (
-                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => handleDelete(item.id)}>Cancella</Button>
+                                <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-rose-700 hover:bg-rose-50 hover:text-rose-700" disabled={isPendingAction} onClick={() => openCancelDialog(item)}>{isFutureActiveItem(item) ? "Annulla guida" : "Rimuovi dallo storico"}</Button>
                               )}
                           </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
@@ -3076,6 +3507,75 @@ export function AutoscuoleAgendaPage({
                         </React.Fragment>
                       );
                     })}
+                    {/* Exam blocks (con orario) for this instructor on this day.
+                        Gli esami senza orario restano nella riga banner in alto. */}
+                    {examGroups
+                      .filter(
+                        (eg) =>
+                          eg.instructorId === instr.id &&
+                          Boolean(eg.endsAt) &&
+                          formatYmd(toDate(eg.startsAt)) === formatYmd(day),
+                      )
+                      .map((eg) => {
+                        const egStart = toDate(eg.startsAt);
+                        const egEnd = toDate(eg.endsAt!);
+                        const clippedStart = egStart < dayStart ? dayStart : egStart;
+                        const clippedEnd = egEnd > dayEnd ? dayEnd : egEnd;
+                        const offsetMin = Math.max(0, diffMinutes(clippedStart, dayStart));
+                        const durMin = Math.max(15, diffMinutes(clippedEnd, clippedStart));
+                        const top = offsetMin * PIXELS_PER_MINUTE;
+                        const height = durMin * PIXELS_PER_MINUTE;
+                        return (
+                          <button
+                            key={`exam-day-grid-${eg.key}`}
+                            type="button"
+                            className="absolute left-1 right-1 z-10 flex flex-col justify-start overflow-hidden rounded-[10px] bg-[#F5F0FF] text-left text-[11px] leading-tight shadow-[0_5px_14px_rgba(139,92,246,0.22)] transition-colors hover:bg-[#EDE4FF] cursor-pointer"
+                            style={{ top, height }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExamPanelGroup(eg);
+                              setExamPanelStudentSearch("");
+                            }}
+                          >
+                            <div className="p-2">
+                              <div className="flex items-center gap-1 text-[11px] font-bold text-violet-700">
+                                <GraduationCap className="size-3 shrink-0" /> Esame
+                              </div>
+                              <div className="truncate text-[10px] text-violet-500">
+                                {formatTimeRange(egStart, egEnd)}
+                              </div>
+                              <div className="mt-0.5 flex flex-col gap-px">
+                                {(() => {
+                                  const real = eg.appointments.filter(
+                                    (a) => !isExamPlaceholder(a),
+                                  );
+                                  if (real.length === 0) {
+                                    return (
+                                      <div className="truncate text-[10px] font-medium italic leading-tight text-violet-500/80">
+                                        Nessun allievo
+                                      </div>
+                                    );
+                                  }
+                                  return real.map((a) => {
+                                    const lic = studentLicenseById.get(a.student.id);
+                                    return (
+                                      <div
+                                        key={a.id}
+                                        className="truncate text-[10px] font-semibold leading-tight text-violet-900/85"
+                                      >
+                                        {a.student.firstName} {a.student.lastName}
+                                        {lic ? (
+                                          <span className="font-medium text-violet-500"> · {lic}</span>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  });
+                                })()}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
                     {/* Instructor blocks for this instructor on this day */}
                     {instructorBlocks
                       .filter((b) => b.instructorId === instr.id && (() => {
@@ -3100,30 +3600,36 @@ export function AutoscuoleAgendaPage({
                                 style={{ top, height }}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <span className="truncate font-semibold text-slate-700">{b.reason || "Blocco"}</span>
+                                <span className="truncate font-semibold text-slate-700">{formatBlockReason(b.reason)}</span>
                                 <span className="truncate text-[10px] text-slate-500 block">{formatTimeRange(bStart, bEnd)}</span>
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" side="right" sideOffset={12} className="w-56 rounded-lg border border-border bg-white p-3 shadow-dropdown">
                               <div className="space-y-2">
-                                <div className="text-xs font-semibold text-foreground">{b.reason || "Blocco"}</div>
+                                <div className="text-xs font-semibold text-foreground">{formatBlockReason(b.reason)}</div>
                                 <div className="text-xs text-muted-foreground">{instr.name}</div>
                                 <div className="text-xs text-muted-foreground">{formatTimeRange(bStart, bEnd)}</div>
+                                {b.description && (
+                                  <div className="whitespace-pre-wrap rounded-md bg-[#f7f7f8] px-2 py-1.5 text-xs text-foreground/80">{b.description}</div>
+                                )}
                               </div>
-                              <Button type="button" variant="ghost" size="sm" className="mt-2 w-full text-red-600 hover:bg-red-50 hover:text-red-700" disabled={blockDeleting === b.id}
-                                onClick={async () => {
+                              <DropdownMenuItem className="mt-2 cursor-pointer text-sm font-medium" onSelect={() => openBlockEdit(b)}>Modifica</DropdownMenuItem>
+                              <DropdownMenuItem className="mt-1 cursor-pointer text-sm font-medium text-red-600 focus:bg-red-50 focus:text-red-700" disabled={blockDeleting === b.id}
+                                onSelect={() => {
                                   if (b.recurrenceGroupId) {
                                     setBlockDeleteConfirm({ id: b.id, recurrenceGroupId: b.recurrenceGroupId });
-                                  } else {
-                                    setBlockDeleting(b.id);
+                                    return;
+                                  }
+                                  setBlockDeleting(b.id);
+                                  void (async () => {
                                     const res = await deleteInstructorBlock(b.id);
                                     setBlockDeleting(null);
                                     if (!res.success) { toast.error({ description: res.message ?? "Errore." }); return; }
                                     setInstructorBlocks((prev) => prev.filter((x) => x.id !== b.id));
                                     toast.success({ description: "Evento eliminato." });
-                                  }
+                                  })();
                                 }}
-                              >{blockDeleting === b.id ? "Elimino..." : "Elimina evento"}</Button>
+                              >Elimina evento</DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                         );
@@ -3631,7 +4137,10 @@ export function AutoscuoleAgendaPage({
               .filter((s): s is (typeof students)[number] => Boolean(s));
             const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
             const examQuery = examPanelStudentSearch.trim().toLowerCase();
-            const examBrowse = examAddable.filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery));
+            const examBrowse = examAddable
+              .filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery))
+              // Come nel picker di creazione: i "pronti" salgono in cima anche qui.
+              .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
@@ -3792,11 +4301,26 @@ export function AutoscuoleAgendaPage({
                       {draftStudents.map((s, idx) => (
                         <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                           <span className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                            <span
+                              className={cn(
+                                "flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]",
+                                s.examReady && "ring-2 ring-[#1a7f50]",
+                              )}
+                            >
                               {examStudentInitials(s.firstName, s.lastName)}
                             </span>
                             <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                                {s.examReady && (
+                                  <span
+                                    title={examReadyTitle(s.examReadyAt)}
+                                    className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                  >
+                                    Pronto
+                                  </span>
+                                )}
+                              </span>
                               {s.licenseCategory ? (
                                 <span className="truncate text-[12px] font-medium text-[#929292]">
                                   Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
@@ -3928,11 +4452,26 @@ export function AutoscuoleAgendaPage({
                           examBrowse.map((s, idx) => (
                             <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
                               <span className="flex min-w-0 items-center gap-2.5">
-                                <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                <span
+                                  className={cn(
+                                    "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                                    s.examReady && "ring-2 ring-[#1a7f50]",
+                                  )}
+                                >
                                   {examStudentInitials(s.firstName, s.lastName)}
                                 </span>
                                 <span className="flex min-w-0 flex-col">
-                                  <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                  <span className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                    {s.examReady && (
+                                      <span
+                                        title={examReadyTitle(s.examReadyAt)}
+                                        className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                      >
+                                        Pronto
+                                      </span>
+                                    )}
+                                  </span>
                                   {s.licenseCategory ? (
                                     <span className="truncate text-[11.5px] font-medium text-[#929292]">
                                       Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
@@ -4009,11 +4548,26 @@ export function AutoscuoleAgendaPage({
                       className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                        <span
+                          className={cn(
+                            "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                            st.examReady && "ring-2 ring-[#1a7f50]",
+                          )}
+                        >
                           {examStudentInitials(st.firstName, st.lastName)}
                         </span>
                         <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                          <span className="flex min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>
+                            {st.examReady && (
+                              <span
+                                title={examReadyTitle(st.examReadyAt)}
+                                className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                              >
+                                Pronto
+                              </span>
+                            )}
+                          </span>
                           {st.licenseCategory ? (
                             <span className="truncate text-[11.5px] font-medium text-[#929292]">
                               Patente {st.licenseCategory}{st.transmission === "automatic" ? " · autom." : ""}
@@ -4181,13 +4735,17 @@ export function AutoscuoleAgendaPage({
       {/* ── Instructor Block Creation Dialog ── */}
       <CreateEventPopover
         open={blockDialogOpen}
-        onClose={() => { if (!blockCreating) setBlockDialogOpen(false); }}
-        title="Nuovo evento bloccante"
-        subtitle="Blocca l'agenda dell'istruttore per un impegno"
+        onClose={() => { if (!blockCreating) { setBlockDialogOpen(false); setBlockEditId(null); } }}
+        title={
+          blockEditId
+            ? (blockKind === "theory" ? "Modifica lezione teorica" : "Modifica evento bloccante")
+            : (blockKind === "theory" ? "Nuova lezione teorica" : "Nuovo evento bloccante")
+        }
+        subtitle={blockKind === "theory" ? "Blocca la fascia oraria dell'istruttore" : "Blocca l'agenda dell'istruttore per un impegno"}
         anchor={popoverAnchor}
         footer={
           <>
-            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => setBlockDialogOpen(false)}>
+            <button type="button" className="cursor-pointer text-sm font-semibold text-[#222222] underline underline-offset-2 disabled:opacity-50" disabled={blockCreating} onClick={() => { setBlockDialogOpen(false); setBlockEditId(null); }}>
               Annulla
             </button>
             <button
@@ -4199,26 +4757,57 @@ export function AutoscuoleAgendaPage({
                 const blockStart = new Date(`${blockForm.date}T${blockForm.startTime}:00`);
                 const startsAt = blockStart.toISOString();
                 const endsAt = new Date(blockStart.getTime() + parseInt(blockForm.duration, 10) * 60 * 1000).toISOString();
+                const isTheory = blockKind === "theory";
+                const description = blockForm.description.trim() || null;
+
+                // ── MODIFICA (blocco singolo, niente ricorrenza) ──
+                if (blockEditId) {
+                  const res = await updateInstructorBlock({
+                    blockId: blockEditId,
+                    startsAt,
+                    endsAt,
+                    // teorica: reason resta il sentinel; generico: aggiorna il titolo.
+                    reason: isTheory ? undefined : blockForm.reason.trim(),
+                    description,
+                  });
+                  setBlockCreating(false);
+                  if (!res.success) {
+                    toast.error({ description: res.message ?? "Errore salvataggio." });
+                    return;
+                  }
+                  setBlockDialogOpen(false);
+                  setBlockEditId(null);
+                  load({ silent: true });
+                  toast.success({ description: isTheory ? "Lezione teorica aggiornata." : "Evento aggiornato." });
+                  return;
+                }
+
+                // ── CREAZIONE ──
                 const res = await createInstructorBlock({
                   instructorId: blockForm.instructorId,
                   startsAt,
                   endsAt,
-                  reason: blockForm.reason.trim() || undefined,
+                  reason: isTheory ? "theory_lesson" : (blockForm.reason.trim() || undefined),
+                  description: description ?? undefined,
                   recurring: blockForm.recurring,
                   recurringWeeks: blockForm.recurring ? blockForm.recurringWeeks : undefined,
                 });
                 setBlockCreating(false);
                 if (!res.success) {
-                  toast.error({ description: res.message ?? "Errore creazione evento." });
+                  toast.error({ description: res.message ?? (isTheory ? "Errore creazione lezione." : "Errore creazione evento.") });
                   return;
                 }
                 setBlockDialogOpen(false);
                 load({ silent: true });
                 const count = (res as { count?: number }).count ?? 1;
-                toast.success({ description: count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato." });
+                toast.success({
+                  description: isTheory
+                    ? (count > 1 ? `${count} lezioni teoriche create.` : "Lezione teorica creata.")
+                    : (count > 1 ? `${count} eventi ricorrenti creati.` : "Evento creato."),
+                });
               }}
             >
-              {blockCreating ? <LoadingDots className="min-h-5" /> : "Crea evento"}
+              {blockCreating ? <LoadingDots className="min-h-5" /> : (blockEditId ? "Salva modifiche" : (blockKind === "theory" ? "Crea lezione" : "Crea evento"))}
             </button>
           </>
         }
@@ -4251,33 +4840,56 @@ export function AutoscuoleAgendaPage({
             onDurationChange={(m) => setBlockForm((f) => ({ ...f, duration: String(m) }))}
             chips={[15, 30, 45, 60, 90, 120]}
           />
-          <div>
-            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
-            <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
-          </div>
-          <div className="space-y-2">
-            <div
-              className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
-              onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
-            >
-              <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
-              <InlineToggle checked={blockForm.recurring} size="sm" />
+          {blockKind === "theory" ? (
+            <div className="flex items-start gap-2.5 rounded-[10px] bg-[#E6E9FF] px-3.5 py-3">
+              <Lock className="mt-0.5 size-4 shrink-0 text-[#4f46e5]" strokeWidth={2} />
+              <p className="text-[12.5px] font-medium leading-snug text-[#3730a3]">
+                In questa fascia l&apos;istruttore risulta occupato: gli allievi non vedranno slot prenotabili e non sarà possibile inserire guide, esami o guide di gruppo sovrapposte.
+              </p>
             </div>
-            {blockForm.recurring && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Ripeti per</span>
-                <Input
-                  type="number"
-                  min={2}
-                  max={52}
-                  value={blockForm.recurringWeeks}
-                  onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
-                  className="h-8 w-16 text-xs"
-                />
-                <span className="text-xs text-muted-foreground">settimane</span>
-              </div>
-            )}
+          ) : (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Titolo (opzionale)</p>
+              <Input value={blockForm.reason} onChange={(e) => setBlockForm((f) => ({ ...f, reason: e.target.value }))} placeholder="Es: Riunione, Visita medica, Ferie..." />
+            </div>
+          )}
+          <div>
+            <p className="mb-1.5 text-xs font-semibold text-[#555555]">Descrizione (opzionale)</p>
+            <Textarea
+              value={blockForm.description}
+              onChange={(e) => setBlockForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder={blockKind === "theory" ? "Es: argomento della lezione, aula, materiale…" : "Note aggiuntive…"}
+              rows={2}
+              maxLength={500}
+              className="resize-none"
+            />
           </div>
+          {/* La ricorrenza vale solo in creazione: in modifica si edita il singolo blocco. */}
+          {!blockEditId && (
+            <div className="space-y-2">
+              <div
+                className="flex cursor-pointer items-center justify-between rounded-[10px] bg-[#f8f8f8] px-3.5 py-2.5"
+                onClick={() => setBlockForm((f) => ({ ...f, recurring: !f.recurring }))}
+              >
+                <span className="text-[13px] font-medium text-[#555555]">Evento ricorrente</span>
+                <InlineToggle checked={blockForm.recurring} size="sm" />
+              </div>
+              {blockForm.recurring && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Ripeti per</span>
+                  <Input
+                    type="number"
+                    min={2}
+                    max={52}
+                    value={blockForm.recurringWeeks}
+                    onChange={(e) => setBlockForm((f) => ({ ...f, recurringWeeks: Math.max(2, Math.min(52, Number(e.target.value) || 2)) }))}
+                    className="h-8 w-16 text-xs"
+                  />
+                  <span className="text-xs text-muted-foreground">settimane</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </CreateEventPopover>
 
@@ -4576,6 +5188,8 @@ function formatBlockReason(reason: string | null | undefined) {
       return "Malattia";
     case "ferie":
       return "Ferie";
+    case "theory_lesson":
+      return "Lezione teorica";
     case "":
       return "Blocco";
     default:
@@ -4584,13 +5198,21 @@ function formatBlockReason(reason: string | null | undefined) {
 }
 
 /** Tinta del blocco istruttore per tipo — palette condivisa con il mobile:
- * malattia = arancio, ferie = teal, generico = grigio. */
+ * malattia = arancio, ferie = teal, lezione teorica = indaco a righe
+ * (evento fortemente bloccante), generico = grigio. */
 function blockTint(reason: string | null | undefined): { card: string; text: string } {
   switch ((reason ?? "").trim()) {
     case "sick_leave":
       return { card: "bg-[#FFF1E9] hover:bg-[#FFE3D3]", text: "text-[#C2410C]" };
     case "ferie":
       return { card: "bg-[#DDF3F0] hover:bg-[#C9ECE7]", text: "text-[#0F766E]" };
+    case "theory_lesson":
+      // Indaco + righe diagonali = "occupato / non prenotabile" a colpo d'occhio.
+      // Colore (background-color) + hatch (background-image) impilati in un'unica classe.
+      return {
+        card: "bg-[#E6E9FF] bg-[image:repeating-linear-gradient(135deg,rgba(79,70,229,0.13)_0,rgba(79,70,229,0.13)_2px,transparent_2px,transparent_9px)] hover:bg-[#DCE0FF]",
+        text: "text-[#3730a3]",
+      };
     default:
       return { card: "bg-[#F3F4F8] hover:bg-[#E7E9F1]", text: "text-slate-600" };
   }

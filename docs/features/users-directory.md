@@ -37,6 +37,17 @@ Nota: durante l'accept di un invito, la release annulla momentaneamente l'invito
 
 Il dialog (`AdminUsersCreateDialog`) mostra i campi solo quando il ruolo scelto è Allievo e la company ha AUTOSCUOLE attivo. `studentPhase`/`phaseClassifiedAt` restano ai default: il badge "Conferma fase" continua a chiedere la classificazione al titolare.
 
+## Lista Utenti (visualizzazione + ordinamento)
+
+Pagina `app/[locale]/admin/users/page.tsx` → `AdminUsersPage`, dati da `getCompanyUsers`.
+
+- **Percorso patente in lista**: per le sole righe **allievo** compare, sotto il badge ruolo, il percorso patente compatto `<categoria> · <trasmissione>` (es. `B · Manuale`), formattato via `TRANSMISSION_LABELS` (`lib/autoscuole/license.ts`). `getCompanyUsers` espone `licenseCategory`/`transmission` dal `CompanyMember`; gli inviti pending non li hanno (null → niente riga).
+- **Ordinamento A-Z**: toggle "A-Z" in toolbar → URL param `?sort=name` (default `recent` = per data di creazione desc). L'ordinamento è **server-side** in `getCompanyUsers` (param `sort`), applicato sull'intera lista prima della paginazione (`localeCompare('it')`), così è corretto anche tra pagine. Il toggle resetta `page=1`.
+
+Nella lista **Allievi** (`AutoscuoleStudentsPage`) esiste lo stesso toggle A-Z ma **client-side** (la lista è già tutta in memoria): riordina per nome *dentro ogni fase* (attesa/teoria/pratica/patentati), default `recent`.
+
+> Nota UI: il select "Istruttore assegnato" nel dettaglio allievo usa `SelectContent className="z-[200]"` per aprirsi **sopra** il `DetailPanel` (z-[200]); senza, il dropdown si apriva dietro il pannello e sembrava non rispondere al click (stessa convenzione di `date-picker`/`time-picker`).
+
 ## Connessioni
 
 - **Istruttori**: `deleteUser` di un istruttore → record `AutoscuolaInstructor` `inactive` + `userId: null`, guide future annullate operativamente (`operationallyCancelAppointmentsByResource`).

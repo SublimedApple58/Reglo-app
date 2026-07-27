@@ -22,6 +22,9 @@ import {
 import {
   operationallyCancelAppointment,
   operationallyCancelAppointmentsByResource,
+  removeAppointmentFromRecord,
+  annulFutureAppointment,
+  hardCleanupAppointmentsByStudent,
 } from "@/lib/autoscuole/operational-cancellation";
 import {
   AUTOSCUOLE_CACHE_SEGMENTS,
@@ -65,6 +68,13 @@ import {
   applyLessonCreditToExistingAppointment,
 } from "@/lib/autoscuole/payments";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
+import {
+  isLessonUnpaid,
+  readAutoBlockSettings,
+  reconcileUnpaidAutoBlock,
+  getStudentUnpaidLessonCount,
+  type MemberBlockState,
+} from "@/lib/autoscuole/unpaid-auto-block";
 import {
   LESSON_ALL_ALLOWED_TYPES,
   getCompatibleLessonTypesForInterval,
@@ -769,6 +779,10 @@ const listDirectoryStudents = async (companyId: string) => {
     // and validate vehicle⇄student eligibility (moto hierarchy).
     licenseCategory: member.licenseCategory ?? null,
     transmission: member.transmission ?? null,
+    // Fase + flag "pronto esame": il picker esame differenzia i PRATICA pronti.
+    studentPhase: member.studentPhase,
+    examReady: member.examReady,
+    examReadyAt: member.examReadyAt ? member.examReadyAt.toISOString() : null,
   }));
 };
 
@@ -1085,6 +1099,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           startsAt: true,
           endsAt: true,
           reason: true,
+          description: true,
           recurrenceGroupId: true,
           createdAt: true,
           updatedAt: true,
@@ -1480,6 +1495,8 @@ export async function getAutoscuolaStudents(search?: string) {
         licenseCategory: m.licenseCategory ?? null,
         transmission: m.transmission ?? null,
         groupLessonsOptIn: m.groupLessonsOptIn ?? false,
+        examReady: m.examReady,
+        examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
       })),
     };
   } catch (error) {
@@ -1525,26 +1542,6 @@ function isCompanyManualMode(config: {
   return (
     (!config.enabled && !config.lessonCreditFlowEnabled) ||
     (config.lessonCreditFlowEnabled && !config.lessonCreditsRequired)
-  );
-}
-
-function isLessonUnpaid(
-  l: {
-    status: string;
-    manualPaymentStatus?: string | null;
-    creditApplied?: boolean | null;
-    lateCancellationAction?: string | null;
-  },
-  manualMode: boolean,
-): boolean {
-  if (l.creditApplied) return false;
-  if (l.manualPaymentStatus === "paid") return false;
-  const s = normalizeStatus(l.status);
-  return (
-    (["completed", "checked_in"].includes(s) && manualMode) ||
-    (["cancelled", "no_show"].includes(s) &&
-      l.lateCancellationAction === "charged" &&
-      l.manualPaymentStatus === "unpaid")
   );
 }
 
@@ -1651,13 +1648,23 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       licenseCategory: m.licenseCategory ?? null,
       transmission: m.transmission ?? null,
       groupLessonsOptIn: m.groupLessonsOptIn ?? false,
+      examReady: m.examReady,
+      examReadyAt: m.examReadyAt ? m.examReadyAt.toISOString() : null,
     }));
     if (!students.length) return { success: true, data: [] };
 
-    const bookingBlockedMap = new Map<string, boolean>();
+    const memberBlockStateMap = new Map<string, MemberBlockState>();
     for (const m of members) {
-      bookingBlockedMap.set(m.userId, m.bookingBlocked);
+      memberBlockStateMap.set(m.userId, {
+        bookingBlocked: m.bookingBlocked,
+        bookingBlockReason:
+          (m.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ?? null,
+        unpaidBlockClearedAtCount: m.unpaidBlockClearedAtCount ?? null,
+      });
     }
+    const autoBlockSettings = readAutoBlockSettings(
+      await getCachedCompanyServiceLimits(companyId),
+    );
 
     const studentIds = students.map((student) => student.id);
 
@@ -1722,27 +1729,44 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       lessonsByStudent.set(item.studentId, current);
     }
 
-    const rows = students.map((student) => {
-      const studentCases = casesByStudent.get(student.id) ?? [];
-      const register = buildDrivingRegisterData({
-        cases: studentCases,
-        lessons: lessonsByStudent.get(student.id) ?? [],
-      });
-      const studentLessons = lessonsByStudent.get(student.id) ?? [];
-      const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
-      const latestCase = studentCases
-        .slice()
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-      const theoryExamAt = (latestCase as { theoryExamAt?: Date | null } | undefined)?.theoryExamAt ?? null;
-      return {
-        ...student,
-        bookingBlocked: bookingBlockedMap.get(student.id) ?? false,
-        activeCase: register.activeCase,
-        summary: register.summary,
-        manualUnpaid,
-        theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
-      };
-    });
+    const rows = await Promise.all(
+      students.map(async (student) => {
+        const studentCases = casesByStudent.get(student.id) ?? [];
+        const register = buildDrivingRegisterData({
+          cases: studentCases,
+          lessons: lessonsByStudent.get(student.id) ?? [],
+        });
+        const studentLessons = lessonsByStudent.get(student.id) ?? [];
+        const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
+        // Riconcilia il blocco automatico per debito: usa il conteggio appena
+        // calcolato (nessuna query extra) e persiste solo se lo stato cambia.
+        const blockState = memberBlockStateMap.get(student.id) ?? {
+          bookingBlocked: false,
+          bookingBlockReason: null,
+          unpaidBlockClearedAtCount: null,
+        };
+        const nextBlock = await reconcileUnpaidAutoBlock({
+          companyId,
+          userId: student.id,
+          state: blockState,
+          unpaidCount: manualUnpaid,
+          settings: autoBlockSettings,
+        });
+        const latestCase = studentCases
+          .slice()
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+        const theoryExamAt = (latestCase as { theoryExamAt?: Date | null } | undefined)?.theoryExamAt ?? null;
+        return {
+          ...student,
+          bookingBlocked: nextBlock.bookingBlocked,
+          bookingBlockReason: nextBlock.bookingBlockReason,
+          activeCase: register.activeCase,
+          summary: register.summary,
+          manualUnpaid,
+          theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
+        };
+      }),
+    );
 
     return { success: true, data: rows };
   } catch (error) {
@@ -1859,7 +1883,20 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
         },
       }),
       prisma.autoscuolaAppointment.findMany({
-        where: { companyId, studentId },
+        // record_cleanup = guida rimossa dal titolare ("Cancella"): sparisce
+        // dallo storico (e quindi da "Tutte"/"Annullate") e da tutti i conteggi.
+        // ATTENZIONE: in Prisma `{ not: "x" }` NON include le righe con valore
+        // NULL (semantica SQL: `col <> 'x'` è NULL per col NULL). Le guide normali
+        // hanno cancellationKind null → serve l'OR esplicito, altrimenti sparirebbero
+        // TUTTE le guide non cancellate dallo storico di ogni allievo.
+        where: {
+          companyId,
+          studentId,
+          OR: [
+            { cancellationKind: null },
+            { cancellationKind: { not: "record_cleanup" } },
+          ],
+        },
         select: {
           id: true,
           studentId: true,
@@ -1873,6 +1910,8 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
           cancelledAt: true,
           cancellationKind: true,
           cancellationReason: true,
+          penaltyCutoffAt: true,
+          penaltyAmount: true,
           paymentRequired: true,
           manualPaymentStatus: true,
           creditApplied: true,
@@ -1917,6 +1956,21 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     );
     const manualUnpaid = lessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
 
+    // Riconcilia il blocco automatico per debito con il conteggio appena calcolato.
+    const autoBlock = await reconcileUnpaidAutoBlock({
+      companyId,
+      userId: studentId,
+      state: {
+        bookingBlocked: studentMembership.bookingBlocked,
+        bookingBlockReason:
+          (studentMembership.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ??
+          null,
+        unpaidBlockClearedAtCount: studentMembership.unpaidBlockClearedAtCount ?? null,
+      },
+      unpaidCount: manualUnpaid,
+      settings: readAutoBlockSettings(await getCachedCompanyServiceLimits(companyId)),
+    });
+
     const latestCaseTheoryExamAt = cases
       .slice()
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.theoryExamAt ?? null;
@@ -1925,12 +1979,17 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
       success: true,
       data: {
         student,
-        bookingBlocked: studentMembership.bookingBlocked,
+        bookingBlocked: autoBlock.bookingBlocked,
+        bookingBlockReason: autoBlock.bookingBlockReason,
         weeklyBookingLimitExempt: studentMembership.weeklyBookingLimitExempt,
         examPriorityOverride: studentMembership.examPriorityOverride,
         examPriorityActive: examPriorityInfo.active,
         examDate: examPriorityInfo.examDate,
         studentPhase: studentMembership.studentPhase,
+        examReady: studentMembership.examReady,
+        examReadyAt: studentMembership.examReadyAt
+          ? studentMembership.examReadyAt.toISOString()
+          : null,
         licenseCategory: studentMembership.licenseCategory ?? null,
         transmission: studentMembership.transmission ?? null,
         groupLessonsOptIn: studentMembership.groupLessonsOptIn ?? false,
@@ -1951,6 +2010,8 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
             cancelledAt: raw?.cancelledAt ?? null,
             cancellationKind: raw?.cancellationKind ?? null,
             cancellationReason: raw?.cancellationReason ?? null,
+            penaltyCutoffAt: raw?.penaltyCutoffAt ?? null,
+            penaltyAmount: raw?.penaltyAmount != null ? Number(raw.penaltyAmount) : null,
             paymentRequired: raw?.paymentRequired ?? false,
             manualPaymentStatus: raw?.manualPaymentStatus ?? null,
             creditApplied: raw?.creditApplied ?? false,
@@ -2358,8 +2419,14 @@ export async function getAutoscuolaAppointmentsFiltered(input?: {
           locationId: true,
           groupLessonId: true,
           notes: true,
+          cancelledAt: true,
           cancellationKind: true,
           cancellationReason: true,
+          creditApplied: true,
+          paymentRequired: true,
+          penaltyAmount: true,
+          penaltyCutoffAt: true,
+          lateCancellationAction: true,
           replacedByAppointmentId: true,
           createdAt: true,
           updatedAt: true,
@@ -3875,6 +3942,110 @@ export async function permanentlyCancelAutoscuolaAppointment(
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return { success: true, message: "Guida eliminata definitivamente." };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Rimuovi dallo storico" dal dettaglio allievo (web): toglie una guida dallo
+ * storico e dall'agenda. Solo titolare/admin. Esami e guide di gruppo esclusi.
+ * Opzioni scelte dal titolare in fase di rimozione:
+ *  - keepInHours: mantiene la guida nel conteggio ore dell'istruttore.
+ *  - refundCredit: restituisce il credito se la guida era coperta da un credito.
+ */
+const removeFromRecordSchema = z.object({
+  appointmentId: z.string().uuid(),
+  keepInHours: z.boolean().optional(),
+  refundCredit: z.boolean().optional(),
+});
+
+export async function hardCleanupAutoscuolaAppointment(
+  input: z.infer<typeof removeFromRecordSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerOrAdmin) {
+      return {
+        success: false,
+        message: "Solo il titolare può rimuovere una guida dallo storico.",
+      };
+    }
+    const payload = removeFromRecordSchema.parse(input);
+    return await removeAppointmentFromRecord({
+      companyId: membership.companyId,
+      appointmentId: payload.appointmentId,
+      actorUserId: membership.userId,
+      keepInHours: payload.keepInHours ?? false,
+      refundCredit: payload.refundCredit ?? false,
+    });
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Annulla guida" (guide future) — dialogo unico dell'agenda / dettaglio allievo.
+ * `lateOutcome` (solo se l'annullamento è tardivo): "penalize" | "waive" | "defer".
+ * L'istruttore (non titolare) non decide l'esito economico: se tardivo va sempre
+ * in coda "Cancellazioni tardive" (defer).
+ */
+const annulAppointmentSchema = z.object({
+  appointmentId: z.string().uuid(),
+  lateOutcome: z.enum(["penalize", "waive", "defer"]).optional(),
+});
+
+export async function annulAutoscuolaAppointment(
+  input: z.infer<typeof annulAppointmentSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    const isInstructorActor =
+      isInstructor(membership.autoscuolaRole) && membership.role !== "admin";
+    if (!isOwnerOrAdmin && !isInstructorActor) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = annulAppointmentSchema.parse(input);
+    // L'istruttore non titolare non può decidere addebito/rimborso sul tardivo.
+    const lateOutcome = isOwnerOrAdmin ? payload.lateOutcome : "defer";
+    return await annulFutureAppointment({
+      companyId: membership.companyId,
+      appointmentId: payload.appointmentId,
+      actorUserId: membership.userId,
+      lateOutcome,
+    });
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/**
+ * "Cancella tutte" dal dettaglio allievo (web): rimuove tutte le guide future
+ * ancora attive dell'allievo (esami/gruppi esclusi). Solo titolare/admin.
+ */
+export async function hardCleanupAutoscuolaAppointmentsByStudent(input: {
+  studentId: string;
+}) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const isOwnerOrAdmin =
+      membership.role === "admin" || isOwner(membership.autoscuolaRole);
+    if (!isOwnerOrAdmin) {
+      return {
+        success: false,
+        message: "Solo il titolare può rimuovere le guide dallo storico.",
+      };
+    }
+    const studentId = z.string().min(1).parse(input?.studentId);
+    return await hardCleanupAppointmentsByStudent({
+      companyId: membership.companyId,
+      studentId,
+      actorUserId: membership.userId,
+    });
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
@@ -5457,7 +5628,13 @@ async function verifyInstructorAvailability({
       minute: "2-digit",
       timeZone: "Europe/Rome",
     });
-    const reasonSuffix = overlappingBlock.reason ? ` (${overlappingBlock.reason})` : "";
+    const rawBlockReason = overlappingBlock.reason?.trim();
+    const blockReasonLabel =
+      rawBlockReason === "theory_lesson" ? "Lezione teorica"
+      : rawBlockReason === "sick_leave" ? "Malattia"
+      : rawBlockReason === "ferie" ? "Ferie"
+      : rawBlockReason;
+    const reasonSuffix = blockReasonLabel ? ` (${blockReasonLabel})` : "";
     return {
       available: false,
       reason: "BLOCK",
@@ -6878,6 +7055,7 @@ const createInstructorBlockSchema = z.object({
   startsAt: z.string(),
   endsAt: z.string(),
   reason: z.string().optional(),
+  description: z.string().max(500).optional(),
   recurring: z.boolean().optional(),
   recurringWeeks: z.number().int().min(2).max(52).optional(),
 });
@@ -6983,8 +7161,14 @@ export async function createInstructorBlock(
         const dayStr = formatDayItaly(blockStart);
         const requested = `${formatTimeItaly(blockStart)}–${formatTimeItaly(blockEnd)}`;
         const conflictTime = `${formatTimeItaly(blockConflict.startsAt)}–${formatTimeItaly(blockConflict.endsAt)}`;
-        const reason = blockConflict.reason?.trim();
-        const conflictLabel = reason ? `«${reason}» ${conflictTime}` : conflictTime;
+        const rawReason = blockConflict.reason?.trim();
+        // Traduci i sentinel-tipo in etichette leggibili (il resto è titolo libero).
+        const reasonLabel =
+          rawReason === "theory_lesson" ? "Lezione teorica"
+          : rawReason === "sick_leave" ? "Malattia"
+          : rawReason === "ferie" ? "Ferie"
+          : rawReason;
+        const conflictLabel = reasonLabel ? `«${reasonLabel}» ${conflictTime}` : conflictTime;
         return {
           success: false as const,
           message: `Impossibile bloccare ${dayStr} ${requested}: si sovrappone al blocco ${conflictLabel}.`,
@@ -7001,6 +7185,7 @@ export async function createInstructorBlock(
             startsAt: new Date(startsAt.getTime() + i * WEEK_MS),
             endsAt: new Date(endsAt.getTime() + i * WEEK_MS),
             reason: payload.reason ?? null,
+            description: payload.description?.trim() || null,
             recurrenceGroupId,
           },
         }),
@@ -7010,6 +7195,128 @@ export async function createInstructorBlock(
     await invalidateAgendaAndPaymentsCache(membership.companyId);
 
     return { success: true as const, data: blocks[0], count: blocks.length };
+  } catch (error) {
+    return { success: false as const, message: formatError(error) };
+  }
+}
+
+const updateInstructorBlockSchema = z.object({
+  blockId: z.string().uuid(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+  reason: z.string().optional(),
+  description: z.string().max(500).nullable().optional(),
+});
+
+/**
+ * Modifica un SINGOLO blocco istruttore (orario e/o descrizione). Non tocca la
+ * ricorrenza: se il blocco fa parte di un gruppo, cambia solo quell'occorrenza.
+ * Usato dalla modifica delle lezioni teoriche (web + mobile via PATCH).
+ */
+export async function updateInstructorBlock(
+  input: z.infer<typeof updateInstructorBlockSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    const payload = updateInstructorBlockSchema.parse(input);
+    const isOwnerOrAdmin = membership.role === "admin" || isOwner(membership.autoscuolaRole);
+
+    const block = await prisma.autoscuolaInstructorBlock.findFirst({
+      where: { id: payload.blockId, companyId: membership.companyId },
+    });
+    if (!block) {
+      return { success: false as const, message: "Blocco non trovato." };
+    }
+
+    // Gli istruttori possono modificare solo i propri blocchi.
+    if (!isOwnerOrAdmin) {
+      const instructor = await prisma.autoscuolaInstructor.findFirst({
+        where: { companyId: membership.companyId, userId: membership.userId, status: { not: "inactive" } },
+        select: { id: true },
+      });
+      if (!instructor || block.instructorId !== instructor.id) {
+        return { success: false as const, message: "Non puoi modificare blocchi di altri istruttori." };
+      }
+    }
+
+    const nextStart = payload.startsAt ? new Date(payload.startsAt) : block.startsAt;
+    const nextEnd = payload.endsAt ? new Date(payload.endsAt) : block.endsAt;
+    if (nextEnd <= nextStart) {
+      return { success: false as const, message: "L'orario di fine deve essere successivo all'inizio." };
+    }
+
+    const timeChanged = payload.startsAt !== undefined || payload.endsAt !== undefined;
+    if (timeChanged) {
+      const formatDayItaly = (d: Date) =>
+        d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", timeZone: "Europe/Rome" });
+      const formatTimeItaly = (d: Date) =>
+        d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" });
+
+      // Stessi controlli di conflitto della creazione, escludendo il blocco stesso.
+      const appointmentConflict = await prisma.autoscuolaAppointment.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: block.instructorId,
+          status: { notIn: ["cancelled"] },
+          startsAt: { lt: nextEnd },
+          endsAt: { gt: nextStart },
+        },
+        select: { id: true, startsAt: true, endsAt: true },
+      });
+      if (appointmentConflict) {
+        const dayStr = formatDayItaly(nextStart);
+        const requested = `${formatTimeItaly(nextStart)}–${formatTimeItaly(nextEnd)}`;
+        const conflictTime = appointmentConflict.endsAt
+          ? `${formatTimeItaly(appointmentConflict.startsAt)}–${formatTimeItaly(appointmentConflict.endsAt)}`
+          : formatTimeItaly(appointmentConflict.startsAt);
+        return {
+          success: false as const,
+          message: `Impossibile spostare a ${dayStr} ${requested}: c'è una guida programmata alle ${conflictTime}.`,
+        };
+      }
+
+      const blockConflict = await prisma.autoscuolaInstructorBlock.findFirst({
+        where: {
+          companyId: membership.companyId,
+          instructorId: block.instructorId,
+          id: { not: block.id },
+          startsAt: { lt: nextEnd },
+          endsAt: { gt: nextStart },
+        },
+        select: { id: true, startsAt: true, endsAt: true, reason: true },
+      });
+      if (blockConflict) {
+        const dayStr = formatDayItaly(nextStart);
+        const requested = `${formatTimeItaly(nextStart)}–${formatTimeItaly(nextEnd)}`;
+        const conflictTime = `${formatTimeItaly(blockConflict.startsAt)}–${formatTimeItaly(blockConflict.endsAt)}`;
+        const rawReason = blockConflict.reason?.trim();
+        const reasonLabel =
+          rawReason === "theory_lesson" ? "Lezione teorica"
+          : rawReason === "sick_leave" ? "Malattia"
+          : rawReason === "ferie" ? "Ferie"
+          : rawReason;
+        const conflictLabel = reasonLabel ? `«${reasonLabel}» ${conflictTime}` : conflictTime;
+        return {
+          success: false as const,
+          message: `Impossibile spostare a ${dayStr} ${requested}: si sovrappone al blocco ${conflictLabel}.`,
+        };
+      }
+    }
+
+    const updated = await prisma.autoscuolaInstructorBlock.update({
+      where: { id: block.id },
+      data: {
+        startsAt: nextStart,
+        endsAt: nextEnd,
+        ...(payload.reason !== undefined ? { reason: payload.reason.trim() || null } : {}),
+        ...(payload.description !== undefined
+          ? { description: (payload.description ?? "").trim() || null }
+          : {}),
+      },
+    });
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true as const, data: updated };
   } catch (error) {
     return { success: false as const, message: formatError(error) };
   }
@@ -7211,13 +7518,27 @@ export async function toggleStudentBookingBlock(
     }
     const payload = toggleStudentBookingBlockSchema.parse(input);
 
+    // Il blocco/sblocco manuale del titolare convive con l'automatismo per debito
+    // (stesso campo `bookingBlocked`). Marca l'origine per non entrare in conflitto:
+    //  - BLOCCA a mano → reason="manual": l'automatismo non toccherà mai il record.
+    //  - SBLOCCA a mano → reason=null + watermark = guide non pagate correnti, così
+    //    l'automatismo non riblocca per lo stesso debito residuo (ribloccherà solo
+    //    su un nuovo superamento della soglia).
+    const clearedAtCount = payload.blocked
+      ? null
+      : await getStudentUnpaidLessonCount(membership.companyId, payload.studentId);
+
     await prisma.companyMember.updateMany({
       where: {
         companyId: membership.companyId,
         userId: payload.studentId,
         autoscuolaRole: "STUDENT",
       },
-      data: { bookingBlocked: payload.blocked },
+      data: {
+        bookingBlocked: payload.blocked,
+        bookingBlockReason: payload.blocked ? "manual" : null,
+        unpaidBlockClearedAtCount: clearedAtCount,
+      },
     });
 
     return {
@@ -7367,6 +7688,13 @@ export async function updateStudentPhase(
         ...(payload.phase === "TEORIA" &&
           payload.grantSeat &&
           !studentMember.quizSeatGrantedAt && { quizSeatGrantedAt: now }),
+        // "Pronto per l'esame" ha senso solo in PRATICA: uscendo dalla fase
+        // (tipicamente → PATENTATO quando passa l'esame) lo azzeriamo.
+        ...(payload.phase !== "PRATICA" && {
+          examReady: false,
+          examReadyAt: null,
+          examReadyBy: null,
+        }),
       },
     });
 
@@ -9658,6 +9986,64 @@ export async function setExamPriorityOverride(
 }
 
 // ---------------------------------------------------------------------------
+// Exam-ready flag ("Pronto per l'esame")
+//
+// Segnale INTERNO impostato da titolare (web) o istruttore (mobile) sugli allievi
+// in fase PRATICA. NON vincolante: non blocca la prenotazione dell'esame né delle
+// guide; serve solo a differenziare pronti/non-pronti nei picker di creazione
+// esame. Permessi allineati alla POST esame (istruttore + titolare + admin), non
+// solo OWNER come i toggle vicini, perché anche l'istruttore da mobile deve poterlo
+// impostare. Salviamo anche chi/quando (examReadyBy/At) per le chicche in UI.
+// ---------------------------------------------------------------------------
+
+const setStudentExamReadySchema = z.object({
+  studentId: z.string().uuid(),
+  ready: z.boolean(),
+});
+
+export async function setStudentExamReady(
+  input: z.infer<typeof setStudentExamReadySchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (
+      !isInstructor(membership.autoscuolaRole) &&
+      !isOwner(membership.autoscuolaRole) &&
+      membership.role !== "admin"
+    ) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const payload = setStudentExamReadySchema.parse(input);
+
+    const examReadyAt = payload.ready ? new Date() : null;
+    const examReadyBy = payload.ready ? membership.userId : null;
+
+    await prisma.companyMember.updateMany({
+      where: {
+        companyId: membership.companyId,
+        userId: payload.studentId,
+        autoscuolaRole: "STUDENT",
+      },
+      data: {
+        examReady: payload.ready,
+        examReadyAt,
+        examReadyBy,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        examReady: payload.ready,
+        examReadyAt: examReadyAt ? examReadyAt.toISOString() : null,
+      },
+    };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Manual payment tracking
 // ---------------------------------------------------------------------------
 
@@ -9715,6 +10101,87 @@ export async function setManualPaymentStatus(
   }
 }
 
+/**
+ * "Copri con credito" dal dettaglio allievo: applica un credito guida a una guida
+ * NON ancora coperta (tipicamente una guida di gruppo, che nasce `paymentRequired`
+ * e non consuma credito alla prenotazione). Consuma 1 credito e marca la guida come
+ * coperta (`creditApplied=true`, azzera lo stato pagamento manuale). Atomico.
+ * L'alternativa resta "Segna pagata".
+ */
+export async function coverAppointmentWithLessonCredit(input: { appointmentId: string }) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageStudentCredits(membership)) {
+      return { success: false, message: "Operazione non consentita." };
+    }
+    const { appointmentId } = z
+      .object({ appointmentId: z.string().uuid() })
+      .parse(input);
+
+    const appointment = await prisma.autoscuolaAppointment.findFirst({
+      where: { id: appointmentId, companyId: membership.companyId },
+      select: {
+        id: true,
+        studentId: true,
+        creditApplied: true,
+        manualPaymentStatus: true,
+        type: true,
+      },
+    });
+    if (!appointment) {
+      return { success: false, message: "Guida non trovata." };
+    }
+    if (appointment.type === "esame") {
+      return { success: false, message: "Gli esami non usano i crediti guida." };
+    }
+    if (appointment.creditApplied) {
+      return { success: false, message: "Questa guida è già coperta da un credito." };
+    }
+    if (appointment.manualPaymentStatus === "paid") {
+      return { success: false, message: "Questa guida è già segnata come pagata." };
+    }
+    if (!appointment.studentId) {
+      return { success: false, message: "Guida senza allievo." };
+    }
+
+    const config = await getAutoscuolaPaymentConfig({ companyId: membership.companyId });
+    if (!config.lessonCreditFlowEnabled) {
+      return {
+        success: false,
+        message: "I crediti guida non sono attivi per questa autoscuola.",
+      };
+    }
+
+    const studentId = appointment.studentId;
+    const applied = await prisma.$transaction(async (tx) => {
+      const adjustment = await adjustStudentLessonCredits({
+        prisma: tx as never,
+        companyId: membership.companyId,
+        studentId,
+        delta: -1,
+        reason: "booking_consume",
+        actorUserId: membership.userId,
+        appointmentId: appointment.id,
+      });
+      if (adjustment.appliedDelta === 0) return false;
+      await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: { creditApplied: true, manualPaymentStatus: null },
+      });
+      return true;
+    });
+
+    if (!applied) {
+      return { success: false, message: "L'allievo non ha crediti disponibili." };
+    }
+
+    await invalidateAgendaAndPaymentsCache(membership.companyId);
+    return { success: true, message: "Guida coperta da un credito." };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Payment mode helper
 // ---------------------------------------------------------------------------
@@ -9760,6 +10227,7 @@ export async function getLateCancellations() {
         instructorName: string | null;
         type: string;
         endsAt: Date | null;
+        creditApplied: boolean;
       }>
     >`
       SELECT
@@ -9773,7 +10241,8 @@ export async function getLateCancellations() {
         u.name AS "studentName",
         i.name AS "instructorName",
         a.type,
-        a."endsAt"
+        a."endsAt",
+        a."creditApplied"
       FROM "AutoscuolaAppointment" a
       JOIN "User" u ON u.id = a."studentId"
       LEFT JOIN "AutoscuolaInstructor" i ON i.id = a."instructorId"
@@ -9854,6 +10323,7 @@ export async function getLateCancellations() {
         lessonType: c.type,
         durationMinutes,
         studentLateCancellationsCount: lateCounts.get(c.studentId) ?? 0,
+        creditApplied: c.creditApplied,
       };
     });
 
@@ -9901,14 +10371,40 @@ export async function resolveLateCancellation(
     }
 
     if (payload.action === "dismiss") {
-      await prisma.autoscuolaAppointment.update({
-        where: { id: appointment.id },
-        data: { lateCancellationAction: "dismissed" },
-      });
+      // Se la guida era coperta da un credito (scalato alla prenotazione) e il
+      // credito NON è ancora stato reso, "Non addebitare / Restituisci il credito"
+      // deve RIDARLO davvero all'allievo (+1). Prima veniva solo archiviata e il
+      // credito restava perso → i due CTA erano di fatto identici.
+      const refundCredit =
+        !!appointment.studentId &&
+        appointment.creditApplied &&
+        appointment.creditRefundedAt === null;
+      if (refundCredit) {
+        await adjustStudentLessonCredits({
+          companyId: membership.companyId,
+          studentId: appointment.studentId!,
+          delta: 1,
+          reason: "cancel_refund",
+          actorUserId: membership.userId,
+          appointmentId: appointment.id,
+        });
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "dismissed", creditRefundedAt: new Date() },
+        });
+      } else {
+        await prisma.autoscuolaAppointment.update({
+          where: { id: appointment.id },
+          data: { lateCancellationAction: "dismissed" },
+        });
+      }
+      await invalidateAgendaAndPaymentsCache(membership.companyId);
       return {
         success: true,
         data: { action: "dismissed" },
-        message: "Cancellazione tardiva archiviata senza addebito.",
+        message: refundCredit
+          ? "Credito restituito all'allievo."
+          : "Cancellazione tardiva archiviata senza addebito.",
       };
     }
 
@@ -10030,6 +10526,9 @@ type InstructorHoursDayBreakdown = {
   totalMinutes: number;
   outsideWorkingHoursMinutes: number;
   appointmentCount: number;
+  // Ore di lezione teorica (block `theory_lesson`) — categoria SEPARATA, NON
+  // conteggiata in totalMinutes (che resta solo guide).
+  theoryMinutes: number;
 };
 
 export type InstructorHoursEntry = {
@@ -10041,6 +10540,7 @@ export type InstructorHoursEntry = {
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
     lateCancellationMinutes: number;
+    theoryMinutes: number;
     byDay: InstructorHoursDayBreakdown[];
   };
   monthly: {
@@ -10048,6 +10548,7 @@ export type InstructorHoursEntry = {
     totalMinutes: number;
     outsideWorkingHoursMinutes: number;
     lateCancellationMinutes: number;
+    theoryMinutes: number;
   };
 };
 
@@ -10060,6 +10561,7 @@ export type InstructorHoursBucket = {
   totalMinutes: number;
   outsideWorkingHoursMinutes: number;
   appointmentCount: number;
+  theoryMinutes: number; // ore di lezione teorica, categoria separata
 };
 
 export type InstructorHoursRange = {
@@ -10070,7 +10572,7 @@ export type InstructorHoursRange = {
   rangeStart: string; // ISO YYYY-MM-DD (inclusive)
   rangeEnd: string; // ISO YYYY-MM-DD (inclusive)
   granularity: "day" | "week";
-  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number };
+  total: { totalMinutes: number; outsideWorkingHoursMinutes: number; appointmentCount: number; theoryMinutes: number };
   buckets: InstructorHoursBucket[];
 };
 
@@ -10221,6 +10723,18 @@ export async function getInstructorDrivingHours(input: {
       },
     });
 
+    // Lezioni teoriche (block `theory_lesson`) nello stesso range — categoria
+    // separata, NON sommata alle ore di guida.
+    const theoryBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        reason: "theory_lesson",
+        startsAt: { gte: rangeStart, lt: rangeEnd },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    });
+
     // Late cancellations: status = 'cancelled' AND cancelledAt > penaltyCutoffAt
     // AND cancellationKind = 'manual_cancel'. We fetch all candidates and then
     // filter in JS because Prisma's `where` cannot compare two fields directly.
@@ -10263,6 +10777,9 @@ export async function getInstructorDrivingHours(input: {
       const instrLateAppts = lateCancelledAppointments.filter(
         (a) => a.instructorId === instr.id,
       );
+      const instrTheory = theoryBlocks.filter((b) => b.instructorId === instr.id);
+      const blockMinutes = (b: { startsAt: Date; endsAt: Date }) =>
+        Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / 60000);
 
       // Late cancellation totals (weekly + monthly)
       let weeklyLateCancellationMin = 0;
@@ -10300,6 +10817,9 @@ export async function getInstructorDrivingHours(input: {
             settings.workingHoursEnd,
           );
         }
+        const dayTheoryMin = instrTheory
+          .filter((b) => b.startsAt >= dayDate && b.startsAt < nextDay)
+          .reduce((s, b) => s + blockMinutes(b), 0);
         const dow = (dayDate.getUTCDay());
         weekDays.push({
           date: dateStr,
@@ -10307,11 +10827,13 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: dayTotalMin,
           outsideWorkingHoursMinutes: Math.round(dayOutsideMin),
           appointmentCount: dayAppts.length,
+          theoryMinutes: dayTheoryMin,
         });
       }
 
       const weeklyTotal = weekDays.reduce((s, d) => s + d.totalMinutes, 0);
       const weeklyOutside = weekDays.reduce((s, d) => s + d.outsideWorkingHoursMinutes, 0);
+      const weeklyTheory = weekDays.reduce((s, d) => s + d.theoryMinutes, 0);
 
       // Monthly totals
       const monthAppts = instrAppts.filter((a) => a.startsAt >= monthStartDate && a.startsAt < monthEndDate);
@@ -10328,6 +10850,9 @@ export async function getInstructorDrivingHours(input: {
           settings.workingHoursEnd,
         );
       }
+      const monthTheory = instrTheory
+        .filter((b) => b.startsAt >= monthStartDate && b.startsAt < monthEndDate)
+        .reduce((s, b) => s + blockMinutes(b), 0);
 
       const monthLabel = `${ITALY_MONTH_LABELS[monthStartDate.getUTCMonth()]} ${monthStartDate.getUTCFullYear()}`;
 
@@ -10340,6 +10865,7 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: weeklyTotal,
           outsideWorkingHoursMinutes: weeklyOutside,
           lateCancellationMinutes: weeklyLateCancellationMin,
+          theoryMinutes: weeklyTheory,
           byDay: weekDays,
         },
         monthly: {
@@ -10347,6 +10873,7 @@ export async function getInstructorDrivingHours(input: {
           totalMinutes: monthTotal,
           outsideWorkingHoursMinutes: Math.round(monthOutside),
           lateCancellationMinutes: monthlyLateCancellationMin,
+          theoryMinutes: monthTheory,
         },
       };
     });
@@ -10439,10 +10966,24 @@ export async function getInstructorDrivingHoursRange(input: {
       select: { instructorId: true, startsAt: true, endsAt: true },
     });
 
+    // Lezioni teoriche nello stesso range — categoria separata.
+    const theoryBlocks = await prisma.autoscuolaInstructorBlock.findMany({
+      where: {
+        companyId,
+        instructorId: { in: instructorIds },
+        reason: "theory_lesson",
+        startsAt: { gte: rangeStartDate, lt: rangeEndExclusive },
+      },
+      select: { instructorId: true, startsAt: true, endsAt: true },
+    });
+
     const settingsMap = new Map<string, ReturnType<typeof parseInstructorSettings>>();
     for (const instr of targetInstructors) {
       settingsMap.set(instr.id, parseInstructorSettings(instr.settings));
     }
+
+    const sumTheory = (blocks: { startsAt: Date; endsAt: Date }[]) =>
+      blocks.reduce((s, b) => s + Math.round((b.endsAt.getTime() - b.startsAt.getTime()) / 60000), 0);
 
     const sumAppts = (
       appts: { startsAt: Date; endsAt: Date | null }[],
@@ -10467,6 +11008,7 @@ export async function getInstructorDrivingHoursRange(input: {
     const results: InstructorHoursRange[] = targetInstructors.map((instr) => {
       const settings = settingsMap.get(instr.id)!;
       const instrAppts = appointments.filter((a) => a.instructorId === instr.id);
+      const instrTheory = theoryBlocks.filter((b) => b.instructorId === instr.id);
       const buckets: InstructorHoursBucket[] = [];
 
       if (granularity === "day") {
@@ -10483,6 +11025,7 @@ export async function getInstructorDrivingHoursRange(input: {
             totalMinutes: total,
             outsideWorkingHoursMinutes: outside,
             appointmentCount: dayAppts.length,
+            theoryMinutes: sumTheory(instrTheory.filter((b) => b.startsAt >= dayDate && b.startsAt < nextDay)),
           });
         }
       } else {
@@ -10503,6 +11046,7 @@ export async function getInstructorDrivingHoursRange(input: {
             totalMinutes: total,
             outsideWorkingHoursMinutes: outside,
             appointmentCount: wAppts.length,
+            theoryMinutes: sumTheory(instrTheory.filter((b) => b.startsAt >= weekStartD && b.startsAt < weekEndD)),
           });
         }
       }
@@ -10519,6 +11063,7 @@ export async function getInstructorDrivingHoursRange(input: {
           totalMinutes: buckets.reduce((s, b) => s + b.totalMinutes, 0),
           outsideWorkingHoursMinutes: buckets.reduce((s, b) => s + b.outsideWorkingHoursMinutes, 0),
           appointmentCount: buckets.reduce((s, b) => s + b.appointmentCount, 0),
+          theoryMinutes: buckets.reduce((s, b) => s + b.theoryMinutes, 0),
         },
         buckets,
       };

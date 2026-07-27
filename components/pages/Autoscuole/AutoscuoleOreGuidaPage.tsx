@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, BookOpen } from "lucide-react";
 
 import { FadeIn } from "@/components/ui/fade-in";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,6 +87,7 @@ export function AutoscuoleOreGuidaPage() {
 
   const isThisWeek = formatDateISO(weekStart) === formatDateISO(getWeekStart(new Date()));
   const teamTotalMinutes = (data ?? []).reduce((sum, e) => sum + e.weekly.totalMinutes, 0);
+  const teamTheoryMinutes = (data ?? []).reduce((sum, e) => sum + e.weekly.theoryMinutes, 0);
   const lateList = (data ?? []).filter((e) => e.monthly.lateCancellationMinutes > 0);
 
   return (
@@ -124,6 +125,9 @@ export function AutoscuoleOreGuidaPage() {
               <h1 className="text-2xl font-bold tracking-[-0.3px] text-foreground">Ore guida</h1>
               <div className="mt-1.5 text-sm font-medium text-[#929292]">
                 Totale ore · {formatMinutesAsHours(teamTotalMinutes)}
+                {teamTheoryMinutes > 0 && (
+                  <span className="text-[#4f46e5]"> · Teoria {formatMinutesAsHours(teamTheoryMinutes)}</span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -214,6 +218,12 @@ function InstructorHoursCard({ entry, weekLabel }: { entry: InstructorHoursEntry
           {formatMinutesAsHours(entry.weekly.totalMinutes)}
         </span>
         <div className="mt-[5px] text-[13px] font-medium text-[#929292]">{weekLabel}</div>
+        {entry.weekly.theoryMinutes > 0 && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#E6E9FF] px-2.5 py-1 text-[12px] font-semibold text-[#3730a3]">
+            <BookOpen className="size-3.5" strokeWidth={2} />
+            Lezione teorica · {formatMinutesAsHours(entry.weekly.theoryMinutes)}
+          </div>
+        )}
       </div>
       <div className="mb-2 flex h-[52px] items-end gap-[3px]">
         {entry.weekly.byDay.map((day) => {

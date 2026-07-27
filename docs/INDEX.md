@@ -6,7 +6,7 @@
 
 | Feature | Doc | Primary files |
 |---------|-----|--------------|
-| Appointments | [appointments.md](features/appointments.md) | `autoscuole.actions.ts` |
+| Appointments (incl. cancellazioni: dialogo unico "Annulla guida" `manual_cancel` / "Rimuovi dallo storico" `record_cleanup`) | [appointments.md](features/appointments.md) | `autoscuole.actions.ts` (`annulAutoscuolaAppointment`, `hardCleanupAutoscuolaAppointment`, `coverAppointmentWithLessonCredit`), `lib/autoscuole/operational-cancellation.ts` (`annulFutureAppointment`, `removeAppointmentFromRecord`), `CancelAppointmentDialog.tsx`, `AutoscuoleStudentsPage.tsx`, `AutoscuoleAgendaPage.tsx` |
 | Never-accessed nudge (allievo mai loggato) | [never-accessed-nudge.md](features/never-accessed-nudge.md) | `autoscuole.actions.ts` (`buildNeverAccessedUserIds`), `NeverAccessedNudge.tsx`, `AutoscuoleAgendaPage.tsx`, `AutoscuoleStudentsPage.tsx` |
 | Owner notifications (bell annullamenti allievi) | [owner-notifications.md](features/owner-notifications.md) | `AutoscuolaNotification` model, `lib/autoscuole/notifications.ts`, `api/autoscuole/owner-notifications/route.ts`, `OwnerNotificationsBell.tsx`, `autoscuole.actions.ts` (`createStudentCancellationNotification`) |
 | Availability | [availability.md](features/availability.md) | `autoscuole-availability.actions.ts` |
@@ -19,6 +19,8 @@
 | Locations (Sede e luoghi) | [locations.md](features/locations.md) | `api/autoscuole/locations/*`, `locations/LocationsSection.tsx`, `locations/LocationFormDialog.tsx` |
 | Notifications | [notifications.md](features/notifications.md) | `push.ts`, `notifications/route.ts` |
 | Instructor Absences (Malattia / Ferie) | [instructor-absences.md](features/instructor-absences.md) | `instructor-sick-leave/route.ts`, `instructor-vacation/route.ts`, `InstructorsTab.tsx` (`MalattiaTab`/`FerieTab`), `operational-cancellation.ts` |
+| Stampa agenda (anteprima PDF vista corrente) | [agenda-print.md](features/agenda-print.md) | `AgendaPrintDialog.tsx`, `AutoscuoleAgendaPage.tsx` (toolbar `Printer` + `agendaPrintData`), `instructor-colors.ts` |
+| Lezione teorica (agenda) | [lezione-teorica.md](features/lezione-teorica.md) | `AutoscuoleAgendaPage.tsx` (`blockKind`, `blockTint`/`formatBlockReason`), `autoscuole.actions.ts` (`createInstructorBlock` con `reason:"theory_lesson"`) |
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
 | Instructor Colors | [instructor-colors.md](features/instructor-colors.md) | `lib/autoscuole/instructor-colors.ts`, `color-swatch-picker.tsx`, `InstructorsTab.tsx`, `AutoscuoleAgendaPage.tsx` |
@@ -31,11 +33,15 @@
 | Quiz Teoria | [quiz-theory.md](features/quiz-theory.md) | `autoscuole-quiz.actions.ts`, `quiz-engine.ts` |
 | Password Reset (mobile) | [password-reset.md](features/password-reset.md) | `lib/auth/password-reset.ts`, `lib/mobile-auth-payload.ts`, `app/api/mobile/auth/password-reset/*` |
 | Student Phase + Quiz Seats | [student-phase.md](features/student-phase.md) | `autoscuole.actions.ts` (`updateStudentPhase`), `autoscuole-settings.actions.ts` (`grantQuizSeat`, `setAutoAssignQuizOnSignup`, `getQuizSeatsContext`), `backoffice.actions.ts` (`getQuizSeatsUsage`, `deactivateTeoriaWithResolution`), `theory-reminders.ts` |
+| Pronto per l'esame (exam-ready flag) | [exam-ready.md](features/exam-ready.md) | `autoscuole.actions.ts` (`setStudentExamReady`), `api/autoscuole/students/[id]/exam-ready`, `AutoscuoleStudentsPage.tsx`, `AutoscuoleAgendaPage.tsx` |
+| Auto-block prenotazioni per debito allievo (web-only, tab Limiti) | [auto-booking-block-debt.md](features/auto-booking-block-debt.md) | `lib/autoscuole/unpaid-auto-block.ts` (`resolveUnpaidAutoBlock`/`reconcileUnpaidAutoBlock`), `CompanyMember.bookingBlockReason`/`unpaidBlockClearedAtCount`, `autoscuole-settings.actions.ts`, `autoscuole.actions.ts` (`toggleStudentBookingBlock`, `getAutoscuolaStudentsWithProgress`), `autoscuole-availability.actions.ts` (guard), `tabs/BookingsTab.tsx` |
 | Users Directory (delete/anonimizzazione, riuso email, inviti) | [users-directory.md](features/users-directory.md) | `user.actions.ts`, `invite.actions.ts`, `account-deletion.ts` |
 | Reglo Aula | [reglo-aula.md](features/reglo-aula.md) | `aula.actions.ts`, `lib/aula/{slides,package-store,live-state}.ts`, `app/aula-live/[code]/`, `app/[locale]/aula/` |
 | Rinnovo Patenti | [rinnovo-patenti.md](features/rinnovo-patenti.md) | `renewal.actions.ts`, `lib/renewal/{chat,booking,slots,openrouter,public}.ts`, `app/api/renewal/[slug]/`, `app/[locale]/rinnovo/[slug]/` |
 | Support Center + Feedback | [support-center.md](features/support-center.md) | `support.actions.ts`, `AutoscuoleAssistenzaPage.tsx`, `FeedbackDialog.tsx`, `Backoffice{Support,Feedback}Page.tsx` |
+| Novità (annuncio "Richieste agenda in pausa") | [news-announcement.md](features/news-announcement.md) | `Layout/news/{AgendaPauseNewsDialog,RegloClips}.tsx`, `AutoscuoleShell.tsx`, `NovitaDialog.tsx`, `support.actions.ts` (`submitNewsFeedback`), `NewsFeedback` |
 | Company Documents (contratto/fatture) | [company-documents.md](features/company-documents.md) | `company-documents.actions.ts`, `api/backoffice/company-documents`, `BackofficeCompanyDocumentsDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
+| Login as admin (impersonazione autoscuola dal backoffice) | [admin-impersonation.md](features/admin-impersonation.md) | `impersonation-grant.ts`, `auth.ts` (provider `impersonation`), `company-context.ts`, `backoffice.actions.ts` (`impersonateCompany`), `BackofficeCompaniesPage.tsx` |
 | Company Plan (abbonamento) | [company-plan.md](features/company-plan.md) | `company-plan.actions.ts`, `BackofficeCompanyPlanDialog.tsx`, `AutoscuoleAreaPersonalePage.tsx` |
 
 ## Design System

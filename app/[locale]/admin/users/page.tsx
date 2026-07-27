@@ -11,6 +11,7 @@ type AdminUsersSearchParams = {
   page?: string | string[];
   query?: string | string[];
   role?: string | string[];
+  sort?: string | string[];
 };
 
 const AUTOSCUOLA_ROLE_VALUES = [
@@ -40,11 +41,13 @@ const AdminUserPage = async ({
   const roleFilter = AUTOSCUOLA_ROLE_VALUES.includes(roleParam as AutoscuolaRole)
     ? (roleParam as AutoscuolaRole)
     : null;
+  const sort = single(resolvedSearchParams.sort) === 'name' ? 'name' : 'recent';
 
   const users = await getCompanyUsers({
     page: currentPage,
     query: searchText ?? '',
     role: roleFilter ?? undefined,
+    sort,
   });
 
   const rows = users.data.map((user) => ({
@@ -53,6 +56,8 @@ const AdminUserPage = async ({
     email: user.email,
     autoscuolaRole: user.autoscuolaRole ?? undefined,
     status: user.status,
+    licenseCategory: user.licenseCategory ?? null,
+    transmission: user.transmission ?? null,
   }));
 
   return (
@@ -64,6 +69,7 @@ const AdminUserPage = async ({
         total={users.total ?? rows.length}
         initialQuery={searchText ?? ''}
         roleFilter={roleFilter}
+        sort={sort}
       />
     </PageWrapper>
   );

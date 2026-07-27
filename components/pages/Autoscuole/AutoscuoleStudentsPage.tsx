@@ -1,13 +1,18 @@
 "use client";
 
 import React from "react";
-import { ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
 import { PageHeader } from "@/components/ui/page-header";
 import { SegmentedPill } from "@/components/ui/segmented-pill";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  CancelAppointmentDialog,
+  type CancelDialogTarget,
+  type LateOutcome,
+} from "@/components/pages/Autoscuole/CancelAppointmentDialog";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -42,11 +47,15 @@ import {
   toggleStudentBookingBlock,
   toggleWeeklyBookingLimitExempt,
   setExamPriorityOverride,
+  setStudentExamReady,
   setManualPaymentStatus,
   updateStudentGroupLessonOptIn,
   updateStudentPhone,
   updateAutoscuolaAppointmentDetails,
   updateAutoscuolaAppointmentStatus,
+  hardCleanupAutoscuolaAppointment,
+  annulAutoscuolaAppointment,
+  coverAppointmentWithLessonCredit,
 } from "@/lib/actions/autoscuole.actions";
 import {
   getAutoscuolaSettings,
@@ -83,6 +92,7 @@ type StudentProfile = {
 
 type Student = StudentProfile & {
   bookingBlocked?: boolean;
+  bookingBlockReason?: "manual" | "unpaid_threshold" | null;
   // Account creato dal titolare ma mai usato (nessun accesso in app) → non
   // riceve promemoria. Guida l'indicatore "cellulare-divieto" nella lista.
   neverAccessed?: boolean;
@@ -90,6 +100,8 @@ type Student = StudentProfile & {
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
   licenseCategory?: string | null;
   transmission?: string | null;
+  examReady?: boolean;
+  examReadyAt?: string | null;
   manualUnpaid?: number;
   theoryExamAt?: string | null;
   activeCase: {
@@ -126,6 +138,8 @@ type LessonEntry = {
   cancelledAt: string | Date | null;
   cancellationKind: string | null;
   cancellationReason: string | null;
+  penaltyCutoffAt: string | Date | null;
+  penaltyAmount: number | null;
   paymentRequired: boolean;
   manualPaymentStatus: string | null;
   creditApplied: boolean;
@@ -142,11 +156,14 @@ type LessonFilter = "all" | "upcoming" | "unpaid" | "completed" | "cancelled";
 type StudentRegister = {
   student: StudentProfile;
   bookingBlocked?: boolean;
+  bookingBlockReason?: "manual" | "unpaid_threshold" | null;
   weeklyBookingLimitExempt?: boolean;
   examPriorityOverride?: boolean | null;
   examPriorityActive?: boolean;
   examDate?: string | null;
   studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO";
+  examReady?: boolean;
+  examReadyAt?: string | null;
   licenseCategory?: string | null;
   transmission?: string | null;
   groupLessonsOptIn?: boolean;
@@ -319,6 +336,17 @@ const PHASE_BADGES: Record<NonNullable<Student["studentPhase"]>, { label: string
   PATENTATO: { label: "Patentato", tone: "green" },
 };
 
+/** "pronto oggi" / "pronto da N giorni" a partire da examReadyAt (ISO). */
+function daysReadyLabel(examReadyAt?: string | null): string | null {
+  if (!examReadyAt) return null;
+  const then = new Date(examReadyAt);
+  if (Number.isNaN(then.getTime())) return null;
+  const days = Math.floor((Date.now() - then.getTime()) / 86_400_000);
+  if (days <= 0) return "pronto da oggi";
+  if (days === 1) return "pronto da 1 giorno";
+  return `pronto da ${days} giorni`;
+}
+
 /** CTA outline compatta delle liste (stile "Dettaglio" del proto) */
 const listButtonClass =
   "cursor-pointer select-none whitespace-nowrap rounded-[8px] border border-[#dddddd] bg-white px-3.5 py-[7px] text-[13px] font-medium text-[#222222] transition-colors hover:border-[#cdcdcd] hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-50";
@@ -326,6 +354,19 @@ const listButtonClass =
 /** Link-azione blu inline (proto #428bff) */
 const blueLinkClass =
   "cursor-pointer text-[12px] font-medium text-[#428bff] hover:underline disabled:cursor-default disabled:opacity-50";
+
+const redLinkClass =
+  "cursor-pointer text-[12px] font-medium text-[#dc2626] hover:underline disabled:cursor-default disabled:opacity-50";
+
+/** "Preavviso dato" = quanto tempo prima dell'inizio guida è arrivato l'annullamento. */
+const formatNoticeGiven = (startsAt: Date, cancelledAt: Date) => {
+  const mins = Math.max(0, Math.round((startsAt.getTime() - cancelledAt.getTime()) / 60000));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
+};
 
 const sectionLabelClass = "mb-4 text-[12px] font-semibold text-[#929292]";
 
@@ -498,6 +539,11 @@ export function AutoscuoleStudentsPage({
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
+  // Ordinamento lista allievi: "recent" (ordine server, default) o "name" (A-Z
+  // dentro ogni fase). Client-side: la lista è già tutta in memoria.
+  const [sortMode, setSortMode] = React.useState<"recent" | "name">("recent");
+  // Filtro "solo pronti all'esame" nella lista pratica (chicca titolare).
+  const [praticaOnlyReady, setPraticaOnlyReady] = React.useState(false);
   const [students, setStudents] = React.useState<Student[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [searching, setSearching] = React.useState(false);
@@ -511,6 +557,7 @@ export function AutoscuoleStudentsPage({
   const [examPriorityEnabledGlobal, setExamPriorityEnabledGlobal] = React.useState(false);
   const [exemptSaving, setExemptSaving] = React.useState(false);
   const [examPrioritySaving, setExamPrioritySaving] = React.useState(false);
+  const [examReadySaving, setExamReadySaving] = React.useState(false);
   const registerRequestRef = React.useRef(0);
   const [credits, setCredits] = React.useState<StudentCredits | null>(null);
   const [creditsLoading, setCreditsLoading] = React.useState(false);
@@ -662,11 +709,23 @@ export function AutoscuoleStudentsPage({
       else if (phase === "PATENTATO") groups.patentato.push(s);
       else groups.pratica.push(s);
     }
+    if (sortMode === "name") {
+      const fullName = (s: Student) => `${s.firstName} ${s.lastName}`.trim();
+      const byName = (a: Student, b: Student) =>
+        fullName(a).localeCompare(fullName(b), "it", { sensitivity: "base" });
+      groups.awaiting.sort(byName);
+      groups.teoria.sort(byName);
+      groups.pratica.sort(byName);
+      groups.patentato.sort(byName);
+    }
     return groups;
-  }, [students]);
+  }, [students, sortMode]);
 
   // Manual payment toggle
   const [paymentSaving, setPaymentSaving] = React.useState<string | null>(null);
+  // Dialogo annulla (future) / rimuovi (passate) dal dettaglio allievo.
+  const [dialogTarget, setDialogTarget] = React.useState<CancelDialogTarget | null>(null);
+  const [cancelBusy, setCancelBusy] = React.useState(false);
 
   React.useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -932,12 +991,18 @@ export function AutoscuoleStudentsPage({
         return;
       }
       toast.success({ description: res.message ?? "Stato aggiornato." });
-      // Update local register
-      setRegister((prev) => prev ? { ...prev, bookingBlocked: blocked } : prev);
+      // Update local register — un blocco manuale ha reason "manual", uno sblocco
+      // manuale azzera la reason (torna gestibile dall'automatismo).
+      const nextReason = blocked ? "manual" : null;
+      setRegister((prev) =>
+        prev ? { ...prev, bookingBlocked: blocked, bookingBlockReason: nextReason } : prev,
+      );
       // Update student in table list
       setStudents((prev) =>
         prev.map((s) =>
-          s.id === selectedStudentId ? { ...s, bookingBlocked: blocked } : s,
+          s.id === selectedStudentId
+            ? { ...s, bookingBlocked: blocked, bookingBlockReason: nextReason }
+            : s,
         ),
       );
     },
@@ -976,6 +1041,78 @@ export function AutoscuoleStudentsPage({
       });
     },
     [paymentSaving, toast],
+  );
+
+  // "Copri con credito": consuma 1 credito dell'allievo per coprire una guida
+  // da pagare (tipicamente una guida di gruppo). Refetch registro + saldo crediti.
+  const handleCoverWithCredit = React.useCallback(
+    async (appointmentId: string) => {
+      if (paymentSaving) return;
+      setPaymentSaving(appointmentId);
+      const res = await coverAppointmentWithLessonCredit({ appointmentId });
+      setPaymentSaving(null);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Operazione non riuscita." });
+        return;
+      }
+      toast.success({ description: res.message ?? "Guida coperta da un credito." });
+      if (selectedStudentId) {
+        await loadRegister(selectedStudentId);
+        await loadCredits(selectedStudentId);
+      }
+    },
+    [paymentSaving, toast, selectedStudentId, loadRegister, loadCredits],
+  );
+
+  // Annulla una guida futura (esito credito/penale gestito nel dialogo). No optimistic.
+  const handleAnnul = React.useCallback(
+    async (lateOutcome?: LateOutcome) => {
+      if (!dialogTarget || cancelBusy) return;
+      const studentId = register?.student.id;
+      setCancelBusy(true);
+      const res = await annulAutoscuolaAppointment({
+        appointmentId: dialogTarget.appointmentId,
+        lateOutcome,
+      });
+      setCancelBusy(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile annullare la guida." });
+        return;
+      }
+      setDialogTarget(null);
+      toast.success({ description: res.message ?? "Guida annullata." });
+      if (studentId) {
+        await loadRegister(studentId);
+        await loadCredits(studentId);
+      }
+    },
+    [dialogTarget, register, cancelBusy, toast, loadRegister, loadCredits],
+  );
+
+  // Rimuove una guida passata dallo storico (opzioni ore/credito nel dialogo).
+  const handleRemove = React.useCallback(
+    async (opts: { keepInHours: boolean; refundCredit: boolean }) => {
+      if (!dialogTarget || cancelBusy) return;
+      const studentId = register?.student.id;
+      setCancelBusy(true);
+      const res = await hardCleanupAutoscuolaAppointment({
+        appointmentId: dialogTarget.appointmentId,
+        keepInHours: opts.keepInHours,
+        refundCredit: opts.refundCredit,
+      });
+      setCancelBusy(false);
+      if (!res.success) {
+        toast.error({ description: res.message ?? "Impossibile rimuovere la guida." });
+        return;
+      }
+      setDialogTarget(null);
+      toast.success({ description: res.message ?? "Guida rimossa dallo storico." });
+      if (studentId) {
+        await loadRegister(studentId);
+        await loadCredits(studentId);
+      }
+    },
+    [dialogTarget, register, cancelBusy, toast, loadRegister, loadCredits],
   );
 
   const openCreateDialog = React.useCallback(() => {
@@ -1136,6 +1273,7 @@ export function AutoscuoleStudentsPage({
             <NeverAccessedListMark hasPhone={Boolean(student.phone)} />
           ) : null}
           {student.bookingBlocked && <Pill tone="red">Bloccato</Pill>}
+          {student.examReady && <Pill tone="green">Pronto</Pill>}
         </div>
         {options?.secondLine ? (
           <p className="mt-0.5 truncate text-[12px] font-medium text-[#929292]">{options.secondLine}</p>
@@ -1235,13 +1373,37 @@ export function AutoscuoleStudentsPage({
   };
 
   const renderPraticaRows = () => {
-    const list = studentsByPhase.pratica;
-    if (list.length === 0) {
+    const allPratica = studentsByPhase.pratica;
+    if (allPratica.length === 0) {
       return <EmptyList subtitle={debouncedSearch ? "Nessun allievo trovato" : "Nessun allievo in fase pratica"} />;
     }
+    const readyCount = allPratica.filter((s) => s.examReady).length;
+    const list = praticaOnlyReady ? allPratica.filter((s) => s.examReady) : allPratica;
     const visible = pageSlice(list, pages.pratica);
     return (
       <div>
+        {readyCount > 0 && (
+          <div className="flex items-center justify-between border-t border-[#ebebeb] bg-[#fbfdfb] px-6 py-2.5">
+            <span className="text-[12px] font-medium text-[#1a7f50]">
+              {readyCount} {readyCount === 1 ? "allievo pronto" : "allievi pronti"} per l&apos;esame
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setPraticaOnlyReady((v) => !v);
+                setPages((prev) => ({ ...prev, pratica: 1 }));
+              }}
+              className={cn(
+                "cursor-pointer select-none rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                praticaOnlyReady
+                  ? "bg-[#1a7f50] text-white"
+                  : "border border-[#c5e8d4] text-[#1a7f50] hover:bg-[#f0faf4]",
+              )}
+            >
+              {praticaOnlyReady ? "Mostra tutti" : "Solo pronti"}
+            </button>
+          </div>
+        )}
         {visible.map((student) => {
           const licenseLabel = student.licenseCategory
             ? `${student.licenseCategory} · ${TRANSMISSION_LABELS[student.transmission as Transmission] ?? student.transmission ?? "—"}`
@@ -1471,6 +1633,11 @@ export function AutoscuoleStudentsPage({
                 <Pill tone={register.bookingBlocked ? "red" : "green"}>
                   {register.bookingBlocked ? "Bloccate" : "Attive"}
                 </Pill>
+                {register.bookingBlocked && register.bookingBlockReason === "unpaid_threshold" && (
+                  <p className="mt-1 text-[11px] font-medium text-[#929292]">
+                    Blocco automatico per guide da pagare
+                  </p>
+                )}
               </div>
               <button
                 type="button"
@@ -1577,6 +1744,65 @@ export function AutoscuoleStudentsPage({
           </div>
         </section>
 
+        {/* Pronto per l'esame — segnale interno, solo in fase pratica */}
+        {register.studentPhase === "PRATICA" && (
+          <section className="border-b border-[#f2f2f2] py-7">
+            <p className={sectionLabelClass}>Esame pratico</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[12px] font-medium text-[#929292]">Pronto per l&apos;esame</p>
+                  {register.examReady && (
+                    <span className="text-[10px] font-medium text-[#c1c1c1]">
+                      {daysReadyLabel(register.examReadyAt)}
+                    </span>
+                  )}
+                </div>
+                <Pill tone={register.examReady ? "green" : "gray"}>
+                  {register.examReady ? "Pronto" : "Non segnato"}
+                </Pill>
+              </div>
+              <button
+                type="button"
+                className={blueLinkClass}
+                disabled={examReadySaving}
+                onClick={async () => {
+                  if (!selectedStudentId || examReadySaving) return;
+                  const next = !register.examReady;
+                  setExamReadySaving(true);
+                  const res = await setStudentExamReady({
+                    studentId: selectedStudentId,
+                    ready: next,
+                  });
+                  setExamReadySaving(false);
+                  if (!res.success) {
+                    toast.error({ description: res.message ?? "Errore aggiornamento." });
+                    return;
+                  }
+                  const nextAt = res.data?.examReadyAt ?? (next ? new Date().toISOString() : null);
+                  setRegister((prev) =>
+                    prev ? { ...prev, examReady: next, examReadyAt: nextAt } : prev,
+                  );
+                  setStudents((prev) =>
+                    prev.map((s) =>
+                      s.id === selectedStudentId
+                        ? { ...s, examReady: next, examReadyAt: nextAt }
+                        : s,
+                    ),
+                  );
+                  toast.success({
+                    description: next
+                      ? "Allievo segnato pronto per l'esame."
+                      : "Rimosso dai pronti.",
+                  });
+                }}
+              >
+                {examReadySaving ? "Salvo…" : register.examReady ? "Rimuovi" : "Segna pronto"}
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Istruttore assegnato */}
         {autonomousInstructors.length > 0 && (
           <section className="border-b border-[#f2f2f2] py-7">
@@ -1614,7 +1840,10 @@ export function AutoscuoleStudentsPage({
               <SelectTrigger className="w-full" disabled={assigningSaving}>
                 <SelectValue placeholder="Nessun istruttore" />
               </SelectTrigger>
-              <SelectContent>
+              {/* z-[200]: il dropdown deve stare sopra il DetailPanel (z-[200]),
+                  altrimenti si apre dietro il pannello e sembra non rispondere
+                  al click — stessa convenzione di date-picker/time-picker. */}
+              <SelectContent className="z-[200]">
                 <SelectItem value="__none__">Nessuno (pool generale)</SelectItem>
                 {autonomousInstructors.map((instr) => (
                   <SelectItem key={instr.id} value={instr.id}>
@@ -1930,6 +2159,44 @@ export function AutoscuoleStudentsPage({
           const startDate = lesson.startsAt instanceof Date ? lesson.startsAt : new Date(lesson.startsAt);
           const endDate = new Date(startDate.getTime() + lesson.durationMinutes * 60000);
           const isExam = lesson.type === "esame";
+          // Esami e guide di gruppo hanno flussi dedicati; le già-rimosse sono escluse.
+          const canModify =
+            !isExam && !lesson.group && lesson.cancellationKind !== "record_cleanup";
+          const isFutureActive =
+            ["scheduled", "confirmed"].includes(lesson.status) &&
+            startDate.getTime() > Date.now();
+          const buildDialogTarget = (isPast: boolean): CancelDialogTarget => ({
+            appointmentId: lesson.id,
+            studentName: register?.student?.firstName ?? null,
+            startsAt: startDate,
+            endsAt: endDate,
+            isPast,
+            creditApplied: lesson.creditApplied,
+            paymentRequired: lesson.paymentRequired,
+            penaltyCutoffAt: lesson.penaltyCutoffAt ? new Date(lesson.penaltyCutoffAt) : null,
+            penaltyAmount: lesson.penaltyAmount,
+            countsInHours: ["completed", "checked_in", "no_show"].includes(lesson.status),
+          });
+          // Preavviso dato per gli annullamenti dell'allievo (manual_cancel).
+          const cancelledDate = lesson.cancelledAt
+            ? lesson.cancelledAt instanceof Date
+              ? lesson.cancelledAt
+              : new Date(lesson.cancelledAt)
+            : null;
+          const cutoffDate = lesson.penaltyCutoffAt
+            ? lesson.penaltyCutoffAt instanceof Date
+              ? lesson.penaltyCutoffAt
+              : new Date(lesson.penaltyCutoffAt)
+            : null;
+          const noticeLabel =
+            lesson.cancellationKind === "manual_cancel" && cancelledDate
+              ? formatNoticeGiven(startDate, cancelledDate)
+              : null;
+          const isLateCancellation =
+            noticeLabel != null &&
+            cancelledDate != null &&
+            cutoffDate != null &&
+            cancelledDate.getTime() > cutoffDate.getTime();
 
           return (
             <div key={lesson.id} className="flex gap-4 border-b border-[#f2f2f2] py-4">
@@ -1977,6 +2244,8 @@ export function AutoscuoleStudentsPage({
                   <Pill tone={isCompleted || isCheckedIn ? "green" : isCancelled || isNoShow ? "red" : "gray"}>
                     {formatStatus(lesson.status)}
                   </Pill>
+                  {noticeLabel && <Pill tone="gray">Preavviso: {noticeLabel}</Pill>}
+                  {isLateCancellation && <Pill tone="amber">Tardiva</Pill>}
                   {isPenaltyCharged && !lesson.creditApplied && (
                     <Pill tone="amber">Da pagare</Pill>
                   )}
@@ -2005,6 +2274,16 @@ export function AutoscuoleStudentsPage({
                           {paymentSaving === lesson.id ? "Salvo…" : "Segna pagata"}
                         </button>
                       )}
+                      {lesson.manualPaymentStatus !== "paid" && !isExam && (credits?.availableCredits ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className={cn(blueLinkClass, "ml-1")}
+                          disabled={paymentSaving === lesson.id}
+                          onClick={() => void handleCoverWithCredit(lesson.id)}
+                        >
+                          {paymentSaving === lesson.id ? "Salvo…" : "Copri con credito"}
+                        </button>
+                      )}
                       {lesson.manualPaymentStatus === "paid" && (
                         <button
                           type="button"
@@ -2017,12 +2296,41 @@ export function AutoscuoleStudentsPage({
                       )}
                     </>
                   )}
+                  {canModify && isFutureActive && (
+                    <button
+                      type="button"
+                      className={cn(redLinkClass, "ml-1")}
+                      disabled={cancelBusy}
+                      onClick={() => setDialogTarget(buildDialogTarget(false))}
+                    >
+                      Annulla
+                    </button>
+                  )}
+                  {canModify && !isFutureActive && (
+                    <button
+                      type="button"
+                      className={cn(redLinkClass, "ml-1")}
+                      disabled={cancelBusy}
+                      onClick={() => setDialogTarget(buildDialogTarget(true))}
+                    >
+                      Rimuovi
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           );
           })
         )}
+        <CancelAppointmentDialog
+          target={dialogTarget}
+          busy={cancelBusy}
+          onClose={() => {
+            if (!cancelBusy) setDialogTarget(null);
+          }}
+          onAnnul={(lateOutcome) => void handleAnnul(lateOutcome)}
+          onRemove={(opts) => void handleRemove(opts)}
+        />
       </div>
     );
   };
@@ -2266,7 +2574,9 @@ export function AutoscuoleStudentsPage({
                         : phaseTab === "teoria"
                           ? studentsByPhase.teoria
                           : phaseTab === "pratica"
-                            ? studentsByPhase.pratica
+                            ? (praticaOnlyReady
+                                ? studentsByPhase.pratica.filter((s) => s.examReady)
+                                : studentsByPhase.pratica)
                             : studentsByPhase.patentato;
                     const totalPages = Math.max(1, Math.ceil(activeList.length / PAGE_SIZE));
                     const page = Math.min(Math.max(1, pages[phaseTab]), totalPages);
@@ -2330,6 +2640,25 @@ export function AutoscuoleStudentsPage({
                 )}
 
                 <div className="flex-1" />
+
+                {/* Ordina A-Z (dentro ogni fase) */}
+                <button
+                  type="button"
+                  title={sortMode === "name" ? "Ordina per più recenti" : "Ordina A-Z"}
+                  aria-pressed={sortMode === "name"}
+                  onClick={() => {
+                    setSortMode((prev) => (prev === "name" ? "recent" : "name"));
+                    setPages({ attesa: 1, teoria: 1, pratica: 1, patentati: 1 });
+                  }}
+                  className={cn(
+                    "flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors",
+                    sortMode === "name"
+                      ? "bg-[#f0f0f0] text-foreground"
+                      : "text-[#929292] hover:text-foreground",
+                  )}
+                >
+                  <ArrowDownAZ className="size-[21px]" strokeWidth={1.8} />
+                </button>
 
                 {inviteCode && (
                   <button

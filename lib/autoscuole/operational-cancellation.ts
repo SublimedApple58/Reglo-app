@@ -7,7 +7,7 @@ import {
   AUTOSCUOLE_CACHE_SEGMENTS,
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
-import { refundLessonCreditIfEligible } from "@/lib/autoscuole/payments";
+import { refundLessonCreditIfEligible, adjustStudentLessonCredits } from "@/lib/autoscuole/payments";
 
 // Operational cancellation. When a lesson can no longer take place for an
 // organizational reason (owner deletes it, the instructor/vehicle is made
@@ -307,6 +307,343 @@ export async function operationallyCancelAppointment({
   });
 
   return { success: true };
+}
+
+/**
+ * "Rimuovi dallo storico": il titolare toglie una guida dallo storico
+ * dell'allievo e dall'agenda. Marcatore dedicato `cancellationKind =
+ * "record_cleanup"` → la guida è filtrata fuori dallo storico, dall'agenda e
+ * dalla vista "guide annullate" del mobile. Due opzioni decise dal titolare in
+ * fase di rimozione:
+ *  - `keepInHours`: se true, lo stato resta invariato (es. "completed") → la
+ *    guida CONTINUA a contare nelle ore dell'istruttore (l'ha comunque svolta);
+ *    se false (default) lo stato diventa "cancelled" → esce anche dalle ore, e
+ *    gli slot futuri vengono liberati.
+ *  - `refundCredit`: se true e la guida era coperta da un credito non ancora
+ *    reso, restituisce 1 credito all'allievo.
+ * Esami e guide di gruppo hanno flussi dedicati → esclusi.
+ */
+export async function removeAppointmentFromRecord({
+  prisma = defaultPrisma,
+  companyId,
+  appointmentId,
+  actorUserId,
+  keepInHours = false,
+  refundCredit = false,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  appointmentId: string;
+  actorUserId?: string | null;
+  keepInHours?: boolean;
+  refundCredit?: boolean;
+}): Promise<{ success: boolean; message?: string }> {
+  const now = new Date();
+
+  const appointment = await prisma.autoscuolaAppointment.findFirst({
+    where: { id: appointmentId, companyId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      type: true,
+      instructorId: true,
+      vehicleId: true,
+      cancellationKind: true,
+      creditApplied: true,
+      creditRefundedAt: true,
+    },
+  });
+
+  if (!appointment) {
+    return { success: false, message: "Guida non trovata." };
+  }
+  if (appointment.type === "esame" || appointment.type === "group_lesson") {
+    return {
+      success: false,
+      message: "Questo tipo di evento non può essere rimosso da qui.",
+    };
+  }
+  if (appointment.cancellationKind === "record_cleanup") {
+    return { success: false, message: "Guida già rimossa dallo storico." };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        // record_cleanup = marcatore "fuori dallo storico" (indipendente dallo stato).
+        cancellationKind: "record_cleanup",
+        cancellationReason: "record_cleanup",
+        cancelledByUserId: actorUserId ?? null,
+        // keepInHours: lo stato resta invariato → continua a contare nelle ore.
+        // Altrimenti "cancelled" → fuori da ore + storico, con cancelledAt.
+        ...(keepInHours ? {} : { status: "cancelled", cancelledAt: now }),
+      },
+    });
+
+    if (!keepInHours) {
+      await releaseSlotsForAppointment(tx as never, {
+        id: appointment.id,
+        companyId,
+        studentId: appointment.studentId,
+        instructorId: appointment.instructorId,
+        vehicleId: appointment.vehicleId,
+        startsAt: appointment.startsAt,
+        endsAt: appointment.endsAt,
+      });
+    }
+
+    if (
+      refundCredit &&
+      appointment.studentId &&
+      appointment.creditApplied &&
+      appointment.creditRefundedAt === null
+    ) {
+      await adjustStudentLessonCredits({
+        prisma: tx as never,
+        companyId,
+        studentId: appointment.studentId,
+        delta: 1,
+        reason: "cancel_refund",
+        actorUserId: actorUserId ?? null,
+        appointmentId: appointment.id,
+      });
+      await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: { creditRefundedAt: now },
+      });
+    }
+  });
+
+  await invalidateAutoscuoleCache({
+    companyId,
+    segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+  });
+
+  return { success: true };
+}
+
+/**
+ * "Annulla guida" (guide FUTURE) — azione unica che sostituisce i due bottoni
+ * confusi Annulla/Cancella dell'agenda. Annulla la guida (status "cancelled",
+ * `manual_cancel`), libera gli slot, notifica l'allievo; poi gestisce l'esito
+ * economico in base a copertura (credito / denaro / niente) e tempistica:
+ *  - NEI TEMPI (annullamento prima del cutoff di preavviso): nessuna penale →
+ *    credito reso, importo azzerato.
+ *  - TARDIVO: serve la scelta del titolare (`lateOutcome`):
+ *      · "waive"    → condona: credito reso / non addebitato (lateCancellationAction=dismissed)
+ *      · "penalize" → applica: credito trattenuto / guida da pagare (lateCancellationAction=charged)
+ *      · "defer"    → decidi dopo: lasciata in coda "Cancellazioni tardive" (null)
+ * Esami e guide di gruppo hanno flussi dedicati → esclusi.
+ */
+export async function annulFutureAppointment({
+  prisma = defaultPrisma,
+  companyId,
+  appointmentId,
+  actorUserId,
+  lateOutcome,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  appointmentId: string;
+  actorUserId?: string | null;
+  lateOutcome?: "penalize" | "waive" | "defer";
+}): Promise<{
+  success: boolean;
+  message?: string;
+  data?: {
+    isLate: boolean;
+    coverage: "credit" | "money" | "none";
+    lateCancellationAction: "charged" | "dismissed" | null;
+    refundedCredit: boolean;
+  };
+}> {
+  const now = new Date();
+
+  const appointment = await prisma.autoscuolaAppointment.findFirst({
+    where: { id: appointmentId, companyId },
+    select: {
+      id: true,
+      companyId: true,
+      studentId: true,
+      instructorId: true,
+      vehicleId: true,
+      startsAt: true,
+      endsAt: true,
+      status: true,
+      type: true,
+      creditApplied: true,
+      creditRefundedAt: true,
+      penaltyCutoffAt: true,
+      paymentRequired: true,
+      paymentStatus: true,
+    },
+  });
+
+  if (!appointment) {
+    return { success: false, message: "Guida non trovata." };
+  }
+  if (appointment.type === "esame" || appointment.type === "group_lesson") {
+    return {
+      success: false,
+      message: "Esami e guide di gruppo si annullano dai loro flussi dedicati.",
+    };
+  }
+  if (!isAppointmentOperationallyCancellable(appointment)) {
+    return {
+      success: false,
+      message: "Puoi annullare solo guide future non ancora svolte.",
+    };
+  }
+
+  const isLate =
+    appointment.penaltyCutoffAt != null &&
+    now.getTime() > appointment.penaltyCutoffAt.getTime();
+  const coverage: "credit" | "money" | "none" = appointment.creditApplied
+    ? "credit"
+    : appointment.paymentRequired
+      ? "money"
+      : "none";
+
+  // Deriva gli effetti su credito/penale.
+  let refundCredit = false;
+  let lateCancellationAction: "charged" | "dismissed" | null = null;
+  let waivePayment = false; // azzera l'importo dovuto
+  let chargeMoney = false; // segna la guida come da pagare (penale denaro)
+
+  if (!isLate) {
+    // Nei tempi: nessuna penale.
+    refundCredit = coverage === "credit";
+    waivePayment = coverage === "money";
+  } else if (coverage !== "none") {
+    const outcome = lateOutcome ?? "defer";
+    if (outcome === "waive") {
+      refundCredit = coverage === "credit";
+      waivePayment = coverage === "money";
+      lateCancellationAction = "dismissed";
+    } else if (outcome === "penalize") {
+      // credito: trattenuto (nessun rimborso). denaro: da pagare.
+      chargeMoney = coverage === "money";
+      lateCancellationAction = "charged";
+    } else {
+      // defer → resta in coda "Cancellazioni tardive" (lateCancellationAction null)
+      lateCancellationAction = null;
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.autoscuolaAppointment.update({
+      where: { id: appointment.id },
+      data: {
+        status: "cancelled",
+        cancelledAt: now,
+        cancelledByUserId: actorUserId ?? null,
+        cancellationKind: "manual_cancel",
+        cancellationReason: "manual_cancel",
+        lateCancellationAction,
+        ...(waivePayment && appointment.paymentRequired
+          ? { paymentStatus: "waived", invoiceStatus: "not_required", manualPaymentStatus: null }
+          : {}),
+        ...(chargeMoney ? { manualPaymentStatus: "unpaid" } : {}),
+      },
+    });
+
+    await releaseSlotsForAppointment(tx as never, {
+      id: appointment.id,
+      companyId,
+      studentId: appointment.studentId,
+      instructorId: appointment.instructorId,
+      vehicleId: appointment.vehicleId,
+      startsAt: appointment.startsAt,
+      endsAt: appointment.endsAt,
+    });
+
+    if (
+      refundCredit &&
+      appointment.studentId &&
+      appointment.creditApplied &&
+      appointment.creditRefundedAt === null
+    ) {
+      await adjustStudentLessonCredits({
+        prisma: tx as never,
+        companyId,
+        studentId: appointment.studentId,
+        delta: 1,
+        reason: "cancel_refund",
+        actorUserId: actorUserId ?? null,
+        appointmentId: appointment.id,
+      });
+      await tx.autoscuolaAppointment.update({
+        where: { id: appointment.id },
+        data: { creditRefundedAt: now },
+      });
+    }
+  });
+
+  await notifyOperationalCancellation({
+    companyId,
+    studentId: appointment.studentId,
+    startsAt: appointment.startsAt,
+    reason: "owner_delete",
+    instructorId: appointment.instructorId,
+  });
+
+  await invalidateAutoscuoleCache({
+    companyId,
+    segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.PAYMENTS],
+  });
+
+  return {
+    success: true,
+    data: { isLate, coverage, lateCancellationAction, refundedCredit: refundCredit },
+  };
+}
+
+/**
+ * Bulk "pulizia storico" di tutte le guide future ancora attive di un allievo
+ * (l'azione "Cancella tutte" dal dettaglio allievo). Esami e guide di gruppo
+ * sono esclusi. Ritorna quante guide sono state rimosse.
+ */
+export async function hardCleanupAppointmentsByStudent({
+  prisma = defaultPrisma,
+  companyId,
+  studentId,
+  actorUserId,
+}: {
+  prisma?: PrismaClientLike;
+  companyId: string;
+  studentId: string;
+  actorUserId?: string | null;
+}): Promise<{ success: boolean; removed: number }> {
+  const now = new Date();
+
+  const candidates = await prisma.autoscuolaAppointment.findMany({
+    where: {
+      companyId,
+      studentId,
+      status: { in: [...ACTIVE_CANCELLABLE_STATUSES] },
+      startsAt: { gt: now },
+      type: { notIn: ["esame", "group_lesson"] },
+    },
+    select: { id: true },
+  });
+
+  let removed = 0;
+  for (const candidate of candidates) {
+    const res = await removeAppointmentFromRecord({
+      prisma,
+      companyId,
+      appointmentId: candidate.id,
+      actorUserId,
+    });
+    if (res.success) removed += 1;
+  }
+
+  return { success: true, removed };
 }
 
 /**

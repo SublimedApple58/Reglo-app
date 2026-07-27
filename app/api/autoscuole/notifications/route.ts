@@ -4,6 +4,7 @@ import { requireServiceAccess } from "@/lib/service-access";
 import { formatError } from "@/lib/utils";
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { vehicleServesLicense } from "@/lib/autoscuole/license";
+import { getExamReadyNudgeForCompany, EXAM_READY_NUDGE_KIND } from "@/lib/autoscuole/exam-ready-nudge";
 
 /**
  * Server-side notification aggregator.
@@ -393,6 +394,21 @@ export async function GET(request: Request) {
               weekStart: weekStartStr,
             },
             createdAt: absence.createdAt.toISOString(),
+          });
+        }
+      }
+
+      // Nudge titolare: allievi pronti da >2 settimane senza esame in agenda.
+      // Ricostruito on-demand (nessuna tabella Notification): stesso conteggio
+      // del cron. Solo per i ruoli owner (OWNER / INSTRUCTOR_OWNER).
+      if (isOwner(role)) {
+        const nudge = await getExamReadyNudgeForCompany({ prisma, companyId, now: new Date() });
+        if (nudge.count > 0) {
+          notifications.push({
+            id: `exam_ready_nudge_${companyId}`,
+            kind: EXAM_READY_NUDGE_KIND,
+            data: { count: nudge.count },
+            createdAt: (nudge.earliestReadyAt ?? new Date()).toISOString(),
           });
         }
       }

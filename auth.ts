@@ -6,6 +6,7 @@ import { prisma } from '@/db/prisma';
 import { cookies } from 'next/headers';
 import { compare, hash } from './lib/encrypt';
 import { GLOBAL_ADMIN_EMAIL, GLOBAL_ADMIN_PASSWORD } from '@/lib/constants';
+import { verifyImpersonationGrant } from '@/lib/impersonation-grant';
 import CredentialsProvider from 'next-auth/providers/credentials';
 
 export const config = {
@@ -79,6 +80,42 @@ export const config = {
         return null;
       },
     }),
+    CredentialsProvider({
+      id: 'impersonation',
+      name: 'Impersonation',
+      credentials: {
+        token: { type: 'text' },
+      },
+      // Login backoffice "Accedi come titolare": consuma un grant firmato (coniato
+      // SOLO dopo requireGlobalAdmin) e logga come l'owner reale dell'autoscuola.
+      async authorize(credentials) {
+        const grant = verifyImpersonationGrant(
+          credentials?.token as string | undefined
+        );
+        if (!grant) return null;
+
+        // Ri-deriva l'autorità dal DB: il target deve essere ancora admin di quella
+        // azienda — non ci si fida del payload del grant.
+        const member = await prisma.companyMember.findFirst({
+          where: {
+            companyId: grant.companyId,
+            userId: grant.targetUserId,
+            role: 'admin',
+          },
+          include: { user: true },
+        });
+        if (!member?.user) return null;
+
+        return {
+          id: member.user.id,
+          name: member.user.name,
+          email: member.user.email,
+          role: member.user.role,
+          impersonating: true,
+          impersonatingCompanyId: grant.companyId,
+        } as any;
+      },
+    }),
   ],
   callbacks: {
     ...authConfig.callbacks,
@@ -95,6 +132,13 @@ export const config = {
         session.user.image = user.image ?? session.user.image;
       }
 
+      // Impersonazione backoffice: espone il claim (solo nel nostro cookie) così
+      // getActiveCompanyContext punta alla company giusta e il resto dell'app tratta
+      // l'operatore come l'owner reale.
+      if (token.impersonating) {
+        session.impersonation = { companyId: token.impersonatingCompanyId };
+      }
+
       return session;
     },
     async jwt({ token, user, trigger, session }: any) {
@@ -103,6 +147,12 @@ export const config = {
         token.id = user.id;
         token.role = user.role;
         token.image = user.image;
+
+        // Porta il claim di impersonazione nel JWT (dal provider `impersonation`).
+        if (user.impersonating) {
+          token.impersonating = true;
+          token.impersonatingCompanyId = user.impersonatingCompanyId;
+        }
 
         // If user has no name then use the email
         if (user.name === 'NO_NAME') {

@@ -1,42 +1,66 @@
 "use client";
 
 import React from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Lightbulb, X } from "lucide-react";
+import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "gruppo" | "istruttori" | "veicoli";
+export type NovitaEntryKey = "agenda-pausa" | "veicoli" | "istruttori";
 
+// "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
+// AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
-  { key: "veicoli", title: "Modulo veicoli", latest: true },
+  { key: "agenda-pausa", title: "Richieste agenda in pausa", latest: true },
+  { key: "veicoli", title: "Modulo veicoli (moto)" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
-  { key: "gruppo", title: "Guide di gruppo" },
 ];
 
 function StepRow({ num, children }: { num: number; children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-[13px]">
       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#eeeef4] text-[13px] font-bold text-navy-900">
         {num}
       </div>
-      <div className="pt-0.5 text-[14.5px] font-medium leading-normal text-[#444444]">{children}</div>
+      <div className="pt-0.5 text-[14.5px] font-medium leading-[1.5] text-[#444444]">{children}</div>
     </div>
   );
 }
 
-function CheckRow({ children }: { children: React.ReactNode }) {
+/** Cornice video del proto: ratio naturale su sfondo #eceef2, angoli 16px. */
+function NovitaVideo({
+  src,
+  className,
+  style,
+}: {
+  src: string;
+  className?: string;
+  style?: React.CSSProperties;
+}) {
   return (
-    <div className="flex items-start gap-2.5">
-      <Check className="mt-0.5 size-[18px] shrink-0 text-[#1a7f50]" strokeWidth={1.9} />
-      <div className="text-[14.5px] font-medium leading-normal text-[#444444]">{children}</div>
+    <div className={`overflow-hidden rounded-2xl bg-[#eceef2] ${className ?? ""}`}>
+      <video src={src} autoPlay muted playsInline loop className="block w-full" style={style} />
     </div>
+  );
+}
+
+function GoButton({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-[#1a1a2e] px-6 py-[13px] text-[15px] font-semibold text-white transition-colors hover:bg-[#2d2d4a] ${className ?? ""}`}
+    >
+      {label}
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M3 8h9M8.5 4l4 4-4 4" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
   );
 }
 
 /**
- * Modal changelog "Novità" (dal menu hamburger). Contenuto statico come il
- * proto: una scheda per feature rilasciata.
+ * Modal changelog "Novità" (dal menu hamburger). Contenuto statico allineato al
+ * prototipo Dashboard.dc.html: una scheda per feature rilasciata.
  */
 export function NovitaDialog({
   entry,
@@ -57,6 +81,11 @@ export function NovitaDialog({
   }, [entry, onClose]);
 
   if (!entry || typeof document === "undefined") return null;
+
+  const go = (href: string) => {
+    onClose();
+    router.push(href);
+  };
 
   return createPortal(
     <div
@@ -83,132 +112,112 @@ export function NovitaDialog({
         </div>
 
         <div className="overflow-y-auto px-8 pb-9 pt-7">
-          {entry === "gruppo" && (
-            <>
-              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">22 giugno 2026</div>
-              <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
-                Guide di gruppo
-              </div>
-              <div className="mb-6 h-[300px] overflow-hidden rounded-2xl bg-black leading-none">
-                <video
-                  src="/images/novita/guide-gruppo.mp4"
-                  autoPlay
-                  muted
-                  playsInline
-                  loop
-                  className="block h-full w-full object-cover"
-                />
-              </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Ora puoi programmare guide a cui partecipano{" "}
-                <b className="font-bold text-foreground">più allievi insieme</b>, invece di un solo
-                allievo per slot — pensate per uscite collettive e lezioni pratiche di gruppo.
-              </p>
-              <div className="mb-4 text-base font-bold text-foreground">Come funziona</div>
-              <div className="mb-6 flex flex-col gap-4">
-                <StepRow num={1}>
-                  Scegli quali allievi sono <b className="font-bold text-foreground">abilitati</b>{" "}
-                  alle guide di gruppo.
-                </StepRow>
-                <StepRow num={2}>
-                  Crei una guida di gruppo dall&apos;agenda, con data, orario e{" "}
-                  <b className="font-bold text-foreground">numero massimo di posti</b>.
-                </StepRow>
-                <StepRow num={3}>
-                  Gli allievi abilitati ricevono la notifica e{" "}
-                  <b className="font-bold text-foreground">si iscrivono in autonomia</b>, fino a
-                  esaurimento posti.
-                </StepRow>
-              </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Le guide di gruppo <b className="font-bold text-foreground">non scalano crediti</b>:
-                ogni partecipante avrà una guida &laquo;da pagare&raquo; al prezzo di una guida
-                normale.
-              </p>
-              <div className="mb-7 flex items-start gap-3 rounded-[14px] border border-[#f0e6d2] bg-[#fbf7ef] px-[18px] py-4">
-                <Lightbulb className="mt-0.5 size-5 shrink-0 text-navy-900" strokeWidth={1.5} />
-                <div className="text-[13.5px] font-medium leading-normal text-[#7a6a4a]">
-                  L&apos;idea arriva dall&apos;<b className="font-bold text-[#5c4f33]">Autoscuola Robatto</b>:
-                  cercavano un modo per organizzare uscite e lezioni pratiche collettive senza
-                  moltiplicare gli slot in agenda. Dal loro feedback è nata questa funzione.
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  router.push("/user/autoscuole?tab=settings&pane=bookings");
-                }}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-[14px] bg-navy-900 px-6 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-navy-800"
-              >
-                Attiva le guide di gruppo
-                <ArrowRight className="size-4" strokeWidth={1.8} />
-              </button>
-            </>
-          )}
-
           {entry === "veicoli" && (
             <>
-              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">12 giugno 2026</div>
-              <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
-                Modulo veicoli
+              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">12 luglio 2026</div>
+              <div className="mb-[22px] text-[26px] font-bold tracking-[-0.4px] text-foreground">
+                Modulo veicoli per le moto
               </div>
-              <div className="mb-6 flex h-[190px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#eef4fb] to-[#f4f0fb]">
-                <Image
-                  src="/images/settings/veicolo-nuovo.png"
-                  alt=""
-                  width={150}
-                  height={150}
-                  className="block h-[150px] w-[150px] object-contain"
-                />
-              </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Tieni traccia dei veicoli della tua autoscuola e assegnali alle guide, così sai
-                sempre quale mezzo è impegnato e quando.
+              <NovitaVideo src="/videos/novita/veicoli.mp4" className="mb-[26px]" />
+              <p className="mb-6 text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Il modulo veicoli è ora disponibile anche per le{" "}
+                <b className="font-bold text-foreground">moto</b>: aggiungile al parco veicoli e
+                assegnale alle guide, come già fai con le auto.
               </p>
-              <div className="flex flex-col gap-3.5">
-                <CheckRow>
-                  Aggiungi un veicolo con <b className="font-bold text-foreground">nome, targa e
-                  idoneità patente</b>, in pool condiviso o esclusiva per istruttore.
-                </CheckRow>
-                <CheckRow>Ogni guida può essere associata al veicolo usato.</CheckRow>
-                <CheckRow>Attivi o disattivi il modulo quando vuoi, dalle Impostazioni.</CheckRow>
+              <div className="mb-2 flex flex-col gap-[14px]">
+                <StepRow num={1}>
+                  Aggiungi una moto con <b className="font-bold text-foreground">nome e targa</b>,
+                  accanto alle auto che hai già.
+                </StepRow>
+                <StepRow num={2}>
+                  Nelle guide in moto puoi indicare l&apos;
+                  <b className="font-bold text-foreground">auto al seguito</b>: risulterà impegnata in
+                  agenda insieme alla moto.
+                </StepRow>
+                <StepRow num={3}>
+                  Attivi o disattivi il modulo quando vuoi, dalla configurazione.
+                </StepRow>
               </div>
+              <GoButton
+                label="Vai ai veicoli"
+                onClick={() => go("/user/autoscuole?tab=settings&pane=vehicles")}
+                className="mt-[18px]"
+              />
             </>
           )}
 
           {entry === "istruttori" && (
             <>
-              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">18 giugno 2026</div>
-              <div className="mb-5 text-[26px] font-bold tracking-[-0.4px] text-foreground">
+              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">10 luglio 2026</div>
+              <div className="mb-[22px] text-[26px] font-bold tracking-[-0.4px] text-foreground">
                 Gestione autonoma degli istruttori
               </div>
-              <div className="mb-6 flex h-[190px] items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-[#eeeef4] to-[#eef4fb]">
-                <div className="h-[120px] w-[120px] overflow-hidden rounded-full border-4 border-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]">
-                  <Image
-                    src="/images/settings/istruttore-nuovo.png"
-                    alt=""
-                    width={120}
-                    height={120}
-                    className="block h-[120px] w-[120px] object-cover"
-                  />
-                </div>
-              </div>
-              <p className="mb-6 text-[15px] font-medium leading-relaxed text-[#444444]">
-                Aggiungi e gestisci gli istruttori in autonomia,{" "}
-                <b className="font-bold text-foreground">senza passare dal nostro team</b>.
+              <NovitaVideo src="/videos/novita/istruttori.mp4" className="mb-[26px]" />
+              <p className="mb-[26px] text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Ora puoi rendere un istruttore autonomo —{" "}
+                <b className="font-bold text-foreground">
+                  gestendo da solo i propri allievi e le proprie impostazioni
+                </b>
+                , dentro i confini che decidi tu. Tu attivi la modalità autonoma dal suo profilo, lui
+                lavora senza fare doppi passaggi.
               </p>
-              <div className="flex flex-col gap-3.5">
-                <CheckRow>
-                  Inviti un istruttore via email;{" "}
-                  <b className="font-bold text-foreground">imposta da solo la password</b>.
-                </CheckRow>
-                <CheckRow>
-                  Il posto si aggiunge all&apos;abbonamento ed è{" "}
-                  <b className="font-bold text-foreground">riassegnabile senza costi</b> in caso di
-                  sostituzione.
-                </CheckRow>
+              <div className="mb-4 text-base font-bold text-foreground">Cosa puoi impostare</div>
+              <div className="mb-[26px] flex flex-col gap-[14px]">
+                <StepRow num={1}>
+                  <b className="font-bold text-foreground">Orario di lavoro</b> per distinguere le ore
+                  ordinarie dalle ore extra.
+                </StepRow>
+                <StepRow num={2}>
+                  <b className="font-bold text-foreground">Durate delle guide</b> proponibili e slot
+                  solo a orari tondi, se vuoi.
+                </StepRow>
+                <StepRow num={3}>
+                  <b className="font-bold text-foreground">Governance delle prenotazioni</b>: chi
+                  prenota, scambi, annullamenti, cutoff, limiti settimanali, fasce orarie e assenze —
+                  ogni regola può seguire il default dell&apos;autoscuola oppure un&apos;impostazione
+                  propria dell&apos;istruttore.
+                </StepRow>
+                <StepRow num={4}>
+                  <b className="font-bold text-foreground">Allievi assegnati</b>: decidi chi segue, con
+                  ricerca rapida e conteggio sempre aggiornato.
+                </StepRow>
               </div>
+
+              <div className="mb-[26px] border-t border-[#f0f0f0]" />
+              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">In evidenza</div>
+              <div className="mb-4 text-[20px] font-bold tracking-[-0.3px] text-foreground">
+                Parco Allievi
+              </div>
+              <NovitaVideo
+                src="/videos/novita/parco-allievi.mp4"
+                className="mb-5"
+                style={{ transform: "scale(1.12, 1.03)", transformOrigin: "left top" }}
+              />
+              <p className="mb-4 text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Il parco allievi permette agli istruttori di creare un{" "}
+                <b className="font-bold text-foreground">proprio bacino utenti</b>, per gestire con le
+                proprie regole i loro allievi. Scopri anche la versione{" "}
+                <b className="font-bold text-foreground">mappa visiva</b>: ogni allievo è una bolla
+                colorata, e ti muovi tra le bolle semplicemente spostando il mouse.
+              </p>
+              <div className="mb-[26px] flex flex-col gap-[14px]">
+                <StepRow num={1}>
+                  Apri il Parco Allievi dal profilo dell&apos;istruttore: vedi{" "}
+                  <b className="font-bold text-foreground">a colpo d&apos;occhio tutti i suoi allievi</b>.
+                </StepRow>
+                <StepRow num={2}>
+                  Clicchi una bolla per i <b className="font-bold text-foreground">dettagli</b> —
+                  patente, stato — e per rimuovere l&apos;allievo dall&apos;istruttore.
+                </StepRow>
+                <StepRow num={3}>
+                  Con la bolla <b className="font-bold text-foreground">+</b> cerchi gli altri allievi
+                  dell&apos;autoscuola e li aggiungi al parco in un tocco.
+                </StepRow>
+              </div>
+              <GoButton
+                label="Vai agli istruttori"
+                onClick={() => go("/user/autoscuole?tab=settings&pane=instructors")}
+              />
             </>
           )}
         </div>
