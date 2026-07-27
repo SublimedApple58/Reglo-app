@@ -446,6 +446,8 @@ export function AutoscuoleResourcesPage({
   const [bookingCutoffTime, setBookingCutoffTime] = React.useState<string>("18:00");
   const [weeklyBookingLimitEnabled, setWeeklyBookingLimitEnabled] = React.useState(false);
   const [weeklyBookingLimit, setWeeklyBookingLimit] = React.useState(3);
+  const [autoBookingBlockEnabled, setAutoBookingBlockEnabled] = React.useState(false);
+  const [autoBookingBlockThreshold, setAutoBookingBlockThreshold] = React.useState(3);
   const [examPriorityEnabled, setExamPriorityEnabled] = React.useState(false);
   const [examPriorityDaysBeforeExam, setExamPriorityDaysBeforeExam] = React.useState(14);
   const [examPriorityBlockNonExam, setExamPriorityBlockNonExam] = React.useState(false);
@@ -679,6 +681,8 @@ export function AutoscuoleResourcesPage({
     setBookingCutoffTime(res.data.bookingCutoffTime ?? "18:00");
     setWeeklyBookingLimitEnabled(res.data.weeklyBookingLimitEnabled ?? false);
     setWeeklyBookingLimit(res.data.weeklyBookingLimit ?? 3);
+    setAutoBookingBlockEnabled(res.data.autoBookingBlockEnabled ?? false);
+    setAutoBookingBlockThreshold(res.data.autoBookingBlockThreshold ?? 3);
     setExamPriorityEnabled(res.data.examPriorityEnabled ?? false);
     setExamPriorityDaysBeforeExam(res.data.examPriorityDaysBeforeExam ?? 14);
     setExamPriorityBlockNonExam(res.data.examPriorityBlockNonExam ?? false);
@@ -828,6 +832,16 @@ export function AutoscuoleResourcesPage({
   const saveWeeklyBookingLimit = persistField(weeklyBookingLimit, setWeeklyBookingLimit, (v) => ({
     weeklyBookingLimit: v,
   }));
+  const saveAutoBookingBlockEnabled = persistField(
+    autoBookingBlockEnabled,
+    setAutoBookingBlockEnabled,
+    (v) => ({ autoBookingBlockEnabled: v }),
+  );
+  const saveAutoBookingBlockThreshold = persistField(
+    autoBookingBlockThreshold,
+    setAutoBookingBlockThreshold,
+    (v) => ({ autoBookingBlockThreshold: v }),
+  );
   const saveExamPriorityEnabled = persistField(examPriorityEnabled, setExamPriorityEnabled, (v) => ({
     examPriorityEnabled: v,
   }));
@@ -2191,6 +2205,10 @@ export function AutoscuoleResourcesPage({
             setWeeklyBookingLimitEnabled={saveWeeklyBookingLimitEnabled}
             weeklyBookingLimit={weeklyBookingLimit}
             setWeeklyBookingLimit={saveWeeklyBookingLimit}
+            autoBookingBlockEnabled={autoBookingBlockEnabled}
+            setAutoBookingBlockEnabled={saveAutoBookingBlockEnabled}
+            autoBookingBlockThreshold={autoBookingBlockThreshold}
+            setAutoBookingBlockThreshold={saveAutoBookingBlockThreshold}
             examPriorityEnabled={examPriorityEnabled}
             setExamPriorityEnabled={saveExamPriorityEnabled}
             examPriorityDaysBeforeExam={examPriorityDaysBeforeExam}

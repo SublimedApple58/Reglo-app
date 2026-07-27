@@ -2728,9 +2728,10 @@ export function AutoscuoleAgendaPage({
             <div className={cn("flex flex-col overflow-hidden bg-white", agendaFrameClass)} style={{ height: "100%", ...agendaFrameStyle }}>
               {/* Fixed header — scrolls horizontally in sync with body */}
               <div className="overflow-hidden border-b border-border shrink-0" data-agenda-header-wrap>
-                <div className="bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                <div className="min-w-max bg-white" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
                 {/* Day header row spanning instructor columns */}
-                <div className="row-span-2" />
+                {/* Angolo in alto a sinistra: sticky left così resta ancorato sopra il time gutter durante lo scroll orizzontale */}
+                <div className="sticky left-0 z-40 bg-white row-span-2" />
                 {days.map((day) => {
                   const isDayToday = day.getTime() === todayNormalized.getTime();
                   const dayHolidayLabel = holidaySet.get(formatYmd(day));
@@ -2790,8 +2791,9 @@ export function AutoscuoleAgendaPage({
               {/* Exam banners row — sticky between header and body */}
               {examGroups.length > 0 && (
                 <div className="overflow-hidden border-b border-violet-100 shrink-0" data-agenda-exam-wrap>
-                  <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
-                    <div />
+                  <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                    {/* Cella gutter esami: sticky left, allineata al time gutter del corpo */}
+                    <div className="sticky left-0 z-40 bg-white" />
                     {days.map((day, dayIdx) => {
                       const dateKey = formatYmd(day);
                       const dayExams = examGroups.filter((eg) => formatYmd(toDate(eg.startsAt)) === dateKey);
@@ -2839,9 +2841,9 @@ export function AutoscuoleAgendaPage({
               }}>
 
               {/* Calendar body */}
-              <div style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
-                {/* Time gutter — sticky left */}
-                <div className="sticky left-0 z-40 relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
+              <div className="min-w-max" style={{ display: "grid", gridTemplateColumns: fsCols(totalCols) ?? `56px repeat(${totalCols}, minmax(80px, 1fr))` }}>
+                {/* Time gutter — sticky left (sticky basta come containing block per gli hour-mark assoluti; niente `relative` che sovrascriverebbe lo sticky) */}
+                <div className="sticky left-0 z-40 border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
                   {hourMarks.map((hour) => (
                     <div key={hour} className="absolute left-0 right-0 flex items-start" style={{ top: (hour - DAY_START_HOUR) * 60 * PIXELS_PER_MINUTE }}>
                       <span className="w-full pr-2 text-right text-[11px] font-semibold leading-none text-[#525252]">{`${pad(hour)}:00`}</span>
@@ -3237,7 +3239,8 @@ export function AutoscuoleAgendaPage({
               className="sticky top-0 z-30 grid border-b border-border bg-white/95 backdrop-blur-sm text-xs text-muted-foreground"
               style={{ gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)` }}
             >
-              <div />
+              {/* Angolo sticky left, allineato al time gutter */}
+              <div className="sticky left-0 bg-white" />
               {dayViewInstructors.length > 0 ? dayViewInstructors.map((instr, idx) => {
                 const tint = tintFor(instr.id, idx);
                 const initials = instr.name
@@ -3272,8 +3275,8 @@ export function AutoscuoleAgendaPage({
               gridTemplateColumns: fsCols(Math.max(1, dayViewInstructors.length)) ?? `56px repeat(${Math.max(1, dayViewInstructors.length)}, 1fr)`,
             }}
           >
-            {/* Time gutter */}
-            <div className="relative border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
+            {/* Time gutter — sticky left (resta ancorato anche con scroll orizzontale in fullscreen; sticky fa da containing block per gli hour-mark assoluti) */}
+            <div className="sticky left-0 z-20 border-r border-[#eeeeee] bg-[#fafafa]" style={{ height: calendarHeight }}>
               {hourMarks.map((hour) => (
                 <div
                   key={hour}
@@ -4134,7 +4137,10 @@ export function AutoscuoleAgendaPage({
               .filter((s): s is (typeof students)[number] => Boolean(s));
             const examAddable = students.filter((s) => !examDraftStudentIds.includes(s.id));
             const examQuery = examPanelStudentSearch.trim().toLowerCase();
-            const examBrowse = examAddable.filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery));
+            const examBrowse = examAddable
+              .filter((s) => !examQuery || `${s.firstName} ${s.lastName}`.toLowerCase().includes(examQuery))
+              // Come nel picker di creazione: i "pronti" salgono in cima anche qui.
+              .sort((a, b) => Number(Boolean(b.examReady)) - Number(Boolean(a.examReady)));
             // Diff draft vs salvato → abilita il bottone unico "Salva modifiche".
             const origTime = examHasTime ? `${String(egStart.getHours()).padStart(2, "0")}:${String(egStart.getMinutes()).padStart(2, "0")}` : null;
             const origInstructorId = eg.instructorId ?? null;
@@ -4295,11 +4301,26 @@ export function AutoscuoleAgendaPage({
                       {draftStudents.map((s, idx) => (
                         <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                           <span className="flex min-w-0 items-center gap-3">
-                            <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                            <span
+                              className={cn(
+                                "flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]",
+                                s.examReady && "ring-2 ring-[#1a7f50]",
+                              )}
+                            >
                               {examStudentInitials(s.firstName, s.lastName)}
                             </span>
                             <span className="flex min-w-0 flex-col">
-                              <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
+                                {s.examReady && (
+                                  <span
+                                    title={examReadyTitle(s.examReadyAt)}
+                                    className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                  >
+                                    Pronto
+                                  </span>
+                                )}
+                              </span>
                               {s.licenseCategory ? (
                                 <span className="truncate text-[12px] font-medium text-[#929292]">
                                   Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}
@@ -4431,11 +4452,26 @@ export function AutoscuoleAgendaPage({
                           examBrowse.map((s, idx) => (
                             <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
                               <span className="flex min-w-0 items-center gap-2.5">
-                                <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                                <span
+                                  className={cn(
+                                    "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                                    s.examReady && "ring-2 ring-[#1a7f50]",
+                                  )}
+                                >
                                   {examStudentInitials(s.firstName, s.lastName)}
                                 </span>
                                 <span className="flex min-w-0 flex-col">
-                                  <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                  <span className="flex min-w-0 items-center gap-1.5">
+                                    <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
+                                    {s.examReady && (
+                                      <span
+                                        title={examReadyTitle(s.examReadyAt)}
+                                        className="shrink-0 rounded-full border border-[#c5e8d4] bg-[#f0faf4] px-2 py-[1px] text-[10px] font-semibold text-[#1a7f50]"
+                                      >
+                                        Pronto
+                                      </span>
+                                    )}
+                                  </span>
                                   {s.licenseCategory ? (
                                     <span className="truncate text-[11.5px] font-medium text-[#929292]">
                                       Patente {s.licenseCategory}{s.transmission === "automatic" ? " · autom." : ""}

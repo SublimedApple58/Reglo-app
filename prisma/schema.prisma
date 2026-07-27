@@ -300,6 +300,19 @@ model CompanyMember {
   /// (drives the yellow "Conferma fase" badge in the titolare drawer).
   phaseClassifiedAt        DateTime?
   bookingBlocked           Boolean                @default(false)
+  /// Origin of an active booking block, so the unpaid-debt automation knows
+  /// which blocks it owns. "manual" = set by the owner (automation never
+  /// touches it); "unpaid_threshold" = set by the auto-block automation
+  /// (auto-released when the student drops below the threshold). Null = not
+  /// blocked, or a legacy manual block (treated as manual for safety).
+  /// See lib/autoscuole/unpaid-auto-block.ts.
+  bookingBlockReason       String?
+  /// Dismissal watermark for the unpaid-debt auto-block: when the owner manually
+  /// unblocks a student, we store the unpaid-lesson count at that moment so the
+  /// automation won't immediately re-block for the same residual debt. It
+  /// re-blocks only if the debt later rises ABOVE this level, or drops below the
+  /// threshold and climbs back up. Null = no active dismissal.
+  unpaidBlockClearedAtCount Int?
   weeklyBookingLimitExempt Boolean                @default(false)
   examPriorityOverride     Boolean?
   assignedInstructorId     String?                @db.Uuid

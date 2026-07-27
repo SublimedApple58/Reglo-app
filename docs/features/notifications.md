@@ -13,6 +13,7 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 - `autoscuole-swap.actions.ts` — swap offers, swap accepted
 - `autoscuole-holidays.actions.ts` — holiday cancellations
 - `communications.ts` — all reminders (appointment, morning, case deadline, payment)
+- `exam-ready-nudge.ts` — nudge titolare `exam_ready_nudge` (cron lunedì 09:00 via `trigger/autoscuole-reminders.ts`)
 
 ## Recovery queries (notification kind → DB query)
 | Kind | DB query |
@@ -27,6 +28,7 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 | `appointment_rescheduled` | `AutoscuolaAppointment` where `rescheduledAt >= since` |
 | `availability_published` | `AutoscuolaInstructorPublishedWeek` where `publishedAt >= since` |
 | `weekly_absence` | `AutoscuolaStudentWeeklyAbsence` where `createdAt >= since` |
+| `exam_ready_nudge` | `getExamReadyNudgeForCompany()` — `CompanyMember` PRATICA `examReady` da >14gg MENO chi ha esame futuro (solo ruoli owner) |
 
 ## Web settings (pane "Promemoria e notifiche")
 
@@ -56,6 +58,7 @@ Real-time push notifications + server-side recovery for mobile offline sync.
 | `availability_published` | Student | publishedAt >= since |
 | `appointment_reminder_*` | Both | time-based, no recovery |
 | `broadcast` / `test_push` | Various | fire-and-forget |
+| `exam_ready_nudge` | Owner (OWNER + INSTRUCTOR_OWNER) | `getExamReadyNudgeForCompany()`, id stabile `exam_ready_nudge_{companyId}` |
 
 ## Connected features
 - **ALL features** — every feature sends push

@@ -69,6 +69,13 @@ import {
 } from "@/lib/autoscuole/payments";
 import { generateAndUploadReceipt } from "@/lib/autoscuole/receipt";
 import {
+  isLessonUnpaid,
+  readAutoBlockSettings,
+  reconcileUnpaidAutoBlock,
+  getStudentUnpaidLessonCount,
+  type MemberBlockState,
+} from "@/lib/autoscuole/unpaid-auto-block";
+import {
   LESSON_ALL_ALLOWED_TYPES,
   getCompatibleLessonTypesForInterval,
   getLessonPolicyTypeLabel,
@@ -1538,26 +1545,6 @@ function isCompanyManualMode(config: {
   );
 }
 
-function isLessonUnpaid(
-  l: {
-    status: string;
-    manualPaymentStatus?: string | null;
-    creditApplied?: boolean | null;
-    lateCancellationAction?: string | null;
-  },
-  manualMode: boolean,
-): boolean {
-  if (l.creditApplied) return false;
-  if (l.manualPaymentStatus === "paid") return false;
-  const s = normalizeStatus(l.status);
-  return (
-    (["completed", "checked_in"].includes(s) && manualMode) ||
-    (["cancelled", "no_show"].includes(s) &&
-      l.lateCancellationAction === "charged" &&
-      l.manualPaymentStatus === "unpaid")
-  );
-}
-
 const buildDrivingRegisterData = ({
   cases,
   lessons,
@@ -1666,10 +1653,18 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
     }));
     if (!students.length) return { success: true, data: [] };
 
-    const bookingBlockedMap = new Map<string, boolean>();
+    const memberBlockStateMap = new Map<string, MemberBlockState>();
     for (const m of members) {
-      bookingBlockedMap.set(m.userId, m.bookingBlocked);
+      memberBlockStateMap.set(m.userId, {
+        bookingBlocked: m.bookingBlocked,
+        bookingBlockReason:
+          (m.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ?? null,
+        unpaidBlockClearedAtCount: m.unpaidBlockClearedAtCount ?? null,
+      });
     }
+    const autoBlockSettings = readAutoBlockSettings(
+      await getCachedCompanyServiceLimits(companyId),
+    );
 
     const studentIds = students.map((student) => student.id);
 
@@ -1734,27 +1729,44 @@ export async function getAutoscuolaStudentsWithProgress(search?: string) {
       lessonsByStudent.set(item.studentId, current);
     }
 
-    const rows = students.map((student) => {
-      const studentCases = casesByStudent.get(student.id) ?? [];
-      const register = buildDrivingRegisterData({
-        cases: studentCases,
-        lessons: lessonsByStudent.get(student.id) ?? [],
-      });
-      const studentLessons = lessonsByStudent.get(student.id) ?? [];
-      const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
-      const latestCase = studentCases
-        .slice()
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-      const theoryExamAt = (latestCase as { theoryExamAt?: Date | null } | undefined)?.theoryExamAt ?? null;
-      return {
-        ...student,
-        bookingBlocked: bookingBlockedMap.get(student.id) ?? false,
-        activeCase: register.activeCase,
-        summary: register.summary,
-        manualUnpaid,
-        theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
-      };
-    });
+    const rows = await Promise.all(
+      students.map(async (student) => {
+        const studentCases = casesByStudent.get(student.id) ?? [];
+        const register = buildDrivingRegisterData({
+          cases: studentCases,
+          lessons: lessonsByStudent.get(student.id) ?? [],
+        });
+        const studentLessons = lessonsByStudent.get(student.id) ?? [];
+        const manualUnpaid = studentLessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
+        // Riconcilia il blocco automatico per debito: usa il conteggio appena
+        // calcolato (nessuna query extra) e persiste solo se lo stato cambia.
+        const blockState = memberBlockStateMap.get(student.id) ?? {
+          bookingBlocked: false,
+          bookingBlockReason: null,
+          unpaidBlockClearedAtCount: null,
+        };
+        const nextBlock = await reconcileUnpaidAutoBlock({
+          companyId,
+          userId: student.id,
+          state: blockState,
+          unpaidCount: manualUnpaid,
+          settings: autoBlockSettings,
+        });
+        const latestCase = studentCases
+          .slice()
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+        const theoryExamAt = (latestCase as { theoryExamAt?: Date | null } | undefined)?.theoryExamAt ?? null;
+        return {
+          ...student,
+          bookingBlocked: nextBlock.bookingBlocked,
+          bookingBlockReason: nextBlock.bookingBlockReason,
+          activeCase: register.activeCase,
+          summary: register.summary,
+          manualUnpaid,
+          theoryExamAt: theoryExamAt ? theoryExamAt.toISOString() : null,
+        };
+      }),
+    );
 
     return { success: true, data: rows };
   } catch (error) {
@@ -1944,6 +1956,21 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
     );
     const manualUnpaid = lessons.filter((l) => isLessonUnpaid(l, manualMode)).length;
 
+    // Riconcilia il blocco automatico per debito con il conteggio appena calcolato.
+    const autoBlock = await reconcileUnpaidAutoBlock({
+      companyId,
+      userId: studentId,
+      state: {
+        bookingBlocked: studentMembership.bookingBlocked,
+        bookingBlockReason:
+          (studentMembership.bookingBlockReason as MemberBlockState["bookingBlockReason"]) ??
+          null,
+        unpaidBlockClearedAtCount: studentMembership.unpaidBlockClearedAtCount ?? null,
+      },
+      unpaidCount: manualUnpaid,
+      settings: readAutoBlockSettings(await getCachedCompanyServiceLimits(companyId)),
+    });
+
     const latestCaseTheoryExamAt = cases
       .slice()
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]?.theoryExamAt ?? null;
@@ -1952,7 +1979,8 @@ export async function getAutoscuolaStudentDrivingRegister(studentId: string) {
       success: true,
       data: {
         student,
-        bookingBlocked: studentMembership.bookingBlocked,
+        bookingBlocked: autoBlock.bookingBlocked,
+        bookingBlockReason: autoBlock.bookingBlockReason,
         weeklyBookingLimitExempt: studentMembership.weeklyBookingLimitExempt,
         examPriorityOverride: studentMembership.examPriorityOverride,
         examPriorityActive: examPriorityInfo.active,
@@ -7490,13 +7518,27 @@ export async function toggleStudentBookingBlock(
     }
     const payload = toggleStudentBookingBlockSchema.parse(input);
 
+    // Il blocco/sblocco manuale del titolare convive con l'automatismo per debito
+    // (stesso campo `bookingBlocked`). Marca l'origine per non entrare in conflitto:
+    //  - BLOCCA a mano → reason="manual": l'automatismo non toccherà mai il record.
+    //  - SBLOCCA a mano → reason=null + watermark = guide non pagate correnti, così
+    //    l'automatismo non riblocca per lo stesso debito residuo (ribloccherà solo
+    //    su un nuovo superamento della soglia).
+    const clearedAtCount = payload.blocked
+      ? null
+      : await getStudentUnpaidLessonCount(membership.companyId, payload.studentId);
+
     await prisma.companyMember.updateMany({
       where: {
         companyId: membership.companyId,
         userId: payload.studentId,
         autoscuolaRole: "STUDENT",
       },
-      data: { bookingBlocked: payload.blocked },
+      data: {
+        bookingBlocked: payload.blocked,
+        bookingBlockReason: payload.blocked ? "manual" : null,
+        unpaidBlockClearedAtCount: clearedAtCount,
+      },
     });
 
     return {
