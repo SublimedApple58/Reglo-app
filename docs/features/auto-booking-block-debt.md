@@ -4,8 +4,10 @@ Blocco automatico delle prenotazioni quando un allievo supera una soglia di
 **guide da pagare non ancora saldate**. Impostazione a livello di autoscuola,
 configurabile SOLO nel pane "Prenotazioni e allievi" → tab **Limiti**.
 
-Solo web/backend: **nessun riflesso mobile** (decisione di prodotto). Il mobile
-subisce solo l'effetto del blocco (già gestito dal blocco prenotazioni esistente).
+Configurazione solo web. Dal 2026-07-28 il mobile **conosce** lo stato del blocco:
+`getBookingOptions` espone `bookingBlocked` e l'app allievo ferma il tasto
+"Prenota" con un messaggio chiaro (prima la ricerca slot falliva in silenzio —
+caso Robatto).
 
 ## Idea di fondo
 
@@ -56,6 +58,10 @@ definizione di `manualUnpaid` mostrato in UI) viene ricalcolato e riconciliato:
 3. **Guard prenotazione da app** (`ensureStudentCanBookFromApp`-like in
    availability): **solo se la feature è attiva**, calcola il debito e riconcilia
    prima del check → enforcement esatto al momento in cui l'allievo prova a prenotare.
+4. **`getBookingOptions`** (home allievo mobile): stesso reconcile, ed espone
+   `bookingBlocked: boolean` nel payload → l'app blocca il tasto "Prenota" con
+   toast "prenotazioni sospese, contatta la segreteria" invece di lasciar partire
+   ricerche destinate al 400 silenzioso (bug segnalato da Robatto il 28/07).
 
 Scritture rare: `reconcileUnpaidAutoBlock` persiste solo quando lo stato cambia.
 

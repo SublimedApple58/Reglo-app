@@ -2641,13 +2641,57 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
       return { success: false, message: "Accesso non consentito." };
     }
 
-    const [student, limits] = await Promise.all([
+    const [student, limits, blockState] = await Promise.all([
       ensureStudentMembership(membership.companyId, payload.studentId),
       getCachedCompanyServiceLimits(membership.companyId),
+      prisma.companyMember.findFirst({
+        where: {
+          companyId: membership.companyId,
+          userId: payload.studentId,
+          autoscuolaRole: "STUDENT",
+        },
+        select: {
+          bookingBlocked: true,
+          bookingBlockReason: true,
+          unpaidBlockClearedAtCount: true,
+        },
+      }),
     ]);
 
     if (!student) {
       return { success: false, message: "Allievo non valido." };
+    }
+
+    // Blocco prenotazioni (manuale o automatico per debito): riconciliato qui
+    // con la stessa macchina a stati usata al momento della ricerca, così la
+    // home mobile conosce subito lo stato reale (e uno sblocco per debito
+    // rientrato si riflette senza dover tentare una ricerca destinata al 400).
+    let bookingBlocked = blockState?.bookingBlocked ?? false;
+    if (blockState) {
+      const autoBlockSettings = readAutoBlockSettings(limits);
+      if (autoBlockSettings.enabled) {
+        const unpaidCount = await getStudentUnpaidLessonCount(
+          membership.companyId,
+          payload.studentId,
+        );
+        const reconciled = await reconcileUnpaidAutoBlock({
+          companyId: membership.companyId,
+          userId: payload.studentId,
+          state: {
+            bookingBlocked: blockState.bookingBlocked,
+            bookingBlockReason:
+              (blockState.bookingBlockReason as
+                | "manual"
+                | "unpaid_threshold"
+                | null) ?? null,
+            unpaidBlockClearedAtCount:
+              blockState.unpaidBlockClearedAtCount ?? null,
+          },
+          unpaidCount,
+          settings: autoBlockSettings,
+        });
+        bookingBlocked = reconciled.bookingBlocked;
+      }
     }
     const policy = parseLessonPolicyFromLimits(limits);
     const companyBookingSlotDurations = normalizeBookingSlotDurations(
@@ -2805,6 +2849,7 @@ export async function getBookingOptions(input: z.infer<typeof bookingOptionsSche
         studentCancellationEnabled: clusterSettings.studentCancellationEnabled,
         examPriority: examPriorityInfo,
         blockedByExamPriority,
+        bookingBlocked,
       },
     };
   } catch (error) {
