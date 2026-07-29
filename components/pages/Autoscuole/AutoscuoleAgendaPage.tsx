@@ -1694,6 +1694,28 @@ export function AutoscuoleAgendaPage({
         description: (res as { warnings?: string[] }).warnings?.join(" "),
       });
     }
+    // L'agenda segue la guida appena creata (richiesta Macchiavello 29/07):
+    // naviga alla settimana/giorno giusto e scrolla all'orario, così la nuova
+    // prenotazione è subito visibile anche creando dal "+" mentre si guarda
+    // un'altra settimana. Stessa logica del follow del draft ghost.
+    {
+      const created = normalizeDay(startDate);
+      if (viewMode === "week") {
+        const ws = weekAnchor(created, viewPrefs.weekMode);
+        if (ws.getTime() !== weekStart.getTime()) setWeekStart(ws);
+      } else if (created.getTime() !== dayFocus.getTime()) {
+        setDayFocus(created);
+      }
+      const startMin =
+        startDate.getHours() * 60 + startDate.getMinutes() - DAY_START_HOUR * 60;
+      const scroller = calendarScrollRef.current;
+      if (scroller) {
+        scroller.scrollTo({
+          top: Math.max(0, startMin * PIXELS_PER_MINUTE - 140),
+          behavior: "smooth",
+        });
+      }
+    }
     load({ silent: true });
   };
 
