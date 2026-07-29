@@ -3020,6 +3020,11 @@ export async function createAutoscuolaAppointment(
         appointmentVehicles: { some: { vehicleId: { in: reservedVehicleIds } } },
       });
     }
+    // Same-student overlap: an allievo cannot have two engagements at the same
+    // time, even with different instructor+vehicle. Checked in the same scan.
+    if (payload.studentId) {
+      conflictOr.push({ studentId: payload.studentId });
+    }
     const conflicts = await prisma.autoscuolaAppointment.findMany({
       where: {
         companyId,
@@ -3028,11 +3033,28 @@ export async function createAutoscuolaAppointment(
         OR: conflictOr,
       },
     });
-    const hasConflict = conflicts.some((item) => {
+    const overlapsSlot = (item: { startsAt: Date; endsAt: Date | null }) => {
       const start = item.startsAt;
       const end = item.endsAt ?? new Date(start.getTime() + 30 * 60 * 1000);
       return start < slotEnd && end > slotTime;
-    });
+    };
+    // HARD block, non aggirabile con skipConflictCheck: il "prenota comunque"
+    // serve a forzare su istruttore/veicolo, non a duplicare l'allievo
+    // (segnalazione Macchiavello 29/07: stesso allievo, stessa ora, 2 istruttori).
+    const studentConflict =
+      payload.studentId &&
+      conflicts.some(
+        (item) => item.studentId === payload.studentId && overlapsSlot(item),
+      );
+    if (studentConflict) {
+      return {
+        success: false,
+        message: "L'allievo ha già una guida o un esame in quell'orario.",
+      };
+    }
+    const hasConflict = conflicts.some(
+      (item) => item.studentId !== payload.studentId && overlapsSlot(item),
+    );
     if (hasConflict && !payload.skipConflictCheck) {
       return {
         success: false,
@@ -4364,9 +4386,13 @@ export async function rescheduleAutoscuolaAppointment(
     const overlapOr: Array<{
       instructorId?: string;
       vehicleId?: string;
+      studentId?: string;
     }> = [];
     if (appointment.instructorId) overlapOr.push({ instructorId: appointment.instructorId });
     if (appointment.vehicleId) overlapOr.push({ vehicleId: appointment.vehicleId });
+    // Same-student overlap: the allievo cannot end up with two engagements at
+    // the same time, even with a different instructor+vehicle.
+    overlapOr.push({ studentId: appointment.studentId });
 
     if (overlapOr.length) {
       const conflicts = await prisma.autoscuolaAppointment.findMany({
@@ -4380,6 +4406,7 @@ export async function rescheduleAutoscuolaAppointment(
         select: {
           instructorId: true,
           vehicleId: true,
+          studentId: true,
           startsAt: true,
           endsAt: true,
         },
@@ -4390,14 +4417,17 @@ export async function rescheduleAutoscuolaAppointment(
         return start < newEnd && end > newStart;
       });
       if (conflict) {
+        const byStudent = conflict.studentId === appointment.studentId;
         const byInstructor =
           appointment.instructorId &&
           conflict.instructorId === appointment.instructorId;
         return {
           success: false,
-          message: byInstructor
-            ? "L'istruttore ha già una guida in quel momento."
-            : "Il veicolo è prenotato da un'altra guida in quel momento.",
+          message: byStudent
+            ? "L'allievo ha già una guida o un esame in quell'orario."
+            : byInstructor
+              ? "L'istruttore ha già una guida in quel momento."
+              : "Il veicolo è prenotato da un'altra guida in quel momento.",
           code: "OVERLAP_APPOINTMENT" as const,
         };
       }
