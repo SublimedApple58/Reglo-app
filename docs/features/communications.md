@@ -22,6 +22,7 @@ Message templates, reminder rules, appointment reminders, case deadline notifica
 - `processAutoscuolaMorningReminders()` — morning notifications (`limits.studentReminderMorningEnabled` + `...Time`, fire-once al minuto configurato, guide di OGGI)
 - `processAutoscuolaDayBeforeReminders()` — day-before notifications (2026-07-06: `limits.studentReminderDayBeforeEnabled` + `...Time`, default 19:00, guide di DOMANI, kind `day_before_reminder_student`, stessi canali `studentReminderChannels`)
 - `processAutoscuolaAppointmentReminders()` — 120/60/30/20/15 min before
+- **Promemoria ESAME senza orario (2026-07-31, richiesta Macchiavello)**: nei 3 promemoria allievo (configurato X-min, mattina, sera-prima) gli appuntamenti `type="esame"` usano una copy dedicata SENZA orario (`EXAM_REMINDER_SUFFIX`: "Orario e luogo di presentazione ti verranno comunicati dall'autoscuola") — la convocazione la comunica l'autoscuola e può cambiare fino all'ultimo. Titoli: "Promemoria esame"/"Esame oggi"/"Esame domani". I promemoria istruttore restano con l'orario.
 - `processAutoscuolaCaseDeadlines()` — pink sheet/medical expiry alerts
 - `processAutoscuolaPendingRepositions()` → delegates to repositioning.ts
 

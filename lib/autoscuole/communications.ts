@@ -68,6 +68,25 @@ const formatAutoscuolaDateTime = (value?: Date | string | null) => {
   });
 };
 
+// Solo data, senza orario: usato per i promemoria ESAME, dove l'orario di
+// convocazione lo comunica l'autoscuola (può cambiare fino all'ultimo).
+const formatAutoscuolaDateOnly = (value?: Date | string | null) => {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("it-IT", {
+    timeZone: AUTOSCUOLA_TIMEZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  });
+};
+
+// Promemoria esame: MAI l'orario nel testo — l'autoscuola comunica lei
+// convocazione e luogo (autoscuola o piazzale), a volte il giorno stesso.
+const EXAM_REMINDER_SUFFIX =
+  "Orario e luogo di presentazione ti verranno comunicati dall'autoscuola.";
+
 const DEADLINE_LABELS: Record<string, string> = {
   PINK_SHEET_EXPIRES: "Foglio rosa",
   MEDICAL_EXPIRES: "Visita medica",
@@ -703,12 +722,17 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
             60000,
         ),
       );
-      const body = `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
+      // Esame: niente orario nel testo (richiesta Macchiavello 31/07) — la
+      // convocazione la comunica l'autoscuola, l'orario in agenda è indicativo.
+      const isExam = appointment.type === "esame";
+      const body = isExam
+        ? `Promemoria: ${formatAutoscuolaDateOnly(appointment.startsAt)} hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
+        : `Promemoria guida il ${startsAtLabel}. Durata ${durationMinutes} minuti.`;
       if (studentChannels.includes("email") && studentProfile.email) {
         try {
           await sendDynamicEmail({
             to: studentProfile.email,
-            subject: "Reglo Autoscuole · Reminder guida",
+            subject: isExam ? "Reglo Autoscuole · Promemoria esame" : "Reglo Autoscuole · Reminder guida",
             body,
           });
         } catch (error) {
@@ -728,7 +752,7 @@ export const processAutoscuolaConfiguredAppointmentReminders = async ({
             await sendAutoscuolaPushToUsers({
               companyId: service.companyId,
               userIds: [appointment.studentId],
-              title: "Reminder guida",
+              title: isExam ? "Promemoria esame" : "Reminder guida",
               body,
               data: {
                 kind: "appointment_reminder_student",
@@ -874,14 +898,18 @@ export const processAutoscuolaMorningReminders = async ({
             60000,
         ),
       );
-      const body = `Buongiorno! Hai una guida oggi alle ${startsAtLabel.split(" alle ")[1] ?? startsAtLabel}. Durata ${durationMinutes} minuti.`;
+      // Esame: niente orario (vedi EXAM_REMINDER_SUFFIX).
+      const isExam = appointment.type === "esame";
+      const body = isExam
+        ? `Buongiorno! Oggi hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
+        : `Buongiorno! Hai una guida oggi alle ${startsAtLabel.split(" alle ")[1] ?? startsAtLabel}. Durata ${durationMinutes} minuti.`;
 
       if (studentChannels.includes("push") && appointment.studentId) {
         try {
           await sendAutoscuolaPushToUsers({
             companyId: service.companyId,
             userIds: [appointment.studentId],
-            title: "Guida oggi",
+            title: isExam ? "Esame oggi" : "Guida oggi",
             body,
             data: {
               kind: "morning_reminder_student",
@@ -906,7 +934,7 @@ export const processAutoscuolaMorningReminders = async ({
         try {
           await sendDynamicEmail({
             to: studentProfile.email,
-            subject: "Reglo Autoscuole · Guida oggi",
+            subject: isExam ? "Reglo Autoscuole · Esame oggi" : "Reglo Autoscuole · Guida oggi",
             body,
           });
         } catch (error) {
@@ -997,14 +1025,18 @@ export const processAutoscuolaDayBeforeReminders = async ({
         ),
       );
       const timeLabel = startsAtLabel.split(" alle ")[1] ?? startsAtLabel;
-      const body = `Promemoria: domani hai una guida alle ${timeLabel}. Durata ${durationMinutes} minuti.`;
+      // Esame: niente orario (vedi EXAM_REMINDER_SUFFIX).
+      const isExam = appointment.type === "esame";
+      const body = isExam
+        ? `Promemoria: domani hai l'esame di guida. ${EXAM_REMINDER_SUFFIX}`
+        : `Promemoria: domani hai una guida alle ${timeLabel}. Durata ${durationMinutes} minuti.`;
 
       if (studentChannels.includes("push") && appointment.studentId) {
         try {
           await sendAutoscuolaPushToUsers({
             companyId: service.companyId,
             userIds: [appointment.studentId],
-            title: "Guida domani",
+            title: isExam ? "Esame domani" : "Guida domani",
             body,
             data: {
               kind: "day_before_reminder_student",
@@ -1029,7 +1061,7 @@ export const processAutoscuolaDayBeforeReminders = async ({
         try {
           await sendDynamicEmail({
             to: studentProfile.email,
-            subject: "Reglo Autoscuole · Guida domani",
+            subject: isExam ? "Reglo Autoscuole · Esame domani" : "Reglo Autoscuole · Guida domani",
             body,
           });
         } catch (error) {
