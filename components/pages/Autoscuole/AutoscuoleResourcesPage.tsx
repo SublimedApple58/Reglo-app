@@ -466,6 +466,7 @@ export function AutoscuoleResourcesPage({
   const [defaultTransmission, setDefaultTransmission] = React.useState<string>("manual");
   const [followCarMotoEnabled, setFollowCarMotoEnabled] = React.useState(false);
   const [groupLessonsEnabled, setGroupLessonsEnabled] = React.useState(false);
+  const [groupLessonsDiscoveryEnabled, setGroupLessonsDiscoveryEnabled] = React.useState(true);
   const [bookingMinStartDate, setBookingMinStartDate] = React.useState<string>("");
 
   // ── Instructor cluster panel state
@@ -701,6 +702,7 @@ export function AutoscuoleResourcesPage({
     setDefaultTransmission(res.data.defaultTransmission ?? "manual");
     setFollowCarMotoEnabled(res.data.followCarMotoEnabled === true);
     setGroupLessonsEnabled(res.data.groupLessonsEnabled === true);
+    setGroupLessonsDiscoveryEnabled(res.data.groupLessonsDiscoveryEnabled !== false);
 
     setAppBookingActors(
       APP_BOOKING_ACTOR_OPTIONS.some((option) => option.value === res.data.appBookingActors)
@@ -892,6 +894,11 @@ export function AutoscuoleResourcesPage({
   const saveGroupLessonsEnabled = persistField(groupLessonsEnabled, setGroupLessonsEnabled, (v) => ({
     groupLessonsEnabled: v,
   }));
+  const saveGroupLessonsDiscoveryEnabled = persistField(
+    groupLessonsDiscoveryEnabled,
+    setGroupLessonsDiscoveryEnabled,
+    (v) => ({ groupLessonsDiscoveryEnabled: v }),
+  );
 
   // App allievi
   const saveStudentNotesEnabled = persistField(studentNotesEnabled, setStudentNotesEnabled, (v) => ({
@@ -2235,6 +2242,8 @@ export function AutoscuoleResourcesPage({
             setStudentNotesEnabled={saveStudentNotesEnabled}
             groupLessonsEnabled={groupLessonsEnabled}
             setGroupLessonsEnabled={saveGroupLessonsEnabled}
+            groupLessonsDiscoveryEnabled={groupLessonsDiscoveryEnabled}
+            setGroupLessonsDiscoveryEnabled={saveGroupLessonsDiscoveryEnabled}
             instructorPreferenceEnabled={instructorPreferenceEnabled}
             setInstructorPreferenceEnabled={saveInstructorPreferenceEnabled}
             toast={toast}

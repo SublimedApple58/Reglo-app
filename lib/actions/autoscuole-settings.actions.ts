@@ -382,6 +382,10 @@ const autoscuolaSettingsPatchSchema = z
     // groupLessonsOptIn can be enrolled into / invited to group driving lessons.
     // Priced like a standard 60' lesson (no dedicated price setting).
     groupLessonsEnabled: z.boolean().optional(),
+    // Discovery/auto-iscrizione: se OFF gli allievi NON vedono i gruppi con
+    // posti liberi nella lista "Guide di gruppo" (e niente inviti broadcast) —
+    // vedono solo i gruppi in cui lo staff li ha inseriti. Default ON.
+    groupLessonsDiscoveryEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
   })
@@ -578,6 +582,7 @@ export type AutoscuolaSettingsData = {
   followCarMotoEnabled: boolean;
   followCarRules: FollowCarRules;
   groupLessonsEnabled: boolean;
+  groupLessonsDiscoveryEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
 };
@@ -939,6 +944,7 @@ const resolveAutoscuolaSettingsData = async (
     followCarMotoEnabled: readFollowCarMotoEnabled(limits),
     followCarRules: parseFollowCarRulesFromLimits(limits),
     groupLessonsEnabled: limits.groupLessonsEnabled === true,
+    groupLessonsDiscoveryEnabled: limits.groupLessonsDiscoveryEnabled !== false,
     quizEnabled:
       typeof limits.quizEnabled === "boolean"
         ? limits.quizEnabled
@@ -1287,6 +1293,8 @@ export async function updateAutoscuolaSettings(
     const nextFollowCarRules = followCarRulesForEnabled(nextFollowCarMotoEnabled);
     const nextGroupLessonsEnabled =
       payload.groupLessonsEnabled ?? limits.groupLessonsEnabled === true;
+    const nextGroupLessonsDiscoveryEnabled =
+      payload.groupLessonsDiscoveryEnabled ?? limits.groupLessonsDiscoveryEnabled !== false;
     const nextQuizEnabled = payload.quizEnabled ?? previousQuizEnabled;
     const nextStudentCancellationEnabled = payload.studentCancellationEnabled ?? previousStudentCancellationEnabled;
     const nextVoiceFeatureEnabled = previousVoiceFeatureEnabled;
@@ -1500,6 +1508,7 @@ export async function updateAutoscuolaSettings(
       followCarMotoEnabled: nextFollowCarMotoEnabled,
       followCarRules: nextFollowCarRules,
       groupLessonsEnabled: nextGroupLessonsEnabled,
+      groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
     };
@@ -1619,6 +1628,7 @@ export async function updateAutoscuolaSettings(
         nationalHolidaysEnabled: nextLimits.nationalHolidaysEnabled,
         nationalHolidaysDisabled: nextLimits.nationalHolidaysDisabled,
         groupLessonsEnabled: nextGroupLessonsEnabled,
+        groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
       },

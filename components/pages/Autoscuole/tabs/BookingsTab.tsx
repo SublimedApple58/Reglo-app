@@ -82,6 +82,8 @@ export type BookingsTabProps = {
   setAutoCheckinEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   groupLessonsEnabled: boolean;
   setGroupLessonsEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  groupLessonsDiscoveryEnabled: boolean;
+  setGroupLessonsDiscoveryEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   // App allievi
   studentNotesEnabled: boolean;
   setStudentNotesEnabled: React.Dispatch<React.SetStateAction<boolean>>;
@@ -464,6 +466,8 @@ export default function BookingsTab({
   setStudentNotesEnabled,
   groupLessonsEnabled,
   setGroupLessonsEnabled,
+  groupLessonsDiscoveryEnabled,
+  setGroupLessonsDiscoveryEnabled,
   instructorPreferenceEnabled,
   setInstructorPreferenceEnabled,
   toast,
@@ -849,6 +853,21 @@ export default function BookingsTab({
             onToggle={() => setGroupLessonsEnabled((prev) => !prev)}
           />
         </div>
+
+        {groupLessonsEnabled && (
+          <div className="py-6">
+            <SettingRow
+              title="Gruppi visibili agli allievi"
+              description={
+                groupLessonsDiscoveryEnabled
+                  ? "Gli allievi abilitati vedono i gruppi con posti liberi nell'app e possono iscriversi da soli."
+                  : "Disattivo — gli allievi vedono solo i gruppi in cui li inserisci tu (niente lista né inviti)."
+              }
+              checked={groupLessonsDiscoveryEnabled}
+              onToggle={() => setGroupLessonsDiscoveryEnabled((prev) => !prev)}
+            />
+          </div>
+        )}
       </div>
 
       {/* ══ APP ALLIEVI ══ */}

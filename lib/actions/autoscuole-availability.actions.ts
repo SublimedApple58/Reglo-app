@@ -4704,6 +4704,12 @@ export async function broadcastGroupLessonInvite({
   groupLessonId: string;
   expiresAt: Date;
 }) {
+  // Discovery spenta → niente inviti broadcast: gli allievi non potrebbero
+  // comunque vedere/iscriversi ai gruppi dalla lista. Coerente con il gate in
+  // getGroupLessonInvites (setting groupLessonsDiscoveryEnabled, default ON).
+  const discoveryLimits = await getCachedCompanyServiceLimits(companyId);
+  if (discoveryLimits.groupLessonsDiscoveryEnabled === false) return null;
+
   const gl = await prisma.autoscuolaGroupLesson.findFirst({
     where: { id: groupLessonId, companyId, status: "scheduled" },
     select: {
@@ -4882,6 +4888,17 @@ export async function inviteToGroupLesson(input: z.infer<typeof inviteToGroupLes
     const expiresAt = gl.startsAt < byHours ? gl.startsAt : byHours;
     if (expiresAt <= new Date()) {
       return { success: false as const, message: "La guida è già iniziata." };
+    }
+
+    // Messaggio chiaro se la visibilità agli allievi è spenta (il broadcast
+    // sarebbe comunque un no-op): meglio dirlo che "nessun posto disponibile".
+    const inviteLimits = await getCachedCompanyServiceLimits(membership.companyId);
+    if (inviteLimits.groupLessonsDiscoveryEnabled === false) {
+      return {
+        success: false as const,
+        message:
+          "La visibilità dei gruppi agli allievi è disattivata nelle impostazioni (Prenotazioni e allievi → Guide).",
+      };
     }
 
     const invite = await broadcastGroupLessonInvite({
@@ -5416,6 +5433,15 @@ export async function getGroupLessonInvites(
         select: { invite: { select: { groupLessonId: true } } },
       }),
     ]);
+
+    // Discovery spenta per questa autoscuola (es. Macchiavello, che compone i
+    // gruppi a mano): gli allievi NON vedono i gruppi altrui con posti liberi —
+    // solo le proprie iscrizioni (che vivono nelle guide normali, non qui).
+    if (
+      (service?.limits as Record<string, unknown> | null)?.groupLessonsDiscoveryEnabled === false
+    ) {
+      return { success: true as const, data: [] };
+    }
 
     const vehiclesEnabled =
       (service?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;

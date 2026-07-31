@@ -203,9 +203,13 @@ export async function GET(request: Request) {
           where: { companyId, serviceKey: "AUTOSCUOLE" },
           select: { limits: true },
         });
-        const glVehiclesEnabled =
-          (glService?.limits as Record<string, unknown> | null)?.vehiclesEnabled !== false;
-        const [glInvites, glStudentAppts] = await Promise.all([
+        const glLimits = glService?.limits as Record<string, unknown> | null;
+        // Discovery spenta → niente inviti gruppo nell'inbox (le righe invito
+        // lazy pre-esistenti non devono riaffiorare). Stesso gate di
+        // getGroupLessonInvites (groupLessonsDiscoveryEnabled, default ON).
+        const glDiscoveryEnabled = glLimits?.groupLessonsDiscoveryEnabled !== false;
+        const glVehiclesEnabled = glLimits?.vehiclesEnabled !== false;
+        const [glInvites, glStudentAppts] = !glDiscoveryEnabled ? [[], []] : await Promise.all([
           prisma.autoscuolaGroupLessonInvite.findMany({
             where: {
               companyId,

@@ -72,6 +72,14 @@ Le seat di gruppo compaiono già nello storico (type=`group_lesson`, incluso da 
 ## Settings (`lib/actions/autoscuole-settings.actions.ts`)
 `groupLessonsEnabled` (default false) added to the patch schema, `AutoscuolaSettingsData`, resolver and `updateAutoscuolaSettings`. No price setting — `getGroupLessonPrice` always returns `lessonPrice60`.
 
+### `groupLessonsDiscoveryEnabled` (2026-07-31, richiesta Macchiavello — default **true**)
+Visibilità dei gruppi agli allievi. Quando **OFF** l'autoscuola compone i gruppi solo a mano e gli allievi vedono SOLO i gruppi in cui sono inseriti (le loro seat = guide normali):
+- `getGroupLessonInvites` → lista vuota (svuota la schermata "Guide di gruppo" mobile E il badge count della home);
+- `broadcastGroupLessonInvite` → no-op (niente push/email/whatsapp; copre anche il re-broadcast al ritiro di un posto);
+- recovery inbox (`notifications/route.ts`, kind `group_lesson_invite`) → sezione saltata (le righe invito lazy pre-esistenti non riaffiorano);
+- `inviteToGroupLesson` → errore esplicito "visibilità disattivata nelle impostazioni" per lo staff.
+UI: toggle "Gruppi visibili agli allievi" in Prenotazioni e allievi → Guide (visibile solo con guide di gruppo attive). Caso d'uso: Macchiavello (i cui allievi vedevano i gruppi altrui con posti liberi e la cosa non era voluta); Robatto resta col default ON.
+
 ## Web UI (`components/pages/Autoscuole/`)
 - `tabs/BookingsTab.tsx` (pane unificato "Prenotazioni e allievi", sub-tab Guide) — "Attiva guide di gruppo": enable toggle.
 - `AutoscuoleStudentsPage.tsx` — per-student opt-in toggle row in the drawer (shown when `groupLessonsEnabled`), via `updateStudentGroupLessonOptIn`; `groupLessonsOptIn` flows from `getAutoscuolaStudents*` and the driving register.
