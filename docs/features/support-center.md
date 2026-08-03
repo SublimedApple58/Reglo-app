@@ -16,7 +16,7 @@ Migration: `20260708160036_support_center`.
 
 **Lato company** (guard: `requireServiceAccess("AUTOSCUOLE")` + `autoscuolaRole !== "STUDENT"` — la chat è dello staff, gli allievi non la vedono):
 - `getSupportConversation()` — ultimi 300 messaggi asc + azzera `unreadForCompany` (aprire = leggere). Il thread NON viene creato qui (lazy al primo messaggio).
-- `sendSupportMessage({ body })` — upsert thread + crea messaggio + `unreadForAdmin++` in transazione; poi `after()` → email di avviso a `GLOBAL_ADMIN_EMAIL` via `sendDynamicEmail` (no-op su staging).
+- `sendSupportMessage({ body })` — upsert thread + crea messaggio + `unreadForAdmin++` in transazione; poi `after()` → email di avviso a `SUPPORT_NOTIFY_EMAILS` (= `GLOBAL_ADMIN_EMAIL` + gabriele.ruzzu@reglo.it + support@reglo.it, dal 2026-08-03) via `sendDynamicEmail` (no-op su staging). Feedback prodotto e news feedback restano solo a `GLOBAL_ADMIN_EMAIL`.
 - `getSupportUnreadCount()` — alimenta il badge nel menu della shell.
 - `submitProductFeedback({ rating, tags, message })` — crea `ProductFeedback` + email di avviso al team.
 

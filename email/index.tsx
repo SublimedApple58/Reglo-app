@@ -96,7 +96,8 @@ export const sendDynamicEmail = async ({
   body,
   from,
 }: {
-  to: string;
+  /** Uno o più destinatari (Resend accetta nativamente string | string[]). */
+  to: string | string[];
   subject: string;
   body: string;
   from?: string;

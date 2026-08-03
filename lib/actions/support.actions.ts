@@ -22,6 +22,14 @@ const MESSAGE_MAX_LENGTH = 4000;
 const PREVIEW_LENGTH = 140;
 const THREAD_MESSAGES_LIMIT = 300;
 
+// Destinatari degli avvisi "nuova richiesta di supporto": admin globale
+// (Tiziano) + Gabriele + casella condivisa del supporto (richiesta 2026-08-03).
+const SUPPORT_NOTIFY_EMAILS = [
+  GLOBAL_ADMIN_EMAIL,
+  "gabriele.ruzzu@reglo.it",
+  "support@reglo.it",
+];
+
 const sendMessageSchema = z.object({
   body: z.string().trim().min(1, "Il messaggio è vuoto.").max(MESSAGE_MAX_LENGTH),
 });
@@ -188,7 +196,7 @@ export async function sendSupportMessage(input: z.infer<typeof sendMessageSchema
     after(async () => {
       try {
         await sendDynamicEmail({
-          to: GLOBAL_ADMIN_EMAIL,
+          to: SUPPORT_NOTIFY_EMAILS,
           subject: `Assistenza — nuovo messaggio da ${companyName}`,
           body: [
             `Nuovo messaggio nel centro assistenza da ${companyName}${senderName ? ` (${senderName})` : ""}:`,
