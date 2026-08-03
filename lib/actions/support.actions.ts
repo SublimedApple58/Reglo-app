@@ -317,7 +317,7 @@ export async function submitNewsFeedback(input: z.infer<typeof newsFeedbackSchem
     after(async () => {
       try {
         await sendDynamicEmail({
-          to: GLOBAL_ADMIN_EMAIL,
+          to: SUPPORT_NOTIFY_EMAILS,
           subject: `${kindLabel} da ${companyName}`,
           body: [
             `Nuovo${isRequest ? "a richiesta" : " consiglio"} dal dialog Novità di ${companyName}${userName ? ` (${userName})` : ""}:`,
