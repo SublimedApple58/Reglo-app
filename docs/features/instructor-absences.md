@@ -12,7 +12,7 @@ Reuses **`AutoscuolaInstructorBlock`** (no new table): one full-day block per da
 - `lib/autoscuole/operational-cancellation.ts` — per-reason student notification copy: `instructor_sick` = "🤒 …in malattia", `instructor_vacation` = "🌴 …in ferie".
 - `lib/actions/autoscuole.actions.ts` — `listInstructorSickLeaves`/`deleteInstructorSickLeave` (reason `sick_leave`), `listInstructorFerie`/`deleteInstructorFerie` (reason `ferie`).
 - `components/pages/Autoscuole/tabs/InstructorsTab.tsx` — `MalattiaTab` + `FerieTab` (clone: same UI, ferie copy, toast instead of overlay).
-- `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` — `formatBlockReason`/`blockTint`: Malattia = arancio, Ferie = teal, generico = grigio.
+- `components/pages/Autoscuole/AutoscuoleAgendaPage.tsx` — `formatBlockReason`/`blockTint`: Malattia = arancio, Ferie = teal, generico = grigio. **Filtro render (fix 2026-08-03, caso Robatto "ferie sparite su un PC")**: i blocchi si filtrano per INTERSEZIONE con la finestra visibile (`bStart < dayEnd && bEnd > dayStart`), non per "inizia dentro" — un blocco 00:00-24:00 con `viewPrefs.startHour` > 0 (preferenza per-browser in localStorage!) veniva scartato del tutto su quel browser.
 
 ## Colour palette (shared web ↔ mobile)
 Malattia `#C2410C`, Ferie `#0F766E` (teal), Festivo aziendale `#D97706` (ambra), blocco generico grigio. Mobile mirror: `reglo-mobile/src/utils/weeklyAgenda.ts` `BLOCK_PRESENTATION`.

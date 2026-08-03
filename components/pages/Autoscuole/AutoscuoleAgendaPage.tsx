@@ -3110,8 +3110,13 @@ export function AutoscuoleAgendaPage({
                         {/* Instructor blocks for this instructor on this day */}
                         {instructorBlocks
                           .filter((b) => b.instructorId === instr.instructorId && (() => {
+                            // Interseca la finestra visibile — NON "inizia dentro": un blocco
+                            // che parte prima dell'ora di inizio vista (es. Ferie 00:00-24:00
+                            // con griglia dalle 07:00, preferenza per-browser) deve comunque
+                            // comparire clampato (caso Robatto 03/08: ferie "sparite" su un PC).
                             const bStart = toDate(b.startsAt);
-                            return bStart >= dayStart && bStart < dayEnd;
+                            const bEnd = toDate(b.endsAt);
+                            return bStart < dayEnd && bEnd > dayStart;
                           })())
                           .map((b) => {
                             const bStart = toDate(b.startsAt);
@@ -3601,8 +3606,11 @@ export function AutoscuoleAgendaPage({
                     {/* Instructor blocks for this instructor on this day */}
                     {instructorBlocks
                       .filter((b) => b.instructorId === instr.id && (() => {
+                        // Interseca la finestra visibile (vedi commento gemello nella vista
+                        // settimana): mai scartare un blocco che parte prima dell'ora di inizio.
                         const bStart = toDate(b.startsAt);
-                        return bStart >= dayStart && bStart < dayEnd;
+                        const bEnd = toDate(b.endsAt);
+                        return bStart < dayEnd && bEnd > dayStart;
                       })())
                       .map((b) => {
                         const bStart = toDate(b.startsAt);
