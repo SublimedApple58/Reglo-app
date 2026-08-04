@@ -446,7 +446,26 @@ const getTheoryCountdown = (theoryExamAt: string | null | undefined) => {
 const unpaidDotColor = (manualUnpaid: number) =>
   manualUnpaid >= 5 ? "#EF4444" : manualUnpaid >= 2 ? "#F59E0B" : manualUnpaid >= 1 ? "#FACC15" : "#22C55E";
 
-function StudentAvatar({ student, size = 40 }: { student: { id: string; firstName: string; lastName: string }; size?: number }) {
+function StudentAvatar({
+  student,
+  size = 40,
+  photoUrl,
+}: {
+  student: { id: string; firstName: string; lastName: string };
+  size?: number;
+  photoUrl?: string | null;
+}) {
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={`${student.firstName} ${student.lastName}`}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <div
       className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
@@ -620,6 +639,8 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
+  // Foto profilo caricata dall'allievo: sostituisce le iniziali nell'avatar del drawer.
+  const [drawerPhotoUrl, setDrawerPhotoUrl] = React.useState<string | null>(null);
   const [lessonFilter, setLessonFilter] = React.useState<LessonFilter>("all");
 
   // Booking block toggle
@@ -923,6 +944,7 @@ export function AutoscuoleStudentsPage({
     (studentId: string) => {
       setSelectedStudentId(studentId);
       setDrawerTab("summary");
+      setDrawerPhotoUrl(null);
       setLessonFilter("all");
       setPanelOpen(true);
       void loadRegister(studentId);
@@ -943,6 +965,7 @@ export function AutoscuoleStudentsPage({
     setCreditsSaving(null);
     setCreditsInput("1");
     setDrawerTab("summary");
+    setDrawerPhotoUrl(null);
   }, []);
 
   const handleAdjustCredits = React.useCallback(
@@ -1624,7 +1647,10 @@ export function AutoscuoleStudentsPage({
           )}
         </section>
 
-        <StudentMediaSection studentUserId={register.student.id} />
+        <StudentMediaSection
+          studentUserId={register.student.id}
+          onLoaded={(media) => setDrawerPhotoUrl(media.photoUrl)}
+        />
 
         {/* Gestione prenotazioni */}
         <section className="border-b border-[#f2f2f2] py-7">
@@ -2988,7 +3014,9 @@ export function AutoscuoleStudentsPage({
                 <path d="M3 3l8 8M11 3l-8 8" stroke="#6a6a6a" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </button>
-            {panelHeaderStudent && <StudentAvatar student={panelHeaderStudent} size={56} />}
+            {panelHeaderStudent && (
+              <StudentAvatar student={panelHeaderStudent} size={56} photoUrl={drawerPhotoUrl} />
+            )}
             <div className="mt-3">
               <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
                 {panelHeaderStudent
