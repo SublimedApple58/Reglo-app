@@ -20,9 +20,12 @@ type MediaState = { loading: boolean } & StudentMediaOverview;
  */
 export function StudentMediaSection({
   studentUserId,
+  refreshKey = 0,
   onLoaded,
 }: {
   studentUserId: string;
+  /** Bump per rifetchare (es. dopo upload foto dallo staff) */
+  refreshKey?: number;
   onLoaded?: (media: StudentMediaOverview) => void;
 }) {
   const [state, setState] = React.useState<MediaState>({
@@ -48,7 +51,7 @@ export function StudentMediaSection({
     return () => {
       cancelled = true;
     };
-  }, [studentUserId]);
+  }, [studentUserId, refreshKey]);
 
   const downloadBase = `/api/students/${studentUserId}/media`;
 
@@ -64,9 +67,9 @@ export function StudentMediaSection({
     </div>
   );
 
-  const emptyValue = (
+  const emptyValue = (label: string) => (
     <p className="text-sm font-medium text-[#c1c1c1]">
-      {state.loading ? 'Caricamento…' : 'In attesa dell’allievo'}
+      {state.loading ? 'Caricamento…' : label}
     </p>
   );
 
@@ -87,7 +90,7 @@ export function StudentMediaSection({
               {downloads('photo')}
             </div>
           ) : (
-            emptyValue
+            emptyValue('Nessuna — caricala da "Modifica" sull’avatar')
           )}
         </div>
         <div>
@@ -103,7 +106,7 @@ export function StudentMediaSection({
               {downloads('signature')}
             </div>
           ) : (
-            emptyValue
+            emptyValue('In attesa dell’allievo')
           )}
         </div>
       </div>

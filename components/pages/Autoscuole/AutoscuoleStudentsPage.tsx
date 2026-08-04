@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, Camera, ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -473,7 +473,7 @@ function StudentAvatar({
         width: size,
         height: size,
         background: avatarColor(student.id),
-        fontSize: size >= 56 ? 20 : 12,
+        fontSize: size >= 96 ? 30 : size >= 56 ? 20 : 12,
       }}
     >
       {initialsOf(student.firstName, student.lastName)}
@@ -639,8 +639,11 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
-  // Foto profilo caricata dall'allievo: sostituisce le iniziali nell'avatar del drawer.
+  // Foto profilo dell'allievo: sostituisce le iniziali nell'avatar del drawer.
   const [drawerPhotoUrl, setDrawerPhotoUrl] = React.useState<string | null>(null);
+  const [drawerPhotoUploading, setDrawerPhotoUploading] = React.useState(false);
+  const [mediaRefreshKey, setMediaRefreshKey] = React.useState(0);
+  const drawerPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [lessonFilter, setLessonFilter] = React.useState<LessonFilter>("all");
 
   // Booking block toggle
@@ -967,6 +970,39 @@ export function AutoscuoleStudentsPage({
     setDrawerTab("summary");
     setDrawerPhotoUrl(null);
   }, []);
+
+  /** Upload foto profilo dal drawer (staff, al posto dell'allievo). */
+  const handleDrawerPhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const studentId = selectedStudentId ?? register?.student.id;
+    if (!file || !studentId || drawerPhotoUploading) return;
+    setDrawerPhotoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/students/${studentId}/media/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { url: string };
+        message?: string;
+      };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error({ description: json.message ?? "Caricamento non riuscito." });
+        return;
+      }
+      setDrawerPhotoUrl(json.data.url);
+      setMediaRefreshKey((k) => k + 1);
+      toast.success({ description: "Foto profilo aggiornata." });
+    } catch {
+      toast.error({ description: "Caricamento non riuscito." });
+    } finally {
+      setDrawerPhotoUploading(false);
+    }
+  };
 
   const handleAdjustCredits = React.useCallback(
     async (direction: "grant" | "revoke") => {
@@ -1649,6 +1685,7 @@ export function AutoscuoleStudentsPage({
 
         <StudentMediaSection
           studentUserId={register.student.id}
+          refreshKey={mediaRefreshKey}
           onLoaded={(media) => setDrawerPhotoUrl(media.photoUrl)}
         />
 
@@ -3015,9 +3052,34 @@ export function AutoscuoleStudentsPage({
               </svg>
             </button>
             {panelHeaderStudent && (
-              <StudentAvatar student={panelHeaderStudent} size={56} photoUrl={drawerPhotoUrl} />
+              <button
+                type="button"
+                onClick={() => drawerPhotoInputRef.current?.click()}
+                className="relative cursor-pointer"
+                title="Modifica foto profilo"
+              >
+                <input
+                  ref={drawerPhotoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleDrawerPhotoChange}
+                />
+                <StudentAvatar student={panelHeaderStudent} size={96} photoUrl={drawerPhotoUrl} />
+                {/* Pill "Modifica" come nell'area personale (versione compatta) */}
+                <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]">
+                  {drawerPhotoUploading ? (
+                    <LoadingDots className="min-h-4 text-foreground" />
+                  ) : (
+                    <>
+                      <Camera className="size-3.5 text-foreground" strokeWidth={1.7} />
+                      <span className="text-[12px] font-semibold text-foreground">Modifica</span>
+                    </>
+                  )}
+                </span>
+              </button>
             )}
-            <div className="mt-3">
+            <div className="mt-4">
               <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
                 {panelHeaderStudent
                   ? `${panelHeaderStudent.firstName} ${panelHeaderStudent.lastName}`

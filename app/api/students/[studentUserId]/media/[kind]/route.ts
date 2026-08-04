@@ -7,9 +7,20 @@ import {
   photoToPortalVariant,
   signatureToPortalVariant,
 } from '@/lib/images/portal';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
+import { randomUUID } from 'crypto';
+import { getSignedAssetUrl } from '@/lib/storage/r2';
 
 export const runtime = 'nodejs';
+
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+
+const UPLOAD_IMAGE_TYPES: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/heic': 'heic',
+};
 
 type Kind = 'photo' | 'signature';
 type Variant = 'original' | 'portale';
@@ -122,6 +133,98 @@ export async function GET(
       {
         success: false,
         message: error instanceof Error ? error.message : 'Download non riuscito',
+      },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Upload della foto profilo da parte dello staff, al posto dell'allievo.
+ * Stessa semantica dell'upload mobile: originale salvato com'è su `User.image`.
+ */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ studentUserId: string; kind: string }> }
+) {
+  try {
+    const { studentUserId, kind } = await params;
+    if (kind !== 'photo') {
+      return NextResponse.json(
+        { success: false, message: 'Upload non supportato per questo tipo.' },
+        { status: 400 }
+      );
+    }
+
+    const { membership } = await requireServiceAccess('AUTOSCUOLE');
+    const isStaff =
+      membership.role === 'admin' ||
+      isOwner(membership.autoscuolaRole) ||
+      isInstructor(membership.autoscuolaRole);
+    if (!isStaff) {
+      return NextResponse.json(
+        { success: false, message: 'Non autorizzato.' },
+        { status: 403 }
+      );
+    }
+
+    const student = await prisma.user.findFirst({
+      where: {
+        id: studentUserId,
+        companyMembers: { some: { companyId: membership.companyId } },
+      },
+      select: { id: true },
+    });
+    if (!student) {
+      return NextResponse.json(
+        { success: false, message: 'Allievo non trovato.' },
+        { status: 404 }
+      );
+    }
+
+    const formData = await request.formData();
+    const file = formData.get('file');
+    if (!(file instanceof File)) {
+      return NextResponse.json(
+        { success: false, message: 'File mancante.' },
+        { status: 400 }
+      );
+    }
+    const extension = UPLOAD_IMAGE_TYPES[file.type];
+    if (!extension) {
+      return NextResponse.json(
+        { success: false, message: 'Formato immagine non supportato.' },
+        { status: 400 }
+      );
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { success: false, message: 'Immagine troppo grande (max 15MB).' },
+        { status: 400 }
+      );
+    }
+
+    const key = `users/${studentUserId}/photo-${randomUUID()}.${extension}`;
+    await getR2Client().send(
+      new PutObjectCommand({
+        Bucket: getR2Bucket(),
+        Key: key,
+        Body: Buffer.from(await file.arrayBuffer()),
+        ContentType: file.type,
+      })
+    );
+    await prisma.user.update({
+      where: { id: studentUserId },
+      data: { image: key },
+    });
+
+    const url = await getSignedAssetUrl(key);
+    return NextResponse.json({ success: true, data: { key, url } });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: error instanceof Error ? error.message : 'Upload non riuscito',
       },
       { status: 500 }
     );
