@@ -3106,7 +3106,8 @@ export function AutoscuoleStudentsPage({
                           <Download className="size-3.5 text-foreground" strokeWidth={1.7} />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="center" className="min-w-[210px]">
+                      {/* Il DetailPanel è z-[200]: il default z-50 del menu finirebbe dietro */}
+                      <DropdownMenuContent align="center" className="z-[300] min-w-[210px]">
                         <DropdownMenuItem asChild>
                           <a
                             href={`/api/students/${panelHeaderStudent.id}/media/photo?variant=original`}
