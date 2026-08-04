@@ -2,15 +2,16 @@
 
 import React from "react";
 import { useRouter } from "next/navigation";
-import { X } from "lucide-react";
+import { Lightbulb, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-export type NovitaEntryKey = "agenda-pausa" | "veicoli" | "istruttori";
+export type NovitaEntryKey = "foto-firma" | "agenda-pausa" | "veicoli" | "istruttori";
 
 // "agenda-pausa" non è gestita da NovitaDialog: la voce apre il dialog dedicato
 // AgendaPauseNewsDialog (splash + video). Lo shell la intercetta prima.
 export const NOVITA_ENTRIES: Array<{ key: NovitaEntryKey; title: string; latest?: boolean }> = [
-  { key: "agenda-pausa", title: "Richieste agenda in pausa", latest: true },
+  { key: "foto-firma", title: "Foto e firme digitali", latest: true },
+  { key: "agenda-pausa", title: "Richieste agenda in pausa" },
   { key: "veicoli", title: "Modulo veicoli (moto)" },
   { key: "istruttori", title: "Gestione autonoma degli istruttori" },
 ];
@@ -218,6 +219,52 @@ export function NovitaDialog({
                 label="Vai agli istruttori"
                 onClick={() => go("/user/autoscuole?tab=settings&pane=instructors")}
               />
+            </>
+          )}
+
+          {entry === "foto-firma" && (
+            <>
+              <div className="mb-1.5 text-[13px] font-semibold text-[#929292]">4 agosto 2026</div>
+              <div className="mb-[22px] flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="text-[26px] font-bold tracking-[-0.4px] text-foreground">
+                  Foto e firme digitali
+                </span>
+                <span className="rounded-full border border-[#d8ecd8] bg-[#f2f9f1] px-3 py-1 text-[12px] font-semibold text-[#33593c]">
+                  Disponibile da lunedì
+                </span>
+              </div>
+              <div className="mb-4 overflow-hidden rounded-2xl bg-[#eceef2]">
+                <img src="/images/novita/firma-allievo.jpg" alt="" className="block w-full" />
+              </div>
+              <div className="mb-3 text-[20px] font-bold tracking-[-0.3px] text-foreground">
+                Firma digitale allievo
+              </div>
+              <p className="mb-[26px] text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Ora raccogli la firma dell&apos;allievo direttamente in app, con un pad touch a
+                schermo intero, semplice e veloce. La trovi nella scheda allievo pronta
+                all&apos;uso, sia in originale che nel formato adatto al portale
+                dell&apos;automobilista.
+              </p>
+              <div className="mb-4 overflow-hidden rounded-2xl bg-[#eceef2]">
+                <img src="/images/novita/foto-profilo-allievo.jpg" alt="" className="block w-full" />
+              </div>
+              <div className="mb-3 text-[20px] font-bold tracking-[-0.3px] text-foreground">
+                Foto profilo allievo
+              </div>
+              <p className="text-[15px] font-medium leading-[1.6] text-[#444444]">
+                Ora puoi far caricare all&apos;allievo la propria foto profilo direttamente
+                dall&apos;app Reglo, in pochi secondi dal telefono. La ritrovi subito nella scheda
+                allievo, già pronta anche nel formato richiesto dalla Motorizzazione per le
+                pratiche — niente più scanner o email da gestire.
+              </p>
+              <div className="mt-[26px] flex items-start gap-3 rounded-[14px] border border-[#d8ecd8] bg-[#f2f9f1] px-[18px] py-4">
+                <Lightbulb className="mt-0.5 size-5 shrink-0 text-navy-900" strokeWidth={1.5} />
+                <div className="text-[13.5px] font-medium leading-normal text-[#4e7a52]">
+                  L&apos;idea arriva dall&apos;<b className="font-bold text-[#33593c]">Autoscuola Octuma</b>:
+                  raccoglievano foto e firme degli allievi a mano, con passaggi manuali e
+                  ripetitivi per ogni pratica. Dalla loro richiesta è nata questa funzione.
+                </div>
+              </div>
             </>
           )}
         </div>
