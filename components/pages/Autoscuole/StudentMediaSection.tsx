@@ -14,9 +14,9 @@ export type StudentMediaOverview = {
 type MediaState = { loading: boolean } & StudentMediaOverview;
 
 /**
- * Sezione "Foto e firma" del dettaglio allievo, in stile Anagrafica:
- * niente box fantasma — la foto vive nell'avatar in testa al drawer
- * (via onLoaded), qui restano stato + download Originale / Portale.
+ * Sezione "Firma" del dettaglio allievo. La FOTO non vive più qui: sta
+ * nell'avatar in testa al drawer (con pill Modifica + menu download), che
+ * riceve l'URL via onLoaded. Qui restano anteprima e download della firma.
  */
 export function StudentMediaSection({
   studentUserId,
@@ -53,63 +53,36 @@ export function StudentMediaSection({
     };
   }, [studentUserId, refreshKey]);
 
-  const downloadBase = `/api/students/${studentUserId}/media`;
-
-  const downloads = (kind: 'photo' | 'signature') => (
-    <div className="flex items-center gap-2.5">
-      <a className={linkClass} href={`${downloadBase}/${kind}?variant=original`} download>
-        Originale
-      </a>
-      <span className="text-[11px] text-[#dddddd]">·</span>
-      <a className={linkClass} href={`${downloadBase}/${kind}?variant=portale`} download>
-        Portale automobilista
-      </a>
-    </div>
-  );
-
-  const emptyValue = (label: string) => (
-    <p className="text-sm font-medium text-[#c1c1c1]">
-      {state.loading ? 'Caricamento…' : label}
-    </p>
-  );
+  const downloadBase = `/api/students/${studentUserId}/media/signature`;
 
   return (
     <section className="border-b border-[#f2f2f2] py-7">
-      <p className="mb-4 text-[12px] font-semibold text-[#929292]">Foto e firma</p>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3.5">
-        <div>
-          <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Foto profilo</p>
-          {state.photoUrl ? (
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={state.photoUrl}
-                alt="Foto profilo allievo"
-                className="size-9 shrink-0 rounded-full border border-[#f2f2f2] object-cover"
-              />
-              {downloads('photo')}
-            </div>
-          ) : (
-            emptyValue('Nessuna — caricala da "Modifica" sull’avatar')
-          )}
+      <p className="mb-4 text-[12px] font-semibold text-[#929292]">Firma</p>
+      {state.signatureUrl ? (
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex h-10 max-w-[180px] items-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={state.signatureUrl}
+              alt="Firma allievo"
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <a className={linkClass} href={`${downloadBase}?variant=original`} download>
+              Originale
+            </a>
+            <span className="text-[11px] text-[#dddddd]">·</span>
+            <a className={linkClass} href={`${downloadBase}?variant=portale`} download>
+              Portale automobilista
+            </a>
+          </div>
         </div>
-        <div>
-          <p className="mb-0.5 text-[12px] font-medium text-[#929292]">Firma</p>
-          {state.signatureUrl ? (
-            <div className="flex items-center gap-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={state.signatureUrl}
-                alt="Firma allievo"
-                className="h-9 max-w-[110px] shrink-0 object-contain"
-              />
-              {downloads('signature')}
-            </div>
-          ) : (
-            emptyValue('In attesa dell’allievo')
-          )}
-        </div>
-      </div>
+      ) : (
+        <p className="text-sm font-medium text-[#c1c1c1]">
+          {state.loading ? 'Caricamento…' : 'In attesa dell’allievo'}
+        </p>
+      )}
     </section>
   );
 }

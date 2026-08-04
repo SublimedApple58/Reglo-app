@@ -27,8 +27,8 @@
 | `app/api/mobile/me/route.ts` | Esteso: `user.photoUrl` + `user.signatureUrl` (signed URL) |
 | `app/api/students/[studentUserId]/media/[kind]/route.ts` | GET download web: `kind=photo\|signature`, `?variant=original\|portale`; auth sessione + staff della company attiva + allievo membro della stessa company; `Content-Disposition: attachment` |
 | `lib/actions/student-media.actions.ts` | `getStudentMediaOverview(studentUserId)` → signed URL anteprime (stessa auth del download) |
-| `components/pages/Autoscuole/StudentMediaSection.tsx` | Sezione UI nel drawer allievo (anteprime + bottoni download) |
-| `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Monta `StudentMediaSection` nel tab Riepilogo (dopo Anagrafica) |
+| `components/pages/Autoscuole/StudentMediaSection.tsx` | Sezione "Firma" del drawer (anteprima + link Originale/Portale); passa gli URL al parent via onLoaded |
+| `components/pages/Autoscuole/AutoscuoleStudentsPage.tsx` | Header drawer: avatar 96px + pill "Modifica" (upload staff) + pill download foto con menu Originale/Portale; monta `StudentMediaSection` nel Riepilogo |
 
 ## Note
 
