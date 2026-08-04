@@ -62,6 +62,7 @@ import {
   getQuizSeatsContext,
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
+import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import {
@@ -1622,6 +1623,8 @@ export function AutoscuoleStudentsPage({
             </div>
           )}
         </section>
+
+        <StudentMediaSection studentUserId={register.student.id} />
 
         {/* Gestione prenotazioni */}
         <section className="border-b border-[#f2f2f2] py-7">

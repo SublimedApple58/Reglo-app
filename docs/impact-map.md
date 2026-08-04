@@ -123,6 +123,13 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Storage R2**: stesso client di avatar/aula; download solo con URL firmati (mai public base)
 - → **Area personale**: pane "Contratto e fattura" (riservata OWNER/INSTRUCTOR_OWNER)
 
+### Foto profilo + Firma allievo
+- → **Storage R2**: stesso client (`lib/storage/r2.ts`) di avatar/logo/company-documents; chiavi `users/{userId}/photo-*` e `users/{userId}/signature-*`
+- → **Avatar utente**: la foto caricata da mobile scrive `User.image` → sostituisce l'avatar ovunque (web incluso)
+- → **Dettaglio allievo** (`AutoscuoleStudentsPage` drawer): sezione "Foto e firma" nel tab Riepilogo; download via `api/students/[studentUserId]/media/[kind]?variant=original|portale`
+- → **Mobile**: endpoint `api/mobile/profile/photo|signature` + campi `photoUrl`/`signatureUrl` in `/api/mobile/me` (tipi in `reglo-mobile/src/types/regloApi.ts`)
+- → **Specs portale**: costanti SOLO in `lib/portal-image-specs.ts` (valori cliente, imprecisi per definizione)
+
 ### Support Center + Feedback
 - → **Users Directory**: `SupportMessage.senderUserId` / `ProductFeedback.userId` SetNull su delete utente (il nome resta come snapshot `senderName`/`userName`)
 - → **Backoffice**: nuove pagine support/feedback sotto la stessa auth cookie (`requireGlobalAdmin`); header con nav + badge non-letti
