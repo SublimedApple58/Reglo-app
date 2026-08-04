@@ -22,6 +22,7 @@ import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 import {
   getGroupLesson,
   getAutoscuolaVehicles,
@@ -736,9 +737,11 @@ export function GroupLessonManageDialog({
                   <div key={p.appointmentId} className={cn("px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
-                          {initialsOf(p.studentName)}
-                        </span>
+                        <UserPhotoCircle userId={p.studentId} size={36}>
+                          <span className="flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]">
+                            {initialsOf(p.studentName)}
+                          </span>
+                        </UserPhotoCircle>
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-semibold text-foreground">{p.studentName ?? "Allievo"}</span>
                           {isMoto ? (
@@ -994,9 +997,11 @@ export function GroupLessonManageDialog({
                       )}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
-                          {initialsOf(e.name)}
-                        </span>
+                        <UserPhotoCircle userId={e.id} size={32}>
+                          <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                            {initialsOf(e.name)}
+                          </span>
+                        </UserPhotoCircle>
                         <span className="truncate text-sm font-medium text-foreground">{e.name}</span>
                       </span>
                       <button

@@ -63,6 +63,7 @@ import {
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
 import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
+import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import {
@@ -449,12 +450,14 @@ const unpaidDotColor = (manualUnpaid: number) =>
 function StudentAvatar({
   student,
   size = 40,
-  photoUrl,
+  photoUrl: photoUrlProp,
 }: {
   student: { id: string; firstName: string; lastName: string };
   size?: number;
   photoUrl?: string | null;
 }) {
+  const fetchedPhotoUrl = useUserPhotoUrl(student.id);
+  const photoUrl = photoUrlProp ?? fetchedPhotoUrl;
   if (photoUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
@@ -996,6 +999,7 @@ export function AutoscuoleStudentsPage({
       }
       setDrawerPhotoUrl(json.data.url);
       setMediaRefreshKey((k) => k + 1);
+      invalidateUserPhoto(studentId);
       toast.success({ description: "Foto profilo aggiornata." });
     } catch {
       toast.error({ description: "Caricamento non riuscito." });

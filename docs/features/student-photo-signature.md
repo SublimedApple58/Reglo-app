@@ -37,6 +37,17 @@
 - La variante portale è generata **on-the-fly a ogni download** (nessuna cache R2): specs ritoccabili senza rigenerare nulla.
 - Il loop qualità JPEG sceglie la qualità più alta sotto `targetMaxKb`; il target è indicativo, non un hard limit.
 
+## Foto negli avatar OVUNQUE (estensione 2026-08-04)
+
+Ogni avatar a iniziali mostra la foto profilo se presente, via **risoluzione batched client-side** (nessun serializer di lista toccato):
+
+- `lib/actions/user-photos.actions.ts` — `getUserPhotoUrls({userIds, instructorIds})`: company-scoped, funziona da web (sessione) e mobile (Bearer, via `getActiveCompanyContext`).
+- `app/api/autoscuole/user-photos/route.ts` — GET per il mobile (`ids`/`instructorIds` CSV).
+- `components/ui/user-photo.tsx` — cache modulo + batching 50ms; hook `useUserPhotoUrl`/`useInstructorPhotoUrl`, wrapper `UserPhotoCircle` (foto se c'è, children=iniziali altrimenti), `invalidateUserPhoto`.
+- Siti patchati web: `AutoscuoleStudentsPage` (StudentAvatar: lista+drawer), `AutoscuoleAgendaPage` (allievi esame ×3, istruttori week/day), `InstructorsTab`, `GroupLessonManageDialog`/`CreateDialog`, `AdminUsersPage`, `AutoscuoleVoicePage`.
+- Upload web staff: pill "Modifica" sull'avatar del drawer → `POST /api/students/[id]/media/photo`.
+- **Esclusi (fallback iniziali, eventuale follow-up)**: `OwnerNotificationsBell` (payload senza userId), `components/shared/header/user-button.tsx` (header legacy), picker mobile label-only.
+
 ## Connessioni
 
 - **Avatar web esistente** (`app/api/uploads/avatar`, `lib/actions/storage.actions.ts`): stesso campo `User.image` — un upload dall'app sostituisce l'avatar mostrato ovunque (voluto).

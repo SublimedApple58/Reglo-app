@@ -18,6 +18,7 @@ import { TimePickerInput } from "@/components/ui/time-picker";
 import { PROTO_INPUT, PROTO_SELECT_TRIGGER } from "@/components/ui/proto-styles";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { SuccessOverlay } from "@/components/ui/success-overlay";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import {
@@ -2211,12 +2212,14 @@ function ParcoAllievi({
                   (() => {
                     const col = colorOf(it.id);
                     return (
-                      <div
-                        className="flex size-full items-center justify-center rounded-full text-[22px] font-bold"
-                        style={{ background: col.bg, color: col.fg }}
-                      >
-                        {initialsOf(`${it.firstName} ${it.lastName}`)}
-                      </div>
+                      <UserPhotoCircle userId={it.id} size={BUB}>
+                        <div
+                          className="flex size-full items-center justify-center rounded-full text-[22px] font-bold"
+                          style={{ background: col.bg, color: col.fg }}
+                        >
+                          {initialsOf(`${it.firstName} ${it.lastName}`)}
+                        </div>
+                      </UserPhotoCircle>
                     );
                   })()
                 )}
@@ -2237,12 +2240,14 @@ function ParcoAllievi({
             <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
           </button>
           <div className="mb-[18px] flex items-center gap-3.5 pr-[38px]">
-            <div
-              className="flex size-[52px] shrink-0 items-center justify-center rounded-full text-[19px] font-bold"
-              style={{ background: colorOf(detail.id).bg, color: colorOf(detail.id).fg }}
-            >
-              {initialsOf(`${detail.firstName} ${detail.lastName}`)}
-            </div>
+            <UserPhotoCircle userId={detail.id} size={52}>
+              <div
+                className="flex size-[52px] shrink-0 items-center justify-center rounded-full text-[19px] font-bold"
+                style={{ background: colorOf(detail.id).bg, color: colorOf(detail.id).fg }}
+              >
+                {initialsOf(`${detail.firstName} ${detail.lastName}`)}
+              </div>
+            </UserPhotoCircle>
             <div className="min-w-0 flex-1">
               <div className="text-[17px] font-bold text-[#222222]">
                 {detail.firstName} {detail.lastName}

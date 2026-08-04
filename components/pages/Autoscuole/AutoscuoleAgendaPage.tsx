@@ -80,6 +80,7 @@ import {
   type AgendaPrintColumn,
 } from "@/components/pages/Autoscuole/AgendaPrintDialog";
 import { NeverAccessedNudge } from "@/components/pages/Autoscuole/NeverAccessedNudge";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 
 type StudentOption = { id: string; firstName: string; lastName: string; email?: string | null; phone?: string | null; licenseCategory?: string | null; transmission?: string | null; assignedInstructorId?: string | null; lastInstructorId?: string | null; neverAccessed?: boolean; studentPhase?: "AWAITING" | "TEORIA" | "PRATICA" | "PATENTATO"; examReady?: boolean; examReadyAt?: string | null };
 type ResourceOption = {
@@ -2801,7 +2802,9 @@ export function AutoscuoleAgendaPage({
                     const initials = instr.instructorName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
                     return (
                       <div key={`${day.toISOString()}-${instr.instructorId}`} className={cn("flex flex-col items-center gap-0.5 py-1.5 border-l", idx === 0 ? "border-[#dddddd]" : "border-[#f0f0f0]")}>
-                        <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
+                        <UserPhotoCircle instructorId={instr.instructorId} size={20}>
+                          <div className={cn("flex size-5 items-center justify-center rounded-full text-[8px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>{initials}</div>
+                        </UserPhotoCircle>
                         <span className="text-[9px] font-medium text-muted-foreground truncate max-w-full px-0.5">{instr.instructorName.split(" ")[0]}</span>
                       </div>
                     );
@@ -3281,9 +3284,11 @@ export function AutoscuoleAgendaPage({
                     key={instr.id}
                     className="flex h-16 flex-col items-center justify-center gap-1 border-l border-[#eeeeee]"
                   >
-                    <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
-                      {initials}
-                    </div>
+                    <UserPhotoCircle instructorId={instr.id} size={32}>
+                      <div className={cn("flex size-8 items-center justify-center rounded-full text-[11px] font-bold", tint.avatarClass)} style={tint.avatarStyle}>
+                        {initials}
+                      </div>
+                    </UserPhotoCircle>
                     <span className="max-w-[90%] truncate text-[12px] font-medium text-[#444444]">{instr.name}</span>
                   </div>
                 );
@@ -4331,14 +4336,16 @@ export function AutoscuoleAgendaPage({
                       {draftStudents.map((s, idx) => (
                         <div key={s.id} className={cn("flex items-center justify-between gap-2 px-4 py-3", idx > 0 && "border-t border-[#f0f0f0]")}>
                           <span className="flex min-w-0 items-center gap-3">
-                            <span
-                              className={cn(
-                                "flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]",
-                                s.examReady && "ring-2 ring-[#1a7f50]",
-                              )}
-                            >
-                              {examStudentInitials(s.firstName, s.lastName)}
-                            </span>
+                            <UserPhotoCircle userId={s.id} size={36} className={s.examReady ? "ring-2 ring-[#1a7f50]" : undefined}>
+                              <span
+                                className={cn(
+                                  "flex size-9 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[12px] font-bold text-[#555555]",
+                                  s.examReady && "ring-2 ring-[#1a7f50]",
+                                )}
+                              >
+                                {examStudentInitials(s.firstName, s.lastName)}
+                              </span>
+                            </UserPhotoCircle>
                             <span className="flex min-w-0 flex-col">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <span className="truncate text-sm font-semibold text-foreground">{s.firstName} {s.lastName}</span>
@@ -4482,14 +4489,16 @@ export function AutoscuoleAgendaPage({
                           examBrowse.map((s, idx) => (
                             <div key={s.id} className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}>
                               <span className="flex min-w-0 items-center gap-2.5">
-                                <span
-                                  className={cn(
-                                    "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
-                                    s.examReady && "ring-2 ring-[#1a7f50]",
-                                  )}
-                                >
-                                  {examStudentInitials(s.firstName, s.lastName)}
-                                </span>
+                                <UserPhotoCircle userId={s.id} size={32} className={s.examReady ? "ring-2 ring-[#1a7f50]" : undefined}>
+                                  <span
+                                    className={cn(
+                                      "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                                      s.examReady && "ring-2 ring-[#1a7f50]",
+                                    )}
+                                  >
+                                    {examStudentInitials(s.firstName, s.lastName)}
+                                  </span>
+                                </UserPhotoCircle>
                                 <span className="flex min-w-0 flex-col">
                                   <span className="flex min-w-0 items-center gap-1.5">
                                     <span className="truncate text-sm font-medium text-foreground">{s.firstName} {s.lastName}</span>
@@ -4578,14 +4587,16 @@ export function AutoscuoleAgendaPage({
                       className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
                     >
                       <span className="flex min-w-0 items-center gap-2.5">
-                        <span
-                          className={cn(
-                            "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
-                            st.examReady && "ring-2 ring-[#1a7f50]",
-                          )}
-                        >
-                          {examStudentInitials(st.firstName, st.lastName)}
-                        </span>
+                        <UserPhotoCircle userId={st.id} size={32} className={st.examReady ? "ring-2 ring-[#1a7f50]" : undefined}>
+                          <span
+                            className={cn(
+                              "flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]",
+                              st.examReady && "ring-2 ring-[#1a7f50]",
+                            )}
+                          >
+                            {examStudentInitials(st.firstName, st.lastName)}
+                          </span>
+                        </UserPhotoCircle>
                         <span className="flex min-w-0 flex-1 flex-col">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate text-sm font-medium text-[#222222]">{st.firstName} {st.lastName}</span>

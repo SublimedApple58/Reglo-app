@@ -14,6 +14,7 @@ import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions
 import { Skeleton } from "@/components/ui/skeleton";
 import { FadeIn } from "@/components/ui/fade-in";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { VoiceInactiveState } from "./VoiceInactiveState";
 import { cn } from "@/lib/utils";
 import {
@@ -586,14 +587,16 @@ export function AutoscuoleVoicePage() {
                             index < callbackTasks.length - 1 && "border-b border-[#f5f5f5]",
                           )}
                         >
-                          <div
-                            className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
-                            style={{ backgroundColor: avatar.bg }}
-                          >
-                            <span className="text-sm font-bold" style={{ color: avatar.fg }}>
-                              {initialsFromName(displayName)}
-                            </span>
-                          </div>
+                          <UserPhotoCircle userId={task.student?.id} size={42}>
+                            <div
+                              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full"
+                              style={{ backgroundColor: avatar.bg }}
+                            >
+                              <span className="text-sm font-bold" style={{ color: avatar.fg }}>
+                                {initialsFromName(displayName)}
+                              </span>
+                            </div>
+                          </UserPhotoCircle>
                           <div className="min-w-0 flex-1">
                             <div className="mb-0.5 flex items-center gap-2">
                               <span className="text-sm font-bold text-foreground">{displayName}</span>

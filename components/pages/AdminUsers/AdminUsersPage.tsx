@@ -22,6 +22,7 @@ import {
 } from "@/lib/actions/invite.actions";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { cn } from "@/lib/utils";
 import {
   ArrowDownAZ,
@@ -463,12 +464,14 @@ export function AdminUsersPage({
                 className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1.6fr)_150px_100px_100px] items-center gap-3 border-b border-[#f0f0f0] py-3.5 transition-colors hover:bg-[#fafafa] max-lg:grid-cols-[minmax(0,1.5fr)_110px_100px]"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <div
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                    style={{ backgroundColor: avatarColor(user.id) }}
-                  >
-                    <span className="text-xs font-bold text-white">{initialsOf(user.name)}</span>
-                  </div>
+                  <UserPhotoCircle userId={user.id} size={36}>
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: avatarColor(user.id) }}
+                    >
+                      <span className="text-xs font-bold text-white">{initialsOf(user.name)}</span>
+                    </div>
+                  </UserPhotoCircle>
                   <div className="min-w-0">
                     <div className="overflow-hidden text-ellipsis whitespace-nowrap text-sm font-semibold text-foreground">
                       {user.name}
@@ -775,12 +778,14 @@ function UserDetailPanelContent({
           >
             <X className="size-3.5 text-[#6a6a6a]" strokeWidth={1.8} />
           </button>
-          <div
-            className="flex h-16 w-16 items-center justify-center rounded-full"
-            style={{ backgroundColor: avatarColor(user.id) }}
-          >
-            <span className="text-lg font-bold text-white">{initialsOf(user.name)}</span>
-          </div>
+          <UserPhotoCircle userId={user.id} size={64}>
+            <div
+              className="flex h-16 w-16 items-center justify-center rounded-full"
+              style={{ backgroundColor: avatarColor(user.id) }}
+            >
+              <span className="text-lg font-bold text-white">{initialsOf(user.name)}</span>
+            </div>
+          </UserPhotoCircle>
           <div className="mt-3">
             <div className="text-lg font-bold tracking-[-0.2px] text-foreground">{user.name}</div>
             <div className="mt-0.5 text-[13px] font-medium text-[#929292]">{user.email}</div>
