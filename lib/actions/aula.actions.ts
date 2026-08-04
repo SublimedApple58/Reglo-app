@@ -17,6 +17,7 @@ import { getSignedAssetUrl } from "@/lib/storage/r2";
 import {
   companyPackageKey,
   copyPackage,
+  deletePackage,
   loadPackage,
   putAsset,
   savePackage,
@@ -164,6 +165,38 @@ export async function createAulaLesson(
       segments: [AUTOSCUOLE_CACHE_SEGMENTS.AULA],
     });
     return { success: true, data: updated };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+/** Elimina una lezione della company (non i template). Rimuove riga + pacchetto R2. */
+export async function deleteAulaLesson(rawLessonId: string) {
+  try {
+    const lessonId = z.string().uuid().parse(rawLessonId);
+    const { membership } = await requireAulaTeacher();
+    // Solo lezioni della propria company e non template: i template globali
+    // (companyId null) non si eliminano dalla console autoscuola.
+    const lesson = await prisma.aulaLesson.findFirst({
+      where: { id: lessonId, companyId: membership.companyId, isTemplate: false },
+    });
+    if (!lesson) throw new Error("LESSON_NOT_EDITABLE");
+
+    // Prima il DB, poi R2 best-effort: se cancellassimo prima da R2 e la
+    // delete DB fallisse, resterebbe una lezione orfana senza pacchetto
+    // (editor rotto). Un pacchetto orfano su R2 è invece innocuo.
+    await prisma.aulaLesson.delete({ where: { id: lesson.id } });
+    try {
+      await deletePackage(lesson.packageR2Key);
+    } catch (err) {
+      console.error("[aula] delete package R2 failed (row already deleted)", err);
+    }
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AULA],
+    });
+    return { success: true };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }

@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "crypto";
 import {
   CopyObjectCommand,
+  DeleteObjectCommand,
   GetObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
@@ -88,6 +89,26 @@ export async function copyPackage(
       Key: destKey,
     }),
   );
+}
+
+/**
+ * Elimina il pacchetto slide da R2 (best-effort). NON tocca gli asset immagine:
+ * vivono in `aula/{companyId}/assets/` — namespace company-wide potenzialmente
+ * condiviso tra lezioni, quindi non è sicuro cancellarli con la lezione.
+ */
+export async function deletePackage(r2Key: string): Promise<void> {
+  if (!r2Key) return;
+  try {
+    await getR2Client().send(
+      new DeleteObjectCommand({ Bucket: getR2Bucket(), Key: r2Key }),
+    );
+  } catch (err) {
+    const code =
+      (err as { name?: string; Code?: string })?.name ??
+      (err as { Code?: string })?.Code;
+    if (code === "NoSuchKey" || code === "NotFound") return;
+    throw err;
+  }
 }
 
 /** Carica un'immagine slide su R2, ritorna l'`r2Key`. */
