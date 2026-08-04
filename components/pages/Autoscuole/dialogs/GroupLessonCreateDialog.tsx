@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
+import { UserPhotoCircle } from "@/components/ui/user-photo";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -460,9 +461,11 @@ export function GroupLessonCreateDialog({
                 className={cn("flex items-center justify-between gap-3 px-3.5 py-2.5", idx > 0 && "border-t border-[#f0f0f0]")}
               >
                 <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
-                    {initials(st.name)}
-                  </span>
+                  <UserPhotoCircle userId={st.id} size={32}>
+                    <span className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-[#f2f2f2] text-[11px] font-bold text-[#555555]">
+                      {initials(st.name)}
+                    </span>
+                  </UserPhotoCircle>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{st.name ?? "Allievo"}</span>
                 </span>
                 <button

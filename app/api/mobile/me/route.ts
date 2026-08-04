@@ -74,6 +74,23 @@ export async function GET(request: Request) {
     instructorId = instructor.id;
   }
 
+  let photoUrl: string | null = null;
+  if (user.image) {
+    try {
+      photoUrl = await getSignedAssetUrl(user.image);
+    } catch {
+      photoUrl = null;
+    }
+  }
+  let signatureUrl: string | null = null;
+  if (user.signatureKey) {
+    try {
+      signatureUrl = await getSignedAssetUrl(user.signatureKey);
+    } catch {
+      signatureUrl = null;
+    }
+  }
+
   return NextResponse.json({
     success: true,
     data: {
@@ -83,6 +100,8 @@ export async function GET(request: Request) {
         email: user.email,
         phone: user.phone ?? null,
         role: user.role,
+        photoUrl,
+        signatureUrl,
       },
       activeCompanyId: user.activeCompanyId,
       autoscuolaRole: activeMembership?.autoscuolaRole ?? null,

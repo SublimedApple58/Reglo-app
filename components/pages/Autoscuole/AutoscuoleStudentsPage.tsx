@@ -1,7 +1,13 @@
 "use client";
 
 import React from "react";
-import { ArrowDownAZ, ChevronLeft, ChevronRight, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import { ArrowDownAZ, Camera, ChevronLeft, ChevronRight, Download, KeyRound, Ticket, UserPlus, UserRoundPlus, Users } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -62,6 +68,8 @@ import {
   getQuizSeatsContext,
   grantQuizSeat,
 } from "@/lib/actions/autoscuole-settings.actions";
+import { StudentMediaSection } from "@/components/pages/Autoscuole/StudentMediaSection";
+import { useUserPhotoUrl, invalidateUserPhoto } from "@/components/ui/user-photo";
 import { ChangeStudentPhaseDialog } from "@/components/pages/Autoscuole/dialogs/ChangeStudentPhaseDialog";
 import { EditStudentLicenseDialog } from "@/components/pages/Autoscuole/dialogs/EditStudentLicenseDialog";
 import {
@@ -445,7 +453,28 @@ const getTheoryCountdown = (theoryExamAt: string | null | undefined) => {
 const unpaidDotColor = (manualUnpaid: number) =>
   manualUnpaid >= 5 ? "#EF4444" : manualUnpaid >= 2 ? "#F59E0B" : manualUnpaid >= 1 ? "#FACC15" : "#22C55E";
 
-function StudentAvatar({ student, size = 40 }: { student: { id: string; firstName: string; lastName: string }; size?: number }) {
+function StudentAvatar({
+  student,
+  size = 40,
+  photoUrl: photoUrlProp,
+}: {
+  student: { id: string; firstName: string; lastName: string };
+  size?: number;
+  photoUrl?: string | null;
+}) {
+  const fetchedPhotoUrl = useUserPhotoUrl(student.id);
+  const photoUrl = photoUrlProp ?? fetchedPhotoUrl;
+  if (photoUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photoUrl}
+        alt={`${student.firstName} ${student.lastName}`}
+        className="shrink-0 rounded-full object-cover"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
   return (
     <div
       className="flex shrink-0 items-center justify-center rounded-full font-bold text-white"
@@ -453,7 +482,7 @@ function StudentAvatar({ student, size = 40 }: { student: { id: string; firstNam
         width: size,
         height: size,
         background: avatarColor(student.id),
-        fontSize: size >= 56 ? 20 : 12,
+        fontSize: size >= 96 ? 30 : size >= 56 ? 20 : 12,
       }}
     >
       {initialsOf(student.firstName, student.lastName)}
@@ -619,6 +648,12 @@ export function AutoscuoleStudentsPage({
 
   // Panel tabs
   const [drawerTab, setDrawerTab] = React.useState<"summary" | "lessons" | "notes">("summary");
+  // Foto profilo dell'allievo: sostituisce le iniziali nell'avatar del drawer.
+  const [drawerPhotoUrl, setDrawerPhotoUrl] = React.useState<string | null>(null);
+  const [drawerPhotoUploading, setDrawerPhotoUploading] = React.useState(false);
+  const [drawerPhotoMenuOpen, setDrawerPhotoMenuOpen] = React.useState(false);
+  const [mediaRefreshKey, setMediaRefreshKey] = React.useState(0);
+  const drawerPhotoInputRef = React.useRef<HTMLInputElement | null>(null);
   const [lessonFilter, setLessonFilter] = React.useState<LessonFilter>("all");
 
   // Booking block toggle
@@ -922,6 +957,7 @@ export function AutoscuoleStudentsPage({
     (studentId: string) => {
       setSelectedStudentId(studentId);
       setDrawerTab("summary");
+      setDrawerPhotoUrl(null);
       setLessonFilter("all");
       setPanelOpen(true);
       void loadRegister(studentId);
@@ -942,7 +978,42 @@ export function AutoscuoleStudentsPage({
     setCreditsSaving(null);
     setCreditsInput("1");
     setDrawerTab("summary");
+    setDrawerPhotoUrl(null);
   }, []);
+
+  /** Upload foto profilo dal drawer (staff, al posto dell'allievo). */
+  const handleDrawerPhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const studentId = selectedStudentId ?? register?.student.id;
+    if (!file || !studentId || drawerPhotoUploading) return;
+    setDrawerPhotoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/students/${studentId}/media/photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = (await res.json()) as {
+        success: boolean;
+        data?: { url: string };
+        message?: string;
+      };
+      if (!res.ok || !json.success || !json.data) {
+        toast.error({ description: json.message ?? "Caricamento non riuscito." });
+        return;
+      }
+      setDrawerPhotoUrl(json.data.url);
+      setMediaRefreshKey((k) => k + 1);
+      invalidateUserPhoto(studentId);
+      toast.success({ description: "Foto profilo aggiornata." });
+    } catch {
+      toast.error({ description: "Caricamento non riuscito." });
+    } finally {
+      setDrawerPhotoUploading(false);
+    }
+  };
 
   const handleAdjustCredits = React.useCallback(
     async (direction: "grant" | "revoke") => {
@@ -1622,6 +1693,12 @@ export function AutoscuoleStudentsPage({
             </div>
           )}
         </section>
+
+        <StudentMediaSection
+          studentUserId={register.student.id}
+          refreshKey={mediaRefreshKey}
+          onLoaded={(media) => setDrawerPhotoUrl(media.photoUrl)}
+        />
 
         {/* Gestione prenotazioni */}
         <section className="border-b border-[#f2f2f2] py-7">
@@ -2985,8 +3062,76 @@ export function AutoscuoleStudentsPage({
                 <path d="M3 3l8 8M11 3l-8 8" stroke="#6a6a6a" strokeWidth="1.5" strokeLinecap="round" />
               </svg>
             </button>
-            {panelHeaderStudent && <StudentAvatar student={panelHeaderStudent} size={56} />}
-            <div className="mt-3">
+            {panelHeaderStudent && (
+              <div className="relative">
+                <input
+                  ref={drawerPhotoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleDrawerPhotoChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => drawerPhotoInputRef.current?.click()}
+                  className="block cursor-pointer"
+                  title="Modifica foto profilo"
+                >
+                  <StudentAvatar student={panelHeaderStudent} size={96} photoUrl={drawerPhotoUrl} />
+                </button>
+                {/* Pill "Modifica" (stile area personale) + download foto accanto */}
+                <div className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => drawerPhotoInputRef.current?.click()}
+                    className="flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-white px-3 py-1.5 shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]"
+                  >
+                    {drawerPhotoUploading ? (
+                      <LoadingDots className="min-h-4 text-foreground" />
+                    ) : (
+                      <>
+                        <Camera className="size-3.5 text-foreground" strokeWidth={1.7} />
+                        <span className="text-[12px] font-semibold text-foreground">Modifica</span>
+                      </>
+                    )}
+                  </button>
+                  {drawerPhotoUrl && (
+                    <DropdownMenu open={drawerPhotoMenuOpen} onOpenChange={setDrawerPhotoMenuOpen}>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          title="Scarica foto profilo"
+                          className="flex size-[30px] cursor-pointer items-center justify-center rounded-full bg-white shadow-[0_3px_10px_rgba(0,0,0,0.14)] transition-shadow duration-150 hover:shadow-[0_3px_10px_rgba(0,0,0,0.14),0_0_0_1px_#d9d9d9]"
+                        >
+                          <Download className="size-3.5 text-foreground" strokeWidth={1.7} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="center" className="min-w-[210px]">
+                        <DropdownMenuItem asChild>
+                          <a
+                            href={`/api/students/${panelHeaderStudent.id}/media/photo?variant=original`}
+                            download
+                            onClick={() => setDrawerPhotoMenuOpen(false)}
+                          >
+                            Originale
+                          </a>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <a
+                            href={`/api/students/${panelHeaderStudent.id}/media/photo?variant=portale`}
+                            download
+                            onClick={() => setDrawerPhotoMenuOpen(false)}
+                          >
+                            Portale dell&apos;automobilista
+                          </a>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="mt-4">
               <p className="text-lg font-bold tracking-[-0.2px] text-foreground">
                 {panelHeaderStudent
                   ? `${panelHeaderStudent.firstName} ${panelHeaderStudent.lastName}`
