@@ -11,7 +11,7 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 | `components/Layout/news/AgendaPauseNewsDialog.tsx` | Dialog a due livelli: **splash** (card 920×788, testo + CTA "Scopri di più" + `RegloEmbed`) e **dettaglio** (modale "Novità" 640px con clip + form). Portal su `document.body`. Props: `open`, `startWith` (`"splash"` \| `"detail"`), `onClose`. |
 | `components/Layout/news/RegloClips.tsx` | Animazioni portate: `RegloEmbed` (splash), `RegloClipRoad` / `RegloClipRinnovi` / `RegloClipGuide` (clip 16:9 in loop). Puro React, nessun canvas, nessuna dipendenza dall'editor del prototipo. |
 | `components/Layout/AutoscuoleShell.tsx` | Monta il dialog + **auto-show al login** una volta per dispositivo (localStorage `reglo-news-seen:agenda-pausa-2026-07`). |
-| `components/Layout/NovitaDialog.tsx` | `NOVITA_ENTRIES` ha la voce `agenda-pausa` (latest); lo shell la intercetta e apre il dialog in `startWith="splash"` (NON usa `NovitaDialog`). |
+| `components/Layout/NovitaDialog.tsx` | `NOVITA_ENTRIES` ha la voce `agenda-pausa`; lo shell la intercetta e apre il dialog in `startWith="splash"` (NON usa `NovitaDialog`). |
 
 **Auto-show + gating**: al mount, se c'è `session` e la chiave localStorage non è settata → apre lo splash. Alla chiusura setta la chiave (mai più su quel dispositivo). Bumpando `AGENDA_PAUSE_NEWS_KEY` nello shell si ri-mostra a tutti. Riapribile sempre dal menu hamburger → Novità → "Richieste agenda in pausa".
 
@@ -30,5 +30,5 @@ Design 1:1 dal prototipo `News.html` (fatto dall'utente). Nessun asset video: le
 ## Note
 
 - Web-only: gli istruttori usano il mobile, non sono il target.
-- Lista Novità (`NOVITA_ENTRIES`): **agenda-pausa** (latest) + **veicoli** + **istruttori**. Rimossa "Guide di gruppo".
+- Lista Novità (`NOVITA_ENTRIES`): **foto-firma** (latest, "Foto e firme digitali", 4 ago, badge "Disponibile da lunedì" — niente video: due sotto-sezioni firma digitale / foto profilo allievo, ognuna con immagine di copertina da `public/images/novita/{firma-allievo,foto-profilo-allievo}.jpg`) + **agenda-pausa** + **veicoli** + **istruttori**. Rimossa "Guide di gruppo".
 - Card veicoli/istruttori **allineate 1:1 al prototipo** `Dashboard.dc.html`: titolo "Modulo veicoli per le moto" (12 lug) / "Gestione autonoma degli istruttori" (10 lug), step numerati, CTA "Vai ai veicoli/istruttori" (`?tab=settings&pane=vehicles|instructors`). L'istruttori include la sezione "In evidenza → Parco Allievi" con un 2° video. Video in `public/videos/novita/{veicoli,istruttori,parco-allievi}.mp4` (1920×1080 H.264), cornice ratio naturale su `#eceef2`.
