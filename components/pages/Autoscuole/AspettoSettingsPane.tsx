@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/autoscuole-settings.actions";
 import {
   DEFAULT_AGENDA_COLOR_CRITERION,
+  LICENSE_COLOR_ENTRIES,
   type AgendaColorCriterion,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
@@ -34,6 +35,11 @@ const DURATION_PREVIEW = [
   { label: "> 90 min", hex: "#FBD9DD" },
 ];
 
+// Anteprima patenti: le voci più comuni della palette (B, B autom., AM, A).
+const LICENSE_PREVIEW = LICENSE_COLOR_ENTRIES.filter((e) =>
+  ["b", "autom", "am", "a"].includes(e.key),
+);
+
 const CRITERION_OPTIONS: Array<{
   value: AgendaColorCriterion;
   label: string;
@@ -45,9 +51,10 @@ const CRITERION_OPTIONS: Array<{
     description: "Ogni blocco prende il colore in base alla durata della guida.",
   },
   {
-    value: "istruttore",
-    label: "Istruttore",
-    description: "Ogni blocco prende il colore dell'istruttore che fa la guida.",
+    value: "patente",
+    label: "Tipo patente",
+    description:
+      "Ogni blocco prende il colore della patente della guida (la B automatica è distinta dalla B).",
   },
 ];
 
@@ -168,7 +175,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 <div className="mt-1 text-[12.5px] font-medium leading-snug text-[#929292]">
                   {option.description}
                 </div>
-                {/* Anteprima chip: bucket durata oppure colori istruttori reali */}
+                {/* Anteprima chip: bucket durata oppure palette patenti */}
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
                   {option.value === "durata"
                     ? DURATION_PREVIEW.map((chip) => (
@@ -180,13 +187,13 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                           {chip.label}
                         </span>
                       ))
-                    : instructors.slice(0, 5).map((instructor, i) => (
+                    : LICENSE_PREVIEW.map((entry) => (
                         <span
-                          key={instructor.id}
+                          key={entry.key}
                           className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#3a3a3a]"
-                          style={{ backgroundColor: `${effectiveHex(instructor, i)}2E` }}
+                          style={{ backgroundColor: entry.bgHex }}
                         >
-                          {instructor.name.split(" ")[0]}
+                          {entry.short}
                         </span>
                       ))}
                 </div>

@@ -4,8 +4,7 @@ Owner-picked display color per instructor, used for the instructor's avatar
 and availability bands in the web agenda. Falls back to the legacy positional
 palette when unset. Dal 2026-08-10 il picker vive in Impostazioni → **Aspetto**
 ([appearance-settings.md](appearance-settings.md)), non più in Gestisci
-istruttore; col criterio colore `"istruttore"` la tinta colora anche i blocchi
-guida normali.
+istruttore.
 
 ## Data model
 
@@ -28,10 +27,9 @@ guida normali.
   for self-instructor edits, like `name`/`status`).
 - Save is await-based (no optimistic UI): picker trigger spins until the
   action resolves, then local list state is updated.
-- Agenda: con criterio colore `"durata"` (default) le event card tengono la
-  palette durata/tipo e il colore istruttore tinge solo avatar e bande; con
-  criterio `"istruttore"` colora anche i blocchi guida normali (vedi
-  [appearance-settings.md](appearance-settings.md)).
+- Agenda **event cards keep their duration/type/license palette** — the
+  instructor color only tints avatars and the availability background bands
+  (plus the print export).
 - Custom hex → inline styles; unset → legacy Tailwind classes by alphabetical
   index (unchanged look for schools that never pick colors).
 

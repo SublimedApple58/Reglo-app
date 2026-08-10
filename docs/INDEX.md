@@ -24,7 +24,7 @@
 | Instructor Clusters | [instructor-clusters.md](features/instructor-clusters.md) | `instructor-clusters.ts`, `autoscuole-settings.actions.ts` |
 | Instructor Hours | [instructor-hours.md](features/instructor-hours.md) | `autoscuole.actions.ts` (`getInstructorDrivingHours`, `getInstructorDrivingHoursRange`), `instructor-hours/route.ts` |
 | Instructor Colors | [instructor-colors.md](features/instructor-colors.md) | `lib/autoscuole/instructor-colors.ts`, `color-swatch-picker.tsx`, `AspettoSettingsPane.tsx`, `AutoscuoleAgendaPage.tsx` |
-| Aspetto (pannello Impostazioni: criterio colore agenda + colori istruttori) | [appearance-settings.md](features/appearance-settings.md) | `AspettoSettingsPane.tsx`, `lib/autoscuole/agenda-color-criterion.ts`, `autoscuole-settings.actions.ts` (`agendaColorCriterion`), `AutoscuoleAgendaPage.tsx` (`instructorBlockStyle`, legenda dinamica) |
+| Aspetto (pannello Impostazioni: criterio colore agenda durata/patente + colori istruttori) | [appearance-settings.md](features/appearance-settings.md) | `AspettoSettingsPane.tsx`, `lib/autoscuole/agenda-color-criterion.ts` (`LICENSE_COLOR_ENTRIES`), `autoscuole-settings.actions.ts` (`agendaColorCriterion`), `AutoscuoleAgendaPage.tsx` (`licenseColorEntryForTag`, legenda dinamica) |
 | Communications | [communications.md](features/communications.md) | `communications.ts`, `whatsapp.ts` |
 | Cases & Deadlines | [cases-deadlines.md](features/cases-deadlines.md) | `autoscuole.actions.ts` |
 | Repositioning **(retired)** | [repositioning.md](features/repositioning.md) | `repositioning.ts` |
