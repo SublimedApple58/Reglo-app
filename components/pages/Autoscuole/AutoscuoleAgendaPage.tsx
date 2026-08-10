@@ -59,7 +59,12 @@ import {
 import { cn } from "@/lib/utils";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
-import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
+import { instructorColorAlpha, instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
+import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
+import {
+  DEFAULT_AGENDA_COLOR_CRITERION,
+  type AgendaColorCriterion,
+} from "@/lib/autoscuole/agenda-color-criterion";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
 import { LoadingDots } from "@/components/ui/loading-dots";
@@ -387,6 +392,13 @@ type InstructorTint = {
   bandClass?: string;
   bandStyle?: React.CSSProperties;
 };
+
+// Hex posizionali di fallback (istruttori senza colore scelto): stessi hue di
+// INSTRUCTOR_COLORS qui sotto. Usati da stampa e criterio colore "istruttore".
+const LEGACY_INSTRUCTOR_HEX = [
+  "#64748B", "#0EA5E9", "#10B981", "#F59E0B",
+  "#8B5CF6", "#14B8A6", "#F97316", "#F43F5E",
+];
 
 // Palette posizionale di fallback (istruttori senza colore scelto). Redesign
 // 2026-07: il primo slot è neutro slate — niente più rosa di default.
@@ -836,6 +848,22 @@ export function AutoscuoleAgendaPage({
     }
   }, [examPanelGroup]);
   const [legendOpen, setLegendOpen] = React.useState(false);
+  // Criterio colore dei blocchi guida (pannello Impostazioni → Aspetto):
+  // "durata" (storico) o "istruttore". Letto una volta al mount (cache Redis).
+  const [agendaColorCriterion, setAgendaColorCriterion] = React.useState<AgendaColorCriterion>(
+    DEFAULT_AGENDA_COLOR_CRITERION,
+  );
+  React.useEffect(() => {
+    let active = true;
+    getAutoscuolaSettings().then((res) => {
+      if (active && res.success && res.data) {
+        setAgendaColorCriterion(res.data.agendaColorCriterion);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
   // with the clicked day/time (and instructor when the column is instructor-
@@ -1877,6 +1905,29 @@ export function AutoscuoleAgendaPage({
       },
     [instructorColorMap],
   );
+  // Stile blocco per il criterio colore "istruttore" (Impostazioni → Aspetto):
+  // stesso hex di banda/stampa (colore scelto o palette posizionale), declinato
+  // come i blocchi durata — sfondo tinta, ombra in tinta, niente bordo.
+  const instructorBlockStyleMap = React.useMemo(() => {
+    const map = new Map<string, React.CSSProperties>();
+    const sorted = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
+    sorted.forEach((instr, idx) => {
+      const hex = instr.color ?? LEGACY_INSTRUCTOR_HEX[idx % LEGACY_INSTRUCTOR_HEX.length];
+      map.set(instr.id, {
+        backgroundColor: instructorColorAlpha(hex, 0.18),
+        boxShadow: `0 5px 14px ${instructorColorAlpha(hex, 0.22)}`,
+      });
+    });
+    return map;
+  }, [instructors]);
+  const instructorBlockStyle = React.useCallback(
+    (instructorId?: string | null): React.CSSProperties =>
+      (instructorId ? instructorBlockStyleMap.get(instructorId) : undefined) ?? {
+        backgroundColor: instructorColorAlpha("#64748B", 0.18),
+        boxShadow: `0 5px 14px ${instructorColorAlpha("#64748B", 0.22)}`,
+      },
+    [instructorBlockStyleMap],
+  );
 
   // Student license path shown on agenda blocks ("B", "AM", "B autom.", …).
   // Appointment rows carry only name/email, so resolve via the bootstrap
@@ -1957,17 +2008,13 @@ export function AutoscuoleAgendaPage({
 
     // Hex per gli istruttori: colore scelto dal titolare oppure palette
     // posizionale (stessi hue dei tint legaci in agenda).
-    const PRINT_LEGACY_HEX = [
-      "#64748B", "#0EA5E9", "#10B981", "#F59E0B",
-      "#8B5CF6", "#14B8A6", "#F97316", "#F43F5E",
-    ];
     const sortedInstructors = [...instructors].sort((a, b) => a.name.localeCompare(b.name));
     const instructorHex = (id?: string | null): string => {
       if (!id) return "#64748B";
       const instr = instructors.find((i) => i.id === id);
       if (instr?.color) return instr.color;
       const idx = sortedInstructors.findIndex((i) => i.id === id);
-      return PRINT_LEGACY_HEX[(idx < 0 ? 0 : idx) % PRINT_LEGACY_HEX.length];
+      return LEGACY_INSTRUCTOR_HEX[(idx < 0 ? 0 : idx) % LEGACY_INSTRUCTOR_HEX.length];
     };
 
     // Minuti dall'inizio giornata, ritagliati alla fascia oraria visibile.
@@ -2971,11 +3018,24 @@ export function AutoscuoleAgendaPage({
                           const licenseTag = licenseTagFor(item);
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
+                          // Criterio "istruttore": tinta istruttore al posto della
+                          // durata sulle guide normali; annullate/assenti restano grigie.
+                          const statusLcInstr = item.status.toLowerCase();
+                          const instrColorStyle =
+                            agendaColorCriterion === "istruttore" &&
+                            !isExamInstr &&
+                            !isGroupLessonInstr &&
+                            statusLcInstr !== "no_show" &&
+                            statusLcInstr !== "cancelled"
+                              ? instructorBlockStyle(item.instructor?.id)
+                              : null;
                           const instrCardClass = isExamInstr
                             ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                             : isGroupLessonInstr
                               ? glTintInstr.card
-                              : statusMeta.className;
+                              : instrColorStyle
+                                ? ""
+                                : statusMeta.className;
                           return (
                             <React.Fragment key={item.id}>
                             <DropdownMenu modal={false}>
@@ -2983,7 +3043,7 @@ export function AutoscuoleAgendaPage({
                                 <button
                                   type="button"
                                   className={cn("absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
-                                  style={{ top, height }}
+                                  style={{ top, height, ...(instrColorStyle ?? {}) }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
                                 >
@@ -3426,11 +3486,24 @@ export function AutoscuoleAgendaPage({
                       const licenseTag = licenseTagFor(item);
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
+                      // Criterio "istruttore": tinta istruttore al posto della
+                      // durata sulle guide normali; annullate/assenti restano grigie.
+                      const statusLcDay = item.status.toLowerCase();
+                      const dayColorStyle =
+                        agendaColorCriterion === "istruttore" &&
+                        !isExamDay &&
+                        !isGroupLessonDay &&
+                        statusLcDay !== "no_show" &&
+                        statusLcDay !== "cancelled"
+                          ? instructorBlockStyle(item.instructor?.id)
+                          : null;
                       const dayCardClass = isExamDay
                         ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
                         : isGroupLessonDay
                           ? glTintDay.card
-                          : statusMeta.className;
+                          : dayColorStyle
+                            ? ""
+                            : statusMeta.className;
 
                       return (
                         <React.Fragment key={item.id}>
@@ -3444,7 +3517,7 @@ export function AutoscuoleAgendaPage({
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
                               )}
-                              style={{ top, height }}
+                              style={{ top, height, ...(dayColorStyle ?? {}) }}
                               onClick={(event) => event.stopPropagation()}
                             >
                               {isPendingAction ? (
@@ -4113,6 +4186,24 @@ export function AutoscuoleAgendaPage({
             <DialogTitle className="text-sm font-semibold">Legenda colori agenda</DialogTitle>
           </div>
           <div className="px-6 py-5 space-y-5">
+            {agendaColorCriterion === "istruttore" ? (
+              <div>
+                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per istruttore</p>
+                <div className="space-y-1.5">
+                  {[...instructors]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((instr) => (
+                      <div key={instr.id} className="flex items-center gap-3">
+                        <div className="h-5 w-8 rounded-md" style={instructorBlockStyle(instr.id)} />
+                        <span className="text-xs text-foreground">{instr.name}</span>
+                      </div>
+                    ))}
+                </div>
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
+                  Il criterio colore si cambia in Impostazioni → Aspetto.
+                </p>
+              </div>
+            ) : (
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per durata</p>
               <div className="space-y-1.5">
@@ -4130,11 +4221,15 @@ export function AutoscuoleAgendaPage({
                 ))}
               </div>
             </div>
+            )}
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
                 {[
-                  { label: "Cambio automatico", className: "bg-[#CFFAFE] shadow-[0_3px_8px_rgba(6,182,212,0.35)]" },
+                  // Il ciano automatico esiste solo col criterio durata.
+                  ...(agendaColorCriterion === "istruttore"
+                    ? []
+                    : [{ label: "Cambio automatico", className: "bg-[#CFFAFE] shadow-[0_3px_8px_rgba(6,182,212,0.35)]" }]),
                   { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
                   { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
                   { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },

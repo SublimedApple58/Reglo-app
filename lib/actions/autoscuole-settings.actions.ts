@@ -26,6 +26,11 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import {
+  AGENDA_COLOR_CRITERIA,
+  asAgendaColorCriterion,
+  type AgendaColorCriterion,
+} from "@/lib/autoscuole/agenda-color-criterion";
+import {
   BOOKING_SLOT_DURATION_OPTIONS,
   LESSON_POLICY_TYPES,
   LessonPolicyType,
@@ -388,6 +393,7 @@ const autoscuolaSettingsPatchSchema = z
     groupLessonsDiscoveryEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
+    agendaColorCriterion: z.enum(AGENDA_COLOR_CRITERIA).optional(),
   })
   .refine(
     // Almeno un campo presente: check generico su tutte le chiavi dello schema
@@ -585,6 +591,7 @@ export type AutoscuolaSettingsData = {
   groupLessonsDiscoveryEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
+  agendaColorCriterion: AgendaColorCriterion;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -950,6 +957,7 @@ const resolveAutoscuolaSettingsData = async (
         ? limits.quizEnabled
         : DEFAULT_QUIZ_ENABLED,
     studentCancellationEnabled: limits.studentCancellationEnabled !== false,
+    agendaColorCriterion: asAgendaColorCriterion(limits.agendaColorCriterion),
   };
 };
 
@@ -1511,6 +1519,8 @@ export async function updateAutoscuolaSettings(
       groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
+      agendaColorCriterion:
+        payload.agendaColorCriterion ?? asAgendaColorCriterion(limits.agendaColorCriterion),
     };
 
     if (service) {
@@ -1631,6 +1641,7 @@ export async function updateAutoscuolaSettings(
         groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
+        agendaColorCriterion: nextLimits.agendaColorCriterion,
       },
     };
   } catch (error) {

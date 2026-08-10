@@ -20,7 +20,6 @@ import { useFeedbackToast } from "@/components/ui/feedback-toast";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { UserPhotoCircle } from "@/components/ui/user-photo";
 import { SuccessOverlay } from "@/components/ui/success-overlay";
-import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import {
   updateAutoscuolaInstructor,
   getAutoscuolaInstructors,
@@ -128,10 +127,6 @@ function weeklySummary(w: WeeklyAvailability | null | undefined): string | null 
 const rangesOf = (w: WeeklyAvailability | null | undefined): Range[] =>
   w ? (w.ranges?.length ? w.ranges.map((r) => ({ ...r })) : [{ startMinutes: w.startMinutes, endMinutes: w.endMinutes }]) : [];
 
-/** Colore effettivo dell'istruttore (custom o palette posizionale legacy). */
-const effectiveColor = (instructor: InstructorDetail, index: number) =>
-  instructor.color ?? INSTRUCTOR_COLOR_CHOICES[index % 8].hex;
-
 // ── Atomi UI ───────────────────────────────────────────────────────────────────
 
 function BlueChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -233,69 +228,6 @@ function Row({
   );
 }
 
-/** Palette colore istruttore (portal ancorato allo swatch, 16 tinte, prese disabilitate). */
-function ColorPop({
-  anchor,
-  current,
-  taken,
-  onPick,
-  onClose,
-}: {
-  anchor: DOMRect;
-  current: string;
-  taken: string[];
-  onPick: (hex: string) => void;
-  onClose: () => void;
-}) {
-  const ref = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) onClose();
-    };
-    const t = setTimeout(() => document.addEventListener("mousedown", handler), 0);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("mousedown", handler);
-    };
-  }, [onClose]);
-  const width = 236;
-  let left = anchor.right - width;
-  left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
-  let top = anchor.bottom + 8;
-  if (top + 190 > window.innerHeight) top = Math.max(12, anchor.top - 198);
-  return createPortal(
-    <div
-      ref={ref}
-      className="fixed z-[70] rounded-2xl border border-[#ececec] bg-white p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
-      style={{ left, top, width }}
-    >
-      <div className="grid grid-cols-6 gap-[9px]">
-        {INSTRUCTOR_COLOR_CHOICES.map(({ hex, name }) => {
-          const isTaken = taken.includes(hex) && hex !== current;
-          const isSel = current === hex;
-          return (
-            <button
-              key={hex}
-              type="button"
-              title={name}
-              disabled={isTaken}
-              onClick={() => onPick(hex)}
-              className={cn(
-                "aspect-square w-full rounded-lg transition-transform",
-                isTaken ? "cursor-not-allowed opacity-25" : "cursor-pointer hover:scale-110",
-              )}
-              style={{ background: hex, boxShadow: isSel ? `0 0 0 2px #fff, 0 0 0 4px ${hex}` : undefined }}
-            >
-              {isSel && <Check className="mx-auto size-3.5 text-white" strokeWidth={2.6} />}
-            </button>
-          );
-        })}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface InstructorsTabProps {
@@ -304,7 +236,6 @@ interface InstructorsTabProps {
   instructorWeeklyAvailability: Record<string, WeeklyAvailability>;
   setInstructorWeeklyAvailability: React.Dispatch<React.SetStateAction<Record<string, WeeklyAvailability>>>;
   setInviteInstructorOpen: (open: boolean) => void;
-  changeInstructorColor: (instructor: InstructorDetail, color: string | null) => Promise<void>;
   /** Ricarica gli slot agenda (dopo modifiche a disponibilità/malattia). */
   refreshAgenda: () => void;
   /** Notifica il parent quando si entra/esce dal dettaglio (nasconde il titolo pane). */
@@ -319,14 +250,12 @@ export default function InstructorsTab({
   instructorWeeklyAvailability,
   setInstructorWeeklyAvailability,
   setInviteInstructorOpen,
-  changeInstructorColor,
   refreshAgenda,
   onDetailOpenChange,
 }: InstructorsTabProps) {
   const toast = useFeedbackToast();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState<"disp" | "malattia" | "ferie" | "autonoma">("disp");
-  const [colorPopAnchor, setColorPopAnchor] = React.useState<DOMRect | null>(null);
 
   const selectedIndex = instructors.findIndex((i) => i.id === selectedId);
   const selected = selectedIndex >= 0 ? instructors[selectedIndex] : null;
@@ -397,8 +326,7 @@ export default function InstructorsTab({
   }
 
   // ── Vista DETTAGLIO ──
-  const color = effectiveColor(selected, selectedIndex);
-  const takenColors = instructors.filter((i) => i.id !== selected.id && i.color).map((i) => i.color as string);
+  // Il colore istruttore si gestisce nel pannello "Aspetto" delle Impostazioni.
   const TABS = [
     { key: "disp" as const, label: "Disponibilità" },
     { key: "malattia" as const, label: "Malattia" },
@@ -427,26 +355,7 @@ export default function InstructorsTab({
             Gestisci le impostazioni dell&apos;istruttore
           </div>
         </div>
-        <button
-          type="button"
-          title="Cambia colore"
-          onClick={(e) => setColorPopAnchor(e.currentTarget.getBoundingClientRect())}
-          className="size-8 shrink-0 cursor-pointer rounded-lg shadow-[0_0_0_1px_rgba(0,0,0,0.1)] transition-transform hover:scale-110"
-          style={{ background: color }}
-        />
       </div>
-      {colorPopAnchor && (
-        <ColorPop
-          anchor={colorPopAnchor}
-          current={color}
-          taken={takenColors}
-          onPick={(hex) => {
-            setColorPopAnchor(null);
-            void changeInstructorColor(selected, hex);
-          }}
-          onClose={() => setColorPopAnchor(null)}
-        />
-      )}
 
       <div className="mb-6 mt-5 flex flex-wrap items-center gap-[26px] border-b border-[#e8e8e8]">
         {TABS.map((t) => (

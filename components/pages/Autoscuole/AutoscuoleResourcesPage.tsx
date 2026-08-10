@@ -16,6 +16,7 @@ import {
   CarProtoIcon,
   FoldedMapIcon,
   NotepadProtoIcon,
+  PaletteProtoIcon,
   PhoneProtoIcon,
   UserRoundProtoIcon,
   UsersProtoIcon,
@@ -54,6 +55,7 @@ import InstructorsTab from "./tabs/InstructorsTab";
 import BookingsTab from "./tabs/BookingsTab";
 import VehiclesTab from "./tabs/VehiclesTab";
 import { VoiceSettingsPane } from "./VoiceSettingsPane";
+import { AspettoSettingsPane } from "./AspettoSettingsPane";
 import { BusinessInfoPane } from "./tabs/BusinessInfoPane";
 import {
   getAutoscuolaInstructors,
@@ -294,12 +296,13 @@ type ConfigPane =
   | "reminders"
   | "instructors"
   | "vehicles"
+  | "aspetto"
   | "voice";
 
 // Dipendenze dati per pane: chi legge i settings autoscuola, chi le risorse
 // (istruttori/veicoli/slot). Business e Fatturazione si caricano da sole.
 const PANES_NEEDING_SETTINGS: ConfigPane[] = ["bookings", "policy", "reminders", "locations", "vehicles"];
-const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles"];
+const PANES_NEEDING_RESOURCES: ConfigPane[] = ["instructors", "vehicles", "aspetto"];
 
 // Icone 1:1 dal proto (components/ui/proto-icons.tsx): lucide ha varianti
 // diverse dagli SVG del proto per quasi tutte le voci della sidebar.
@@ -318,6 +321,7 @@ const CONFIG_PANE_GROUPS: Array<
   [
     { key: "instructors", label: "Istruttori", icon: UsersProtoIcon },
     { key: "vehicles", label: "Veicoli", icon: CarProtoIcon },
+    { key: "aspetto", label: "Aspetto", icon: PaletteProtoIcon },
   ],
   [{ key: "voice", label: "Segretaria", icon: PhoneProtoIcon }],
 ];
@@ -351,6 +355,7 @@ const CONFIG_PANE_TITLES: Record<ConfigPane, string> = {
   reminders: "Promemoria e notifiche",
   instructors: "Istruttori",
   vehicles: "Veicoli",
+  aspetto: "Aspetto",
   voice: "Segretaria AI",
 };
 
@@ -2181,7 +2186,6 @@ export function AutoscuoleResourcesPage({
             instructorWeeklyAvailability={instructorWeeklyAvailability}
             setInstructorWeeklyAvailability={setInstructorWeeklyAvailability}
             setInviteInstructorOpen={setInviteInstructorOpen}
-            changeInstructorColor={changeInstructorColor}
             refreshAgenda={() => loadAvailability(date)}
             onDetailOpenChange={setInstructorsDetailOpen}
           />
@@ -2267,6 +2271,12 @@ export function AutoscuoleResourcesPage({
             setDetailTab={setVehicleDetailTab}
             detailsForm={renderVehicleDetailsForm()}
             availabilityEditor={renderVehicleAvailabilityEditor()}
+          />
+        </KeepAlivePane>
+        <KeepAlivePane active={configTab === "aspetto"} eager={mountAllPanes}>
+          <AspettoSettingsPane
+            instructors={instructors}
+            changeInstructorColor={changeInstructorColor}
           />
         </KeepAlivePane>
         <KeepAlivePane active={configTab === "voice"} eager={mountAllPanes}>

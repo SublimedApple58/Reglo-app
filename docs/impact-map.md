@@ -137,9 +137,16 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Email**: avvisi al team via `sendDynamicEmail` (no-op staging)
 
 ### Instructor Colors
-- → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
+- → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette col criterio "durata"; col criterio "istruttore" (pannello Aspetto) la tinta colora anche i blocchi guida normali.
 - → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)
+- → **Aspetto**: il picker colore vive in `AspettoSettingsPane` (Impostazioni → Aspetto); rimosso da `InstructorsTab` (2026-08-10)
 - → **Mobile**: `color` already returned by `GET /api/autoscuole/instructors` + agenda bootstrap (not consumed yet)
+
+### Aspetto (Impostazioni)
+- → **Instructor Colors**: sezione "Colori istruttori" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
+- → **Appointments/Agenda**: `agendaColorCriterion` (in `CompanyService.limits`) letto da `AutoscuoleAgendaPage` al mount; override sfondo blocchi + legenda dinamica
+- → **Settings (autoscuole-settings.actions)**: campo nel patch schema/`AutoscuolaSettingsData`; cache Redis limits invalidata su update
+- → **Stampa agenda**: già colorata per istruttore (condivide `LEGACY_INSTRUCTOR_HEX`), nessun cambio col criterio
 
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs
