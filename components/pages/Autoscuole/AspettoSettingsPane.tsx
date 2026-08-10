@@ -8,14 +8,18 @@ import {
   updateAutoscuolaSettings,
 } from "@/lib/actions/autoscuole-settings.actions";
 import {
+  AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
   agendaBlockStyle,
+  asAgendaColorExceptions,
   type AgendaColorCriterion,
   type AgendaColorEntry,
+  type AgendaColorExceptions,
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
+import { InlineToggle } from "@/components/ui/inline-toggle";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
 import { useFeedbackToast } from "@/components/ui/feedback-toast";
@@ -30,9 +34,9 @@ type AspettoInstructor = { id: string; name: string; color?: string | null };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Anteprima patenti nei card del criterio: le voci più comuni (B, B autom., AM, A).
+// Anteprima patenti nei card del criterio: le voci più comuni.
 const LICENSE_PREVIEW = LICENSE_COLOR_ENTRIES.filter((e) =>
-  ["b", "autom", "am", "a"].includes(e.key),
+  ["b", "be", "am", "a"].includes(e.key),
 );
 
 const CRITERION_OPTIONS: Array<{
@@ -49,7 +53,7 @@ const CRITERION_OPTIONS: Array<{
     value: "patente",
     label: "Tipo patente",
     description:
-      "Ogni blocco prende il colore della patente della guida (la B automatica è distinta dalla B).",
+      "Ogni blocco prende il colore della patente della guida. Con l'eccezione “Cambio automatico” attiva, la B automatica resta distinta dalla B.",
   },
 ];
 
@@ -78,6 +82,10 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
   const [savingCriterion, setSavingCriterion] = React.useState(false);
   const [overrides, setOverrides] = React.useState<AgendaColorOverrides>({});
   const [customizeOpen, setCustomizeOpen] = React.useState(false);
+  const [exceptions, setExceptions] = React.useState<AgendaColorExceptions>(() =>
+    asAgendaColorExceptions(null),
+  );
+  const [savingExceptionKey, setSavingExceptionKey] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let active = true;
@@ -87,6 +95,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       if (res.success && res.data) {
         setCriterion(res.data.agendaColorCriterion);
         setOverrides(res.data.agendaColorOverrides);
+        setExceptions(res.data.agendaColorExceptions);
       }
       setLoading(false);
     };
@@ -113,14 +122,18 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
 
   // Salva il colore personalizzato di una voce (null = torna al default).
   // Il picker attende la promise → spinner sul trigger finché non risolve.
-  const saveOverride = async (entryKey: string, hex: string | null) => {
-    const current = overrides[criterion] ?? {};
+  const saveOverride = async (
+    namespace: keyof AgendaColorOverrides,
+    entryKey: string,
+    hex: string | null,
+  ) => {
+    const current = overrides[namespace] ?? {};
     const nextRecord: Record<string, string> = { ...current };
     if (hex) nextRecord[entryKey] = hex;
     else delete nextRecord[entryKey];
     const next: AgendaColorOverrides = { ...overrides };
-    if (Object.keys(nextRecord).length) next[criterion] = nextRecord;
-    else delete next[criterion];
+    if (Object.keys(nextRecord).length) next[namespace] = nextRecord;
+    else delete next[namespace];
 
     const res = await updateAutoscuolaSettings({ agendaColorOverrides: next });
     if (!res.success || !res.data) {
@@ -128,6 +141,20 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
       return;
     }
     setOverrides(res.data.agendaColorOverrides);
+  };
+
+  // Attiva/disattiva un'eccezione (toggle con spinner per riga).
+  const saveException = async (key: string, enabled: boolean) => {
+    if (savingExceptionKey) return;
+    setSavingExceptionKey(key);
+    const next = { ...exceptions, [key]: enabled };
+    const res = await updateAutoscuolaSettings({ agendaColorExceptions: next });
+    setSavingExceptionKey(null);
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare l'eccezione." });
+      return;
+    }
+    setExceptions(res.data.agendaColorExceptions);
   };
 
   const entriesForCriterion: AgendaColorEntry[] =
@@ -248,7 +275,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 value={overrides[criterion]?.[entry.key] ?? null}
                 title={`Colore per ${entry.label}`}
                 resetLabel="Colore standard"
-                onSelect={(hex) => saveOverride(entry.key, hex)}
+                onSelect={(hex) => saveOverride(criterion, entry.key, hex)}
                 renderTrigger={({ saving }) => (
                   <button
                     type="button"
@@ -272,6 +299,73 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
           </div>
         </div>
       )}
+
+      {/* ── Eccezioni ── */}
+      <section className="mt-10">
+        <h3 className="text-base font-semibold text-[#222222]">Eccezioni</h3>
+        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
+          Regole pronte all&apos;uso che vincono sul criterio scelto: le guide che
+          corrispondono prendono il colore dell&apos;eccezione. Tocca il colore per
+          personalizzarlo.
+        </p>
+        <div className="mt-2">
+          {AGENDA_COLOR_EXCEPTIONS.map((exc, index) => {
+            const enabled = Boolean(exceptions[exc.key]);
+            return (
+              <div
+                key={exc.key}
+                className={cn(
+                  "flex items-center justify-between gap-4 py-3.5",
+                  index < AGENDA_COLOR_EXCEPTIONS.length - 1 && "border-b border-[#eeeeee]",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-3.5">
+                  <ColorSwatchPicker
+                    value={overrides.eccezioni?.[exc.key] ?? null}
+                    title={`Colore per ${exc.entry.label}`}
+                    resetLabel="Colore standard"
+                    onSelect={(hex) => saveOverride("eccezioni", exc.key, hex)}
+                    renderTrigger={({ saving }) => (
+                      <button
+                        type="button"
+                        title={`Colore per ${exc.entry.label}`}
+                        className={cn(
+                          "h-8 w-11 shrink-0 cursor-pointer rounded-lg ring-1 ring-inset ring-black/5 transition hover:ring-black/25",
+                          saving && "animate-pulse opacity-60",
+                          !enabled && "opacity-45",
+                        )}
+                        style={{
+                          backgroundColor: agendaBlockStyle(
+                            exc.entry,
+                            overrides.eccezioni?.[exc.key],
+                          ).backgroundColor,
+                        }}
+                      />
+                    )}
+                  />
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-foreground">{exc.label}</div>
+                    <div className="mt-0.5 max-w-[460px] text-[13px] font-medium leading-normal text-[#929292]">
+                      {exc.description}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center">
+                  {savingExceptionKey === exc.key ? (
+                    <LoadingDots className="text-[#929292]" />
+                  ) : (
+                    <InlineToggle
+                      checked={enabled}
+                      size="lg"
+                      onChange={() => void saveException(exc.key, !enabled)}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* ── Colori istruttori ── */}
       <section className="mt-10">

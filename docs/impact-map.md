@@ -146,7 +146,8 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Instructor Colors**: sezione "Colori istruttori" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
 - → **Appointments/Agenda**: `agendaColorCriterion` ("durata" | "patente") + `agendaColorOverrides` (colori per voce, in `CompanyService.limits`) letti da `AutoscuoleAgendaPage` al mount; i blocchi guida normali sono colorati inline via `guideBlockColorStyle` (patente: `licenseColorEntryForTag(licenseTagFor(item))`, dipende dalla directory allievi bootstrap `licenseCategory`+`transmission`; durata: `durationColorEntry`); legenda dinamica override-aware
 - → **Settings (autoscuole-settings.actions)**: campo nel patch schema/`AutoscuolaSettingsData`; cache Redis limits invalidata su update
-- → **Vehicles/License**: la palette patenti copre le categorie di `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`); il suffisso " autom." (percorso automatico) vince sulla categoria (ciano)
+- → **Vehicles/License**: la palette patenti copre le categorie di `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`); la distinzione cambio automatico è l'eccezione `automatic` (ON di default)
+- → **Eccezioni** (`AGENDA_COLOR_EXCEPTIONS` + `agendaColorExceptions` nei limits): automatic (`isAutomaticLesson`), moto (`isMotoLicenseCategory`), exam_ready (flag [exam-ready.md](features/exam-ready.md)); vincono sul criterio, colori personalizzabili (ns `eccezioni`), sezione dedicata in legenda
 
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs

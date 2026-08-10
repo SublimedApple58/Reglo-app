@@ -62,13 +62,16 @@ import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type 
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
+  AGENDA_COLOR_EXCEPTIONS,
   DEFAULT_AGENDA_COLOR_CRITERION,
   DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
   agendaBlockStyle,
+  asAgendaColorExceptions,
   durationColorEntry,
   licenseColorEntryForTag,
   type AgendaColorCriterion,
+  type AgendaColorExceptions,
   type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { InlineToggle } from "@/components/ui/inline-toggle";
@@ -861,35 +864,64 @@ export function AutoscuoleAgendaPage({
     DEFAULT_AGENDA_COLOR_CRITERION,
   );
   const [agendaColorOverrides, setAgendaColorOverrides] = React.useState<AgendaColorOverrides>({});
+  const [agendaColorExceptions, setAgendaColorExceptions] = React.useState<AgendaColorExceptions>(
+    () => asAgendaColorExceptions(null),
+  );
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
       if (active && res.success && res.data) {
         setAgendaColorCriterion(res.data.agendaColorCriterion);
         setAgendaColorOverrides(res.data.agendaColorOverrides);
+        setAgendaColorExceptions(res.data.agendaColorExceptions);
       }
     });
     return () => {
       active = false;
     };
   }, []);
-  // Stile del blocco guida normale secondo criterio + overrides. Restituisce
-  // sempre uno stile inline (coi default replica 1:1 le vecchie classi durata).
+  // Flag allievo per il match delle eccezioni colore (directory bootstrap,
+  // stesso spazio user-id degli appuntamenti come studentLicenseById).
+  const studentColorFlagsById = React.useMemo(() => {
+    const map = new Map<string, { moto: boolean; examReady: boolean }>();
+    for (const s of students) {
+      map.set(s.id, {
+        moto: isMotoLicenseCategory(s.licenseCategory),
+        examReady: Boolean(s.examReady),
+      });
+    }
+    return map;
+  }, [students]);
+  // Stile del blocco guida normale: prima le ECCEZIONI attive (in ordine di
+  // registry, la prima che matcha vince), poi il criterio base + overrides.
+  // Restituisce sempre uno stile inline (coi default replica i colori storici).
   const guideBlockColorStyle = React.useCallback(
     (item: AppointmentRow, licenseTag: string | null): React.CSSProperties => {
+      const flags = studentColorFlagsById.get(item.student.id);
+      for (const exc of AGENDA_COLOR_EXCEPTIONS) {
+        if (!agendaColorExceptions[exc.key]) continue;
+        const hit =
+          exc.key === "automatic"
+            ? isAutomaticLesson(item)
+            : exc.key === "moto"
+              ? Boolean(flags?.moto)
+              : exc.key === "exam_ready"
+                ? Boolean(flags?.examReady)
+                : false;
+        if (hit) {
+          return agendaBlockStyle(exc.entry, agendaColorOverrides.eccezioni?.[exc.key]);
+        }
+      }
       if (agendaColorCriterion === "patente") {
         const entry = licenseColorEntryForTag(licenseTag);
         return agendaBlockStyle(entry, agendaColorOverrides.patente?.[entry.key]);
       }
       const start = toDate(item.startsAt);
       const end = getAppointmentEnd(item);
-      const entry = durationColorEntry(
-        Math.round(diffMinutes(end, start)),
-        isAutomaticLesson(item),
-      );
+      const entry = durationColorEntry(Math.round(diffMinutes(end, start)));
       return agendaBlockStyle(entry, agendaColorOverrides.durata?.[entry.key]);
     },
-    [agendaColorCriterion, agendaColorOverrides],
+    [agendaColorCriterion, agendaColorOverrides, agendaColorExceptions, studentColorFlagsById],
   );
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
@@ -4196,7 +4228,7 @@ export function AutoscuoleAgendaPage({
               <div className="space-y-1.5">
                 {(agendaColorCriterion === "patente"
                   ? LICENSE_COLOR_ENTRIES
-                  : DURATION_COLOR_ENTRIES.filter((e) => e.key !== "autom")
+                  : DURATION_COLOR_ENTRIES
                 ).map((entry) => (
                   <div key={entry.key} className="flex items-center gap-3">
                     <div
@@ -4214,29 +4246,35 @@ export function AutoscuoleAgendaPage({
                 Criterio e colori si cambiano in Impostazioni → Aspetto.
               </p>
             </div>
+            {/* Eccezioni attive: vincono sul criterio (Impostazioni → Aspetto) */}
+            {AGENDA_COLOR_EXCEPTIONS.some((exc) => agendaColorExceptions[exc.key]) && (
+              <div>
+                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Eccezioni</p>
+                <div className="space-y-1.5">
+                  {AGENDA_COLOR_EXCEPTIONS.filter((exc) => agendaColorExceptions[exc.key]).map((exc) => (
+                    <div key={exc.key} className="flex items-center gap-3">
+                      <div
+                        className="h-5 w-8 rounded-md"
+                        style={agendaBlockStyle(exc.entry, agendaColorOverrides.eccezioni?.[exc.key])}
+                      />
+                      <span className="text-xs text-foreground">{exc.entry.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
                 {[
-                  // Col criterio patente il ciano automatico è già nella sezione sopra.
-                  ...(agendaColorCriterion === "patente"
-                    ? []
-                    : [{
-                        label: "Cambio automatico",
-                        className: "",
-                        style: agendaBlockStyle(
-                          DURATION_COLOR_ENTRIES.find((e) => e.key === "autom")!,
-                          agendaColorOverrides.durata?.autom,
-                        ),
-                      }]),
                   { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
                   { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
                   { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },
                   { label: "Evento bloccante", className: "bg-[#F3F4F8]" },
                   { label: "Annullata / Assente", className: "bg-[#F3F4F8]" },
-                ].map((item: { label: string; className: string; style?: React.CSSProperties }) => (
+                ].map((item) => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded-md", item.className)} style={item.style} />
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
                     <span className="text-xs text-foreground">{item.label}</span>
                   </div>
                 ))}

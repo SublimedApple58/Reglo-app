@@ -38,9 +38,14 @@ di verifica locale di Tiziano prima di staging/prod).
   su richiesta di Tiziano è diventato "tipo patente" (B distinta da B
   automatica). Il colore istruttore resta solo su avatar/bande/stampa.
 - **Amendment 2 (2026-08-10)**: colori personalizzabili per voce
-  (`agendaColorOverrides` nei limits, sezione "Colori delle voci" nel
-  pannello, hex → tinta alpha 0.20 + ombra; legenda e anteprime
-  override-aware; `resetLabel` su ColorSwatchPicker).
+  (`agendaColorOverrides` nei limits, hex → tinta alpha 0.20 + ombra; legenda
+  e anteprime override-aware; `resetLabel` su ColorSwatchPicker). UI rifatta
+  on-demand: link "Personalizza i colori" → chip strip (via `renderTrigger`).
+- **Amendment 3 (2026-08-10)**: sezione **Eccezioni** — registry
+  `AGENDA_COLOR_EXCEPTIONS` di regole pre-costruite toggleabili che vincono
+  sul criterio (automatic ON default / moto / exam_ready), colore
+  personalizzabile per eccezione; il ciano automatico non è più hard-coded
+  nei criteri; legenda con sezione Eccezioni.
 - Rimozione secca del picker da Gestisci istruttore (nessun hint residuo).
 - Il ciano "cambio automatico" esiste solo col criterio durata.
 - Mobile fuori scope (palette duplicata client-side): follow-up separato.

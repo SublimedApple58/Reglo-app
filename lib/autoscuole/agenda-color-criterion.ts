@@ -63,12 +63,10 @@ export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("d60", "46–60 minuti", "60 min", "#FCEFC7", "rgba(245,158,11,0.22)"),
   ENTRY("d90", "61–90 minuti", "90 min", "#F9DDF3", "rgba(217,70,239,0.22)"),
   ENTRY("d90plus", "Oltre 90 minuti", "> 90", "#FBD9DD", "rgba(244,63,94,0.22)"),
-  ENTRY("autom", "Cambio automatico", "Autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
 ];
 
 export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
-  ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
   ENTRY("be", "Patente BE", "BE", "#E6E9FF", "rgba(99,102,241,0.22)"),
   ENTRY("am", "Patente AM", "AM", "#EAF7CE", "rgba(132,204,22,0.22)"),
   ENTRY("a1", "Patente A1", "A1", "#D6F5E3", "rgba(16,185,129,0.22)"),
@@ -81,12 +79,9 @@ export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
 
 const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
 
-/** Bucket durata per minuti + flag cambio automatico (stesse soglie storiche). */
-export function durationColorEntry(
-  minutes: number,
-  automatic: boolean,
-): AgendaColorEntry {
-  if (automatic) return DURATION_COLOR_ENTRIES[5];
+/** Bucket durata per minuti (stesse soglie storiche). Il cambio automatico
+ * non è più un bucket: è l'eccezione "automatic" (attiva di default). */
+export function durationColorEntry(minutes: number): AgendaColorEntry {
   if (minutes <= 30) return DURATION_COLOR_ENTRIES[0];
   if (minutes <= 45) return DURATION_COLOR_ENTRIES[1];
   if (minutes <= 60) return DURATION_COLOR_ENTRIES[2];
@@ -96,8 +91,9 @@ export function durationColorEntry(
 
 /**
  * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM", …
- * da studentLicenseById) nella voce colore. Il suffisso " autom." vince sulla
- * categoria: è la distinzione chiave chiesta dal criterio (B vs B automatica).
+ * da studentLicenseById) nella voce colore per CATEGORIA. La distinzione del
+ * cambio automatico (B vs B autom.) è demandata all'eccezione "automatic"
+ * (attiva di default), che vince sul criterio.
  */
 export function licenseColorEntryForTag(
   tag: string | null | undefined,
@@ -106,7 +102,6 @@ export function licenseColorEntryForTag(
   if (!tag) return none;
   const t = tag.trim().toUpperCase();
   if (!t) return none;
-  if (t.includes("AUTOM")) return licenseEntryByKey.get("autom")!;
   if (t.startsWith("AM")) return licenseEntryByKey.get("am")!;
   if (t.startsWith("A1")) return licenseEntryByKey.get("a1")!;
   if (t.startsWith("A2")) return licenseEntryByKey.get("a2")!;
@@ -118,39 +113,99 @@ export function licenseColorEntryForTag(
   return none;
 }
 
+// ─── Eccezioni pre-costruite ──────────────────────────────────────────────────
+// Regole pronte che VINCONO sul criterio scelto (prima che matcha vince,
+// nell'ordine del registry). Il titolare le attiva/disattiva dal pannello
+// Aspetto; il match è implementato in AutoscuoleAgendaPage (serve la directory
+// allievi). Estendibili: aggiungere qui la voce + il predicato in agenda.
+
+export type AgendaColorException = {
+  key: string;
+  label: string;
+  /** Spiegazione mostrata nel pannello Aspetto. */
+  description: string;
+  /** Stato iniziale (prima che il titolare tocchi il toggle). */
+  defaultEnabled: boolean;
+  entry: AgendaColorEntry;
+};
+
+export const AGENDA_COLOR_EXCEPTIONS: AgendaColorException[] = [
+  {
+    key: "automatic",
+    label: "Cambio automatico in evidenza",
+    description:
+      "Le guide con veicolo o percorso a cambio automatico sono sempre in ciano, qualunque criterio sia attivo.",
+    defaultEnabled: true,
+    entry: ENTRY("automatic", "Cambio automatico", "Autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
+  },
+  {
+    key: "moto",
+    label: "Guide moto in evidenza",
+    description:
+      "Le guide degli allievi con patente moto (AM, A1, A2, A) sono sempre in arancio, come i gruppi moto.",
+    defaultEnabled: false,
+    entry: ENTRY("moto", "Guida moto", "Moto", "#FFEDD5", "rgba(249,115,22,0.22)"),
+  },
+  {
+    key: "exam_ready",
+    label: "Pronti per l'esame in evidenza",
+    description:
+      "Le guide degli allievi segnati “Pronto per l'esame” si accendono di viola.",
+    defaultEnabled: false,
+    entry: ENTRY("exam_ready", "Pronto per l'esame", "Esame", "#F0E9FF", "rgba(139,92,246,0.22)"),
+  },
+];
+
+/** Stato on/off delle eccezioni (chiave → attiva). */
+export type AgendaColorExceptions = Record<string, boolean>;
+
+/** Normalizza il JSON grezzo: solo chiavi note, default dal registry. */
+export function asAgendaColorExceptions(value: unknown): AgendaColorExceptions {
+  const raw = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const out: AgendaColorExceptions = {};
+  for (const exc of AGENDA_COLOR_EXCEPTIONS) {
+    out[exc.key] = typeof raw[exc.key] === "boolean" ? (raw[exc.key] as boolean) : exc.defaultEnabled;
+  }
+  return out;
+}
+
 // ─── Overrides del titolare ───────────────────────────────────────────────────
 
-/** Colori personalizzati per voce, namespace separato per criterio. */
+/** Colori personalizzati per voce: un namespace per criterio + le eccezioni. */
 export type AgendaColorOverrides = {
   durata?: Record<string, string>;
   patente?: Record<string, string>;
+  eccezioni?: Record<string, string>;
 };
 
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
-const VALID_OVERRIDE_KEYS: Record<keyof AgendaColorOverrides, Set<string>> = {
+const OVERRIDE_NAMESPACES = ["durata", "patente", "eccezioni"] as const;
+
+const VALID_OVERRIDE_KEYS: Record<(typeof OVERRIDE_NAMESPACES)[number], Set<string>> = {
   durata: new Set(DURATION_COLOR_ENTRIES.map((e) => e.key)),
   patente: new Set(LICENSE_COLOR_ENTRIES.map((e) => e.key)),
+  eccezioni: new Set(AGENDA_COLOR_EXCEPTIONS.map((e) => e.key)),
 };
 
 /** Normalizza il JSON grezzo dai limits: solo chiavi note + hex validi. */
 export function asAgendaColorOverrides(value: unknown): AgendaColorOverrides {
   const out: AgendaColorOverrides = {};
   if (!value || typeof value !== "object") return out;
-  for (const criterion of AGENDA_COLOR_CRITERIA) {
-    const raw = (value as Record<string, unknown>)[criterion];
+  for (const namespace of OVERRIDE_NAMESPACES) {
+    const raw = (value as Record<string, unknown>)[namespace];
     if (!raw || typeof raw !== "object") continue;
     const rec: Record<string, string> = {};
     for (const [key, hex] of Object.entries(raw)) {
       if (
-        VALID_OVERRIDE_KEYS[criterion].has(key) &&
+        VALID_OVERRIDE_KEYS[namespace].has(key) &&
         typeof hex === "string" &&
         HEX_RE.test(hex)
       ) {
         rec[key] = hex.toUpperCase();
       }
     }
-    if (Object.keys(rec).length) out[criterion] = rec;
+    if (Object.keys(rec).length) out[namespace] = rec;
   }
   return out;
 }

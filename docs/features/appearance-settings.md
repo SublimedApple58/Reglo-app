@@ -9,11 +9,13 @@ blocchi.
 ## Data model
 
 - Nessuna migrazione: `agendaColorCriterion` (valori `"durata"` default |
-  `"patente"`) e `agendaColorOverrides` (`{ durata?: {key→hex}, patente?:
-  {key→hex} }`, colori personalizzati per voce) vivono nel JSON
+  `"patente"`), `agendaColorOverrides` (`{ durata?, patente?, eccezioni?:
+  {key→hex} }`, colori personalizzati per voce) e `agendaColorExceptions`
+  (`{key→boolean}`, on/off delle eccezioni pre-costruite) vivono nel JSON
   `CompanyService.limits`, normalizzati da `asAgendaColorCriterion` /
-  `asAgendaColorOverrides` (chiavi note + hex validi). Colore istruttore:
-  `AutoscuolaInstructor.color` (vedi [instructor-colors.md](instructor-colors.md)).
+  `asAgendaColorOverrides` / `asAgendaColorExceptions` (chiavi note, default
+  dal registry). Colore istruttore: `AutoscuolaInstructor.color`
+  (vedi [instructor-colors.md](instructor-colors.md)).
 
 ## Files
 
@@ -41,6 +43,17 @@ blocchi.
   palette del picker viene declinato in tinta soft (alpha 0.20) + ombra in
   tinta così testo/badge restano leggibili; "Colore standard" rimuove
   l'override. I default replicano 1:1 le vecchie classi Tailwind.
+- **Eccezioni pre-costruite** (`AGENDA_COLOR_EXCEPTIONS`, registry nel modulo
+  condiviso): regole toggleabili che VINCONO sul criterio (prima che matcha
+  vince, in ordine di registry), ognuna con colore personalizzabile
+  (namespace `eccezioni`). Attuali: `automatic` (veicolo/percorso automatico
+  → ciano, **ON di default** = comportamento storico; il ciano non è più
+  hard-coded nei criteri), `moto` (patente AM/A1/A2/A → arancio, OFF),
+  `exam_ready` (allievo "Pronto per l'esame" → viola, OFF). Match in
+  `guideBlockColorStyle` via `isAutomaticLesson` + `studentColorFlagsById`
+  (directory allievi: `licenseCategory`/`isMotoLicenseCategory`, `examReady`).
+  Con l'eccezione automatic OFF, la B autom. torna uguale alla B.
+- La legenda mostra una sezione "Eccezioni" con le sole eccezioni attive.
 - La legenda agenda mostra i bucket durata oppure la palette patenti a
   seconda del criterio attivo, coi colori personalizzati applicati.
 - Setting a livello autoscuola (non per-utente); salvataggio auto-save con
