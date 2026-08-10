@@ -176,7 +176,7 @@ export function ChangeStudentPhaseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent overlayClassName="z-[250]" className="z-[250] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Cambia fase del percorso</DialogTitle>
           <DialogDescription>
