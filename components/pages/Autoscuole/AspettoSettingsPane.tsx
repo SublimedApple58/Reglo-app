@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ChevronDown } from "lucide-react";
 
 import {
   getAutoscuolaSettings,
@@ -76,6 +77,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
   );
   const [savingCriterion, setSavingCriterion] = React.useState(false);
   const [overrides, setOverrides] = React.useState<AgendaColorOverrides>({});
+  const [customizeOpen, setCustomizeOpen] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
@@ -221,40 +223,55 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         </div>
       </section>
 
-      {/* ── Colori delle voci del criterio attivo ── */}
-      <section className="mt-10">
-        <h3 className="text-base font-semibold text-[#222222]">Colori delle voci</h3>
-        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
-          {criterion === "patente"
-            ? "Personalizza il colore di ogni patente. “Colore standard” ripristina la palette Reglo."
-            : "Personalizza il colore di ogni durata. “Colore standard” ripristina la palette Reglo."}
-        </p>
-        <div className="mt-2">
-          {entriesForCriterion.map((entry, index) => (
-            <div
-              key={entry.key}
-              className={cn(
-                "flex items-center justify-between gap-4 py-3.5",
-                index < entriesForCriterion.length - 1 && "border-b border-[#eeeeee]",
-              )}
-            >
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  className="h-6 w-9 shrink-0 rounded-md"
-                  style={agendaBlockStyle(entry, overrides[criterion]?.[entry.key])}
-                />
-                <div className="truncate text-sm font-semibold text-[#222222]">{entry.label}</div>
-              </div>
+      {/* ── Personalizzazione colori on-demand (chip strip nascosta) ── */}
+      <button
+        type="button"
+        onClick={() => setCustomizeOpen((open) => !open)}
+        className="mt-4 inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:decoration-2"
+      >
+        Personalizza i colori
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", customizeOpen && "rotate-180")}
+          strokeWidth={2}
+        />
+      </button>
+      {customizeOpen && (
+        <div className="mt-3 rounded-2xl bg-[#fafafa] p-4">
+          <p className="text-[12.5px] font-medium leading-normal text-[#929292]">
+            Tocca una voce per cambiarne il colore. &laquo;Colore standard&raquo; ripristina la
+            palette Reglo.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {entriesForCriterion.map((entry) => (
               <ColorSwatchPicker
+                key={entry.key}
                 value={overrides[criterion]?.[entry.key] ?? null}
                 title={`Colore per ${entry.label}`}
                 resetLabel="Colore standard"
                 onSelect={(hex) => saveOverride(entry.key, hex)}
+                renderTrigger={({ saving }) => (
+                  <button
+                    type="button"
+                    title={entry.label}
+                    className={cn(
+                      "cursor-pointer rounded-full px-3 py-1.5 text-[12px] font-semibold text-[#3a3a3a] ring-1 ring-inset ring-black/5 transition hover:ring-black/25",
+                      saving && "animate-pulse opacity-60",
+                    )}
+                    style={{
+                      backgroundColor: agendaBlockStyle(
+                        entry,
+                        overrides[criterion]?.[entry.key],
+                      ).backgroundColor,
+                    }}
+                  >
+                    {entry.short}
+                  </button>
+                )}
               />
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </section>
+      )}
 
       {/* ── Colori istruttori ── */}
       <section className="mt-10">

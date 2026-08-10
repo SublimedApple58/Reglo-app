@@ -29,6 +29,7 @@ export function ColorSwatchPicker({
   className,
   taken,
   resetLabel = "Automatico",
+  renderTrigger,
 }: {
   value: string | null | undefined;
   onSelect: (hex: string | null) => Promise<void> | void;
@@ -38,6 +39,8 @@ export function ColorSwatchPicker({
   taken?: string[];
   /** Etichetta della voce di reset (null): "Automatico", "Colore standard", … */
   resetLabel?: string;
+  /** Trigger custom (es. chip colorata) al posto del bottone 7×7 di default. */
+  renderTrigger?: (state: { saving: boolean }) => React.ReactElement;
 }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -55,6 +58,9 @@ export function ColorSwatchPicker({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
+        {renderTrigger ? (
+          renderTrigger({ saving })
+        ) : (
         <button
           type="button"
           title={title}
@@ -82,6 +88,7 @@ export function ColorSwatchPicker({
             />
           )}
         </button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[196px] p-2">
         <div className="grid grid-cols-4 gap-1.5">

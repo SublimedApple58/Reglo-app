@@ -76,7 +76,7 @@ export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("a", "Patente A", "A", "#FBD9DD", "rgba(244,63,94,0.22)"),
   ENTRY("c", "Patente C / CE", "C", "#FCEFC7", "rgba(245,158,11,0.22)"),
   ENTRY("d", "Patente D / DE", "D", "#F9DDF3", "rgba(217,70,239,0.22)"),
-  ENTRY("none", "Patente non impostata", "—", "#F3F4F8", "rgba(100,116,139,0.16)"),
+  ENTRY("none", "Patente non impostata", "Nessuna", "#F3F4F8", "rgba(100,116,139,0.16)"),
 ];
 
 const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
