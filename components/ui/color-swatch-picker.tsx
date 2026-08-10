@@ -28,6 +28,7 @@ export function ColorSwatchPicker({
   title = "Colore",
   className,
   taken,
+  resetLabel = "Automatico",
 }: {
   value: string | null | undefined;
   onSelect: (hex: string | null) => Promise<void> | void;
@@ -35,6 +36,8 @@ export function ColorSwatchPicker({
   className?: string;
   /** Colori già usati da altri (disabilitati nella griglia, tranne l'attuale). */
   taken?: string[];
+  /** Etichetta della voce di reset (null): "Automatico", "Colore standard", … */
+  resetLabel?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -126,7 +129,7 @@ export function ColorSwatchPicker({
                 "conic-gradient(#EC4899, #F59E0B, #10B981, #0EA5E9, #8B5CF6, #EC4899)",
             }}
           />
-          Automatico
+          {resetLabel}
           {!value && <Check className="size-3" />}
         </button>
       </DropdownMenuContent>

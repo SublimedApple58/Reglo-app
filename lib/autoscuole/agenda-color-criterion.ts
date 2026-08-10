@@ -1,5 +1,7 @@
 import type * as React from "react";
 
+import { instructorColorAlpha } from "@/lib/autoscuole/instructor-colors";
+
 /**
  * Criterio colore dei blocchi guida in agenda (setting company, pannello
  * "Aspetto"). Vale SOLO per le guide individuali normali: esami (viola),
@@ -9,6 +11,11 @@ import type * as React from "react";
  * - "durata": bucket per durata della guida (comportamento storico, default)
  * - "patente": colore per patente della guida (la B automatica — e ogni
  *   percorso a cambio automatico — è distinta col ciano dedicato)
+ *
+ * Ogni voce di entrambi i criteri può essere personalizzata dal titolare
+ * (overrides in `CompanyService.limits.agendaColorOverrides`, pannello
+ * Aspetto): l'hex scelto viene declinato in tinta soft + ombra così i blocchi
+ * restano leggibili con qualunque swatch della palette.
  *
  * Modulo client-safe separato dall'action ("use server" non può esportare
  * costanti). Estendibile: aggiungere qui un nuovo criterio e gestirlo nei
@@ -26,14 +33,14 @@ export function asAgendaColorCriterion(value: unknown): AgendaColorCriterion {
     : DEFAULT_AGENDA_COLOR_CRITERION;
 }
 
-// ─── Palette criterio "patente" ───────────────────────────────────────────────
-// Stesso stile dei bucket durata (sfondo pastello vivo + ombra in tinta, niente
-// bordo). Il ciano "cambio automatico" riusa l'hex del criterio durata così
+// ─── Voci colore ──────────────────────────────────────────────────────────────
+// Stesso stile per tutti (sfondo pastello vivo + ombra in tinta, niente bordo).
+// Il ciano "cambio automatico" è lo stesso hex nei due criteri così
 // l'automatico resta riconoscibile in entrambe le modalità.
 
-export type LicenseColorEntry = {
+export type AgendaColorEntry = {
   key: string;
-  /** Etichetta per legenda agenda. */
+  /** Etichetta per legenda agenda e righe del pannello Aspetto. */
   label: string;
   /** Etichetta corta per i chip di anteprima nel pannello Aspetto. */
   short: string;
@@ -47,9 +54,19 @@ const ENTRY = (
   short: string,
   bgHex: string,
   shadowRgba: string,
-): LicenseColorEntry => ({ key, label, short, bgHex, shadowRgba });
+): AgendaColorEntry => ({ key, label, short, bgHex, shadowRgba });
 
-export const LICENSE_COLOR_ENTRIES: LicenseColorEntry[] = [
+/** Bucket del criterio "durata" (default storici dei blocchi). */
+export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
+  ENTRY("d30", "Fino a 30 minuti", "30 min", "#E3EEFF", "rgba(59,130,246,0.22)"),
+  ENTRY("d45", "31–45 minuti", "45 min", "#EAF7CE", "rgba(132,204,22,0.22)"),
+  ENTRY("d60", "46–60 minuti", "60 min", "#FCEFC7", "rgba(245,158,11,0.22)"),
+  ENTRY("d90", "61–90 minuti", "90 min", "#F9DDF3", "rgba(217,70,239,0.22)"),
+  ENTRY("d90plus", "Oltre 90 minuti", "> 90", "#FBD9DD", "rgba(244,63,94,0.22)"),
+  ENTRY("autom", "Cambio automatico", "Autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
+];
+
+export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
   ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
   ENTRY("be", "Patente BE", "BE", "#E6E9FF", "rgba(99,102,241,0.22)"),
@@ -62,7 +79,20 @@ export const LICENSE_COLOR_ENTRIES: LicenseColorEntry[] = [
   ENTRY("none", "Patente non impostata", "—", "#F3F4F8", "rgba(100,116,139,0.16)"),
 ];
 
-const entryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
+const licenseEntryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
+
+/** Bucket durata per minuti + flag cambio automatico (stesse soglie storiche). */
+export function durationColorEntry(
+  minutes: number,
+  automatic: boolean,
+): AgendaColorEntry {
+  if (automatic) return DURATION_COLOR_ENTRIES[5];
+  if (minutes <= 30) return DURATION_COLOR_ENTRIES[0];
+  if (minutes <= 45) return DURATION_COLOR_ENTRIES[1];
+  if (minutes <= 60) return DURATION_COLOR_ENTRIES[2];
+  if (minutes <= 90) return DURATION_COLOR_ENTRIES[3];
+  return DURATION_COLOR_ENTRIES[4];
+}
 
 /**
  * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM", …
@@ -71,27 +101,77 @@ const entryByKey = new Map(LICENSE_COLOR_ENTRIES.map((e) => [e.key, e]));
  */
 export function licenseColorEntryForTag(
   tag: string | null | undefined,
-): LicenseColorEntry {
-  const none = entryByKey.get("none")!;
+): AgendaColorEntry {
+  const none = licenseEntryByKey.get("none")!;
   if (!tag) return none;
   const t = tag.trim().toUpperCase();
   if (!t) return none;
-  if (t.includes("AUTOM")) return entryByKey.get("autom")!;
-  if (t.startsWith("AM")) return entryByKey.get("am")!;
-  if (t.startsWith("A1")) return entryByKey.get("a1")!;
-  if (t.startsWith("A2")) return entryByKey.get("a2")!;
-  if (t.startsWith("A")) return entryByKey.get("a")!;
-  if (t.startsWith("BE")) return entryByKey.get("be")!;
-  if (t.startsWith("B")) return entryByKey.get("b")!;
-  if (t.startsWith("C")) return entryByKey.get("c")!;
-  if (t.startsWith("D")) return entryByKey.get("d")!;
+  if (t.includes("AUTOM")) return licenseEntryByKey.get("autom")!;
+  if (t.startsWith("AM")) return licenseEntryByKey.get("am")!;
+  if (t.startsWith("A1")) return licenseEntryByKey.get("a1")!;
+  if (t.startsWith("A2")) return licenseEntryByKey.get("a2")!;
+  if (t.startsWith("A")) return licenseEntryByKey.get("a")!;
+  if (t.startsWith("BE")) return licenseEntryByKey.get("be")!;
+  if (t.startsWith("B")) return licenseEntryByKey.get("b")!;
+  if (t.startsWith("C")) return licenseEntryByKey.get("c")!;
+  if (t.startsWith("D")) return licenseEntryByKey.get("d")!;
   return none;
 }
 
-/** Stile inline del blocco agenda per una voce patente. */
-export function licenseBlockStyle(entry: LicenseColorEntry): React.CSSProperties {
+// ─── Overrides del titolare ───────────────────────────────────────────────────
+
+/** Colori personalizzati per voce, namespace separato per criterio. */
+export type AgendaColorOverrides = {
+  durata?: Record<string, string>;
+  patente?: Record<string, string>;
+};
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+const VALID_OVERRIDE_KEYS: Record<keyof AgendaColorOverrides, Set<string>> = {
+  durata: new Set(DURATION_COLOR_ENTRIES.map((e) => e.key)),
+  patente: new Set(LICENSE_COLOR_ENTRIES.map((e) => e.key)),
+};
+
+/** Normalizza il JSON grezzo dai limits: solo chiavi note + hex validi. */
+export function asAgendaColorOverrides(value: unknown): AgendaColorOverrides {
+  const out: AgendaColorOverrides = {};
+  if (!value || typeof value !== "object") return out;
+  for (const criterion of AGENDA_COLOR_CRITERIA) {
+    const raw = (value as Record<string, unknown>)[criterion];
+    if (!raw || typeof raw !== "object") continue;
+    const rec: Record<string, string> = {};
+    for (const [key, hex] of Object.entries(raw)) {
+      if (
+        VALID_OVERRIDE_KEYS[criterion].has(key) &&
+        typeof hex === "string" &&
+        HEX_RE.test(hex)
+      ) {
+        rec[key] = hex.toUpperCase();
+      }
+    }
+    if (Object.keys(rec).length) out[criterion] = rec;
+  }
+  return out;
+}
+
+/**
+ * Stile inline del blocco agenda per una voce. Senza override usa i pastelli
+ * di default; con override l'hex (palette satura del picker) viene declinato
+ * in tinta soft + ombra in tinta, così testo e badge restano leggibili.
+ */
+export function agendaBlockStyle(
+  entry: AgendaColorEntry,
+  overrideHex?: string | null,
+): React.CSSProperties {
+  if (!overrideHex) {
+    return {
+      backgroundColor: entry.bgHex,
+      boxShadow: `0 5px 14px ${entry.shadowRgba}`,
+    };
+  }
   return {
-    backgroundColor: entry.bgHex,
-    boxShadow: `0 5px 14px ${entry.shadowRgba}`,
+    backgroundColor: instructorColorAlpha(overrideHex, 0.2),
+    boxShadow: `0 5px 14px ${instructorColorAlpha(overrideHex, 0.22)}`,
   };
 }

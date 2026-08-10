@@ -8,8 +8,12 @@ import {
 } from "@/lib/actions/autoscuole-settings.actions";
 import {
   DEFAULT_AGENDA_COLOR_CRITERION,
+  DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
+  agendaBlockStyle,
   type AgendaColorCriterion,
+  type AgendaColorEntry,
+  type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { INSTRUCTOR_COLOR_CHOICES } from "@/lib/autoscuole/instructor-colors";
 import { ColorSwatchPicker } from "@/components/ui/color-swatch-picker";
@@ -25,17 +29,7 @@ type AspettoInstructor = { id: string; name: string; color?: string | null };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-// Anteprima statica dei bucket durata: stessi hex dei blocchi agenda
-// (getScheduledDurationClass in AutoscuoleAgendaPage).
-const DURATION_PREVIEW = [
-  { label: "30 min", hex: "#E3EEFF" },
-  { label: "45 min", hex: "#EAF7CE" },
-  { label: "60 min", hex: "#FCEFC7" },
-  { label: "90 min", hex: "#F9DDF3" },
-  { label: "> 90 min", hex: "#FBD9DD" },
-];
-
-// Anteprima patenti: le voci più comuni della palette (B, B autom., AM, A).
+// Anteprima patenti nei card del criterio: le voci più comuni (B, B autom., AM, A).
 const LICENSE_PREVIEW = LICENSE_COLOR_ENTRIES.filter((e) =>
   ["b", "autom", "am", "a"].includes(e.key),
 );
@@ -81,13 +75,17 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     DEFAULT_AGENDA_COLOR_CRITERION,
   );
   const [savingCriterion, setSavingCriterion] = React.useState(false);
+  const [overrides, setOverrides] = React.useState<AgendaColorOverrides>({});
 
   React.useEffect(() => {
     let active = true;
     const load = async () => {
       const res = await getAutoscuolaSettings();
       if (!active) return;
-      if (res.success && res.data) setCriterion(res.data.agendaColorCriterion);
+      if (res.success && res.data) {
+        setCriterion(res.data.agendaColorCriterion);
+        setOverrides(res.data.agendaColorOverrides);
+      }
       setLoading(false);
     };
     load();
@@ -110,6 +108,28 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
     }
     setCriterion(res.data.agendaColorCriterion);
   };
+
+  // Salva il colore personalizzato di una voce (null = torna al default).
+  // Il picker attende la promise → spinner sul trigger finché non risolve.
+  const saveOverride = async (entryKey: string, hex: string | null) => {
+    const current = overrides[criterion] ?? {};
+    const nextRecord: Record<string, string> = { ...current };
+    if (hex) nextRecord[entryKey] = hex;
+    else delete nextRecord[entryKey];
+    const next: AgendaColorOverrides = { ...overrides };
+    if (Object.keys(nextRecord).length) next[criterion] = nextRecord;
+    else delete next[criterion];
+
+    const res = await updateAutoscuolaSettings({ agendaColorOverrides: next });
+    if (!res.success || !res.data) {
+      toast.error({ description: res.message ?? "Impossibile salvare il colore." });
+      return;
+    }
+    setOverrides(res.data.agendaColorOverrides);
+  };
+
+  const entriesForCriterion: AgendaColorEntry[] =
+    criterion === "patente" ? LICENSE_COLOR_ENTRIES : DURATION_COLOR_ENTRIES;
 
   // Colore effettivo mostrato in anteprima: custom oppure palette posizionale
   // (stessa regola di InstructorsTab/agenda per gli istruttori senza colore).
@@ -175,31 +195,64 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
                 <div className="mt-1 text-[12.5px] font-medium leading-snug text-[#929292]">
                   {option.description}
                 </div>
-                {/* Anteprima chip: bucket durata oppure palette patenti */}
+                {/* Anteprima chip (coi colori personalizzati, se presenti) */}
                 <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                  {option.value === "durata"
-                    ? DURATION_PREVIEW.map((chip) => (
-                        <span
-                          key={chip.label}
-                          className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#3a3a3a]"
-                          style={{ backgroundColor: chip.hex }}
-                        >
-                          {chip.label}
-                        </span>
-                      ))
-                    : LICENSE_PREVIEW.map((entry) => (
-                        <span
-                          key={entry.key}
-                          className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#3a3a3a]"
-                          style={{ backgroundColor: entry.bgHex }}
-                        >
-                          {entry.short}
-                        </span>
-                      ))}
+                  {(option.value === "durata"
+                    ? DURATION_COLOR_ENTRIES.filter((e) => e.key !== "autom")
+                    : LICENSE_PREVIEW
+                  ).map((entry) => (
+                    <span
+                      key={entry.key}
+                      className="rounded-md px-2 py-1 text-[10px] font-semibold text-[#3a3a3a]"
+                      style={{
+                        backgroundColor: agendaBlockStyle(
+                          entry,
+                          overrides[option.value]?.[entry.key],
+                        ).backgroundColor,
+                      }}
+                    >
+                      {entry.short}
+                    </span>
+                  ))}
                 </div>
               </button>
             );
           })}
+        </div>
+      </section>
+
+      {/* ── Colori delle voci del criterio attivo ── */}
+      <section className="mt-10">
+        <h3 className="text-base font-semibold text-[#222222]">Colori delle voci</h3>
+        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
+          {criterion === "patente"
+            ? "Personalizza il colore di ogni patente. “Colore standard” ripristina la palette Reglo."
+            : "Personalizza il colore di ogni durata. “Colore standard” ripristina la palette Reglo."}
+        </p>
+        <div className="mt-2">
+          {entriesForCriterion.map((entry, index) => (
+            <div
+              key={entry.key}
+              className={cn(
+                "flex items-center justify-between gap-4 py-3.5",
+                index < entriesForCriterion.length - 1 && "border-b border-[#eeeeee]",
+              )}
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="h-6 w-9 shrink-0 rounded-md"
+                  style={agendaBlockStyle(entry, overrides[criterion]?.[entry.key])}
+                />
+                <div className="truncate text-sm font-semibold text-[#222222]">{entry.label}</div>
+              </div>
+              <ColorSwatchPicker
+                value={overrides[criterion]?.[entry.key] ?? null}
+                title={`Colore per ${entry.label}`}
+                resetLabel="Colore standard"
+                onSelect={(hex) => saveOverride(entry.key, hex)}
+              />
+            </div>
+          ))}
         </div>
       </section>
 

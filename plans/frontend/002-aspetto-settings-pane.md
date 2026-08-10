@@ -37,6 +37,10 @@ di verifica locale di Tiziano prima di staging/prod).
 - **Amendment 2026-08-10**: il secondo criterio era nato come "istruttore";
   su richiesta di Tiziano è diventato "tipo patente" (B distinta da B
   automatica). Il colore istruttore resta solo su avatar/bande/stampa.
+- **Amendment 2 (2026-08-10)**: colori personalizzabili per voce
+  (`agendaColorOverrides` nei limits, sezione "Colori delle voci" nel
+  pannello, hex → tinta alpha 0.20 + ombra; legenda e anteprime
+  override-aware; `resetLabel` su ColorSwatchPicker).
 - Rimozione secca del picker da Gestisci istruttore (nessun hint residuo).
 - Il ciano "cambio automatico" esiste solo col criterio durata.
 - Mobile fuori scope (palette duplicata client-side): follow-up separato.

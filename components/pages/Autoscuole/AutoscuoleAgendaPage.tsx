@@ -63,10 +63,13 @@ import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
   DEFAULT_AGENDA_COLOR_CRITERION,
+  DURATION_COLOR_ENTRIES,
   LICENSE_COLOR_ENTRIES,
-  licenseBlockStyle,
+  agendaBlockStyle,
+  durationColorEntry,
   licenseColorEntryForTag,
   type AgendaColorCriterion,
+  type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import { InlineToggle } from "@/components/ui/inline-toggle";
 import { ExpandingSearch } from "@/components/ui/expanding-search";
@@ -852,21 +855,42 @@ export function AutoscuoleAgendaPage({
   }, [examPanelGroup]);
   const [legendOpen, setLegendOpen] = React.useState(false);
   // Criterio colore dei blocchi guida (pannello Impostazioni → Aspetto):
-  // "durata" (storico) o "patente". Letto una volta al mount (cache Redis).
+  // "durata" (storico) o "patente" + colori personalizzati per voce.
+  // Letti una volta al mount (cache Redis).
   const [agendaColorCriterion, setAgendaColorCriterion] = React.useState<AgendaColorCriterion>(
     DEFAULT_AGENDA_COLOR_CRITERION,
   );
+  const [agendaColorOverrides, setAgendaColorOverrides] = React.useState<AgendaColorOverrides>({});
   React.useEffect(() => {
     let active = true;
     getAutoscuolaSettings().then((res) => {
       if (active && res.success && res.data) {
         setAgendaColorCriterion(res.data.agendaColorCriterion);
+        setAgendaColorOverrides(res.data.agendaColorOverrides);
       }
     });
     return () => {
       active = false;
     };
   }, []);
+  // Stile del blocco guida normale secondo criterio + overrides. Restituisce
+  // sempre uno stile inline (coi default replica 1:1 le vecchie classi durata).
+  const guideBlockColorStyle = React.useCallback(
+    (item: AppointmentRow, licenseTag: string | null): React.CSSProperties => {
+      if (agendaColorCriterion === "patente") {
+        const entry = licenseColorEntryForTag(licenseTag);
+        return agendaBlockStyle(entry, agendaColorOverrides.patente?.[entry.key]);
+      }
+      const start = toDate(item.startsAt);
+      const end = getAppointmentEnd(item);
+      const entry = durationColorEntry(
+        Math.round(diffMinutes(end, start)),
+        isAutomaticLesson(item),
+      );
+      return agendaBlockStyle(entry, agendaColorOverrides.durata?.[entry.key]);
+    },
+    [agendaColorCriterion, agendaColorOverrides],
+  );
   // Google-Calendar-style slot menu: click on an empty agenda slot → ghost
   // block on the grid + popover with the same options as "+ Nuovo", pre-filled
   // with the clicked day/time (and instructor when the column is instructor-
@@ -2998,16 +3022,15 @@ export function AutoscuoleAgendaPage({
                           const licenseTag = licenseTagFor(item);
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
-                          // Criterio "patente": colore per patente della guida al posto
-                          // della durata; annullate/assenti restano grigie.
+                          // Guide normali: colore da criterio (durata/patente) + overrides
+                          // del titolare; annullate/assenti restano grigie.
                           const statusLcInstr = item.status.toLowerCase();
                           const instrColorStyle =
-                            agendaColorCriterion === "patente" &&
                             !isExamInstr &&
                             !isGroupLessonInstr &&
                             statusLcInstr !== "no_show" &&
                             statusLcInstr !== "cancelled"
-                              ? licenseBlockStyle(licenseColorEntryForTag(licenseTag))
+                              ? guideBlockColorStyle(item, licenseTag)
                               : null;
                           const instrCardClass = isExamInstr
                             ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
@@ -3466,16 +3489,15 @@ export function AutoscuoleAgendaPage({
                       const licenseTag = licenseTagFor(item);
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
-                      // Criterio "patente": colore per patente della guida al posto
-                      // della durata; annullate/assenti restano grigie.
+                      // Guide normali: colore da criterio (durata/patente) + overrides
+                      // del titolare; annullate/assenti restano grigie.
                       const statusLcDay = item.status.toLowerCase();
                       const dayColorStyle =
-                        agendaColorCriterion === "patente" &&
                         !isExamDay &&
                         !isGroupLessonDay &&
                         statusLcDay !== "no_show" &&
                         statusLcDay !== "cancelled"
-                          ? licenseBlockStyle(licenseColorEntryForTag(licenseTag))
+                          ? guideBlockColorStyle(item, licenseTag)
                           : null;
                       const dayCardClass = isExamDay
                         ? "bg-[#F5F0FF] shadow-[0_5px_14px_rgba(139,92,246,0.22)]"
@@ -4166,40 +4188,32 @@ export function AutoscuoleAgendaPage({
             <DialogTitle className="text-sm font-semibold">Legenda colori agenda</DialogTitle>
           </div>
           <div className="px-6 py-5 space-y-5">
-            {agendaColorCriterion === "patente" ? (
-              <div>
-                <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per patente</p>
-                <div className="space-y-1.5">
-                  {LICENSE_COLOR_ENTRIES.map((entry) => (
-                    <div key={entry.key} className="flex items-center gap-3">
-                      <div className="h-5 w-8 rounded-md" style={licenseBlockStyle(entry)} />
-                      <span className="text-xs text-foreground">{entry.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
-                  Il criterio colore si cambia in Impostazioni → Aspetto.
-                </p>
-              </div>
-            ) : (
+            {/* Guide normali: voci del criterio attivo, coi colori personalizzati */}
             <div>
-              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Guide normali — per durata</p>
+              <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">
+                {agendaColorCriterion === "patente" ? "Guide normali — per patente" : "Guide normali — per durata"}
+              </p>
               <div className="space-y-1.5">
-                {[
-                  { label: "Fino a 30 minuti", className: "bg-[#E3EEFF] shadow-[0_3px_8px_rgba(59,130,246,0.35)]" },
-                  { label: "31–45 minuti", className: "bg-[#EAF7CE] shadow-[0_3px_8px_rgba(132,204,22,0.35)]" },
-                  { label: "46–60 minuti", className: "bg-[#FCEFC7] shadow-[0_3px_8px_rgba(245,158,11,0.35)]" },
-                  { label: "61–90 minuti", className: "bg-[#F9DDF3] shadow-[0_3px_8px_rgba(217,70,239,0.35)]" },
-                  { label: "Oltre 90 minuti", className: "bg-[#FBD9DD] shadow-[0_3px_8px_rgba(244,63,94,0.35)]" },
-                ].map((item) => (
-                  <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
-                    <span className="text-xs text-foreground">{item.label}</span>
+                {(agendaColorCriterion === "patente"
+                  ? LICENSE_COLOR_ENTRIES
+                  : DURATION_COLOR_ENTRIES.filter((e) => e.key !== "autom")
+                ).map((entry) => (
+                  <div key={entry.key} className="flex items-center gap-3">
+                    <div
+                      className="h-5 w-8 rounded-md"
+                      style={agendaBlockStyle(
+                        entry,
+                        agendaColorOverrides[agendaColorCriterion]?.[entry.key],
+                      )}
+                    />
+                    <span className="text-xs text-foreground">{entry.label}</span>
                   </div>
                 ))}
               </div>
+              <p className="mt-2 text-[11px] leading-snug text-muted-foreground/70">
+                Criterio e colori si cambiano in Impostazioni → Aspetto.
+              </p>
             </div>
-            )}
             <div>
               <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Per tipo &amp; stato</p>
               <div className="space-y-1.5">
@@ -4207,15 +4221,22 @@ export function AutoscuoleAgendaPage({
                   // Col criterio patente il ciano automatico è già nella sezione sopra.
                   ...(agendaColorCriterion === "patente"
                     ? []
-                    : [{ label: "Cambio automatico", className: "bg-[#CFFAFE] shadow-[0_3px_8px_rgba(6,182,212,0.35)]" }]),
+                    : [{
+                        label: "Cambio automatico",
+                        className: "",
+                        style: agendaBlockStyle(
+                          DURATION_COLOR_ENTRIES.find((e) => e.key === "autom")!,
+                          agendaColorOverrides.durata?.autom,
+                        ),
+                      }]),
                   { label: "Esame", className: "bg-[#F5F0FF] shadow-[0_3px_8px_rgba(139,92,246,0.35)]" },
                   { label: "Guida di gruppo", className: "bg-[#ECFDF5] shadow-[0_3px_8px_rgba(16,185,129,0.35)]" },
                   { label: "Gruppo moto", className: "bg-[#FFEDD5] shadow-[0_3px_8px_rgba(249,115,22,0.35)]" },
                   { label: "Evento bloccante", className: "bg-[#F3F4F8]" },
                   { label: "Annullata / Assente", className: "bg-[#F3F4F8]" },
-                ].map((item) => (
+                ].map((item: { label: string; className: string; style?: React.CSSProperties }) => (
                   <div key={item.label} className="flex items-center gap-3">
-                    <div className={cn("h-5 w-8 rounded-md", item.className)} />
+                    <div className={cn("h-5 w-8 rounded-md", item.className)} style={item.style} />
                     <span className="text-xs text-foreground">{item.label}</span>
                   </div>
                 ))}

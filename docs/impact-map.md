@@ -144,7 +144,7 @@ Each entry: **Feature** → list of features it connects to, with reason.
 
 ### Aspetto (Impostazioni)
 - → **Instructor Colors**: sezione "Colori istruttori" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
-- → **Appointments/Agenda**: `agendaColorCriterion` ("durata" | "patente", in `CompanyService.limits`) letto da `AutoscuoleAgendaPage` al mount; col criterio patente i blocchi guida normali sono colorati via `licenseColorEntryForTag(licenseTagFor(item))` (dipende dalla directory allievi bootstrap: `licenseCategory` + `transmission`); legenda dinamica
+- → **Appointments/Agenda**: `agendaColorCriterion` ("durata" | "patente") + `agendaColorOverrides` (colori per voce, in `CompanyService.limits`) letti da `AutoscuoleAgendaPage` al mount; i blocchi guida normali sono colorati inline via `guideBlockColorStyle` (patente: `licenseColorEntryForTag(licenseTagFor(item))`, dipende dalla directory allievi bootstrap `licenseCategory`+`transmission`; durata: `durationColorEntry`); legenda dinamica override-aware
 - → **Settings (autoscuole-settings.actions)**: campo nel patch schema/`AutoscuolaSettingsData`; cache Redis limits invalidata su update
 - → **Vehicles/License**: la palette patenti copre le categorie di `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`); il suffisso " autom." (percorso automatico) vince sulla categoria (ciano)
 

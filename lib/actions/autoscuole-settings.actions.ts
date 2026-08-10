@@ -28,7 +28,9 @@ import {
 import {
   AGENDA_COLOR_CRITERIA,
   asAgendaColorCriterion,
+  asAgendaColorOverrides,
   type AgendaColorCriterion,
+  type AgendaColorOverrides,
 } from "@/lib/autoscuole/agenda-color-criterion";
 import {
   BOOKING_SLOT_DURATION_OPTIONS,
@@ -394,6 +396,14 @@ const autoscuolaSettingsPatchSchema = z
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
     agendaColorCriterion: z.enum(AGENDA_COLOR_CRITERIA).optional(),
+    // Colori personalizzati per voce (pannello Aspetto): il client manda
+    // l'oggetto completo; chiavi/hex vengono rivalidati da asAgendaColorOverrides.
+    agendaColorOverrides: z
+      .object({
+        durata: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
+        patente: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
+      })
+      .optional(),
   })
   .refine(
     // Almeno un campo presente: check generico su tutte le chiavi dello schema
@@ -592,6 +602,7 @@ export type AutoscuolaSettingsData = {
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
   agendaColorCriterion: AgendaColorCriterion;
+  agendaColorOverrides: AgendaColorOverrides;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -958,6 +969,7 @@ const resolveAutoscuolaSettingsData = async (
         : DEFAULT_QUIZ_ENABLED,
     studentCancellationEnabled: limits.studentCancellationEnabled !== false,
     agendaColorCriterion: asAgendaColorCriterion(limits.agendaColorCriterion),
+    agendaColorOverrides: asAgendaColorOverrides(limits.agendaColorOverrides),
   };
 };
 
@@ -1521,6 +1533,9 @@ export async function updateAutoscuolaSettings(
       studentCancellationEnabled: nextStudentCancellationEnabled,
       agendaColorCriterion:
         payload.agendaColorCriterion ?? asAgendaColorCriterion(limits.agendaColorCriterion),
+      agendaColorOverrides: asAgendaColorOverrides(
+        payload.agendaColorOverrides ?? limits.agendaColorOverrides,
+      ),
     };
 
     if (service) {
@@ -1642,6 +1657,7 @@ export async function updateAutoscuolaSettings(
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
         agendaColorCriterion: nextLimits.agendaColorCriterion,
+        agendaColorOverrides: nextLimits.agendaColorOverrides,
       },
     };
   } catch (error) {
