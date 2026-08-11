@@ -46,14 +46,20 @@ blocchi.
 - **Eccezioni pre-costruite** (`AGENDA_COLOR_EXCEPTIONS`, registry nel modulo
   condiviso): regole toggleabili che VINCONO sul criterio (prima che matcha
   vince, in ordine di registry), ognuna con colore personalizzabile
-  (namespace `eccezioni`). Attuali: `automatic` (veicolo/percorso automatico
-  → ciano, **ON di default** = comportamento storico; il ciano non è più
-  hard-coded nei criteri), `moto` (patente AM/A1/A2/A → arancio, OFF),
-  `exam_ready` (allievo "Pronto per l'esame" → viola, OFF). Match in
+  (namespace `eccezioni`) e con un campo `criteria` che dice in quali
+  criteri ha senso (mostrata + applicata solo lì). Attuali: `automatic`
+  (veicolo/percorso automatico → ciano, **ON di default**, SOLO criterio
+  durata — nel criterio patente la distinzione B/B autom. è NATIVA, voce
+  `autom` della palette patenti), `exam_ready` (allievo "Pronto per
+  l'esame" → viola, OFF, entrambi i criteri), `moto` (patente AM/A1/A2/A →
+  stesso arancio per tutte, OFF, entrambi — nel criterio patente significa
+  collassare le patenti moto in un colore unico). Match in
   `guideBlockColorStyle` via `isAutomaticLesson` + `studentColorFlagsById`
   (directory allievi: `licenseCategory`/`isMotoLicenseCategory`, `examReady`).
-  Con l'eccezione automatic OFF, la B autom. torna uguale alla B.
-- La legenda mostra una sezione "Eccezioni" con le sole eccezioni attive.
+- Nel pannello le eccezioni sono nascoste dietro il link "Eccezioni" (badge
+  col conteggio delle attive), accordion mutuamente esclusivo con
+  "Personalizza i colori"; la lista mostra solo quelle del criterio attivo.
+- La legenda mostra una sezione "Eccezioni" con le sole attive del criterio.
 - La legenda agenda mostra i bucket durata oppure la palette patenti a
   seconda del criterio attivo, coi colori personalizzati applicati.
 - Setting a livello autoscuola (non per-utente); salvataggio auto-save con

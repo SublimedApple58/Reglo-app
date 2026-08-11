@@ -67,6 +67,7 @@ export const DURATION_COLOR_ENTRIES: AgendaColorEntry[] = [
 
 export const LICENSE_COLOR_ENTRIES: AgendaColorEntry[] = [
   ENTRY("b", "Patente B", "B", "#E3EEFF", "rgba(59,130,246,0.22)"),
+  ENTRY("autom", "Cambio automatico (B autom., …)", "B autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
   ENTRY("be", "Patente BE", "BE", "#E6E9FF", "rgba(99,102,241,0.22)"),
   ENTRY("am", "Patente AM", "AM", "#EAF7CE", "rgba(132,204,22,0.22)"),
   ENTRY("a1", "Patente A1", "A1", "#D6F5E3", "rgba(16,185,129,0.22)"),
@@ -91,9 +92,9 @@ export function durationColorEntry(minutes: number): AgendaColorEntry {
 
 /**
  * Risolve il tag patente mostrato sui blocchi agenda ("B", "B autom.", "AM", …
- * da studentLicenseById) nella voce colore per CATEGORIA. La distinzione del
- * cambio automatico (B vs B autom.) è demandata all'eccezione "automatic"
- * (attiva di default), che vince sul criterio.
+ * da studentLicenseById) nella voce colore. Il suffisso " autom." vince sulla
+ * categoria: distinguere B da B automatica è NATIVO di questo criterio
+ * (per il criterio durata invece esiste l'eccezione "automatic").
  */
 export function licenseColorEntryForTag(
   tag: string | null | undefined,
@@ -102,6 +103,7 @@ export function licenseColorEntryForTag(
   if (!tag) return none;
   const t = tag.trim().toUpperCase();
   if (!t) return none;
+  if (t.includes("AUTOM")) return licenseEntryByKey.get("autom")!;
   if (t.startsWith("AM")) return licenseEntryByKey.get("am")!;
   if (t.startsWith("A1")) return licenseEntryByKey.get("a1")!;
   if (t.startsWith("A2")) return licenseEntryByKey.get("a2")!;
@@ -126,25 +128,22 @@ export type AgendaColorException = {
   description: string;
   /** Stato iniziale (prima che il titolare tocchi il toggle). */
   defaultEnabled: boolean;
+  /** Criteri in cui l'eccezione ha senso (viene mostrata + applicata solo lì). */
+  criteria: AgendaColorCriterion[];
   entry: AgendaColorEntry;
 };
 
 export const AGENDA_COLOR_EXCEPTIONS: AgendaColorException[] = [
   {
+    // Solo criterio durata: nel criterio patente la distinzione B/B autom.
+    // è nativa (voce "autom" della palette patenti).
     key: "automatic",
     label: "Cambio automatico in evidenza",
     description:
-      "Le guide con veicolo o percorso a cambio automatico sono sempre in ciano, qualunque criterio sia attivo.",
+      "Le guide con veicolo o percorso a cambio automatico sono sempre in ciano invece del colore per durata.",
     defaultEnabled: true,
+    criteria: ["durata"],
     entry: ENTRY("automatic", "Cambio automatico", "Autom.", "#CFFAFE", "rgba(6,182,212,0.22)"),
-  },
-  {
-    key: "moto",
-    label: "Guide moto in evidenza",
-    description:
-      "Le guide degli allievi con patente moto (AM, A1, A2, A) sono sempre in arancio, come i gruppi moto.",
-    defaultEnabled: false,
-    entry: ENTRY("moto", "Guida moto", "Moto", "#FFEDD5", "rgba(249,115,22,0.22)"),
   },
   {
     key: "exam_ready",
@@ -152,7 +151,17 @@ export const AGENDA_COLOR_EXCEPTIONS: AgendaColorException[] = [
     description:
       "Le guide degli allievi segnati “Pronto per l'esame” si accendono di viola.",
     defaultEnabled: false,
+    criteria: ["durata", "patente"],
     entry: ENTRY("exam_ready", "Pronto per l'esame", "Esame", "#F0E9FF", "rgba(139,92,246,0.22)"),
+  },
+  {
+    key: "moto",
+    label: "Guide moto in evidenza",
+    description:
+      "Tutte le guide degli allievi con patente moto (AM, A1, A2, A) hanno lo stesso colore arancio, come i gruppi moto.",
+    defaultEnabled: false,
+    criteria: ["durata", "patente"],
+    entry: ENTRY("moto", "Guida moto", "Moto", "#FFEDD5", "rgba(249,115,22,0.22)"),
   },
 ];
 

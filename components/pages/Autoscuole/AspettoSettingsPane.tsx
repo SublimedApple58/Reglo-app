@@ -36,7 +36,7 @@ type AspettoInstructor = { id: string; name: string; color?: string | null };
 
 // Anteprima patenti nei card del criterio: le voci più comuni.
 const LICENSE_PREVIEW = LICENSE_COLOR_ENTRIES.filter((e) =>
-  ["b", "be", "am", "a"].includes(e.key),
+  ["b", "autom", "am", "a"].includes(e.key),
 );
 
 const CRITERION_OPTIONS: Array<{
@@ -53,7 +53,7 @@ const CRITERION_OPTIONS: Array<{
     value: "patente",
     label: "Tipo patente",
     description:
-      "Ogni blocco prende il colore della patente della guida. Con l'eccezione “Cambio automatico” attiva, la B automatica resta distinta dalla B.",
+      "Ogni blocco prende il colore della patente della guida (la B automatica è distinta dalla B).",
   },
 ];
 
@@ -81,7 +81,8 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
   );
   const [savingCriterion, setSavingCriterion] = React.useState(false);
   const [overrides, setOverrides] = React.useState<AgendaColorOverrides>({});
-  const [customizeOpen, setCustomizeOpen] = React.useState(false);
+  // Pannellini on-demand sotto i card (accordion: uno aperto alla volta).
+  const [openPanel, setOpenPanel] = React.useState<"colors" | "exceptions" | null>(null);
   const [exceptions, setExceptions] = React.useState<AgendaColorExceptions>(() =>
     asAgendaColorExceptions(null),
   );
@@ -159,6 +160,15 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
 
   const entriesForCriterion: AgendaColorEntry[] =
     criterion === "patente" ? LICENSE_COLOR_ENTRIES : DURATION_COLOR_ENTRIES;
+
+  // Eccezioni pertinenti al criterio attivo (le altre restano salvate ma
+  // né mostrate né applicate finché non si torna a un criterio compatibile).
+  const applicableExceptions = AGENDA_COLOR_EXCEPTIONS.filter((exc) =>
+    exc.criteria.includes(criterion),
+  );
+  const activeExceptionCount = applicableExceptions.filter((exc) =>
+    Boolean(exceptions[exc.key]),
+  ).length;
 
   // Colore effettivo mostrato in anteprima: custom oppure palette posizionale
   // (stessa regola di InstructorsTab/agenda per gli istruttori senza colore).
@@ -250,19 +260,37 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         </div>
       </section>
 
-      {/* ── Personalizzazione colori on-demand (chip strip nascosta) ── */}
-      <button
-        type="button"
-        onClick={() => setCustomizeOpen((open) => !open)}
-        className="mt-4 inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:decoration-2"
-      >
-        Personalizza i colori
-        <ChevronDown
-          className={cn("size-3.5 transition-transform", customizeOpen && "rotate-180")}
-          strokeWidth={2}
-        />
-      </button>
-      {customizeOpen && (
+      {/* ── Pannellini on-demand: colori + eccezioni (nascosti di default) ── */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+        <button
+          type="button"
+          onClick={() => setOpenPanel((p) => (p === "colors" ? null : "colors"))}
+          className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:decoration-2"
+        >
+          Personalizza i colori
+          <ChevronDown
+            className={cn("size-3.5 transition-transform", openPanel === "colors" && "rotate-180")}
+            strokeWidth={2}
+          />
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpenPanel((p) => (p === "exceptions" ? null : "exceptions"))}
+          className="inline-flex cursor-pointer select-none items-center gap-1.5 text-[13px] font-semibold text-[#222222] underline decoration-1 underline-offset-2 transition-all hover:decoration-2"
+        >
+          Eccezioni
+          {activeExceptionCount > 0 && (
+            <span className="rounded-full bg-[#f2f2f2] px-1.5 py-0.5 text-[11px] font-semibold no-underline">
+              {activeExceptionCount}
+            </span>
+          )}
+          <ChevronDown
+            className={cn("size-3.5 transition-transform", openPanel === "exceptions" && "rotate-180")}
+            strokeWidth={2}
+          />
+        </button>
+      </div>
+      {openPanel === "colors" && (
         <div className="mt-3 rounded-2xl bg-[#fafafa] p-4">
           <p className="text-[12.5px] font-medium leading-normal text-[#929292]">
             Tocca una voce per cambiarne il colore. &laquo;Colore standard&raquo; ripristina la
@@ -300,23 +328,21 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
         </div>
       )}
 
-      {/* ── Eccezioni ── */}
-      <section className="mt-10">
-        <h3 className="text-base font-semibold text-[#222222]">Eccezioni</h3>
-        <p className="mt-1 max-w-[560px] text-[13px] font-medium leading-normal text-[#929292]">
-          Regole pronte all&apos;uso che vincono sul criterio scelto: le guide che
-          corrispondono prendono il colore dell&apos;eccezione. Tocca il colore per
-          personalizzarlo.
-        </p>
-        <div className="mt-2">
-          {AGENDA_COLOR_EXCEPTIONS.map((exc, index) => {
+      {openPanel === "exceptions" && (
+        <div className="mt-3 rounded-2xl bg-[#fafafa] p-4">
+          <p className="text-[12.5px] font-medium leading-normal text-[#929292]">
+            Regole pronte all&apos;uso che vincono sul criterio scelto: le guide che
+            corrispondono prendono il colore dell&apos;eccezione. Tocca il colore per
+            personalizzarlo.
+          </p>
+          {applicableExceptions.map((exc, index) => {
             const enabled = Boolean(exceptions[exc.key]);
             return (
               <div
                 key={exc.key}
                 className={cn(
                   "flex items-center justify-between gap-4 py-3.5",
-                  index < AGENDA_COLOR_EXCEPTIONS.length - 1 && "border-b border-[#eeeeee]",
+                  index < applicableExceptions.length - 1 && "border-b border-[#eeeeee]",
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3.5">
@@ -365,7 +391,7 @@ export function AspettoSettingsPane<T extends AspettoInstructor>({
             );
           })}
         </div>
-      </section>
+      )}
 
       {/* ── Colori istruttori ── */}
       <section className="mt-10">

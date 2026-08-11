@@ -899,6 +899,7 @@ export function AutoscuoleAgendaPage({
     (item: AppointmentRow, licenseTag: string | null): React.CSSProperties => {
       const flags = studentColorFlagsById.get(item.student.id);
       for (const exc of AGENDA_COLOR_EXCEPTIONS) {
+        if (!exc.criteria.includes(agendaColorCriterion)) continue;
         if (!agendaColorExceptions[exc.key]) continue;
         const hit =
           exc.key === "automatic"
@@ -4246,12 +4247,16 @@ export function AutoscuoleAgendaPage({
                 Criterio e colori si cambiano in Impostazioni → Aspetto.
               </p>
             </div>
-            {/* Eccezioni attive: vincono sul criterio (Impostazioni → Aspetto) */}
-            {AGENDA_COLOR_EXCEPTIONS.some((exc) => agendaColorExceptions[exc.key]) && (
+            {/* Eccezioni attive del criterio corrente: vincono sul criterio */}
+            {AGENDA_COLOR_EXCEPTIONS.some(
+              (exc) => exc.criteria.includes(agendaColorCriterion) && agendaColorExceptions[exc.key],
+            ) && (
               <div>
                 <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/70">Eccezioni</p>
                 <div className="space-y-1.5">
-                  {AGENDA_COLOR_EXCEPTIONS.filter((exc) => agendaColorExceptions[exc.key]).map((exc) => (
+                  {AGENDA_COLOR_EXCEPTIONS.filter(
+                    (exc) => exc.criteria.includes(agendaColorCriterion) && agendaColorExceptions[exc.key],
+                  ).map((exc) => (
                     <div key={exc.key} className="flex items-center gap-3">
                       <div
                         className="h-5 w-8 rounded-md"
