@@ -112,7 +112,7 @@ export function EditStudentLicenseDialog({
                 <SelectTrigger className="cursor-pointer">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[300]">
                   {LICENSE_CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat} className="cursor-pointer">
                       {LICENSE_CATEGORY_LABELS[cat]}
@@ -127,7 +127,7 @@ export function EditStudentLicenseDialog({
                 <SelectTrigger className="cursor-pointer">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="z-[300]">
                   {TRANSMISSIONS.map((t) => (
                     <SelectItem key={t} value={t} className="cursor-pointer">
                       {TRANSMISSION_LABELS[t]}

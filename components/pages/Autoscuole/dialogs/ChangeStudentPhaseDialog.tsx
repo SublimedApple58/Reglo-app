@@ -192,7 +192,7 @@ export function ChangeStudentPhaseDialog({
               <SelectTrigger className="cursor-pointer">
                 <SelectValue placeholder="Seleziona la fase" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="z-[300]">
                 {visibleOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
                     <div className="flex items-center gap-2">
