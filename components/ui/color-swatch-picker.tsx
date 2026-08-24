@@ -27,11 +27,20 @@ export function ColorSwatchPicker({
   onSelect,
   title = "Colore",
   className,
+  taken,
+  resetLabel = "Automatico",
+  renderTrigger,
 }: {
   value: string | null | undefined;
   onSelect: (hex: string | null) => Promise<void> | void;
   title?: string;
   className?: string;
+  /** Colori già usati da altri (disabilitati nella griglia, tranne l'attuale). */
+  taken?: string[];
+  /** Etichetta della voce di reset (null): "Automatico", "Colore standard", … */
+  resetLabel?: string;
+  /** Trigger custom (es. chip colorata) al posto del bottone 7×7 di default. */
+  renderTrigger?: (state: { saving: boolean }) => React.ReactElement;
 }) {
   const [open, setOpen] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -49,6 +58,9 @@ export function ColorSwatchPicker({
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
+        {renderTrigger ? (
+          renderTrigger({ saving })
+        ) : (
         <button
           type="button"
           title={title}
@@ -76,19 +88,25 @@ export function ColorSwatchPicker({
             />
           )}
         </button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[196px] p-2">
         <div className="grid grid-cols-4 gap-1.5">
           {INSTRUCTOR_COLOR_CHOICES.map((choice) => {
             const selected = value?.toUpperCase() === choice.hex.toUpperCase();
+            const isTaken =
+              !selected &&
+              (taken ?? []).some((t) => t.toUpperCase() === choice.hex.toUpperCase());
             return (
               <button
                 key={choice.hex}
                 type="button"
-                title={choice.name}
+                title={isTaken ? `${choice.name} (già usato)` : choice.name}
+                disabled={isTaken}
                 onClick={() => pick(choice.hex)}
                 className={cn(
-                  "flex h-9 w-full items-center justify-center rounded-lg transition hover:scale-105",
+                  "flex h-9 w-full items-center justify-center rounded-lg transition",
+                  isTaken ? "cursor-not-allowed opacity-30" : "hover:scale-105",
                   selected && "ring-2 ring-offset-1 ring-foreground/40",
                 )}
                 style={{ backgroundColor: instructorColorAlpha(choice.hex, 0.16) }}
@@ -118,7 +136,7 @@ export function ColorSwatchPicker({
                 "conic-gradient(#EC4899, #F59E0B, #10B981, #0EA5E9, #8B5CF6, #EC4899)",
             }}
           />
-          Automatico
+          {resetLabel}
           {!value && <Check className="size-3" />}
         </button>
       </DropdownMenuContent>

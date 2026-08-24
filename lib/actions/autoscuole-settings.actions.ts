@@ -26,6 +26,15 @@ import {
   invalidateAutoscuoleCache,
 } from "@/lib/autoscuole/cache";
 import {
+  AGENDA_COLOR_CRITERIA,
+  asAgendaColorCriterion,
+  asAgendaColorExceptions,
+  asAgendaColorOverrides,
+  type AgendaColorCriterion,
+  type AgendaColorExceptions,
+  type AgendaColorOverrides,
+} from "@/lib/autoscuole/agenda-color-criterion";
+import {
   BOOKING_SLOT_DURATION_OPTIONS,
   LESSON_POLICY_TYPES,
   LessonPolicyType,
@@ -388,6 +397,19 @@ const autoscuolaSettingsPatchSchema = z
     groupLessonsDiscoveryEnabled: z.boolean().optional(),
     quizEnabled: z.boolean().optional(),
     studentCancellationEnabled: z.boolean().optional(),
+    agendaColorCriterion: z.enum(AGENDA_COLOR_CRITERIA).optional(),
+    // Colori personalizzati per voce (pannello Aspetto): il client manda
+    // l'oggetto completo; chiavi/hex vengono rivalidati da asAgendaColorOverrides.
+    agendaColorOverrides: z
+      .object({
+        durata: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
+        patente: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
+        eccezioni: z.record(z.string(), z.string().regex(/^#[0-9a-fA-F]{6}$/)).optional(),
+      })
+      .optional(),
+    // Eccezioni colore pre-costruite (chiave → attiva); chiavi rivalidate da
+    // asAgendaColorExceptions (default dal registry per quelle mancanti).
+    agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
   })
   .refine(
     // Almeno un campo presente: check generico su tutte le chiavi dello schema
@@ -585,6 +607,9 @@ export type AutoscuolaSettingsData = {
   groupLessonsDiscoveryEnabled: boolean;
   quizEnabled: boolean;
   studentCancellationEnabled: boolean;
+  agendaColorCriterion: AgendaColorCriterion;
+  agendaColorOverrides: AgendaColorOverrides;
+  agendaColorExceptions: AgendaColorExceptions;
 };
 
 const resolveAutoscuolaSettingsData = async (
@@ -950,6 +975,9 @@ const resolveAutoscuolaSettingsData = async (
         ? limits.quizEnabled
         : DEFAULT_QUIZ_ENABLED,
     studentCancellationEnabled: limits.studentCancellationEnabled !== false,
+    agendaColorCriterion: asAgendaColorCriterion(limits.agendaColorCriterion),
+    agendaColorOverrides: asAgendaColorOverrides(limits.agendaColorOverrides),
+    agendaColorExceptions: asAgendaColorExceptions(limits.agendaColorExceptions),
   };
 };
 
@@ -1511,6 +1539,14 @@ export async function updateAutoscuolaSettings(
       groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
       quizEnabled: nextQuizEnabled,
       studentCancellationEnabled: nextStudentCancellationEnabled,
+      agendaColorCriterion:
+        payload.agendaColorCriterion ?? asAgendaColorCriterion(limits.agendaColorCriterion),
+      agendaColorOverrides: asAgendaColorOverrides(
+        payload.agendaColorOverrides ?? limits.agendaColorOverrides,
+      ),
+      agendaColorExceptions: asAgendaColorExceptions(
+        payload.agendaColorExceptions ?? limits.agendaColorExceptions,
+      ),
     };
 
     if (service) {
@@ -1631,6 +1667,9 @@ export async function updateAutoscuolaSettings(
         groupLessonsDiscoveryEnabled: nextGroupLessonsDiscoveryEnabled,
         quizEnabled: nextQuizEnabled,
         studentCancellationEnabled: nextStudentCancellationEnabled,
+        agendaColorCriterion: nextLimits.agendaColorCriterion,
+        agendaColorOverrides: nextLimits.agendaColorOverrides,
+        agendaColorExceptions: nextLimits.agendaColorExceptions,
       },
     };
   } catch (error) {

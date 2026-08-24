@@ -137,9 +137,17 @@ Each entry: **Feature** → list of features it connects to, with reason.
 - → **Email**: avvisi al team via `sendDynamicEmail` (no-op staging)
 
 ### Instructor Colors
-- → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type palette.
+- → **Appointments/Agenda**: `AutoscuoleAgendaPage` avatars + availability bands read `instructor.color` (fallback: positional palette). Event cards keep the duration/type/license palette.
 - → **Instructor Clusters**: saved via `updateAutoscuolaInstructor` (OWNER-only field, stripped for self-instructor like `name`/`status`)
+- → **Aspetto**: il picker colore vive in `AspettoSettingsPane` (Impostazioni → Aspetto); rimosso da `InstructorsTab` (2026-08-10)
 - → **Mobile**: `color` already returned by `GET /api/autoscuole/instructors` + agenda bootstrap (not consumed yet)
+
+### Aspetto (Impostazioni)
+- → **Instructor Colors**: sezione "Colori istruttori" usa `changeInstructorColor` (AutoscuoleResourcesPage) → `updateAutoscuolaInstructor`
+- → **Appointments/Agenda**: `agendaColorCriterion` ("durata" | "patente") + `agendaColorOverrides` (colori per voce, in `CompanyService.limits`) letti da `AutoscuoleAgendaPage` al mount; i blocchi guida normali sono colorati inline via `guideBlockColorStyle` (patente: `licenseColorEntryForTag(licenseTagFor(item))`, dipende dalla directory allievi bootstrap `licenseCategory`+`transmission`; durata: `durationColorEntry`); legenda dinamica override-aware
+- → **Settings (autoscuole-settings.actions)**: campo nel patch schema/`AutoscuolaSettingsData`; cache Redis limits invalidata su update
+- → **Vehicles/License**: la palette patenti copre le categorie di `LICENSE_CATEGORIES` (`lib/autoscuole/license.ts`); la distinzione cambio automatico è NATIVA del criterio patente (voce `autom`), eccezione `automatic` solo per il criterio durata
+- → **Eccezioni** (`AGENDA_COLOR_EXCEPTIONS` + `agendaColorExceptions` nei limits, ognuna con `criteria` di pertinenza): automatic (`isAutomaticLesson`, solo durata, ON default), exam_ready (flag [exam-ready.md](features/exam-ready.md), entrambi), moto (`isMotoLicenseCategory`, entrambi); vincono sul criterio, colori personalizzabili (ns `eccezioni`), sezione dedicata in legenda
 
 ### Communications
 - → **Payments**: calls settlement, retry, penalty, invoice jobs
