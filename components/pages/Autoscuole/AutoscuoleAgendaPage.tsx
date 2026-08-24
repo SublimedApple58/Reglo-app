@@ -3989,6 +3989,9 @@ export function AutoscuoleAgendaPage({
               </div>
             </div>
           )}
+          {/* Il "Tipo guida" generico (attività) è ridondante per le moto, che
+              usano "Tipo guida moto" (birilli/strada) → nascosto in modalità moto. */}
+          {!(vehiclesEnabled && form.bookingMode === "moto") && (
           <div>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Tipo guida</p>
             <div className="flex flex-wrap gap-1.5">
@@ -4010,6 +4013,7 @@ export function AutoscuoleAgendaPage({
               })}
             </div>
           </div>
+          )}
           <div ref={createStudentRef}>
             <p className="mb-1.5 text-xs font-semibold text-[#555555]">Allievo</p>
             <StudentSearchSelect
