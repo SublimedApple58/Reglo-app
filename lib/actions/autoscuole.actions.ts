@@ -33,6 +33,7 @@ import {
 import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS, isMotoLicenseCategory, vehicleServesLicense } from "@/lib/autoscuole/license";
 import { FOLLOW_CAR_CATEGORY, parseFollowCarRulesFromLimits, type FollowCarRules } from "@/lib/autoscuole/follow-car";
+import { MOTO_LESSON_TYPES } from "@/lib/autoscuole/moto-lesson-type";
 import {
   assignMotoForStudent,
   assignMotosToStudents,
@@ -123,6 +124,9 @@ const createAppointmentSchema = z.object({
   // Extra moto vehicles a moto guida may occupy beyond the primary one. Stored as
   // additional role="primary" join rows; not auto-assigned (manual add only).
   extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
+  // Tipo strutturato di una guida moto: birilli (area chiusa) vs strada.
+  // Opzionale, solo per le guide moto (ignorato per le altre).
+  motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   locationId: z.string().uuid().optional().nullable(),
   notes: z.string().optional(),
   skipWeeklyLimitCheck: z.boolean().optional(),
@@ -200,6 +204,11 @@ const updateAppointmentDetailsSchema = z.object({
    * rows). Each must belong to the company, be a moto and differ from the primary.
    */
   extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
+  /**
+   * Tipo strutturato di una guida moto: "birilli" (area chiusa, coni) vs
+   * "strada". null lo azzera. Solo per le guide moto — le altre lo ignorano.
+   */
+  motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   /**
    * New instructor for the appointment (cluster-level reassignment).
    * Verified against availability: no overlapping appointments, no manual
@@ -1021,6 +1030,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           vehicleId: true,
           locationId: true,
           groupLessonId: true,
+          motoLessonType: true,
           cancellationKind: true,
           cancellationReason: true,
           replacedByAppointmentId: true,
@@ -1245,6 +1255,7 @@ export async function getAutoscuolaAgendaBootstrapAction(input: {
           vehicleId: gl.vehicleId,
           locationId: null,
           groupLessonId: gl.id,
+          motoLessonType: null,
           cancellationKind: null,
           cancellationReason: null,
           replacedByAppointmentId: null,
@@ -3144,6 +3155,7 @@ export async function createAutoscuolaAppointment(
             status: appointmentStatus,
             instructorId: resolvedInstructorId,
             vehicleId: payload.vehicleId ?? null,
+            motoLessonType: payload.motoLessonType ?? null,
             locationId: resolvedLocationId,
           notes: payload.notes ?? null,
           paymentRequired: paymentSnapshot.paymentRequired,
@@ -5047,7 +5059,7 @@ export async function updateAutoscuolaAppointmentDetails(
       // Il cambio ISTRUTTORE resta comunque bloccato a valle per le guide concluse.
     }
 
-    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; vehicleId?: string | null; instructorId?: string; endsAt?: Date } = {};
+    const updateData: { type?: string; types?: string[]; rating?: number | null; notes?: string | null; locationId?: string | null; vehicleId?: string | null; instructorId?: string; endsAt?: Date; motoLessonType?: string | null } = {};
     const appointmentLessonType = normalizeLessonType(appointment.type);
     const appointmentEnd = computeAppointmentEnd({
       startsAt: appointment.startsAt,
@@ -5152,6 +5164,12 @@ export async function updateAutoscuolaAppointmentDetails(
     if (payload.notes !== undefined) {
       const normalizedNotes = normalizeText(payload.notes);
       updateData.notes = normalizedNotes || null;
+    }
+
+    // Tipo guida moto (birilli/strada): metadato libero, nessun vincolo di
+    // stato. null lo azzera. La UI lo invia solo per le guide moto.
+    if (payload.motoLessonType !== undefined) {
+      updateData.motoLessonType = payload.motoLessonType ?? null;
     }
 
     // Handle location change

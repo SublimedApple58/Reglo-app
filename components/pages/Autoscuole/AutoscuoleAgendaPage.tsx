@@ -3,7 +3,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer } from "lucide-react";
+import { Plus, SlidersHorizontal, Users, Send, ChevronLeft, ChevronRight, Check, AlertTriangle, LayoutGrid, Ban, GraduationCap, Search, Info, Car, Bike, Maximize2, Minimize2, ZoomIn, ZoomOut, History, X, Trash2, BookOpen, Lock, Printer, TrafficCone, Route } from "lucide-react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
 import { PageWrapper } from "@/components/Layout/PageWrapper";
@@ -59,6 +59,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FieldGroup } from "@/components/ui/field-group";
 import { TRANSMISSION_LABELS, isMotoLicenseCategory, vehicleServesLicense, type Transmission } from "@/lib/autoscuole/license";
+import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, motoLessonTypeLabel, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorTintStyles } from "@/lib/autoscuole/instructor-colors";
 import { getAutoscuolaSettings } from "@/lib/actions/autoscuole-settings.actions";
 import {
@@ -130,6 +131,8 @@ type AppointmentRow = {
   groupLessonId?: string | null;
   groupLessonCapacity?: number | null;
   groupLessonKind?: string | null;
+  // Guida moto: "birilli" (area chiusa) | "strada" | null (non-moto / non impostato).
+  motoLessonType?: string | null;
   notes?: string | null;
 };
 
@@ -758,6 +761,7 @@ export function AutoscuoleAgendaPage({
     vehicleId: "",
     followVehicleId: "",
     extraMotoVehicleIds: [] as string[],
+    motoLessonType: null as MotoLessonType | null,
     locationId: "",
     duration: "30",
     notes: "",
@@ -1733,6 +1737,8 @@ export function AutoscuoleAgendaPage({
       extraMotoVehicleIds: isMotoMode
         ? form.extraMotoVehicleIds.filter((id) => id !== form.vehicleId)
         : [],
+      // Tipo guida moto (birilli/strada): solo in modalità moto.
+      motoLessonType: isMotoMode ? form.motoLessonType : null,
       locationId: form.locationId || null,
       notes: form.notes.trim() || undefined,
       ...(skip ? { skipWeeklyLimitCheck: true } : {}),
@@ -1773,6 +1779,7 @@ export function AutoscuoleAgendaPage({
       vehicleId: "",
       followVehicleId: "",
       extraMotoVehicleIds: [],
+      motoLessonType: null,
       locationId: defaultLocationId,
       duration: "30",
       notes: "",
@@ -1920,6 +1927,7 @@ export function AutoscuoleAgendaPage({
       location: item.location
         ? { id: item.location.id, name: item.location.name }
         : null,
+      motoLessonType: item.motoLessonType ?? null,
     });
   };
 
@@ -3053,6 +3061,8 @@ export function AutoscuoleAgendaPage({
                           const isGroupLessonInstr = item.type === "group_lesson";
                           const isCompact = height <= 40;
                           const licenseTag = licenseTagFor(item);
+                          const motoTypeLabelInstr = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
+                          const MotoTypeIconInstr = item.motoLessonType === "birilli" ? TrafficCone : Route;
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
                           // Guide normali: colore da criterio (durata/patente) + overrides
@@ -3089,6 +3099,12 @@ export function AutoscuoleAgendaPage({
                                     {!isCompact && licenseTag ? (
                                       <div className={cn("text-[9px] font-semibold truncate", isExamInstr ? "text-violet-700" : "text-foreground/70")}>Patente {licenseTag}</div>
                                     ) : null}
+                                    {motoTypeLabelInstr ? (
+                                      <span className="mt-0.5 inline-flex max-w-full items-center gap-0.5 rounded-full bg-white/70 px-1.5 py-[1px] text-[8px] font-bold uppercase tracking-wide text-[#333333]">
+                                        <MotoTypeIconInstr className="size-2.5 shrink-0" strokeWidth={2.4} aria-hidden />
+                                        <span className="truncate">{motoTypeLabelInstr}</span>
+                                      </span>
+                                    ) : null}
                                   </div>
                                 </button>
                               </DropdownMenuTrigger>
@@ -3103,6 +3119,7 @@ export function AutoscuoleAgendaPage({
                                       <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
                                       <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                       <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
+                                      {motoTypeLabelInstr ? <div>Guida moto: <span className="font-medium text-foreground/85">{motoTypeLabelInstr}</span></div> : null}
                                       {item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}
                                     </div>
                                     <div className="mt-2 flex items-center gap-2">
@@ -3520,6 +3537,8 @@ export function AutoscuoleAgendaPage({
                       const isGroupLessonDay = item.type === "group_lesson";
                       const isCompact = height <= 56;
                       const licenseTag = licenseTagFor(item);
+                      const motoTypeLabelDay = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
+                      const MotoTypeIconDay = item.motoLessonType === "birilli" ? TrafficCone : Route;
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
                       // Guide normali: colore da criterio (durata/patente) + overrides
@@ -3587,6 +3606,12 @@ export function AutoscuoleAgendaPage({
                                       Patente {licenseTag}
                                     </div>
                                   ) : null}
+                                  {motoTypeLabelDay ? (
+                                    <span className="mt-0.5 inline-flex max-w-full items-center gap-1 rounded-full bg-white/70 px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-wide text-[#333333]">
+                                      <MotoTypeIconDay className="size-3 shrink-0" strokeWidth={2.4} aria-hidden />
+                                      <span className="truncate">{motoTypeLabelDay}</span>
+                                    </span>
+                                  ) : null}
                                 </>
                               )}
                             </button>
@@ -3607,6 +3632,7 @@ export function AutoscuoleAgendaPage({
                                   <div>Istruttore: <span className="font-medium text-foreground/85">{item.instructor?.name ?? "Non assegnato"}</span></div>
                                   <VehicleDetailLines item={item} vehiclesEnabled={vehiclesEnabled} />
                                   <div>Luogo: <span className="font-medium text-foreground/85">{item.location?.name ?? "Sede dell'autoscuola"}</span></div>
+                                  {motoTypeLabelDay ? <div>Guida moto: <span className="font-medium text-foreground/85">{motoTypeLabelDay}</span></div> : null}
                                   {item.notes?.trim() ? <div>Note: <span className="whitespace-pre-wrap font-medium text-foreground/85">{item.notes}</span></div> : null}
                                 </div>
                                 <div className="mt-2 flex items-center gap-2">
@@ -3928,12 +3954,34 @@ export function AutoscuoleAgendaPage({
                   const Icon = opt.icon;
                   return (
                     <button key={opt.value} type="button"
-                      onClick={() => setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [] }))}
+                      onClick={() => setForm((prev) => ({ ...prev, bookingMode: opt.value, studentId: "", vehicleId: "", followVehicleId: "", extraMotoVehicleIds: [], motoLessonType: null }))}
                       className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
                       <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
                       <span className="flex min-w-0 items-baseline gap-1.5">
                         <span className="text-sm font-semibold text-[#222222]">{opt.label}</span>
                         <span className="truncate text-[10px] font-medium text-[#929292]">{opt.hint}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {vehiclesEnabled && form.bookingMode === "moto" && (
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-[#555555]">Tipo guida moto</p>
+              <div className="grid grid-cols-2 gap-2">
+                {MOTO_LESSON_TYPES.map((value) => {
+                  const active = form.motoLessonType === value;
+                  const Icon = value === "birilli" ? TrafficCone : Route;
+                  return (
+                    <button key={value} type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, motoLessonType: active ? null : value }))}
+                      className={cn("flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors", active ? "border-[#222222] bg-[#f7f7f7]" : "border-[#dddddd] hover:border-[#929292]")}>
+                      <Icon className={cn("size-4 shrink-0", active ? "text-[#222222]" : "text-[#929292]")} />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm font-semibold text-[#222222]">{MOTO_LESSON_TYPE_LABELS[value]}</span>
+                        <span className="truncate text-[10px] font-medium text-[#929292]">{MOTO_LESSON_TYPE_HINTS[value]}</span>
                       </span>
                     </button>
                   );

@@ -466,6 +466,11 @@ model AutoscuolaAppointment {
   /// When set, this appointment is one participant seat of a group lesson
   /// (Guide di gruppo). type = "group_lesson". Null for normal lessons/exams.
   groupLessonId                String?   @db.Uuid
+  /// For MOTO driving lessons only: distinguishes "birilli" (closed-area cone
+  /// practice) from "strada" (road driving). Optional structured attribute —
+  /// null for non-moto lessons or when not specified. See
+  /// lib/autoscuole/moto-lesson-type.ts.
+  motoLessonType               String?
   /// How this appointment was created — the CHANNEL/category, not a specific user:
   /// student_self | swap | slot_fill | staff_instructor | staff_owner | voice |
   /// group_lesson | exam. Null on legacy rows created before this field existed.
