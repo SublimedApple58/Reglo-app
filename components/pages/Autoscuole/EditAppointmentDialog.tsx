@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Star, UserCog, X } from "lucide-react";
+import { AlertCircle, CalendarDays, Check, CheckCircle2, Clock, Loader2, Route, Star, TrafficCone, UserCog, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePickerInput } from "@/components/ui/date-picker";
@@ -25,6 +25,7 @@ import { CreateEventPopover } from "@/components/pages/Autoscuole/dialogs/Create
 import { TimePickerInput } from "@/components/ui/time-picker";
 import { LoadingDots } from "@/components/ui/loading-dots";
 import { isMotoLicenseCategory, vehicleServesLicense, LICENSE_CATEGORY_LABELS, TRANSMISSION_LABELS, type LicenseCategory, type Transmission } from "@/lib/autoscuole/license";
+import { MOTO_LESSON_TYPES, MOTO_LESSON_TYPE_LABELS, MOTO_LESSON_TYPE_HINTS, asMotoLessonType, type MotoLessonType } from "@/lib/autoscuole/moto-lesson-type";
 import { instructorCanUseVehicle } from "@/lib/autoscuole/group-moto";
 import {
   rescheduleAutoscuolaAppointment,
@@ -73,6 +74,8 @@ export type EditAppointmentDialogAppointment = {
   followVehicle?: { id: string; name: string } | null;
   extraMotoVehicles?: { id: string; name: string }[] | null;
   location?: { id: string; name: string } | null;
+  /** Guida moto: "birilli" | "strada" | null. */
+  motoLessonType?: string | null;
 };
 
 type Availability =
@@ -253,6 +256,7 @@ export function EditAppointmentDialog({
   );
   const originalLocationId = appointment?.location?.id ?? "";
   const originalNotes = appointment?.notes ?? "";
+  const originalMotoLessonType = asMotoLessonType(appointment?.motoLessonType);
 
   const [instructorId, setInstructorId] = React.useState(originalInstructorId);
   const [lessonTypes, setLessonTypes] = React.useState<string[]>(originalLessonTypes);
@@ -265,6 +269,9 @@ export function EditAppointmentDialog({
   );
   const [locationId, setLocationId] = React.useState(originalLocationId);
   const [notes, setNotes] = React.useState(originalNotes);
+  const [motoLessonType, setMotoLessonType] = React.useState<MotoLessonType | null>(
+    originalMotoLessonType,
+  );
   const [durationMin, setDurationMin] = React.useState<number>(originalDurationMin);
   // Date/time staging — start from the appointment's current slot.
   const [newDate, setNewDate] = React.useState<string>(
@@ -290,6 +297,7 @@ export function EditAppointmentDialog({
     setExtraMotoVehicleIds((appointment.extraMotoVehicles ?? []).map((v) => v.id));
     setLocationId(appointment.location?.id ?? "");
     setNotes(appointment.notes ?? "");
+    setMotoLessonType(asMotoLessonType(appointment.motoLessonType));
     const end = appointment.endsAt
       ? new Date(appointment.endsAt)
       : new Date(start.getTime() + 30 * 60 * 1000);
@@ -536,6 +544,14 @@ export function EditAppointmentDialog({
     vehiclesEnabled &&
     !!selectedVehicle &&
     isMotoLicenseCategory(selectedVehicle.licenseCategory);
+  // Guida moto = veicolo primario moto OPPURE allievo con patente moto (il
+  // veicolo può non essere ancora assegnato). Gate del selettore birilli/strada.
+  const isMotoLesson =
+    primaryIsMoto || isMotoLicenseCategory(appointment.student.licenseCategory);
+  // Fuori da una guida moto il tipo (birilli/strada) non ha senso → azzerato.
+  const effectiveMotoLessonType = isMotoLesson ? motoLessonType : null;
+  const motoLessonTypeChanged =
+    effectiveMotoLessonType !== originalMotoLessonType;
   // Extra motos must ALSO serve the student's license (same moto hierarchy as the
   // primary — equal-or-lower category), on top of instructor-usability. Already
   // selected ones are always kept so an existing set never silently drops.
@@ -563,6 +579,7 @@ export function EditAppointmentDialog({
     extraMotosChanged ||
     locationId !== originalLocationId ||
     (notes ?? "") !== (originalNotes ?? "") ||
+    motoLessonTypeChanged ||
     dateTimeChanged ||
     durationChanged;
 
@@ -660,6 +677,11 @@ export function EditAppointmentDialog({
       }
       if ((notes ?? "") !== (originalNotes ?? "")) {
         detailsPayload.notes = notes;
+        hasDetails = true;
+      }
+      if (motoLessonTypeChanged) {
+        // null azzera il tipo (es. guida che ha smesso di essere moto).
+        detailsPayload.motoLessonType = effectiveMotoLessonType;
         hasDetails = true;
       }
       // Durata: quando cambia anche data/ora, il nuovo endsAt viaggia già col
@@ -973,6 +995,50 @@ export function EditAppointmentDialog({
                           · {licLabel(v.licenseCategory)}
                         </span>
                       ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Tipo guida moto — birilli (area chiusa) vs strada. Solo per le
+              guide moto. Opzionale: ri-clic sull'attivo azzera. */}
+          {isMotoLesson && (
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <TrafficCone className="size-3.5 text-slate-500" aria-hidden />
+                Tipo guida moto
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {MOTO_LESSON_TYPES.map((value) => {
+                  const active = motoLessonType === value;
+                  const Icon = value === "birilli" ? TrafficCone : Route;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      disabled={pending}
+                      onClick={() => setMotoLessonType(active ? null : value)}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-[10px] border-[1.5px] px-3 py-2 text-left transition-colors disabled:opacity-50",
+                        active
+                          ? "border-[#1a1a2e] bg-[#f4f4f8]"
+                          : "border-slate-200 bg-white hover:border-slate-300",
+                      )}
+                    >
+                      <Icon
+                        className={cn("size-4 shrink-0", active ? "text-[#1a1a2e]" : "text-slate-400")}
+                        aria-hidden
+                      />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="text-sm font-semibold text-[#222222]">
+                          {MOTO_LESSON_TYPE_LABELS[value]}
+                        </span>
+                        <span className="truncate text-[10px] font-medium text-slate-400">
+                          {MOTO_LESSON_TYPE_HINTS[value]}
+                        </span>
+                      </span>
                     </button>
                   );
                 })}
