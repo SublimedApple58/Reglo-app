@@ -347,17 +347,17 @@ export function InstructorPublicationEditor({
                               value={fmtMin(r.startMinutes)}
                               onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, startMinutes: labelToMin(v) } : x)))}
                               minTime="00:00"
-                              maxTime="23:30"
-                              minuteStep={30}
+                              maxTime="23:45"
+                              minuteStep={15}
                               className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
                             />
                             <span className="text-xs text-muted-foreground">–</span>
                             <TimePickerInput
                               value={r.endMinutes === 1440 ? "24:00" : fmtMin(r.endMinutes)}
                               onChange={(v) => setDraftRanges((prev) => prev.map((x, xi) => (xi === ri ? { ...x, endMinutes: labelToMin(v) } : x)))}
-                              minTime="00:30"
+                              minTime="00:15"
                               maxTime="24:00"
-                              minuteStep={30}
+                              minuteStep={15}
                               className="h-8 w-[96px] justify-between px-2.5 py-1 text-xs"
                             />
                             {draftRanges.length > 1 && (
