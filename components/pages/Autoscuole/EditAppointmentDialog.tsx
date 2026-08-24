@@ -1103,7 +1103,9 @@ export function EditAppointmentDialog({
             </div>
           )}
 
-          {/* Tipo guida — multi "cosa si è fatto" (attività). */}
+          {/* Tipo guida — multi "cosa si è fatto" (attività). Ridondante per le
+              guide moto (usano "Tipo guida moto" birilli/strada) → nascosto se moto. */}
+          {!isMotoLesson && (
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-slate-700">
               Tipo guida · cosa si è fatto
@@ -1134,6 +1136,7 @@ export function EditAppointmentDialog({
               })}
             </div>
           </div>
+          )}
 
           {/* Location */}
           {locations.length > 0 && (

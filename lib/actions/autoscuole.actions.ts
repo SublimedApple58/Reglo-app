@@ -3217,6 +3217,7 @@ const createAppointmentBatchSchema = z.object({
   // set across the slots).
   followVehicleId: z.string().uuid().optional().nullable(),
   extraMotoVehicleIds: z.array(z.string().uuid()).optional(),
+  motoLessonType: z.enum(MOTO_LESSON_TYPES).nullable().optional(),
   locationId: z.string().uuid().optional().nullable(),
   type: z.string().optional(),
   types: z.array(z.string()).optional(),
@@ -3618,6 +3619,7 @@ export async function createAutoscuolaAppointmentBatch(
             status: "scheduled",
             instructorId: resolvedInstructorId,
             vehicleId: payload.vehicleId ?? null,
+            motoLessonType: payload.motoLessonType ?? null,
             locationId: batchLocationId,
             notes: null,
             paymentRequired: paymentSnapshot.paymentRequired,

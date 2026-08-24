@@ -9,6 +9,7 @@ export async function POST(request: Request) {
     vehicleId: payload.vehicleId,
     followVehicleId: payload.followVehicleId ?? null,
     extraMotoVehicleIds: payload.extraMotoVehicleIds ?? undefined,
+    motoLessonType: payload.motoLessonType ?? null,
     locationId: payload.locationId,
     entries: payload.entries,
     type: payload.lessonType,
