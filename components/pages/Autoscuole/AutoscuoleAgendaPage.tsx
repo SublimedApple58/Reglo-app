@@ -289,10 +289,19 @@ function DurationField({
     </div>
   );
 }
-const BASE_PIXELS_PER_MINUTE = 1.6;
-// Scala base della griglia (px per minuto). In fullscreen il componente ombreggia
-// questa costante con un fattore di zoom; qui resta la base usata dallo skeleton.
+// Scala base della griglia (px per minuto) = altezza riga oraria / 60. 1.2 ⇒ 72px/h,
+// densità stile Google Calendar (prima era 1.6 ⇒ 96px/h, agenda troppo estesa in
+// verticale). Il componente ombreggia questa costante col fattore di zoom scelto
+// dall'utente (persistito), così le righe orarie scalano con lo zoom; qui resta la
+// base usata dallo skeleton.
+const BASE_PIXELS_PER_MINUTE = 1.2;
 const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE;
+// Limiti dello zoom verticale dell'agenda (moltiplicatore della densità base).
+const AGENDA_ZOOM_MIN = 0.7;
+const AGENDA_ZOOM_MAX = 2.2;
+const AGENDA_ZOOM_STEP = 0.15;
+const clampAgendaZoom = (z: number) =>
+  Math.min(AGENDA_ZOOM_MAX, Math.max(AGENDA_ZOOM_MIN, Math.round(z * 100) / 100));
 // Preferenze di visualizzazione agenda (giorni + fascia oraria) persistite in
 // localStorage, indipendenti dai filtri dati. Si resettano solo con "Ripristina".
 // `totalMinutes` è ridefinito nel componente (dipende dalla fascia oraria scelta);
@@ -302,9 +311,10 @@ const AGENDA_VIEW_PREFS_KEY = "reglo-agenda-view-prefs";
 // oggi (es. mercoledì → mer…mar). In entrambi i casi si rispettano i giorni
 // visibili scelti.
 type WeekMode = "classic" | "rolling";
-type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode };
+type AgendaViewPrefs = { days: number[]; startHour: number; endHour: number; weekMode: WeekMode; zoom: number };
 // days = giorni della settimana visibili, convenzione getDay() (0 = domenica).
-const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic" };
+// zoom = moltiplicatore altezza righe orarie (1 = densità base 72px/h), persistito.
+const DEFAULT_VIEW_PREFS: AgendaViewPrefs = { days: [0, 1, 2, 3, 4, 5, 6], startHour: 0, endHour: 24, weekMode: "classic", zoom: 1 };
 const WEEKDAY_CHIPS: Array<{ dow: number; label: string }> = [
   { dow: 1, label: "Lun" }, { dow: 2, label: "Mar" }, { dow: 3, label: "Mer" },
   { dow: 4, label: "Gio" }, { dow: 5, label: "Ven" }, { dow: 6, label: "Sab" }, { dow: 0, label: "Dom" },
@@ -330,7 +340,11 @@ function readAgendaViewPrefs(): AgendaViewPrefs {
         : DEFAULT_VIEW_PREFS.endHour;
     if (endHour <= startHour) endHour = DEFAULT_VIEW_PREFS.endHour;
     const weekMode: WeekMode = p.weekMode === "rolling" ? "rolling" : "classic";
-    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode };
+    const zoom =
+      typeof p.zoom === "number" && Number.isFinite(p.zoom)
+        ? clampAgendaZoom(p.zoom)
+        : DEFAULT_VIEW_PREFS.zoom;
+    return { days: days.length ? days : DEFAULT_VIEW_PREFS.days, startHour, endHour, weekMode, zoom };
   } catch {
     return DEFAULT_VIEW_PREFS;
   }
@@ -713,12 +727,21 @@ export function AutoscuoleAgendaPage({
   const DAY_END_HOUR = viewPrefs.endHour;
   // eslint-disable-next-line @typescript-eslint/no-shadow
   const totalMinutes = (DAY_END_HOUR - DAY_START_HOUR) * 60;
-  // Zoom dell'agenda (attivo solo in fullscreen): scala la densità verticale così
-  // i blocchi diventano più alti/leggibili. Ombreggiamo PIXELS_PER_MINUTE così
-  // tutti i calcoli (posizioni, altezze, drag/click, auto-scroll) si adeguano da
-  // soli. Il testo dei blocchi scala insieme via la CSS var --agenda-fs-scale.
-  const [agendaZoom, setAgendaZoom] = React.useState(1.3);
-  const agendaZoomFactor = isAgendaFullscreen ? agendaZoom : 1;
+  // Zoom dell'agenda (attivo in vista normale E fullscreen, persistito nelle
+  // preferenze): scala la densità verticale così l'utente decide l'altezza delle
+  // righe orarie. Ombreggiamo PIXELS_PER_MINUTE così tutti i calcoli (posizioni,
+  // altezze, drag/click, auto-scroll) si adeguano da soli. In fullscreen il testo
+  // dei blocchi scala insieme via la CSS var --agenda-fs-scale.
+  const agendaZoom = viewPrefs.zoom;
+  const setAgendaZoom = React.useCallback(
+    (updater: number | ((z: number) => number)) =>
+      setViewPrefs((p) => ({
+        ...p,
+        zoom: clampAgendaZoom(typeof updater === "function" ? updater(p.zoom) : updater),
+      })),
+    [],
+  );
+  const agendaZoomFactor = agendaZoom;
   // eslint-disable-next-line @typescript-eslint/no-shadow
   const PIXELS_PER_MINUTE = BASE_PIXELS_PER_MINUTE * agendaZoomFactor;
   // eslint-disable-next-line @typescript-eslint/no-shadow
@@ -2421,30 +2444,30 @@ export function AutoscuoleAgendaPage({
             </PopoverPrimitive.Portal>
           </PopoverPrimitive.Root>
 
-          {/* Zoom (solo in fullscreen) */}
-          {isAgendaFullscreen && (
-            <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
-              <button
-                type="button"
-                title="Riduci zoom"
-                onClick={() => setAgendaZoom((z) => Math.max(0.9, Math.round((z - 0.15) * 100) / 100))}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
-              >
-                <ZoomOut className="size-4" strokeWidth={1.7} />
-              </button>
-              <span className="min-w-[40px] select-none text-center text-[12px] font-semibold tabular-nums text-[#555]">
-                {Math.round(agendaZoom * 100)}%
-              </span>
-              <button
-                type="button"
-                title="Aumenta zoom"
-                onClick={() => setAgendaZoom((z) => Math.min(2.2, Math.round((z + 0.15) * 100) / 100))}
-                className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2]"
-              >
-                <ZoomIn className="size-4" strokeWidth={1.7} />
-              </button>
-            </div>
-          )}
+          {/* Zoom verticale: altezza righe orarie, persistito (vista normale + fullscreen) */}
+          <div className="flex h-[34px] shrink-0 items-center gap-0.5 rounded-lg border border-[#eeeeee] px-1">
+            <button
+              type="button"
+              title="Riduci altezza righe (agenda più compatta)"
+              onClick={() => setAgendaZoom((z) => z - AGENDA_ZOOM_STEP)}
+              disabled={agendaZoom <= AGENDA_ZOOM_MIN}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
+            >
+              <ZoomOut className="size-4" strokeWidth={1.7} />
+            </button>
+            <span className="min-w-[40px] select-none text-center text-[12px] font-semibold tabular-nums text-[#555]">
+              {Math.round(agendaZoom * 100)}%
+            </span>
+            <button
+              type="button"
+              title="Aumenta altezza righe"
+              onClick={() => setAgendaZoom((z) => z + AGENDA_ZOOM_STEP)}
+              disabled={agendaZoom >= AGENDA_ZOOM_MAX}
+              className="flex size-7 cursor-pointer items-center justify-center rounded-md text-[#555] transition-colors hover:bg-[#f2f2f2] disabled:cursor-default disabled:opacity-40"
+            >
+              <ZoomIn className="size-4" strokeWidth={1.7} />
+            </button>
+          </div>
 
           {/* Schermo intero */}
           <button
