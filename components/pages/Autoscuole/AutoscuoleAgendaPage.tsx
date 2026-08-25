@@ -748,6 +748,9 @@ export function AutoscuoleAgendaPage({
   );
   const [dayFocus, setDayFocus] = React.useState(() => normalizeDay(new Date()));
   const [pendingEventActionId, setPendingEventActionId] = React.useState<string | null>(null);
+  // Blocco agenda su cui è aperto il popover-nota in hover (REG-397): portale
+  // Radix così la card può sbordare fuori dalla colonna senza essere tagliata.
+  const [hoveredNoteId, setHoveredNoteId] = React.useState<string | null>(null);
   const [editAppointmentTarget, setEditAppointmentTarget] =
     React.useState<EditAppointmentDialogAppointment | null>(null);
   const [form, setForm] = React.useState({
@@ -3063,6 +3066,12 @@ export function AutoscuoleAgendaPage({
                           const licenseTag = licenseTagFor(item);
                           const motoTypeLabelInstr = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
                           const MotoTypeIconInstr = item.motoLessonType === "birilli" ? TrafficCone : Route;
+                          const noteTextInstr = item.notes?.trim() ?? "";
+                          const hasNotesInstr = noteTextInstr.length > 0;
+                          // Righe di nota che entrano nello spazio residuo del blocco
+                          // (multi-riga fino a riempire; "…" solo su ciò che non ci sta).
+                          const headerPxInstr = 14 + 11 + (!isCompact && licenseTag ? 12 : 0) + (motoTypeLabelInstr ? 20 : 0) + 6;
+                          const noteFillLinesInstr = hasNotesInstr ? Math.max(1, Math.floor((height - headerPxInstr) / 10)) : 0;
                           const isPendingAction = pendingEventActionId === item.id;
                           const glTintInstr = groupLessonTint(item);
                           // Guide normali: colore da criterio (durata/patente) + overrides
@@ -3084,16 +3093,20 @@ export function AutoscuoleAgendaPage({
                                 : statusMeta.className;
                           return (
                             <React.Fragment key={item.id}>
+                            <PopoverPrimitive.Root open={hasNotesInstr && hoveredNoteId === item.id} modal={false}>
                             <DropdownMenu modal={false}>
                               <DropdownMenuTrigger asChild>
+                                <PopoverPrimitive.Anchor asChild>
                                 <button
                                   type="button"
-                                  className={cn("absolute left-0.5 right-0.5 z-10 flex flex-col justify-start overflow-hidden rounded-[8px] text-[9px] leading-tight text-left", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
+                                  className={cn("group absolute left-0.5 right-0.5 z-10 flex flex-col justify-start rounded-[8px] text-[9px] leading-tight text-left hover:z-30", isPendingAction ? "pointer-events-none opacity-75" : "", instrCardClass)}
                                   style={{ top, height, ...(instrColorStyle ?? {}) }}
                                   title={`${isExamInstr ? "🎓 ESAME · " : ""}${item.student.firstName} ${item.student.lastName} · ${formatEventType(item.type)} · ${formatTimeRange(start, end)}`}
                                   onClick={(e) => e.stopPropagation()}
+                                  onMouseEnter={hasNotesInstr ? () => setHoveredNoteId(item.id) : undefined}
+                                  onMouseLeave={hasNotesInstr ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
                                 >
-                                  <div className={cn("p-1", isCompact ? "p-0.5" : "")}>
+                                  <div className={cn("flex h-full flex-col overflow-hidden rounded-[8px] p-1", isCompact ? "p-0.5" : "")}>
                                     <div className={cn("font-bold truncate text-[10px]", isExamInstr ? "text-violet-800" : isGroupLessonInstr ? glTintInstr.name : "")}>{isExamInstr ? "🎓 " : ""}{item.student.firstName}{isGroupLessonInstr ? "" : ` ${item.student.lastName.charAt(0)}.`}</div>
                                     <div className={cn("text-[8px] truncate", isExamInstr ? "text-violet-600" : isGroupLessonInstr ? glTintInstr.time : "text-muted-foreground")}>{isExamInstr ? "Esame · " : isGroupLessonInstr ? `${glTintInstr.label} · ` : ""}{formatTimeRange(start, end)}{isCompact && licenseTag ? ` · ${licenseTag}` : ""}</div>
                                     {!isCompact && licenseTag ? (
@@ -3105,8 +3118,12 @@ export function AutoscuoleAgendaPage({
                                         <span className="truncate">{motoTypeLabelInstr}</span>
                                       </span>
                                     ) : null}
+                                    {hasNotesInstr ? (
+                                      <div className="mt-0.5 whitespace-pre-wrap break-words text-[8px] font-medium leading-snug text-foreground/60 line-clamp-[var(--nl)]" style={{ ["--nl"]: noteFillLinesInstr } as React.CSSProperties}>{noteTextInstr}</div>
+                                    ) : null}
                                   </div>
                                 </button>
+                                </PopoverPrimitive.Anchor>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" side="right" sideOffset={8} className="w-72 overflow-visible border-0 bg-transparent p-0 shadow-none"><DraggableEventPanel>
                                 <div className="space-y-2">
@@ -3147,6 +3164,21 @@ export function AutoscuoleAgendaPage({
                               )}
                               </DraggableEventPanel></DropdownMenuContent>
                             </DropdownMenu>
+                            {hasNotesInstr ? (
+                              <PopoverPrimitive.Portal>
+                                <PopoverPrimitive.Content
+                                  side="top"
+                                  align="start"
+                                  sideOffset={6}
+                                  collisionPadding={10}
+                                  onOpenAutoFocus={(e) => e.preventDefault()}
+                                  className="pointer-events-none z-[70] w-[260px] max-w-[80vw] rounded-lg bg-[#1f2430] px-3 py-2 text-[11.5px] font-medium leading-snug text-white shadow-[0_12px_34px_rgba(0,0,0,0.32)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+                                >
+                                  <span className="block whitespace-pre-wrap break-words">{noteTextInstr}</span>
+                                </PopoverPrimitive.Content>
+                              </PopoverPrimitive.Portal>
+                            ) : null}
+                            </PopoverPrimitive.Root>
                             {neverAccessedFor(item) ? (
                               <div className="absolute z-30" style={{ top: Math.max(0, top - 4), right: 2 }}>
                                 <NeverAccessedNudge
@@ -3539,6 +3571,12 @@ export function AutoscuoleAgendaPage({
                       const licenseTag = licenseTagFor(item);
                       const motoTypeLabelDay = item.type === "group_lesson" ? null : motoLessonTypeLabel(item.motoLessonType);
                       const MotoTypeIconDay = item.motoLessonType === "birilli" ? TrafficCone : Route;
+                      const noteTextDay = item.notes?.trim() ?? "";
+                      const hasNotesDay = noteTextDay.length > 0;
+                      // Righe di nota che entrano nello spazio residuo del blocco
+                      // (multi-riga fino a riempire; "…" solo su ciò che non ci sta).
+                      const headerPxDay = 18 + 15 + (!isCompact && licenseTag ? 14 : 0) + (motoTypeLabelDay ? 18 : 0) + 22;
+                      const noteFillLinesDay = hasNotesDay ? Math.max(1, Math.floor((height - headerPxDay) / 14)) : 0;
                       const isPendingAction = pendingEventActionId === item.id;
                       const glTintDay = groupLessonTint(item);
                       // Guide normali: colore da criterio (durata/patente) + overrides
@@ -3561,19 +3599,24 @@ export function AutoscuoleAgendaPage({
 
                       return (
                         <React.Fragment key={item.id}>
+                        <PopoverPrimitive.Root open={hasNotesDay && hoveredNoteId === item.id} modal={false}>
                         <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
+                            <PopoverPrimitive.Anchor asChild>
                             <button
                               type="button"
                               className={cn(
-                                "absolute left-1 right-1 z-10 box-border flex flex-col overflow-hidden rounded-[10px] text-left text-[11px] transition motion-safe:hover:-translate-y-0.5",
-                                isCompact ? "gap-0.5 p-1.5" : "gap-1 p-2",
+                                "group absolute left-1 right-1 z-10 box-border flex flex-col rounded-[10px] text-left text-[11px] transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 hover:z-30",
+                                isCompact ? "p-1.5" : "p-2",
                                 isPendingAction ? "pointer-events-none opacity-75" : "",
                                 dayCardClass,
                               )}
                               style={{ top, height, ...(dayColorStyle ?? {}) }}
                               onClick={(event) => event.stopPropagation()}
+                              onMouseEnter={hasNotesDay ? () => setHoveredNoteId(item.id) : undefined}
+                              onMouseLeave={hasNotesDay ? () => setHoveredNoteId((c) => (c === item.id ? null : c)) : undefined}
                             >
+                              <div className={cn("flex h-full flex-col overflow-hidden", isCompact ? "gap-0.5" : "gap-1")}>
                               {isPendingAction ? (
                                 <>
                                   <div className="flex items-center justify-between gap-2">
@@ -3612,9 +3655,14 @@ export function AutoscuoleAgendaPage({
                                       <span className="truncate">{motoTypeLabelDay}</span>
                                     </span>
                                   ) : null}
+                                  {hasNotesDay ? (
+                                    <div className="whitespace-pre-wrap break-words text-[10px] font-medium leading-snug text-foreground/65 line-clamp-[var(--nl)]" style={{ ["--nl"]: noteFillLinesDay } as React.CSSProperties}>{noteTextDay}</div>
+                                  ) : null}
                                 </>
                               )}
+                              </div>
                             </button>
+                            </PopoverPrimitive.Anchor>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent
                             align="start"
@@ -3660,6 +3708,21 @@ export function AutoscuoleAgendaPage({
                               )}
                           </DraggableEventPanel></DropdownMenuContent>
                         </DropdownMenu>
+                        {hasNotesDay ? (
+                          <PopoverPrimitive.Portal>
+                            <PopoverPrimitive.Content
+                              side="top"
+                              align="start"
+                              sideOffset={6}
+                              collisionPadding={10}
+                              onOpenAutoFocus={(e) => e.preventDefault()}
+                              className="pointer-events-none z-[70] w-[300px] max-w-[80vw] rounded-lg bg-[#1f2430] px-3.5 py-2.5 text-[12px] font-medium leading-snug text-white shadow-[0_14px_38px_rgba(0,0,0,0.34)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95"
+                            >
+                              <span className="block whitespace-pre-wrap break-words">{noteTextDay}</span>
+                            </PopoverPrimitive.Content>
+                          </PopoverPrimitive.Portal>
+                        ) : null}
+                        </PopoverPrimitive.Root>
                         {neverAccessedFor(item) ? (
                           <div className="absolute z-30" style={{ top: Math.max(0, top - 5), right: 3 }}>
                             <NeverAccessedNudge
