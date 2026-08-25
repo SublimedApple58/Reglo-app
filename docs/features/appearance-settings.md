@@ -69,6 +69,26 @@ blocchi.
 
 ## Mobile
 
-Non consumato dal mobile: la palette blocchi mobile è duplicata client-side.
-Se si vuole estendere, esporre `agendaColorCriterion` via settings API e
-replicare la logica in `reglo-mobile` (follow-up deliberato).
+L'endpoint `/api/autoscuole/settings` è **già completo per il mobile**: auth via
+`requireServiceAccess` → `getActiveCompanyContext`, che accetta sia session web
+sia bearer token mobile.
+
+- **Lettura (GET)**: `getAutoscuolaSettings` espone `agendaColorCriterion`,
+  `agendaColorOverrides` e `agendaColorExceptions` a tutti i membri (nessun gate
+  owner/admin), così anche un istruttore normale può leggere il criterio per il
+  rendering. **Consumato dal mobile** (REG-403): la palette blocchi mobile è
+  duplicata client-side in `reglo-mobile/src/utils/agendaColors.ts` (porta 1:1
+  degli hex/soglie/eccezioni con resa "Airbnb soft" volutamente più soft del web)
+  e legge questi campi via `AutoscuolaSettings`. Se cambiano hex/soglie/eccezioni
+  o si aggiunge un criterio qui, aggiornare in parallelo quel file mobile.
+- **Scrittura (PATCH)**: due strade sullo **stesso** JSON `limits`, dati coerenti.
+  - **Web** (`AspettoSettingsPane`): `updateAutoscuolaSettings` (broad) —
+    `canManageSettings = admin || isOwner`. Invariato.
+  - **Mobile** (REG-403, pannello "Aspetto agenda"): endpoint **scoped**
+    `PATCH /api/autoscuole/agenda-colors` → `updateAgendaColorSettings`, gate
+    `canManageAgendaColors = admin || owner || instructor`. Scrive SOLO i 3 campi
+    `agendaColor*` (nessun altro setting sensibile), quindi il permesso è allargato
+    agli **istruttori** in sicurezza. Implementato in
+    `reglo-mobile/src/screens/AppearanceSettingsScreen.tsx`. Per estendere l'editing
+    agli istruttori **anche da web**, spostare le 3 chiamate del pane su questa
+    action ed esporre il pane ai ruoli non-owner.

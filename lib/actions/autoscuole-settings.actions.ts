@@ -8,7 +8,7 @@ import { getCachedCompanyServiceLimits } from "@/lib/autoscuole/cached-service";
 import { formatError } from "@/lib/utils";
 import { requireServiceAccess } from "@/lib/service-access";
 import { isAutoscuolaStripeConnectReady } from "@/lib/autoscuole/stripe-connect";
-import { isOwner } from "@/lib/autoscuole/roles";
+import { isInstructor, isOwner } from "@/lib/autoscuole/roles";
 import { LICENSE_CATEGORIES, TRANSMISSIONS } from "@/lib/autoscuole/license";
 import {
   NATIONAL_HOLIDAY_IDS,
@@ -1672,6 +1672,90 @@ export async function updateAutoscuolaSettings(
         agendaColorExceptions: nextLimits.agendaColorExceptions,
       },
     };
+  } catch (error) {
+    return { success: false, message: formatError(error) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Colori agenda (pannello "Aspetto") — action SCOPED e gestibile anche dagli
+// ISTRUTTORI (non solo titolari). Scrive ESCLUSIVAMENTE i 3 campi agendaColor*
+// nel JSON limits: nessun altro setting sensibile (pagamenti/voce/booking) è
+// raggiungibile da qui, così allargare il permesso resta sicuro.
+// ---------------------------------------------------------------------------
+const AGENDA_COLOR_HEX = /^#[0-9a-fA-F]{6}$/;
+
+const agendaColorPatchSchema = z
+  .object({
+    agendaColorCriterion: z.enum(AGENDA_COLOR_CRITERIA).optional(),
+    agendaColorOverrides: z
+      .object({
+        durata: z.record(z.string(), z.string().regex(AGENDA_COLOR_HEX)).optional(),
+        patente: z.record(z.string(), z.string().regex(AGENDA_COLOR_HEX)).optional(),
+        eccezioni: z.record(z.string(), z.string().regex(AGENDA_COLOR_HEX)).optional(),
+      })
+      .optional(),
+    agendaColorExceptions: z.record(z.string(), z.boolean()).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: "Nessun campo da aggiornare.",
+  });
+
+// Staff dell'autoscuola (titolare O istruttore), non gli allievi.
+const canManageAgendaColors = (role: string, autoscuolaRole: string | null) =>
+  role === "admin" || isOwner(autoscuolaRole) || isInstructor(autoscuolaRole);
+
+export async function updateAgendaColorSettings(
+  input: z.infer<typeof agendaColorPatchSchema>,
+) {
+  try {
+    const { membership } = await requireServiceAccess("AUTOSCUOLE");
+    if (!canManageAgendaColors(membership.role, membership.autoscuolaRole)) {
+      throw new Error("Operazione non consentita.");
+    }
+
+    const payload = agendaColorPatchSchema.parse(input);
+
+    const service = await prisma.companyService.findFirst({
+      where: { companyId: membership.companyId, serviceKey: "AUTOSCUOLE" },
+    });
+    const limits = (service?.limits ?? {}) as Record<string, unknown>;
+
+    const nextLimits = {
+      ...limits,
+      agendaColorCriterion: asAgendaColorCriterion(
+        payload.agendaColorCriterion ?? limits.agendaColorCriterion,
+      ),
+      agendaColorOverrides: asAgendaColorOverrides(
+        payload.agendaColorOverrides ?? limits.agendaColorOverrides,
+      ),
+      agendaColorExceptions: asAgendaColorExceptions(
+        payload.agendaColorExceptions ?? limits.agendaColorExceptions,
+      ),
+    };
+
+    if (service) {
+      await prisma.companyService.update({
+        where: { id: service.id },
+        data: { limits: nextLimits },
+      });
+    } else {
+      await prisma.companyService.create({
+        data: {
+          companyId: membership.companyId,
+          serviceKey: "AUTOSCUOLE",
+          status: "ACTIVE",
+          limits: nextLimits,
+        },
+      });
+    }
+
+    await invalidateAutoscuoleCache({
+      companyId: membership.companyId,
+      segments: [AUTOSCUOLE_CACHE_SEGMENTS.AGENDA, AUTOSCUOLE_CACHE_SEGMENTS.SETTINGS],
+    });
+
+    return { success: true, data: await resolveAutoscuolaSettingsData(nextLimits) };
   } catch (error) {
     return { success: false, message: formatError(error) };
   }
